@@ -49,6 +49,7 @@ model User {
   phoneNumber   String
   role          Role           @default(MEMBER)
   isProfessor   Boolean        @default(false)
+  dni       String?
 
   clubId        Int?
   club          Club?          @relation(fields: [clubId], references: [id])

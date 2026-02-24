@@ -1199,7 +1199,7 @@ async getClubDebtors(clubId: number) {
         paymentStatus: true,
         startDateTime: true,
         user: {
-          select: { firstName: true, lastName: true, phoneNumber: true, email: true }
+          select: { firstName: true, lastName: true, phoneNumber: true, email: true, dni: true}
         },
         items: {
           // Acá mantenemos la corrección del producto
@@ -1236,6 +1236,7 @@ async getClubDebtors(clubId: number) {
         displayName = `${booking.user.firstName || ''} ${booking.user.lastName || ''}`.trim();
         displayPhone = booking.user.phoneNumber || "";
         displayEmail = booking.user.email || "";
+        displayDni = booking.user.dni || "";
       } else {
         const guestDni = booking.guestDni?.trim();
         const guestPhone = booking.guestPhone?.trim();
@@ -1253,19 +1254,29 @@ async getClubDebtors(clubId: number) {
       }
 
       // --- INICIALIZAR EN EL MAPA ---
-      if (!clientsMap.has(uniqueKey)) {
-        clientsMap.set(uniqueKey, {
-          id: booking.userId || parseInt(uniqueKey.replace(/\D/g, '').substring(0, 8)) || Date.now(),
-          name: displayName || "Sin Nombre",
-          phone: displayPhone, 
-          email: displayEmail,
-          dni: displayDni,
-          totalDebt: 0,
-          totalBookings: 0, 
-          bookings: [], 
-          history: []   
-        });
-      }
+            if (!clientsMap.has(uniqueKey)) {
+                clientsMap.set(uniqueKey, {
+                    id: booking.userId || parseInt(uniqueKey.replace(/\D/g, '').substring(0, 8)) || Date.now(),
+                    name: displayName || "Sin Nombre",
+                    phone: displayPhone, 
+                    email: displayEmail,
+                    dni: displayDni,
+                    // Añadimos `user` y `guestDni` para compatibilidad con el frontend
+                    user: booking.user ? {
+                        id: booking.userId,
+                        firstName: booking.user.firstName,
+                        lastName: booking.user.lastName,
+                        phoneNumber: booking.user.phoneNumber,
+                        email: booking.user.email,
+                        dni: booking.user.dni
+                    } : undefined,
+                    guestDni: booking.guestDni || undefined,
+                    totalDebt: 0,
+                    totalBookings: 0, 
+                    bookings: [], 
+                    history: []   
+                });
+            }
 
       const client = clientsMap.get(uniqueKey);
       client.totalBookings++;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { login, register } from '../services/AuthService';
 import { ClubService } from '../services/ClubService';
-import { Mail, Lock, User, Phone, UserPlus, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Phone, UserPlus, LogIn, AlertCircle, Loader2, IdCard, CheckCircle } from 'lucide-react'; // Agregamos IdCard
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,8 +16,10 @@ export default function LoginPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [dni, setDni] = useState(''); // Estado del DNI listo
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const isPhoneValid = (phone: string) => {
     if (!phone) return false;
@@ -40,6 +42,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -58,6 +61,7 @@ export default function LoginPage() {
       } else {
         const phoneDigits = phoneNumber.replace(/\D/g, '').slice(0, 10);
         const fullPhone = phoneDigits ? `+549${phoneDigits}` : '';
+        
         if (!phoneDigits) {
           setError('Ingresá un teléfono para completar el registro.');
           return;
@@ -66,10 +70,18 @@ export default function LoginPage() {
           setError('Ingresá un teléfono con formato válido.');
           return;
         }
-        await register(firstName, lastName, email, password, fullPhone, 'MEMBER');
-        setError('Usuario registrado exitosamente. Ahora puedes iniciar sesión.');
+        if (!dni || dni.length < 7) {
+          setError('Ingresá un DNI válido.');
+          return;
+        }
+
+        // IMPORTANTE: Asegurate de que tu función register en AuthService acepte el DNI
+        await register(firstName, lastName, email, password, fullPhone, 'MEMBER', dni); 
+        
+        setSuccessMessage('Usuario registrado exitosamente. Ahora podés iniciar sesión.');
         setIsLogin(true);
-        setFirstName(''); setLastName(''); setPhoneNumber('');
+        // Limpiamos los campos
+        setFirstName(''); setLastName(''); setPhoneNumber(''); setDni(''); 
       }
     } catch (err: any) {
       setError(err.message || (isLogin ? 'Credenciales inválidas' : 'Error al registrar'));
@@ -111,9 +123,19 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* 👉 NUEVO CARTEL DE ÉXITO */}
+          {successMessage && (
+            <div className="mb-6 p-4 bg-[#B9CF32]/20 border border-[#B9CF32] text-[#347048] rounded-2xl text-xs font-bold flex items-start gap-3 shadow-sm animate-in slide-in-from-top-2">
+              <CheckCircle size={18} className="shrink-0 mt-0.5 text-[#347048]" strokeWidth={2.5} />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
               <div className="grid grid-cols-2 gap-4">
+                
+                {/* Nombre */}
                 <div>
                   <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Nombre</label>
                   <div className="relative">
@@ -122,6 +144,8 @@ export default function LoginPage() {
                       className="w-full pl-11 pr-4 py-3.5 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl text-[#347048] font-bold focus:outline-none transition-all shadow-sm placeholder-[#347048]/20" placeholder="Ej: Juan" />
                   </div>
                 </div>
+                
+                {/* Apellido */}
                 <div>
                   <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Apellido</label>
                   <div className="relative">
@@ -130,7 +154,26 @@ export default function LoginPage() {
                       className="w-full pl-11 pr-4 py-3.5 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl text-[#347048] font-bold focus:outline-none transition-all shadow-sm placeholder-[#347048]/20" placeholder="Ej: Pérez" />
                   </div>
                 </div>
+
+                {/* DNI (NUEVO CAMPO) */}
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">DNI</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#347048]/40">
+                      <IdCard size={16} strokeWidth={3} />
+                    </div>
+                    <input 
+                      type="number" 
+                      required 
+                      value={dni} 
+                      onChange={(e) => setDni(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3.5 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl text-[#347048] font-bold focus:outline-none transition-all shadow-sm placeholder-[#347048]/20" 
+                      placeholder="Sin puntos ni espacios. Ej: 35123456" 
+                    />
+                  </div>
+                </div>
                 
+                {/* Teléfono */}
                 <div className="col-span-2">
                   <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Teléfono</label>
                   <div className="relative flex items-stretch bg-white border-2 border-transparent focus-within:border-[#B9CF32] rounded-2xl transition-all shadow-sm overflow-hidden min-h-[56px]">
@@ -146,6 +189,7 @@ export default function LoginPage() {
               </div>
             )}
             
+            {/* Email */}
             <div>
               <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Correo Electrónico</label>
               <div className="relative">
@@ -157,6 +201,7 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {/* Contraseña */}
             <div>
               <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Contraseña</label>
               <div className="relative">

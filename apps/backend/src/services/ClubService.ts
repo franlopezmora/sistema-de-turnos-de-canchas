@@ -136,7 +136,7 @@ export class ClubService {
     }
 
     // 👇 2. NUEVO MÉTODO AGREGADO (Para el Buscador Inteligente)
-    async getClients(clubId: number) {
+async getClients(clubId: number) {
     
     // Buscamos todas las reservas de ese club (incluyendo CANCELLED para mantener historial)
     const bookings: any[] = await prisma.booking.findMany({
@@ -152,7 +152,8 @@ export class ClubService {
                     firstName: true,
                     lastName: true,
                     phoneNumber: true,
-                    isProfessor: true
+                    isProfessor: true,
+                    dni: true 
                 }
             }
         },
@@ -166,8 +167,8 @@ export class ClubService {
         const name = b.user ? `${b.user.firstName} ${b.user.lastName}` : b.guestName;
         const phone = b.user ? b.user.phoneNumber : b.guestPhone;
         
-        // El DNI lo sacamos del guestDni (el de la reserva)
-        const dni = b.guestDni; 
+        // 👉 2. PRIORIZAMOS EL DNI DEL USUARIO, Y SI NO HAY, USAMOS EL DEL INVITADO
+        const dni = b.user?.dni || b.guestDni; 
 
         if (name) {
             // Usamos DNI como clave única si existe, sino el nombre
@@ -176,10 +177,10 @@ export class ClubService {
             if (!uniqueClients.has(key)) {
                 uniqueClients.set(key, {
                     // Mapeamos para que el Frontend lo entienda
-                    firstName: name, // El front se encarga de separar nombre/apellido si viene junto
+                    firstName: name, 
                     lastName: '', 
-                    phoneNumber: phone, // Importante: usar 'phoneNumber' para que coincida con tu front
-                    dni: dni,
+                    phoneNumber: phone, 
+                    dni: dni, // ¡Ahora sí viaja el correcto!
                     isProfessor: b.user?.isProfessor ?? false
                 });
             }

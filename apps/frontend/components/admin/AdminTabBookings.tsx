@@ -1180,10 +1180,20 @@ export default function AdminTabBookings() {
                   const rawHeight = (durationMinutes ?? scheduleSlotDuration) * pixelsPerMinute;
                   const height = Math.max(rawHeight - V_GAP_PX, 40);
 
+                  // Intentamos sacar el nombre de todas las fuentes posibles:
                   const bookingName =
-                    slot.booking?.userName ||
-                    slot.booking?.guestName ||
-                    'Reserva';
+                    // 1. Si viene el objeto user completo (muy común en relaciones BDD)
+                    (slot.booking?.user?.firstName && slot.booking?.user?.lastName) 
+                      ? `${slot.booking.user.firstName} ${slot.booking.user.lastName}` 
+                      : slot.booking?.user?.firstName 
+                    // 2. Si viene el nombre del usuario plano (como intentabas antes)
+                    || slot.booking?.userName
+                    // 3. Si es un invitado (sin cuenta)
+                    || slot.booking?.guestName
+                    // 4. Si el objeto booking trae el DNI en lugar del nombre (por si acaso)
+                    || (slot.booking?.user?.dni ? `DNI: ${slot.booking.user.dni}` : null)
+                    // 5. El fallback por defecto si todo lo demás falla
+                    || 'Sin nombre';
 
                   return (
                     <button
@@ -1307,20 +1317,35 @@ export default function AdminTabBookings() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="rounded-2xl border border-[#347048]/10 bg-white p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Reservante</p>
-                <p className="text-lg font-black mt-1">
-                  {selectedBookingDetail.booking.userName || selectedBookingDetail.booking.guestName || 'Sin nombre'}
+            <div className="rounded-2xl border border-[#347048]/10 bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Reservante</p>
+              
+              {/* 👉 ACÁ ARREGLAMOS EL NOMBRE */}
+              <p className="text-lg font-black mt-1 text-[#347048]">
+                {
+                  (selectedBookingDetail.booking.user?.firstName && selectedBookingDetail.booking.user?.lastName)
+                    ? `${selectedBookingDetail.booking.user.firstName} ${selectedBookingDetail.booking.user.lastName}`
+                    : selectedBookingDetail.booking.user?.firstName
+                    || selectedBookingDetail.booking.userName
+                    || selectedBookingDetail.booking.guestName
+                    || 'Sin nombre'
+                }
+              </p>
+
+              {/* El teléfono queda igual (ya estaba bien hecho) */}
+              {(selectedBookingDetail.booking.guestPhone || selectedBookingDetail.booking.user?.phoneNumber) && (
+                <p className="text-xs font-bold text-[#347048]/60 mt-1">
+                  {selectedBookingDetail.booking.guestPhone || selectedBookingDetail.booking.user?.phoneNumber}
                 </p>
-                {(selectedBookingDetail.booking.guestPhone || selectedBookingDetail.booking.user?.phoneNumber) && (
-                  <p className="text-xs font-bold text-[#347048]/60 mt-1">
-                    {selectedBookingDetail.booking.guestPhone || selectedBookingDetail.booking.user?.phoneNumber}
-                  </p>
-                )}
-                {selectedBookingDetail.booking.guestDni && (
-                  <p className="text-xs font-bold text-[#347048]/60 mt-1">DNI: {selectedBookingDetail.booking.guestDni}</p>
-                )}
-              </div>
+              )}
+
+              {/* 👉 ACÁ TAMBIÉN AGREGAMOS EL DNI DEL USUARIO LOGUEADO */}
+              {(selectedBookingDetail.booking.guestDni || selectedBookingDetail.booking.user?.dni) && (
+                <p className="text-xs font-bold text-[#347048]/60 mt-1">
+                  DNI: {selectedBookingDetail.booking.guestDni || selectedBookingDetail.booking.user?.dni}
+                </p>
+              )}
+            </div>
               <div className="rounded-2xl border border-[#347048]/10 bg-white p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Horario</p>
                 <p className="text-lg font-black mt-1">{getBookingTimeRange(selectedBookingDetail.booking)}</p>

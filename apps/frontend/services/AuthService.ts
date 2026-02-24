@@ -34,13 +34,13 @@ export const login = async (email: string, password: string) => {
   return data;
 };
 
-export const register = async (firstName: string, lastName: string, email: string, password: string, phoneNumber: string, role: string) => {
+export const register = async (firstName: string, lastName: string, email: string, password: string, phoneNumber: string, role: string, dni: string) => {
   const response = await fetch(`${apiBase()}/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ firstName, lastName, email, password, phoneNumber, role }),
+    body: JSON.stringify({ firstName, lastName, email, password, phoneNumber, role, dni}),
   });
 
   if (!response.ok) {

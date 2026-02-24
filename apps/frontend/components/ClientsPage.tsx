@@ -131,6 +131,8 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
         showError("No se pudo procesar el cobro. Intentá nuevamente."); 
     }
   };
+
+  console.log("LOS CLIENTES QUE LLEGAN SON:", filteredClients);
   
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -187,37 +189,59 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
               </thead>
               <tbody>
                 {filteredClients.length > 0 ? (
-                    filteredClients.map((client) => (
-                    <tr key={client.id} className="bg-white/80 hover:bg-white transition-all shadow-sm group">
-                        <td className="px-6 py-4 font-black text-[#347048] first:rounded-l-2xl uppercase tracking-tight italic">{client.name}</td>
-                        <td className="px-6 py-4">
-                           {client.dni !== '-' ? (
-                             <span className="bg-[#347048]/5 border border-[#347048]/10 px-2 py-1 rounded-lg text-[#347048] font-bold text-xs">{client.dni}</span>
-                           ) : <span className="opacity-20">-</span>}
-                        </td>
-                        <td className="px-6 py-4 text-[#347048]/70 font-bold text-xs uppercase">
-                            {client.phone ? <span className="flex items-center gap-2"><Phone size={12} className="text-[#B9CF32]"/> {client.phone}</span> : '-'}
-                        </td>
-                        <td className="px-6 py-4">
-                           <span className="text-[10px] font-black bg-[#926699]/10 text-[#926699] px-3 py-1 rounded-full border border-[#926699]/20 uppercase tracking-widest">{client.totalBookings} Reservas</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {client.totalDebt > 0 ? (
-                              <span className="inline-flex items-center gap-2 bg-red-50 text-red-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-red-100 uppercase tracking-wider italic">DEBE: ${client.totalDebt.toLocaleString()}</span>
-                          ) : (
-                              <span className="inline-flex items-center gap-1 text-emerald-600 text-[10px] font-black uppercase tracking-wider"><CheckCircle size={12}/> Al día</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 last:rounded-r-2xl">
-                          <div className="flex justify-end gap-3">
-                            <button onClick={() => setSelectedClientHistory(client)} className="text-[10px] font-black uppercase tracking-widest bg-white border-2 border-[#347048]/10 hover:border-[#347048] text-[#347048] px-4 py-2 rounded-xl transition shadow-sm">Historial</button>
-                            {client.totalDebt > 0 && (
-                              <button onClick={() => setSelectedDebtor(client)} className="text-[10px] font-black uppercase tracking-widest bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl transition shadow-lg shadow-red-900/20 flex items-center gap-2"><DollarSign size={14} strokeWidth={3}/> Saldar</button>
-                            )}
-                          </div>
-                        </td>
-                    </tr>
-                    ))
+                    filteredClients.map((client) => {
+                      
+                      // 👉 1. ACÁ CALCULAMOS EL DNI LIMPIO (Antes de dibujar el HTML)
+                      const dniFinal = (client.dni && client.dni !== '-') 
+                        ? client.dni 
+                        : (client.user?.dni || client.guestDni);
+
+                      return (
+                        <tr key={client.id} className="bg-white/80 hover:bg-white transition-all shadow-sm group">
+                            
+                            <td className="px-6 py-4 font-black text-[#347048] first:rounded-l-2xl uppercase tracking-tight italic">
+                              {client.name}
+                            </td>
+                            
+                            <td className="px-6 py-4">
+                                {/* 👉 2. Y ACÁ LO MOSTRAMOS SÚPER FÁCIL */}
+                                {dniFinal ? (
+                                    <span className="bg-[#347048]/5 border border-[#347048]/10 px-2 py-1 rounded-lg text-[#347048] font-bold text-xs">
+                                        {dniFinal}
+                                    </span>
+                                ) : (
+                                    <span className="opacity-20">-</span>
+                                )}
+                            </td>
+                            
+                            <td className="px-6 py-4 text-[#347048]/70 font-bold text-xs uppercase">
+                                {client.phone ? <span className="flex items-center gap-2"><Phone size={12} className="text-[#B9CF32]"/> {client.phone}</span> : '-'}
+                            </td>
+                            
+                            <td className="px-6 py-4">
+                               <span className="text-[10px] font-black bg-[#926699]/10 text-[#926699] px-3 py-1 rounded-full border border-[#926699]/20 uppercase tracking-widest">{client.totalBookings} Reservas</span>
+                            </td>
+                            
+                            <td className="px-6 py-4">
+                              {client.totalDebt > 0 ? (
+                                  <span className="inline-flex items-center gap-2 bg-red-50 text-red-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-red-100 uppercase tracking-wider italic">DEBE: ${client.totalDebt.toLocaleString()}</span>
+                              ) : (
+                                  <span className="inline-flex items-center gap-1 text-emerald-600 text-[10px] font-black uppercase tracking-wider"><CheckCircle size={12}/> Al día</span>
+                              )}
+                            </td>
+                            
+                            <td className="px-6 py-4 last:rounded-r-2xl">
+                              <div className="flex justify-end gap-3">
+                                <button onClick={() => setSelectedClientHistory(client)} className="text-[10px] font-black uppercase tracking-widest bg-white border-2 border-[#347048]/10 hover:border-[#347048] text-[#347048] px-4 py-2 rounded-xl transition shadow-sm">Historial</button>
+                                {client.totalDebt > 0 && (
+                                  <button onClick={() => setSelectedDebtor(client)} className="text-[10px] font-black uppercase tracking-widest bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl transition shadow-lg shadow-red-900/20 flex items-center gap-2"><DollarSign size={14} strokeWidth={3}/> Saldar</button>
+                                )}
+                              </div>
+                            </td>
+
+                        </tr>
+                      ); // <-- Fin del return de la fila
+                    }) // <-- Fin del map
                 ) : (
                     <tr><td colSpan={6} className="p-20 text-center text-[#347048]/30 font-black uppercase tracking-[0.3em] italic">Sin coincidencias</td></tr>
                 )}

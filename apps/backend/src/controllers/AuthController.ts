@@ -6,6 +6,8 @@ import { z } from 'zod';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
+// Asegurate de tener importados z, prisma, bcrypt y jwt arriba en tu archivo
+
 export class AuthController {
     register = async (req: Request, res: Response) => {
         const registerSchema = z.object({
@@ -14,13 +16,18 @@ export class AuthController {
             email: z.string().email(),
             password: z.string().min(6),
             phoneNumber: z.string().min(5),
-            role: z.enum(["MEMBER", "ADMIN"])
+            role: z.enum(["MEMBER", "ADMIN"]),
+            dni: z.string().min(7, "El DNI es muy corto").optional() // Dejalo opcional o sacale el .optional() si es obligatorio
         });
+        
         const parsed = registerSchema.safeParse(req.body);
         if (!parsed.success) {
             return res.status(400).json({ error: parsed.error.format() });
         }
-        const { firstName, lastName, email, password, phoneNumber, role } = parsed.data;
+        
+        // 👉 2. DESESTRUCTURAMOS EL DNI
+        const { firstName, lastName, email, password, phoneNumber, role, dni } = parsed.data;
+        
         try {
             const existingUser = await prisma.user.findUnique({ where: { email } });
             if (existingUser) {
@@ -31,9 +38,13 @@ export class AuthController {
 
             const newUser = await prisma.user.create({
                 data: {
-                    firstName, lastName, email, phoneNumber,
+                    firstName, 
+                    lastName, 
+                    email, 
+                    phoneNumber,
                     password: hashedPassword,
-                    role
+                    role,
+                    dni 
                 }
             });
             res.status(201).json({ message: "Usuario creado", userId: newUser.id });
@@ -65,7 +76,7 @@ export class AuthController {
 
             const token = jwt.sign(
                 { userId: user.id, role: user.role },
-                JWT_SECRET,
+                process.env.JWT_SECRET || 'fallback-secret', // Cambiá esto por tu variable de entorno
                 { expiresIn: '6h' }
             );
 
@@ -79,7 +90,9 @@ export class AuthController {
                     email: user.email,
                     phoneNumber: user.phoneNumber,
                     role: user.role,
-                    clubId: user.clubId
+                    clubId: user.clubId,
+                    // 👉 4. ENVIAMOS EL DNI AL FRONTEND AL LOGUEARSE
+                    dni: user.dni
                 } 
             });
         } catch (error: any) {
@@ -96,7 +109,8 @@ export class AuthController {
         try {
             const user = await prisma.user.findUnique({
                 where: { id: payload.userId },
-                select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, role: true, clubId: true }
+                // 👉 5. PEDIMOS QUE LA BD NOS TRAIGA EL DNI TAMBIÉN ACÁ
+                select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, role: true, clubId: true, dni: true }
             });
             if (!user) {
                 return res.status(401).json({ error: 'Usuario no encontrado' });
@@ -108,10 +122,12 @@ export class AuthController {
                 email: user.email,
                 phoneNumber: user.phoneNumber,
                 role: user.role,
-                clubId: user.clubId
+                clubId: user.clubId,
+                // 👉 6. LO DEVOLVEMOS AL FRONTEND
+                dni: user.dni
             });
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }
     };
-}   
+}
