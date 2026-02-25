@@ -14,9 +14,15 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
 
   const res = await fetch(input, { ...init, headers });
 
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
+    // 401: token inválido/expirado -> cerrar sesión
     logout();
     throw new Error('Sesión expirada. Volvé a iniciar sesión.');
+  }
+
+  if (res.status === 403) {
+    // 403: usuario autenticado pero sin permisos -> no cerrar sesión
+    throw new Error('No autorizado');
   }
 
   return res;
