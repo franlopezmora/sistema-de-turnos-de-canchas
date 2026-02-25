@@ -1105,7 +1105,7 @@ export default function Home() {
                 <p className="text-[#347048]/80 font-medium leading-relaxed">
                     ¿Tenés dudas sobre el sistema o querés dar de alta tu club? Escribinos, respondemos al toque.
                 </p>
-        <a href="https://wa.me/543513436150" target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
+        <a href="https://wa.me/5493513436163" target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
                     <div className="bg-[#B9CF32] h-12 w-12 rounded-full flex items-center justify-center text-[#347048] group-hover:scale-110 transition-transform">
                         <Phone size={20} fill="currentColor" className="text-[#347048]" />
                     </div>
@@ -1114,13 +1114,13 @@ export default function Home() {
             <p className="text-[#347048] font-bold text-lg">+54 351 343 6150</p>
                     </div>
                 </a>
-                <a href="mailto:hola@tucancha.app" className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
+                <a href="mailto:soporte.tucancha@gmail.com" className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
                     <div className="bg-[#347048] h-12 w-12 rounded-full flex items-center justify-center text-[#EBE1D8] group-hover:scale-110 transition-transform">
                         <Mail size={20} />
                     </div>
                     <div>
                         <p className="text-[#347048]/50 text-xs font-bold uppercase tracking-wider">Email</p>
-                        <p className="text-[#347048] font-bold text-lg">hola@tucancha.app</p>
+                        <p className="text-[#347048] font-bold text-lg">soporte.tucancha@gmail.com</p>
                     </div>
                 </a>
                 <div className="mt-8 pt-8 border-t border-[#347048]/10">

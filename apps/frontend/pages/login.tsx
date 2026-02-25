@@ -212,8 +212,18 @@ export default function LoginPage() {
                 <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-11 pr-14 py-3.5 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl text-[#347048] font-bold focus:outline-none transition-all shadow-sm placeholder-[#347048]/20" placeholder="••••••••" />
 
-                <button type="button" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-3 flex items-center text-[#347048]/60 hover:text-[#347048] transition-colors">
+                <button
+                  type="button"
+                  aria-label="Mantener pulsado para ver la contraseña"
+                  onMouseDown={() => setShowPassword(true)}
+                  onMouseUp={() => setShowPassword(false)}
+                  onMouseLeave={() => setShowPassword(false)}
+                  onTouchStart={() => setShowPassword(true)}
+                  onTouchEnd={() => setShowPassword(false)}
+                  onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') setShowPassword(true); }}
+                  onKeyUp={(e) => { if (e.key === ' ' || e.key === 'Enter') setShowPassword(false); }}
+                  className="absolute inset-y-0 right-3 flex items-center text-[#347048]/60 hover:text-[#347048] transition-colors"
+                >
                   {showPassword ? <EyeOff size={18} strokeWidth={2.5} /> : <Eye size={18} strokeWidth={2.5} />}
                 </button>
               </div>
