@@ -78,7 +78,6 @@ export default function AdminTabClub() {
           websiteUrl: clubData.websiteUrl || '', description: clubData.description || '',
           lightsEnabled: clubData.lightsEnabled ?? false,
           lightsExtraAmount: clubData.lightsExtraAmount != null ? String(clubData.lightsExtraAmount) : '',
-           setOpeningDaysSet(Array.isArray(clubData.openingDays) ? clubData.openingDays : []);
           lightsFromHour: clubData.lightsFromHour || '',
           professorDiscountEnabled: clubData.professorDiscountEnabled ?? false,
           professorDiscountPercent: clubData.professorDiscountPercent != null ? String(clubData.professorDiscountPercent) : '',
@@ -87,10 +86,12 @@ export default function AdminTabClub() {
           scheduleCloseTime: clubData.scheduleCloseTime || '',
           scheduleIntervalMinutes: clubData.scheduleIntervalMinutes != null ? String(clubData.scheduleIntervalMinutes) : '',
           scheduleDurations: Array.isArray(clubData.scheduleDurations) ? clubData.scheduleDurations.join(', ') : '',
-          scheduleFixedSlots: Array.isArray(clubData.scheduleFixedSlots) ? clubData.scheduleFixedSlots.join(', ') : ''
-        });
-  setLogoPreview(clubData.logoUrl || null);
-  setClubImagePreview(clubData.clubImageUrl || null);
+          scheduleFixedSlots: Array.isArray(clubData.scheduleFixedSlots) ? clubData.scheduleFixedSlots.join(', ') : '',
+          openingDays: Array.isArray(clubData.openingDays) ? clubData.openingDays.join(',') : ''
+          });
+          setOpeningDaysSet(Array.isArray(clubData.openingDays) ? clubData.openingDays : []);
+          setLogoPreview(clubData.logoUrl || null);
+          setClubImagePreview(clubData.clubImageUrl || null);
       }
     } catch (error: any) {
       showError('Error al cargar información del club: ' + error.message);
@@ -269,7 +270,7 @@ export default function AdminTabClub() {
                 {/* DIAS DE APERTURA */}
                 <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10">
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Días de apertura</h3>
-                  <p className="text-[12px] text-[#347048]/70 mb-3">Seleccioná los días en los que el club está abierto (si no se selecciona ninguno, se entiende "abre todos los días").</p>
+                  <p className="text-[12px] text-[#347048]/70 mb-3">Seleccioná los días en los que el club está abierto (si no se selecciona ninguno, se entiende &quot;abre todos los días&quot;).</p>
                   <div className="flex gap-2 flex-wrap">
                     {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map((label, idx) => {
                       const day = idx % 7; // 0..6
