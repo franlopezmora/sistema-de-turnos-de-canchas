@@ -230,7 +230,7 @@ Ingresó un nuevo turno web en *${clubName}*.
                         try {
                             const fetchFn = (globalThis as any).fetch;
                             if (typeof fetchFn !== 'function') throw new Error('fetch no disponible en el runtime');
-                            const resp = await fetchFn('http://localhost:3002/send', {
+                            const resp = await fetchFn('http://wpp-service:3002/send', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ number: notif.phone, message: notif.message })
