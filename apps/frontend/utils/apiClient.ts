@@ -1,7 +1,7 @@
 /**
  * Cliente HTTP que añade el token de auth y, si el servidor responde 401 o 403
- * (token expirado o inválido), limpia la sesión (logout). No realiza
- * una redirección automática a `/login`; la navegación la debe manejar la app.
+ * (token expirado o inválido), limpia la sesión (logout). `logout()` redirige
+ * automáticamente a `/`.
  */
 import { getToken, logout } from '../services/AuthService';
 

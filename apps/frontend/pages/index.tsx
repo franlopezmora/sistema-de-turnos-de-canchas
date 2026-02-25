@@ -121,7 +121,6 @@ export default function Home() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [user, setUser] = useState<any>(null);
-  const [isGuest, setIsGuest] = useState(false);
   const [showContact, setShowContact] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeBookingsCount, setActiveBookingsCount] = useState(0);
@@ -304,15 +303,6 @@ export default function Home() {
     const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
     if (userStr) { try { setUser(JSON.parse(userStr)); } catch {} }
 
-    // Listen for logout events to update UI without reload
-    const onLogout = () => {
-      setUser(null);
-      const guestId = typeof window !== 'undefined' ? localStorage.getItem('guestId') : null;
-      setIsGuest(!!guestId);
-      setShowUserMenu(false);
-    };
-    window.addEventListener('tucancha:logout', onLogout);
-
     const loadClubs = async () => {
       try {
         const allClubs = await ClubService.getAllClubs();
@@ -335,10 +325,6 @@ export default function Home() {
     };
     loadClubs();
     loadLocations();
-
-    return () => {
-      window.removeEventListener('tucancha:logout', onLogout);
-    };
   }, []);
 
   useEffect(() => {
@@ -686,16 +672,10 @@ export default function Home() {
                           type="button"
                           className="flex items-center gap-3 text-red-500 hover:text-red-600 w-full text-left p-2 rounded-xl hover:bg-red-50 transition-colors"
                           onClick={() => {
-                            // Limpiar sesión. Si no estamos en '/' o en '/club/*', redirigir a '/'.
+                            // Cerrar sesión (logout() redirige siempre a '/').
                             logout();
                             setUser(null);
                             setShowUserMenu(false);
-                            const path = router.asPath.split('?')[0].split('#')[0];
-                            const isHome = path === '/';
-                            const isClub = path.startsWith('/club/');
-                            if (!isHome && !isClub) {
-                              router.push('/');
-                            }
                           }}
                         >
                           <LogOut size={18} strokeWidth={2.5} /> Cerrar sesión

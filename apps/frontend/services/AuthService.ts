@@ -53,15 +53,12 @@ export const register = async (firstName: string, lastName: string, email: strin
 };
 
 export const logout = () => {
-  // Limpiar token y datos del usuario en localStorage.
-  // No navegamos aquí: la navegación la debe decidir el lugar que llama a `logout()`.
+  // Limpiar token y datos del usuario en localStorage y navegar a '/'.
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-  // Emitir un evento para avisar a la app en esta pestaña
-  try {
-    window.dispatchEvent(new Event('tucancha:logout'));
-  } catch (e) {
-    // noop
+  // Redirigimos siempre al home después de cerrar sesión.
+  if (typeof window !== 'undefined') {
+    window.location.href = '/';
   }
 };
 

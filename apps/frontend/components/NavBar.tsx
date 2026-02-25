@@ -48,17 +48,6 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Escuchar logout global para actualizar UI sin recargar
-  useEffect(() => {
-    const onLogout = () => {
-      setUser(null);
-      const guestId = typeof window !== 'undefined' ? localStorage.getItem('guestId') : null;
-      setIsGuest(!!guestId);
-    };
-    window.addEventListener('tucancha:logout', onLogout);
-    return () => window.removeEventListener('tucancha:logout', onLogout);
-  }, []);
-
 
   useEffect(() => {
     setShowUserMenu(false);
@@ -299,15 +288,9 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
         confirmText="Salir"
         isWarning={true}
         onConfirm={() => {
-          // Limpiar sesión y redirigir SOLO si no estamos en Home o en la página pública del club.
+          // Cerrar sesión (logout() redirige siempre a '/').
           logout();
           setShowLogoutModal(false);
-          const path = router.asPath.split('?')[0].split('#')[0];
-          const isHome = path === '/';
-          const isClub = path.startsWith('/club/');
-          if (!isHome && !isClub) {
-            router.replace('/');
-          }
         }}
         closeOnBackdrop
         closeOnEscape
