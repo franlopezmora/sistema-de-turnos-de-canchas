@@ -56,6 +56,19 @@ export class BookingService {
         return parsed.length > 0 ? parsed : this.defaultFixedSlots;
     }
 
+    private isClubOpenOnLocalDate(clubConfig: any, date: Date, timeZone: string) {
+        if (!clubConfig || !Array.isArray(clubConfig.openingDays) || clubConfig.openingDays.length === 0) return true;
+        try {
+            // Construir la medianoche local para la fecha dada y obtener el día de la semana en la zona del club
+            const slotMidUtc = TimeHelper.localSlotToUtc(date, '00:00', timeZone);
+            const localMid = TimeHelper.utcToLocal(slotMidUtc, timeZone);
+            const day = localMid.getDay();
+            return Array.isArray(clubConfig.openingDays) ? clubConfig.openingDays.includes(day) : true;
+        } catch {
+            return true;
+        }
+    }
+
     private buildRangeSlots(openTime: string, closeTime: string, intervalMinutes: number, durationMinutes: number) {
         const openMinutes = this.toMinutes(openTime);
         const closeMinutesRaw = this.toMinutes(closeTime);
@@ -175,6 +188,11 @@ export class BookingService {
             throw new Error("Horario no permitido por el club");
         }
 
+        // Verificar días de apertura del club (en la zona horaria del club)
+        if (!this.isClubOpenOnLocalDate(clubConfig, startDateTime, clubTimeZone)) {
+            throw new Error('El club está cerrado ese día');
+        }
+
         const endDateTime = new Date(startDateTime.getTime() + effectiveDuration * 60000);
 
         // Validar que la reserva quede dentro del horario de apertura/cierre si el club lo define
@@ -283,6 +301,12 @@ export class BookingService {
         if (!activity) throw new Error("Actividad no encontrada");
 
         const clubTimeZone = (court as any)?.club?.timeZone ?? 'America/Argentina/Buenos_Aires';
+        const clubConfig = (court as any)?.club;
+
+        // Si el club está cerrado ese día, retornamos vacío
+        if (!this.isClubOpenOnLocalDate(clubConfig, date, clubTimeZone)) {
+            return [];
+        }
         const { startUtc, endUtc } = TimeHelper.getUtcRangeForLocalDate(date, clubTimeZone);
 
         const existingBookings = await prisma.booking.findMany({
@@ -609,7 +633,12 @@ export class BookingService {
         const firstClub = await prisma.club.findFirst({ select: { timeZone: true } });
         const timeZone = firstClub?.timeZone ?? 'America/Argentina/Buenos_Aires';
         const allCourts = await this.courtRepo.findAll();
-        const activeCourts = allCourts.filter(court => !court.isUnderMaintenance);
+        const activeCourts = allCourts.filter(court => {
+            if (court.isUnderMaintenance) return false;
+            const clubTZ = (court as any)?.club?.timeZone ?? timeZone;
+            const clubCfg = (court as any)?.club;
+            return this.isClubOpenOnLocalDate(clubCfg, date, clubTZ);
+        });
         const bookings = await this.bookingRepo.findAllByDate(date, timeZone);
 
         const activity = await this.activityRepo.findById(activityId);
@@ -698,6 +727,11 @@ export class BookingService {
         });
         const activity = await this.activityRepo.findById(activityId);
         if (!activity) throw new Error("Actividad no encontrada");
+
+        // Si el club (si se indicó) está cerrado ese día, no devolvemos horarios
+        if (clubId && !this.isClubOpenOnLocalDate(clubConfig, date, timeZone)) {
+            return [];
+        }
 
         const activityCourts = activeCourts.filter((court: any) =>
             Array.isArray(court.activities) && court.activities.some((act: any) => act.id === activityId)
@@ -830,6 +864,12 @@ export class BookingService {
         const startTime = `${String(localStart.getHours()).padStart(2, '0')}:${String(localStart.getMinutes()).padStart(2, '0')}`;
         const endTime = `${String(localEnd.getHours()).padStart(2, '0')}:${String(localEnd.getMinutes()).padStart(2, '0')}`;
         const dayOfWeek = localStart.getDay();
+
+        // Verificar días de apertura del club antes de crear turnos fijos
+        const clubCfgForFixed = (court as any)?.club;
+        if (!this.isClubOpenOnLocalDate(clubCfgForFixed, startDateTime, clubTimeZone)) {
+            throw new Error('El club está cerrado ese día');
+        }
 
         // 👇 CORRECCIÓN 1: FILTRAR SOLO LOS ACTIVOS (NO CANCELADOS)
         const existingFixed = await prisma.fixedBooking.findMany({
