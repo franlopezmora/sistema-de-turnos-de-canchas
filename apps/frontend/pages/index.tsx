@@ -126,7 +126,7 @@ export default function Home() {
   const [activeBookingsCount, setActiveBookingsCount] = useState(0);
   // track which FAQ item is currently open (null if none)
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
-  const faqRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const faqRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   // close open FAQ when clicking outside the open item's box
   useEffect(() => {
@@ -1124,7 +1124,7 @@ export default function Home() {
              { q: "¿Es necesario instalar algún programa en mi computadora?", a: "No, nuestra solución es 100% basada en la nube. Podés acceder a tu panel de administración desde cualquier dispositivo (celular, tablet o PC) con conexión a internet, en cualquier momento y lugar." }
            ].map((item, idx) => (
              <RevealOnScroll delay={100 * (idx + 1)} key={idx}>
-               <div ref={(el) => (faqRefs.current[idx] = el)}>
+               <div ref={(el) => { faqRefs.current[idx] = el; }}>
                  <FAQItem
                    question={item.q}
                    answer={item.a}
