@@ -148,6 +148,73 @@ export default function Home() {
   const [lastSearchLabel, setLastSearchLabel] = useState<string>('');
   const [availableTimesByClub, setAvailableTimesByClub] = useState<Record<number, string[]>>({});
 
+  // Menú de acciones para contactos (abrir / copiar)
+  const [contactMenu, setContactMenu] = useState<{
+    type: 'whatsapp' | 'email' | 'instagram';
+    top: number;
+    left: number;
+    href: string;
+    copyText: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleDocClick = (e: MouseEvent) => {
+      if (!menuRef.current) return;
+      const target = e.target as Node;
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        setContactMenu(null);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContactMenu(null);
+    };
+    document.addEventListener('mousedown', handleDocClick);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleDocClick);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, []);
+
+  const openContactMenu = (e: React.MouseEvent, type: 'whatsapp' | 'email' | 'instagram') => {
+    e.preventDefault();
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const top = rect.bottom + 8; // 8px gap
+    const left = rect.left;
+    let href = '#';
+    let copyText = '';
+    if (type === 'whatsapp') {
+      href = 'https://wa.me/5493513436163';
+      copyText = '+5493513436163';
+    } else if (type === 'email') {
+      href = 'mailto:soporte.tucancha@gmail.com';
+      copyText = 'soporte.tucancha@gmail.com';
+    } else if (type === 'instagram') {
+      href = 'https://www.instagram.com/tucancha.app_/';
+      copyText = '@tucancha.app_';
+    }
+    setContactMenu({ type, top: Math.max(top, 10), left: Math.max(left, 10), href, copyText });
+  };
+
+  const handleOpenHref = (href: string) => {
+    window.open(href, '_blank');
+    setContactMenu(null);
+  };
+
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error('Clipboard write failed', err);
+    }
+    setContactMenu(null);
+  };
+
   const userInitials = useMemo(() => {
     if (!user) return 'TU';
     const first = (user.firstName || user.name || '').trim();
@@ -1105,7 +1172,7 @@ export default function Home() {
                 <p className="text-[#347048]/80 font-medium leading-relaxed">
                     ¿Tenés dudas sobre el sistema o querés dar de alta tu club? Escribinos, respondemos al toque.
                 </p>
-        <a href="https://wa.me/5493513436163" target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
+        <button type="button" onClick={(e) => openContactMenu(e, 'whatsapp')} className="flex items-center gap-4 px-4 py-3 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
               <div className="bg-[#B9CF32] h-12 w-12 rounded-full flex items-center justify-center text-[#347048] group-hover:scale-110 transition-transform shrink-0">
                         <Phone size={20} fill="currentColor" className="text-[#347048]" />
                     </div>
@@ -1113,27 +1180,39 @@ export default function Home() {
                         <p className="text-[#347048]/50 text-xs font-bold uppercase tracking-wider">WhatsApp</p>
             <p className="text-[#347048] font-bold text-lg">+54 351 343 6163</p>
                     </div>
-                </a>
-                <a href="mailto:soporte.tucancha@gmail.com" className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
-                  <div className="bg-[#347048] h-12 w-12 rounded-full flex items-center justify-center text-[#EBE1D8] group-hover:scale-110 transition-transform shrink-0">
-                    <Mail size={20} />
-                  </div>
-                    <div>
+              </button>
+                <button type="button" onClick={(e) => openContactMenu(e, 'email')} className="w-full flex items-center gap-4 px-4 py-3 bg-white rounded-2xl shadow-sm border border-[#347048]/5 hover:border-[#B9CF32] hover:shadow-md transition-all group">
+                      <div className="bg-[#347048] h-12 w-12 rounded-full flex items-center justify-center text-[#EBE1D8] group-hover:scale-110 transition-transform shrink-0">
+                        <Mail size={20} />
+                      </div>
+                      <div className="flex-1 min-w-0">
                         <p className="text-[#347048]/50 text-xs font-bold uppercase tracking-wider">Email</p>
-                        <p className="text-[#347048] font-bold text-lg">soporte.tucancha@gmail.com</p>
-                    </div>
-                </a>
+                        <p className="text-[#347048] font-bold text-lg truncate">soporte.tucancha@gmail.com</p>
+                      </div>
+                    </button>
                 <div className="mt-8 pt-8 border-t border-[#347048]/10">
                     <p className="text-[#347048]/60 text-sm font-bold mb-4 text-center">Seguinos en redes</p>
                     <div className="flex justify-center gap-4">
-                      <a href="https://www.instagram.com/tucancha.app_/" target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-[#347048] text-[#EBE1D8] rounded-full hover:bg-[#B9CF32] hover:text-[#347048] transition-colors">
-                        <Instagram size={20} />
+                      <button type="button" onClick={(e) => openContactMenu(e, 'instagram')} className="flex items-center gap-4 px-4 py-3 bg-[#347048] text-[#EBE1D8] rounded-full hover:bg-[#B9CF32] hover:text-[#347048] transition-colors">
+                        <Instagram size={20} className="shrink-0" />
                         <span className="hidden sm:inline text-[#EBE1D8] font-bold">@tucancha.app_</span>
-                      </a>
+                      </button>
                     </div>
                 </div>
             </div>
       </div>
+      {contactMenu && (
+        <div
+          ref={menuRef}
+          role="dialog"
+          aria-label="Acciones de contacto"
+          style={{ position: 'fixed', top: contactMenu.top, left: contactMenu.left }}
+          className="z-[90] bg-white rounded-lg shadow-lg border p-2 w-44"
+        >
+          <button onClick={() => handleOpenHref(contactMenu.href)} className="w-full text-left px-3 py-2 hover:bg-[#f3f4f6] rounded">Abrir</button>
+          <button onClick={() => handleCopy(contactMenu.copyText)} className="w-full text-left px-3 py-2 hover:bg-[#f3f4f6] rounded">{copied ? 'Copiado!' : 'Copiar'}</button>
+        </div>
+      )}
     </div>
   );
 }
