@@ -79,7 +79,26 @@ export class BookingService {
             return this.buildRangeSlots(openTime, closeTime, intervalMinutes, durationMinutes);
         }
         // For FIXED mode, return objects with dayOffset 0
-        return this.normalizeFixedSlots(club?.scheduleFixedSlots).map((s: string) => ({ slotTime: s, dayOffset: 0 }));
+        const fixed = this.normalizeFixedSlots(club?.scheduleFixedSlots);
+        // Si el club define horario de apertura/cierre, filtrar los slots que queden dentro
+        const open = this.toMinutes(club?.scheduleOpenTime);
+        const close = this.toMinutes(club?.scheduleCloseTime);
+        if (open !== null && close !== null) {
+            return fixed
+                .map((s: string) => ({ slotTime: s, dayOffset: 0 }))
+                .filter((obj: { slotTime: string; dayOffset: number }) => {
+                    const start = this.toMinutes(obj.slotTime);
+                    if (start === null) return false;
+                    // calcular fin del turno en minutos locales
+                    const end = start + durationMinutes;
+                    // normalizar cierre (si close <= open, se asume cruce de medianoche)
+                    let closeMinutes = close;
+                    if (closeMinutes <= open) closeMinutes += 24 * 60;
+                    const startNormalized = start < open ? start + 24 * 60 : start;
+                    return startNormalized >= open && end <= closeMinutes;
+                });
+        }
+        return fixed.map((s: string) => ({ slotTime: s, dayOffset: 0 }));
     }
 
     async createBooking(
@@ -157,6 +176,28 @@ export class BookingService {
         }
 
         const endDateTime = new Date(startDateTime.getTime() + effectiveDuration * 60000);
+
+        // Validar que la reserva quede dentro del horario de apertura/cierre si el club lo define
+        try {
+            const openStr = clubConfig?.scheduleOpenTime;
+            const closeStr = clubConfig?.scheduleCloseTime;
+            if (openStr && closeStr) {
+                const localStart = TimeHelper.utcToLocal(startDateTime, clubTimeZone);
+                const localEnd = TimeHelper.utcToLocal(endDateTime, clubTimeZone);
+                const startMinutes = localStart.getHours() * 60 + localStart.getMinutes();
+                const endMinutes = localEnd.getHours() * 60 + localEnd.getMinutes();
+                const openMinutes = this.toMinutes(openStr)!;
+                let closeMinutes = this.toMinutes(closeStr)!;
+                if (closeMinutes <= openMinutes) closeMinutes += 24 * 60;
+                const startNorm = startMinutes < openMinutes ? startMinutes + 24 * 60 : startMinutes;
+                const endNorm = endMinutes < openMinutes ? endMinutes + 24 * 60 : endMinutes;
+                if (startNorm < openMinutes || endNorm > closeMinutes) {
+                    throw new Error('La reserva excede el horario de apertura del club');
+                }
+            }
+        } catch (err) {
+            throw err;
+        }
 
     // Calcular precio base y extra por luces según configuración del club
         const BASE_PRICE = Number((court as any)?.price ?? 0);

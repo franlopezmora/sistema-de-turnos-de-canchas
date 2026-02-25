@@ -113,8 +113,9 @@ export default function AdminTabClub() {
         professorDiscountEnabled: !!clubForm.professorDiscountEnabled,
         professorDiscountPercent: clubForm.professorDiscountPercent === '' ? null : Number(clubForm.professorDiscountPercent),
         scheduleMode,
-        scheduleOpenTime: scheduleMode === 'RANGE' ? (clubForm.scheduleOpenTime || null) : null,
-        scheduleCloseTime: scheduleMode === 'RANGE' ? (clubForm.scheduleCloseTime || null) : null,
+        // enviar open/close si el admin los completó (también aplicable en FIXED)
+        scheduleOpenTime: clubForm.scheduleOpenTime || null,
+        scheduleCloseTime: clubForm.scheduleCloseTime || null,
         scheduleIntervalMinutes: scheduleMode === 'RANGE'
           ? (clubForm.scheduleIntervalMinutes === '' ? null : Number(clubForm.scheduleIntervalMinutes))
           : null,
@@ -489,6 +490,26 @@ export default function AdminTabClub() {
                       className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
                       placeholder="08:00, 09:30, 11:00"
                     />
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Apertura (opcional)</label>
+                        <input
+                          type="time"
+                          value={clubForm.scheduleOpenTime}
+                          onChange={(e) => setClubForm({ ...clubForm, scheduleOpenTime: e.target.value })}
+                          className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Cierre (opcional)</label>
+                        <input
+                          type="time"
+                          value={clubForm.scheduleCloseTime}
+                          onChange={(e) => setClubForm({ ...clubForm, scheduleCloseTime: e.target.value })}
+                          className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                        />
+                      </div>
+                    </div>
                     <p className="text-[10px] font-bold text-[#347048]/40 mt-1.5 ml-1">Formato 24h, separar con comas.</p>
                   </div>
                 )}
