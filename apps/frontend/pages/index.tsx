@@ -672,10 +672,16 @@ export default function Home() {
                           type="button"
                           className="flex items-center gap-3 text-red-500 hover:text-red-600 w-full text-left p-2 rounded-xl hover:bg-red-50 transition-colors"
                           onClick={() => {
+                            // Limpiar sesión. Si no estamos en '/' o en '/club/*', redirigir a '/'.
                             logout();
                             setUser(null);
                             setShowUserMenu(false);
-                            router.push('/');
+                            const path = router.asPath.split('?')[0].split('#')[0];
+                            const isHome = path === '/';
+                            const isClub = path.startsWith('/club/');
+                            if (!isHome && !isClub) {
+                              router.push('/');
+                            }
                           }}
                         >
                           <LogOut size={18} strokeWidth={2.5} /> Cerrar sesión

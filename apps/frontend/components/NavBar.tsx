@@ -288,8 +288,15 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
         confirmText="Salir"
         isWarning={true}
         onConfirm={() => {
+          // Limpiar sesión y redirigir SOLO si no estamos en Home o en la página pública del club.
           logout();
-          window.location.href = '/';
+          setShowLogoutModal(false);
+          const path = router.asPath.split('?')[0].split('#')[0];
+          const isHome = path === '/';
+          const isClub = path.startsWith('/club/');
+          if (!isHome && !isClub) {
+            router.replace('/');
+          }
         }}
         closeOnBackdrop
         closeOnEscape

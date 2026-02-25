@@ -53,9 +53,10 @@ export const register = async (firstName: string, lastName: string, email: strin
 };
 
 export const logout = () => {
+  // Limpiar token y datos del usuario en localStorage.
+  // No navegamos aquí: la navegación la debe decidir el lugar que llama a `logout()`.
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-  window.location.href = '/login'; // O recargar la página
 };
 
 export const getToken = () => {
