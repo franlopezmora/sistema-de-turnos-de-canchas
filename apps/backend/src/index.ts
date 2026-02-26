@@ -233,12 +233,11 @@ const startServer = async () => {
               nextStatus = PaymentStatus.PAID;
             }
 
-            if (nextStatus !== booking.paymentStatus) {
-              await prisma.booking.update({
-                where: { id: booking.id },
-                data: { paymentStatus: nextStatus }
-              });
-            }
+            // Aquí booking.paymentStatus es PENDING; nextStatus siempre es distinto → actualizamos
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: { paymentStatus: nextStatus }
+            });
           }
         }
       } catch (error) {
