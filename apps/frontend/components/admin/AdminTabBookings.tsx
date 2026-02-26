@@ -1283,6 +1283,7 @@ export default function AdminTabBookings() {
             slug={getClubSlug() || ''}
             courtPrice={selectedBooking.price}
             baseCourtPrice={selectedBooking.court?.price}
+            bookingStatus={selectedBooking.status}
             paymentStatus={selectedBooking.paymentStatus}
             onClose={handleCloseConsumption}
             onConfirm={() => { setSelectedBooking(null); loadSchedule(); }}

@@ -8,6 +8,7 @@ interface Props {
   slug: string;
   courtPrice?: number;
   baseCourtPrice?: number | null;
+  bookingStatus?: string;
   paymentStatus: string;
   onClose: () => void;
   onConfirm: () => void;
@@ -94,7 +95,7 @@ const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
 
 
 const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function BookingConsumption(
-  { bookingId, slug, courtPrice = 0, baseCourtPrice, paymentStatus, onClose, onConfirm },
+  { bookingId, slug, courtPrice = 0, baseCourtPrice, bookingStatus, paymentStatus, onClose, onConfirm },
   ref
 ) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -207,6 +208,8 @@ const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function 
   }, [bookingId, cartItems, saving]);
 
   useImperativeHandle(ref, () => ({ persistDraft }));
+
+  const isCancelled = bookingStatus === 'CANCELLED';
 
   const isCourtResolved = paymentStatus === 'PAID' || paymentStatus === 'PARTIAL' || paymentStatus === 'DEBT';
   const courtPriceToPay = isCourtResolved ? 0 : (courtPrice || 0);
@@ -372,7 +375,7 @@ const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function 
               const nextStatus = (paymentStatus === 'PAID' || paymentStatus === 'PARTIAL') ? 'PARTIAL' : 'DEBT';
               handleSaveChanges(nextStatus, 'DEBT');
           }}
-          disabled={saving || !hasPendingCharges}
+          disabled={saving || !hasPendingCharges || isCancelled}
           className="flex flex-col items-center justify-center gap-1 py-4 bg-[#EBE1D8] border-2 border-[#347048]/20 text-[#347048] font-black uppercase text-[10px] tracking-widest rounded-2xl transition-all hover:bg-white shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <div className="flex items-center gap-2"><FileText size={18} strokeWidth={2.5} /> Dejar en Cuenta</div>
@@ -380,7 +383,7 @@ const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function 
         
         <button 
           onClick={() => setShowPaymentModal(true)} 
-          disabled={saving || !hasPendingCharges}
+          disabled={saving || !hasPendingCharges || isCancelled}
           className="flex flex-col items-center justify-center gap-1 py-4 bg-[#B9CF32] text-[#347048] font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl shadow-[#B9CF32]/20 transition-all hover:-translate-y-1 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
         >
           <div className="flex items-center gap-2"><Banknote size={18} strokeWidth={2.5} /> Cobrar Total</div>

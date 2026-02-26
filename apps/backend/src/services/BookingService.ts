@@ -377,7 +377,7 @@ export class BookingService {
         return freeSlotsResult;
     }
 
-   async cancelBooking(bookingId: number, cancelledByUserId: number, clubId?: number) {
+    async cancelBooking(bookingId: number, cancelledByUserId: number, clubId?: number) {
         const booking = await this.bookingRepo.findById(bookingId);
         if (!booking) {
             throw new Error("La reserva no existe.");
@@ -439,6 +439,14 @@ export class BookingService {
 
     if (clubId != null && booking.court.club.id !== clubId) {
         throw new Error("No tienes acceso a esta reserva");
+    }
+
+    // No permitir confirmar reservas canceladas o ya finalizadas
+    if (booking.status === BookingStatus.CANCELLED) {
+        throw new Error("No se puede confirmar una reserva cancelada.");
+    }
+    if (booking.status === BookingStatus.COMPLETED) {
+        throw new Error("No se puede confirmar una reserva que ya finalizó.");
     }
 
     const paymentStatus = paymentMethod === 'DEBT' 
@@ -1112,6 +1120,17 @@ async updatePaymentStatus(id: number, status: 'PAID' | 'DEBT' | 'PARTIAL') {
 
     if (!booking) throw new Error("Reserva no encontrada");
 
+    // No permitir modificar el pago de reservas canceladas
+    if (booking.status === 'CANCELLED') {
+        throw new Error("No se puede modificar el pago de una reserva cancelada");
+    }
+
+    // Para reservas ya completadas solo permitimos marcar como pagadas (cerrar deuda),
+    // pero nunca volver a DEBT/PARTIAL.
+    if (booking.status === 'COMPLETED' && status !== 'PAID') {
+        throw new Error("Solo se puede marcar como pagado un turno ya completado");
+    }
+
     // 2. LÓGICA DE CAJA AUTOMÁTICA 💰
     // Si el nuevo estado es PAGADO y antes NO lo era... ¡Cobramos la cancha!
     if (status === 'PAID' && booking.paymentStatus !== 'PAID') {
@@ -1206,6 +1225,11 @@ async payBookingDebt(bookingId: number, paymentMethod: string) {
     });
 
     if (!booking) throw new Error("Reserva no encontrada");
+
+    // No permitir cobrar deuda de reservas canceladas
+    if (booking.status === 'CANCELLED') {
+        throw new Error("No se puede cobrar la deuda de una reserva cancelada");
+    }
 
     // 2. DIAGNÓSTICO: Ver qué trae la base de datos
     const dbPrice = Number(booking.price);

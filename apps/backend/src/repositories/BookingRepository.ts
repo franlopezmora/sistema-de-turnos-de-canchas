@@ -86,7 +86,9 @@ export class BookingRepository {
     async delete(id: number, cancelledBy?: number): Promise<void> {
         const data: any = {
             status: 'CANCELLED',
-            cancelledAt: new Date()
+            cancelledAt: new Date(),
+            // Una reserva cancelada no debe seguir contando como pagada o en deuda.
+            paymentStatus: 'PENDING'
         };
         if (cancelledBy) data.cancelledBy = cancelledBy;
         await prisma.booking.update({

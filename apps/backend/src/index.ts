@@ -6,6 +6,7 @@ import { whatsappService } from './services/WhatsappService';
 
 import { prisma } from './prisma';
 import { BookingStatus } from './entities/Enums';
+import { PaymentStatus } from '@prisma/client';
 
 import bookingRoutes from './routes/BookingRoutes';
 import CourtRoutes from './routes/CourtRoutes';
@@ -182,10 +183,63 @@ const startServer = async () => {
           .map(b => b.id);
 
         if (toComplete.length > 0) {
+          // 1) Marcar como COMPLETED todos los turnos cuyo horario ya terminó
           await prisma.booking.updateMany({
             where: { id: { in: toComplete } },
             data: { status: BookingStatus.COMPLETED }
           });
+
+          // 2) Normalizar el estado de pago para evitar COMPLETED + PENDING
+          //    y registrar deuda real cuando no hubo cobro en caja.
+          const completed = await prisma.booking.findMany({
+            where: { id: { in: toComplete } },
+            include: {
+              items: true,
+              cashMovements: true
+            }
+          });
+
+          for (const booking of completed) {
+            // Solo normalizamos cuando la reserva sigue en PENDING
+            if (booking.paymentStatus !== PaymentStatus.PENDING) continue;
+
+            const basePrice = Number(booking.price || 0);
+            const itemsTotal = booking.items.reduce(
+              (sum, item) => sum + Number(item.price || 0) * item.quantity,
+              0
+            );
+            const total = basePrice + itemsTotal;
+
+            // Si el total es 0, no hay deuda que registrar
+            if (total <= 0) {
+              await prisma.booking.update({
+                where: { id: booking.id },
+                data: { paymentStatus: PaymentStatus.PAID }
+              });
+              continue;
+            }
+
+            const totalIncome = booking.cashMovements
+              .filter(m => m.type === 'INCOME')
+              .reduce((sum, m) => sum + Number(m.amount || 0), 0);
+
+            let nextStatus: PaymentStatus;
+            if (totalIncome <= 0) {
+              // Jugado sin pagar nada → deuda total
+              nextStatus = PaymentStatus.DEBT;
+            } else if (totalIncome < total) {
+              nextStatus = PaymentStatus.PARTIAL;
+            } else {
+              nextStatus = PaymentStatus.PAID;
+            }
+
+            if (nextStatus !== booking.paymentStatus) {
+              await prisma.booking.update({
+                where: { id: booking.id },
+                data: { paymentStatus: nextStatus }
+              });
+            }
+          }
         }
       } catch (error) {
         console.error('❌ Error completando turnos:', error);
