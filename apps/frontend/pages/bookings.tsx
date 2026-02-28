@@ -13,6 +13,7 @@ export default function MyBookingsPage() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'PAST' | 'CANCELLED'>('ACTIVE');
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
+  const bookingRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalState, setModalState] = useState<{
@@ -134,6 +135,20 @@ export default function MyBookingsPage() {
       setSelectedBooking(null);
     }
   }, [bookings, selectedBooking]);
+
+  useEffect(() => {
+    if (!selectedBooking) return;
+    const el = bookingRefs.current[selectedBooking.id];
+    if (!el) return;
+    try {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // permitir foco programático (ayuda en mobile cuando aparece el detalle)
+      el.focus({ preventScroll: true });
+    } catch (_) {
+      // fallback simple
+      el.scrollIntoView();
+    }
+  }, [selectedBooking]);
 
   const formatDayLabel = (date: Date) =>
     date.toLocaleDateString('es-AR', {
@@ -283,6 +298,8 @@ export default function MyBookingsPage() {
                     return (
                       <div 
                         key={booking.id}
+                        ref={(el) => { bookingRefs.current[booking.id] = el; }}
+                        tabIndex={-1}
                         onClick={() => setSelectedBooking(booking)}
                         className={`group cursor-pointer relative p-5 rounded-2xl border-2 transition-all duration-300 hover:shadow-lg ${
                           isSelected
