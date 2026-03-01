@@ -14,6 +14,7 @@ export default function MyBookingsPage() {
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'PAST' | 'CANCELLED'>('ACTIVE');
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const bookingRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const selectedDetailRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalState, setModalState] = useState<{
@@ -138,14 +139,12 @@ export default function MyBookingsPage() {
 
   useEffect(() => {
     if (!selectedBooking) return;
-    const el = bookingRefs.current[selectedBooking.id];
+    const el = selectedDetailRef.current;
     if (!el) return;
     try {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // permitir foco programático (ayuda en mobile cuando aparece el detalle)
       el.focus({ preventScroll: true });
     } catch (_) {
-      // fallback simple
       el.scrollIntoView();
     }
   }, [selectedBooking]);
@@ -342,7 +341,7 @@ export default function MyBookingsPage() {
             {/* PANEL DERECHO: DETALLE (STICKY) */}
             <div className="relative animate-in slide-in-from-right-4 duration-500 delay-200">
               {selectedBooking ? (
-                <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border-8 border-[#EBE1D8] h-fit sticky top-24">
+                <div ref={(el) => { selectedDetailRef.current = el; }} tabIndex={-1} className="bg-white rounded-[2.5rem] p-8 shadow-2xl border-8 border-[#EBE1D8] h-fit sticky top-24">
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#347048] text-[#EBE1D8] px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest shadow-lg flex items-center gap-2">
                     <Ticket size={14} /> Ticket de Reserva
                   </div>
