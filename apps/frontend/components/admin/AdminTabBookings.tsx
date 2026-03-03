@@ -6,6 +6,7 @@ import {
   getAdminSchedule,
   cancelBooking,
   confirmBooking as confirmBookingService,
+  splitBookingPayment as splitBookingPaymentService,
   createBooking,
   createFixedBooking,
   cancelFixedBooking,
@@ -211,6 +212,11 @@ const getTodayLocalDate = () => {
   return formatLocalDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
 };
 
+type SplitPaymentDraft = {
+  method: 'CASH' | 'TRANSFER' | 'DEBT';
+  amount: string;
+};
+
 const isPastTimeForDate = (
   dateStr: string,
   timeStr: string,
@@ -282,6 +288,8 @@ export default function AdminTabBookings() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [clubConfig, setClubConfig] = useState<Club | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<'single' | 'split'>('single');
+  const [splitPayments, setSplitPayments] = useState<SplitPaymentDraft[]>([{ method: 'CASH', amount: '' }]);
   const consumptionRef = useRef<BookingConsumptionHandle | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
@@ -291,6 +299,8 @@ export default function AdminTabBookings() {
 
   const handleOpenPaymentModal = (bookingId: number) => {
     setSelectedBookingId(bookingId);
+    setPaymentMode('single');
+    setSplitPayments([{ method: 'CASH', amount: '' }]);
     setShowPaymentModal(true);
   };
 
@@ -824,6 +834,56 @@ export default function AdminTabBookings() {
         loadSchedule(); 
         showInfo('Cobro registrado correctamente.', "Listo");
     } catch (error) { alert('Error al confirmar'); }
+  };
+
+  const updateSplitPayment = (index: number, patch: Partial<SplitPaymentDraft>) => {
+    setSplitPayments((prev) => prev.map((payment, idx) => (idx === index ? { ...payment, ...patch } : payment)));
+  };
+
+  const addSplitPaymentRow = () => {
+    setSplitPayments((prev) => [...prev, { method: 'TRANSFER', amount: '' }]);
+  };
+
+  const removeSplitPaymentRow = (index: number) => {
+    setSplitPayments((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, idx) => idx !== index);
+    });
+  };
+
+  const splitEnteredTotal = splitPayments.reduce((sum, payment) => {
+    const amount = Number(payment.amount);
+    return sum + (Number.isFinite(amount) && amount > 0 ? amount : 0);
+  }, 0);
+
+  const splitTargetTotal = Number(selectedBookingDetail?.booking?.price ?? selectedBooking?.price ?? 0);
+  const splitRemaining = splitTargetTotal - splitEnteredTotal;
+
+  const handleConfirmSplitPayment = async () => {
+    if (!selectedBookingId) return;
+
+    const parsedPayments = splitPayments
+      .map((payment) => ({
+        method: payment.method,
+        amount: Number(payment.amount)
+      }))
+      .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
+
+    if (parsedPayments.length === 0) {
+      showError('Ingresá al menos un monto válido para registrar el pago dividido.');
+      return;
+    }
+
+    try {
+      await splitBookingPaymentService(selectedBookingId, parsedPayments as Array<{ method: 'CASH' | 'TRANSFER' | 'DEBT'; amount: number }>);
+      setShowPaymentModal(false);
+      setPaymentMode('single');
+      setSplitPayments([{ method: 'CASH', amount: '' }]);
+      loadSchedule();
+      showInfo('Pago dividido registrado correctamente.', 'Listo');
+    } catch (error: any) {
+      showError(error?.message || 'No se pudo registrar el pago dividido');
+    }
   };
 
   const handleCloseConsumption = useCallback(async () => {
@@ -1421,7 +1481,10 @@ export default function AdminTabBookings() {
         <ModalPortal onClose={() => setShowPaymentModal(false)}>
           <div className="relative text-[#347048]">
             <button
-              onClick={() => setShowPaymentModal(false)}
+              onClick={() => {
+                setShowPaymentModal(false);
+                setPaymentMode('single');
+              }}
               className="absolute right-0 top-0 -mt-2 -mr-2 bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
               title="Cerrar ventana"
             >
@@ -1429,22 +1492,96 @@ export default function AdminTabBookings() {
             </button>
             <div className="text-center mb-6">
               <h3 className="text-2xl font-black mb-2 uppercase tracking-tight italic">Cobrar Reserva</h3>
-              <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest">Selecciona el método de pago</p>
+              <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest">
+                {paymentMode === 'single' ? 'Selecciona el método de pago' : 'Ingresá múltiples pagos (debe sumar el total pendiente)'}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <button onClick={() => handleConfirmBooking('CASH')} className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-[1.5rem] text-[#347048] transition-all shadow-sm group">
-                <Banknote size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-                <span className="font-black text-xs uppercase tracking-tighter">Efectivo</span>
-              </button>
-              <button onClick={() => handleConfirmBooking('TRANSFER')} className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-[1.5rem] text-[#347048] transition-all shadow-sm group">
-                <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-                <span className="font-black text-xs uppercase tracking-tighter">Digital</span>
-              </button>
-            </div>
-            <button onClick={() => handleConfirmBooking('DEBT')} className="w-full py-4 flex items-center justify-center gap-2 bg-[#926699]/10 border-2 border-[#926699]/20 hover:bg-[#926699]/20 rounded-xl text-[#926699] font-black uppercase text-[10px] tracking-[0.2em] transition-all">
-              <FileText size={16} strokeWidth={3} />
-              <span>Dejar en Cuenta (Deuda)</span>
-            </button>
+            {paymentMode === 'single' ? (
+              <>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <button onClick={() => handleConfirmBooking('CASH')} className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-[1.5rem] text-[#347048] transition-all shadow-sm group">
+                    <Banknote size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+                    <span className="font-black text-xs uppercase tracking-tighter">Efectivo</span>
+                  </button>
+                  <button onClick={() => handleConfirmBooking('TRANSFER')} className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-[1.5rem] text-[#347048] transition-all shadow-sm group">
+                    <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+                    <span className="font-black text-xs uppercase tracking-tighter">Digital</span>
+                  </button>
+                </div>
+                <button onClick={() => handleConfirmBooking('DEBT')} className="w-full py-4 flex items-center justify-center gap-2 bg-[#926699]/10 border-2 border-[#926699]/20 hover:bg-[#926699]/20 rounded-xl text-[#926699] font-black uppercase text-[10px] tracking-[0.2em] transition-all">
+                  <FileText size={16} strokeWidth={3} />
+                  <span>Dejar en Cuenta (Deuda)</span>
+                </button>
+                <button
+                  onClick={() => setPaymentMode('split')}
+                  className="w-full mt-3 py-3 bg-white border-2 border-[#347048]/20 hover:border-[#B9CF32] rounded-xl text-[#347048] font-black uppercase text-[10px] tracking-[0.2em]"
+                >
+                  Cargar pago dividido
+                </button>
+              </>
+            ) : (
+              <div className="space-y-3">
+                {splitPayments.map((payment, index) => (
+                  <div key={`split-payment-${index}`} className="grid grid-cols-12 gap-2 items-center">
+                    <select
+                      value={payment.method}
+                      onChange={(e) => updateSplitPayment(index, { method: e.target.value as 'CASH' | 'TRANSFER' | 'DEBT' })}
+                      className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
+                    >
+                      <option value="CASH">Efectivo</option>
+                      <option value="TRANSFER">Digital</option>
+                      <option value="DEBT">Deuda</option>
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={payment.amount}
+                      onChange={(e) => updateSplitPayment(index, { amount: e.target.value })}
+                      className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
+                      placeholder="Monto"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSplitPaymentRow(index)}
+                      className="col-span-2 h-11 rounded-xl border border-red-200 text-red-500 font-black text-xs"
+                      disabled={splitPayments.length === 1}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addSplitPaymentRow}
+                  className="w-full py-2.5 bg-white border border-[#347048]/20 rounded-xl text-[#347048] font-black uppercase text-[10px] tracking-[0.2em]"
+                >
+                  + Agregar pago
+                </button>
+                <div className="rounded-xl bg-white border border-[#347048]/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#347048]/70 flex items-center justify-between">
+                  <span>Cargado: ${splitEnteredTotal.toLocaleString()}</span>
+                  <span className={Math.abs(splitRemaining) <= 0.01 ? 'text-emerald-600' : 'text-[#926699]'}>
+                    Restante: ${Math.abs(splitRemaining).toLocaleString()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('single')}
+                    className="py-3 bg-white border-2 border-[#347048]/20 rounded-xl text-[#347048] font-black uppercase text-[10px] tracking-[0.2em]"
+                  >
+                    Volver
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmSplitPayment}
+                    className="py-3 bg-[#347048] text-[#EBE1D8] rounded-xl font-black uppercase text-[10px] tracking-[0.2em]"
+                  >
+                    Confirmar split
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </ModalPortal>
       )}

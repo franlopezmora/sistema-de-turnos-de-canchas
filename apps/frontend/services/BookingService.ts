@@ -147,6 +147,47 @@ export const confirmBooking = async (
     return res.json();
 };
 
+export const splitBookingPayment = async (
+  bookingId: number,
+  payments: Array<{ method: 'CASH' | 'TRANSFER' | 'DEBT'; amount: number }>
+) => {
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+
+  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/split-payment`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payments })
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || error.message || 'No se pudo registrar el pago dividido');
+  }
+
+  return res.json();
+};
+
+export const registerBookingPartialPayment = async (
+  bookingId: number,
+  amount: number,
+  method: 'CASH' | 'TRANSFER'
+) => {
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+
+  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/partial-payment`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, method })
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || error.message || 'No se pudo registrar el pago parcial');
+  }
+
+  return res.json();
+};
+
 // --- 4. OBTENER SCHEDULE COMPLETO DEL DÍA (ADMIN) ---
 export const getAdminSchedule = async (date: string) => {
     if (!getToken()) throw new Error("Debes iniciar sesión como administrador.");

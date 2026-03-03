@@ -74,6 +74,10 @@ export class CashController {
                 productId: z.preprocess((v) => Number(v), z.number().int().positive()),
                 quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
                 method: z.enum(['CASH', 'TRANSFER', 'DEBT']).optional(),
+                payments: z.array(z.object({
+                    method: z.enum(['CASH', 'TRANSFER', 'DEBT']),
+                    amount: z.preprocess((v) => Number(v), z.number().positive())
+                })).min(1).optional(),
                 userId: z.preprocess((v) => (v === undefined || v === null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
                 guestName: z.string().trim().optional(),
                 guestPhone: z.string().trim().optional(),
@@ -85,9 +89,10 @@ export class CashController {
             }
             const clubId = (req as any).clubId;
             if (!clubId) return res.status(400).json({ error: 'No se pudo determinar el club' });
-            const { productId, quantity: qty, method, userId, guestName, guestPhone, guestDni } = parsed.data;
+            const { productId, quantity: qty, method, payments, userId, guestName, guestPhone, guestDni } = parsed.data;
 
-            if (method === 'DEBT' && !userId && !guestDni && !guestPhone && !guestName) {
+            const hasDebtInSplit = Array.isArray(payments) && payments.some((payment) => payment.method === 'DEBT');
+            if ((method === 'DEBT' || hasDebtInSplit) && !userId && !guestDni && !guestPhone && !guestName) {
                 return res.status(400).json({ error: 'Debes vincular un cliente para dejar la venta en cuenta' });
             }
 
@@ -104,28 +109,49 @@ export class CashController {
             if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
 
             const amount = Number(product.price) * qty;
+            const normalizedPayments = payments?.map((payment) => ({
+                method: payment.method,
+                amount: Number(payment.amount)
+            }));
 
-            const movement = await prisma.$transaction(async (tx) => {
+            if (normalizedPayments && normalizedPayments.length > 0) {
+                const splitTotal = normalizedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+                if (Math.abs(splitTotal - amount) > 0.01) {
+                    return res.status(400).json({ error: 'La suma de pagos debe coincidir con el total de la venta' });
+                }
+            }
+
+            const movements = await prisma.$transaction(async (tx) => {
                 await this.productService.consumeStock(clubId, product.id, qty, tx);
 
-                return tx.cashMovement.create({
-                    data: {
-                        date: new Date(),
-                        type: 'INCOME',
-                        amount,
-                        description: `${qty}x ${product.name}`,
-                        method: method ?? 'CASH',
-                        clubId,
-                        user: userId ? { connect: { id: userId } } : undefined,
-                        guestName: guestName || null,
-                        guestPhone: guestPhone || null,
-                        guestDni: guestDni || null,
-                        isSettled: method === 'DEBT' ? false : true
-                    }
-                } as any);
+                const paymentsToRegister = normalizedPayments && normalizedPayments.length > 0
+                    ? normalizedPayments
+                    : [{ method: method ?? 'CASH', amount }];
+
+                const created = [];
+                for (const paymentLine of paymentsToRegister) {
+                    const movement = await tx.cashMovement.create({
+                        data: {
+                            date: new Date(),
+                            type: 'INCOME',
+                            amount: paymentLine.amount,
+                            description: `${qty}x ${product.name}`,
+                            method: paymentLine.method,
+                            clubId,
+                            user: userId ? { connect: { id: userId } } : undefined,
+                            guestName: guestName || null,
+                            guestPhone: guestPhone || null,
+                            guestDni: guestDni || null,
+                            isSettled: paymentLine.method === 'DEBT' ? false : true
+                        }
+                    } as any);
+                    created.push(movement);
+                }
+
+                return created;
             });
 
-            res.json(movement);
+            res.json({ movements, total: amount });
         } catch (error) {
             console.error('❌ Error en createProductSale:', error);
             res.status(500).json({ error: 'Error al registrar la venta' });

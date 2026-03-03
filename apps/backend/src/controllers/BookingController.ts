@@ -867,6 +867,89 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
         res.json({ success: true });
     }
 
+    splitPayment = async (req: Request, res: Response) => {
+        try {
+            const paramsSchema = z.object({
+                id: z.preprocess((v) => Number(v), z.number().int().positive())
+            });
+            const bodySchema = z.object({
+                payments: z.array(z.object({
+                    method: z.enum(['CASH', 'TRANSFER', 'DEBT']),
+                    amount: z.preprocess((v) => Number(v), z.number().positive())
+                })).min(1)
+            });
+
+            const paramsParsed = paramsSchema.safeParse(req.params);
+            const bodyParsed = bodySchema.safeParse(req.body);
+
+            if (!paramsParsed.success) {
+                return res.status(400).json({ error: paramsParsed.error.format() });
+            }
+            if (!bodyParsed.success) {
+                return res.status(400).json({ error: bodyParsed.error.format() });
+            }
+
+            const userId = Number((req as any)?.user?.userId);
+            if (!Number.isFinite(userId) || userId <= 0) {
+                return res.status(401).json({ error: 'No autorizado' });
+            }
+
+            const clubId = (req as any).clubId;
+            const result = await this.bookingService.registerSplitPayment(
+                paramsParsed.data.id,
+                userId,
+                bodyParsed.data.payments,
+                clubId
+            );
+
+            return res.json(result);
+        } catch (error: any) {
+            console.error('❌ Error en splitPayment:', error);
+            return res.status(400).json({ error: error.message || 'Error al registrar pago dividido' });
+        }
+    }
+
+    partialPayment = async (req: Request, res: Response) => {
+        try {
+            const paramsSchema = z.object({
+                id: z.preprocess((v) => Number(v), z.number().int().positive())
+            });
+            const bodySchema = z.object({
+                amount: z.preprocess((v) => Number(v), z.number().positive()),
+                method: z.enum(['CASH', 'TRANSFER'])
+            });
+
+            const paramsParsed = paramsSchema.safeParse(req.params);
+            const bodyParsed = bodySchema.safeParse(req.body);
+
+            if (!paramsParsed.success) {
+                return res.status(400).json({ error: paramsParsed.error.format() });
+            }
+            if (!bodyParsed.success) {
+                return res.status(400).json({ error: bodyParsed.error.format() });
+            }
+
+            const userId = Number((req as any)?.user?.userId);
+            if (!Number.isFinite(userId) || userId <= 0) {
+                return res.status(401).json({ error: 'No autorizado' });
+            }
+
+            const clubId = (req as any).clubId;
+            const result = await this.bookingService.registerPartialPayment(
+                paramsParsed.data.id,
+                userId,
+                bodyParsed.data.amount,
+                bodyParsed.data.method,
+                clubId
+            );
+
+            return res.json(result);
+        } catch (error: any) {
+            console.error('❌ Error en partialPayment:', error);
+            return res.status(400).json({ error: error.message || 'Error al registrar pago parcial' });
+        }
+    }
+
     getDebtors = async (req: Request, res: Response) => {
         try {
             const clubId = (req as any).clubId;

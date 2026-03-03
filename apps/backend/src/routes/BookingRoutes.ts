@@ -63,6 +63,8 @@ router.delete('/items/:itemId', authMiddleware, (req, res) => bookingController.
 // Historial y Estados
 router.get('/history/:userId', authMiddleware, (req, res) => bookingController.getHistory(req, res));
 router.patch('/:id/payment-status', authMiddleware, (req, res) => bookingController.updateStatus(req, res));
+router.post('/:id/split-payment', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, (req, res) => bookingController.splitPayment(req, res));
+router.post('/:id/partial-payment', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, (req, res) => bookingController.partialPayment(req, res));
 
 
 export default router;

@@ -114,6 +114,24 @@ export class BookingService {
         return fixed.map((s: string) => ({ slotTime: s, dayOffset: 0 }));
     }
 
+    private calculateBookingFinancials(booking: {
+        price: unknown;
+        items: Array<{ price: unknown; quantity: number }>;
+        cashMovements: Array<{ type: string; amount: unknown }>;
+    }) {
+        const courtPrice = Number(booking.price || 0);
+        const itemsTotal = booking.items.reduce(
+            (sum, item) => sum + Number(item.price) * Number(item.quantity),
+            0
+        );
+        const totalPaid = booking.cashMovements
+            .filter((movement) => movement.type === 'INCOME')
+            .reduce((sum, movement) => sum + Number(movement.amount), 0);
+        const total = courtPrice + itemsTotal;
+        const remaining = Math.max(0, total - totalPaid);
+        return { courtPrice, itemsTotal, totalPaid, total, remaining };
+    }
+
     async createBooking(
         userId: number | null,
         guestIdentifier: string | undefined,
@@ -1283,6 +1301,177 @@ async payBookingDebt(bookingId: number, paymentMethod: string) {
     });
 
     return movement;
+}
+
+async registerSplitPayment(
+    bookingId: number,
+    userId: number,
+    payments: Array<{ method: 'CASH' | 'TRANSFER' | 'DEBT'; amount: number }>,
+    clubId?: number
+) {
+    if (!Array.isArray(payments) || payments.length === 0) {
+        throw new Error('Debe enviar al menos un pago');
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const booking = await tx.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                court: { include: { club: true } },
+                items: true,
+                cashMovements: true
+            }
+        });
+
+        if (!booking) throw new Error('Reserva no encontrada');
+        if (clubId != null && booking.court.club.id !== clubId) {
+            throw new Error('No tienes acceso a esta reserva');
+        }
+        if (booking.status === BookingStatus.CANCELLED) {
+            throw new Error('No se puede cobrar una reserva cancelada');
+        }
+        if (booking.status === BookingStatus.COMPLETED) {
+            throw new Error('No se puede modificar el cobro de una reserva finalizada');
+        }
+
+        const normalizedPayments = payments.map((payment) => ({
+            method: payment.method,
+            amount: Number(payment.amount)
+        }));
+
+        if (normalizedPayments.some((payment) => !Number.isFinite(payment.amount) || payment.amount <= 0)) {
+            throw new Error('Todos los montos deben ser mayores a 0');
+        }
+
+        const { total, totalPaid, remaining } = this.calculateBookingFinancials(booking);
+        const totalRequested = normalizedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+        if (Math.abs(totalRequested - remaining) > 0.01) {
+            throw new Error('La suma de pagos debe ser exactamente igual a la deuda pendiente');
+        }
+
+        const paidNow = normalizedPayments
+            .filter((payment) => payment.method !== 'DEBT')
+            .reduce((sum, payment) => sum + payment.amount, 0);
+
+        for (const payment of normalizedPayments) {
+            if (payment.method === 'DEBT') continue;
+
+            await tx.cashMovement.create({
+                data: {
+                    date: new Date(),
+                    type: 'INCOME',
+                    amount: payment.amount,
+                    description: `Cobro parcial Reserva #${booking.id} - ${booking.court.name}`,
+                    method: payment.method,
+                    bookingId: booking.id,
+                    clubId: booking.court.club.id
+                }
+            });
+        }
+
+        const totalPaidAfter = totalPaid + paidNow;
+        const remainingAfter = Math.max(0, total - totalPaidAfter);
+        let nextPaymentStatus: PaymentStatus = PaymentStatus.DEBT;
+        if (remainingAfter <= 0.01) nextPaymentStatus = PaymentStatus.PAID;
+        else if (totalPaidAfter > 0) nextPaymentStatus = PaymentStatus.PARTIAL;
+
+        const updated = await tx.booking.update({
+            where: { id: booking.id },
+            data: {
+                status: booking.status === BookingStatus.PENDING ? BookingStatus.CONFIRMED : booking.status,
+                paymentStatus: nextPaymentStatus
+            }
+        });
+
+        return {
+            booking: updated,
+            summary: {
+                total,
+                paidBefore: totalPaid,
+                paidNow,
+                paidAfter: totalPaidAfter,
+                remaining: remainingAfter
+            }
+        };
+    });
+}
+
+async registerPartialPayment(
+    bookingId: number,
+    userId: number,
+    amount: number,
+    method: 'CASH' | 'TRANSFER',
+    clubId?: number
+) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error('El monto del pago parcial debe ser mayor a 0');
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const booking = await tx.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                court: { include: { club: true } },
+                items: true,
+                cashMovements: true
+            }
+        });
+
+        if (!booking) throw new Error('Reserva no encontrada');
+        if (clubId != null && booking.court.club.id !== clubId) {
+            throw new Error('No tienes acceso a esta reserva');
+        }
+        if (booking.status === BookingStatus.CANCELLED) {
+            throw new Error('No se puede cobrar una reserva cancelada');
+        }
+        if (booking.status === BookingStatus.COMPLETED) {
+            throw new Error('No se puede modificar el cobro de una reserva finalizada');
+        }
+
+        const { total, totalPaid, remaining } = this.calculateBookingFinancials(booking);
+        if (amount > remaining + 0.01) {
+            throw new Error('El pago parcial supera la deuda pendiente');
+        }
+
+        await tx.cashMovement.create({
+            data: {
+                date: new Date(),
+                type: 'INCOME',
+                amount,
+                description: `Cobro parcial Reserva #${booking.id} - ${booking.court.name}`,
+                method,
+                bookingId: booking.id,
+                clubId: booking.court.club.id
+            }
+        });
+
+        const totalPaidAfter = totalPaid + amount;
+        const remainingAfter = Math.max(0, total - totalPaidAfter);
+        let nextPaymentStatus: PaymentStatus = PaymentStatus.DEBT;
+        if (remainingAfter <= 0.01) nextPaymentStatus = PaymentStatus.PAID;
+        else if (totalPaidAfter > 0) nextPaymentStatus = PaymentStatus.PARTIAL;
+
+        const updated = await tx.booking.update({
+            where: { id: booking.id },
+            data: {
+                status: booking.status === BookingStatus.PENDING ? BookingStatus.CONFIRMED : booking.status,
+                paymentStatus: nextPaymentStatus
+            }
+        });
+
+        return {
+            booking: updated,
+            summary: {
+                total,
+                paidBefore: totalPaid,
+                paidNow: amount,
+                paidAfter: totalPaidAfter,
+                remaining: remainingAfter,
+                registeredBy: userId
+            }
+        };
+    });
 }
 
 

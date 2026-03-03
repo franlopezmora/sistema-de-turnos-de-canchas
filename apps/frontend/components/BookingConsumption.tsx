@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { ClubAdminService } from '../services/ClubAdminService';
-import { confirmBooking as confirmBookingService } from '../services/BookingService';
-import { Trash2, Plus, ShoppingCart, Receipt, Lock, ChevronDown, Check, X, Banknote, CreditCard, FileText, Star } from 'lucide-react';
+import { confirmBooking as confirmBookingService, registerBookingPartialPayment } from '../services/BookingService';
+import { Trash2, Plus, ShoppingCart, Receipt, Lock, ChevronDown, Check, X, Banknote, FileText, Star } from 'lucide-react';
+import PaymentCalculator, { type PaymentCalculatorResult } from './PaymentCalculator';
 // import { BookingTicket } from './BookingTicket'; // Si no lo usás, podés borrar esta línea
 
 interface Props {
@@ -105,7 +106,6 @@ const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const paymentBackdropMouseDownRef = useRef(false);
   const skipDraftPersistRef = useRef(false);
 
   // Formulario
@@ -228,16 +228,48 @@ const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function 
   const finalTotal = courtPriceToPay + consumptionTotal;
   const hasPendingCharges = finalTotal > 0;
 
-  const handlePaymentConfirm = (method: 'CASH' | 'TRANSFER') => {
-      let nextStatus: 'PAID' | 'PARTIAL' | 'DEBT' = 'PAID';
-      if (paymentStatus === 'DEBT') {
-          nextStatus = 'PARTIAL';
-      } 
-      else if (paymentStatus === 'PARTIAL') {
-          nextStatus = 'PARTIAL';
+  const handleCalculatedPaymentConfirm = async (result: PaymentCalculatorResult) => {
+    try {
+      setSaving(true);
+      skipDraftPersistRef.current = true;
+
+      if (bookingStatus === 'PENDING') {
+        await confirmBookingService(bookingId, 'DEBT');
       }
-      handleSaveChanges(nextStatus, method);
+
+      const deletePromises = itemsToDelete.map((id) => ClubAdminService.removeItemFromBooking(id));
+      const newItems = cartItems.filter((item) => item.isNew);
+      const selectedKeys = new Set(result.selectedItemKeys);
+      const paidItems = result.method === 'DEBT'
+        ? []
+        : newItems.filter((item) => selectedKeys.has(item.tempId || item.id || ''));
+      const debtItems = newItems.filter((item) => !paidItems.includes(item));
+
+      const paidItemsPromises = paidItems.map((item) =>
+        ClubAdminService.addItemToBooking(bookingId, item.productId, item.quantity, result.method)
+      );
+      const debtItemsPromises = debtItems.map((item) =>
+        ClubAdminService.addItemToBooking(bookingId, item.productId, item.quantity, 'DEBT')
+      );
+
+      await Promise.all([...deletePromises, ...paidItemsPromises, ...debtItemsPromises]);
+
+      if (result.method !== 'DEBT') {
+        const paidItemsAmount = paidItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const courtOrDebtPortion = Math.max(0, result.amount - paidItemsAmount);
+        if (courtOrDebtPortion > 0.01) {
+          await registerBookingPartialPayment(bookingId, courtOrDebtPortion, result.method);
+        }
+      }
+
       setShowPaymentModal(false);
+      onConfirm();
+      onClose();
+    } catch (error: any) {
+      alert('Error: ' + (error.message || 'No se pudo registrar el pago'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Convertimos los productos cargados en opciones para el CustomSelect
@@ -387,7 +419,9 @@ const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function 
         </button>
         
         <button 
-          onClick={() => setShowPaymentModal(true)} 
+          onClick={() => {
+            setShowPaymentModal(true);
+          }} 
           disabled={saving || !hasPendingCharges || isCancelled}
           className="flex flex-col items-center justify-center gap-1 py-4 bg-[#B9CF32] text-[#347048] font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl shadow-[#B9CF32]/20 transition-all hover:-translate-y-1 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
         >
@@ -397,65 +431,20 @@ const BookingConsumption = forwardRef<BookingConsumptionHandle, Props>(function 
 
       {/* MODAL DE COBRO */}
       {showPaymentModal && (
-  <div
-    className="fixed inset-0 bg-[#347048]/80 backdrop-blur-[2px] flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
-    onMouseDown={(event) => {
-      paymentBackdropMouseDownRef.current = event.target === event.currentTarget;
-    }}
-    onTouchStart={(event) => {
-      paymentBackdropMouseDownRef.current = event.target === event.currentTarget;
-    }}
-    onClick={(event) => {
-      const startedOnBackdrop = paymentBackdropMouseDownRef.current;
-      paymentBackdropMouseDownRef.current = false;
-      if (startedOnBackdrop && event.target === event.currentTarget) {
-        setShowPaymentModal(false);
-      }
-    }}
-  >
-            <div
-              className="bg-[#EBE1D8] border-4 border-white p-8 rounded-[2.5rem] shadow-2xl max-w-sm w-full relative"
-              onClick={(event) => event.stopPropagation()}
-            >
-                <button 
-                  onClick={() => setShowPaymentModal(false)}
-                  className="absolute top-6 right-6 bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
-                  title="Cerrar ventana"
-                >
-                  <X size={20} strokeWidth={3} />
-                </button>
-
-                <h3 className="text-2xl font-black text-[#347048] mb-2 text-center uppercase tracking-tight italic">Cobrar Total</h3>
-                <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
-                  Total: <span className="text-[#347048] text-lg font-black">${finalTotal.toLocaleString()}</span>
-                </p>
-                
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                    <button
-                      onClick={() => handlePaymentConfirm('CASH')}
-                      className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
-                    >
-                      <Banknote size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-                      <span className="font-black text-[10px] uppercase tracking-widest">Efectivo</span>
-                    </button>
-
-                    <button
-                      onClick={() => handlePaymentConfirm('TRANSFER')}
-                      className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
-                    >
-                      <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-                      <span className="font-black text-[10px] uppercase tracking-widest">Digital</span>
-                    </button>
-                </div>
-                
-                <button 
-                    onClick={() => setShowPaymentModal(false)}
-                    className="w-full text-[#347048]/40 hover:text-[#347048] text-[10px] font-black uppercase tracking-widest hover:underline transition-all"
-                >
-                    Cancelar operación
-                </button>
-            </div>
-        </div>
+        <PaymentCalculator
+          courtPending={courtPriceToPay}
+          cartItems={cartItems.filter((item) => item.isNew).map((item) => ({
+            id: item.id,
+            tempId: item.tempId,
+            productName: item.productName,
+            quantity: item.quantity,
+            price: item.price
+          }))}
+          alreadyPaid={0}
+          grandTotal={finalTotal}
+          onClose={() => setShowPaymentModal(false)}
+          onConfirm={handleCalculatedPaymentConfirm}
+        />
       )}
     </div>
   );

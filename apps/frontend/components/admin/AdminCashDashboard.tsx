@@ -30,6 +30,11 @@ interface Product {
   category?: string;
 }
 
+type SplitSalePaymentDraft = {
+  method: 'CASH' | 'TRANSFER' | 'DEBT';
+  amount: string;
+};
+
 // --- COMPONENTE DROPDOWN CUSTOM (ESTILO WIMBLEDON) ---
 const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -109,6 +114,8 @@ const AdminCashDashboard = () => {
   // Formulario
   const [newMove, setNewMove] = useState({ description: '', amount: '', type: 'INCOME', method: 'CASH' });
   const [productSale, setProductSale] = useState({ productId: '', quantity: '1', method: 'CASH' as 'CASH' | 'TRANSFER' | 'DEBT', clientQuery: '' });
+  const [splitSaleEnabled, setSplitSaleEnabled] = useState(false);
+  const [splitSalePayments, setSplitSalePayments] = useState<SplitSalePaymentDraft[]>([{ method: 'CASH', amount: '' }]);
 
   const getClubSlug = () => {
     try {
@@ -285,6 +292,33 @@ const AdminCashDashboard = () => {
       return;
     }
 
+    const selectedProduct = products.find((product) => Number(product.id) === Number(productSale.productId));
+    if (!selectedProduct) {
+      setSaleError('El producto seleccionado no es válido.');
+      return;
+    }
+
+    const totalAmount = Number(selectedProduct.price) * qty;
+
+    const parsedSplitPayments = splitSalePayments
+      .map((payment) => ({
+        method: payment.method,
+        amount: Number(payment.amount)
+      }))
+      .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
+
+    if (splitSaleEnabled) {
+      if (parsedSplitPayments.length === 0) {
+        setSaleError('Agregá al menos un tramo de pago válido.');
+        return;
+      }
+      const splitTotal = parsedSplitPayments.reduce((sum, payment) => sum + payment.amount, 0);
+      if (Math.abs(splitTotal - totalAmount) > 0.01) {
+        setSaleError('La suma de los pagos debe coincidir con el total de la venta.');
+        return;
+      }
+    }
+
     try {
       const token = localStorage.getItem('token');
       const apiBase = `${getApiUrl()}/api`;
@@ -299,6 +333,7 @@ const AdminCashDashboard = () => {
           productId: Number(productSale.productId),
           quantity: qty,
           method: productSale.method,
+          ...(splitSaleEnabled ? { payments: parsedSplitPayments } : {}),
           userId: selectedClient?.id,
           guestName: selectedClient ? `${selectedClient.firstName || ''} ${selectedClient.lastName || ''}`.trim() : undefined,
           guestPhone: selectedClient?.phoneNumber || selectedClient?.phone || undefined,
@@ -312,6 +347,8 @@ const AdminCashDashboard = () => {
       }
 
       setProductSale({ productId: '', quantity: '1', method: productSale.method, clientQuery: '' });
+  setSplitSaleEnabled(false);
+  setSplitSalePayments([{ method: 'CASH', amount: '' }]);
       setSelectedClient(null);
       fetchCash();
       fetchProducts();
@@ -652,7 +689,56 @@ const AdminCashDashboard = () => {
                     Fiado
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setSplitSaleEnabled((prev) => !prev)}
+                  className="mt-2 w-full h-10 rounded-xl border-2 border-[#347048]/20 bg-white text-[#347048] text-[10px] font-black uppercase tracking-widest"
+                >
+                  {splitSaleEnabled ? 'Usar pago simple' : 'Dividir pago'}
+                </button>
               </div>
+
+              {splitSaleEnabled && (
+                <div className="col-span-2 space-y-2">
+                  {splitSalePayments.map((payment, index) => (
+                    <div key={`split-sale-${index}`} className="grid grid-cols-12 gap-2">
+                      <select
+                        value={payment.method}
+                        onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, method: e.target.value as 'CASH' | 'TRANSFER' | 'DEBT' } : item))}
+                        className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
+                      >
+                        <option value="CASH">Efectivo</option>
+                        <option value="TRANSFER">Digital</option>
+                        <option value="DEBT">Fiado</option>
+                      </select>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={payment.amount}
+                        onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, amount: e.target.value } : item))}
+                        className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
+                        placeholder="Monto"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setSplitSalePayments((prev) => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== index))}
+                        className="col-span-2 h-11 rounded-xl border border-red-200 text-red-500 font-black text-xs"
+                        disabled={splitSalePayments.length === 1}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSplitSalePayments((prev) => [...prev, { method: 'TRANSFER', amount: '' }])}
+                    className="w-full h-10 rounded-xl border border-[#347048]/20 bg-white text-[#347048] text-[10px] font-black uppercase tracking-widest"
+                  >
+                    + Agregar tramo
+                  </button>
+                </div>
+              )}
             </div>
 
             {saleError && (
