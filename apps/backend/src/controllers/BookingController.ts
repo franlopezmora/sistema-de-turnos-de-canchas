@@ -1042,44 +1042,51 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
     getDashboardStats = async (req: Request, res: Response) => {
     try {
         const clubId = Number((req as any).clubId);
-        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-        const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
+        
+        // 1. LEER FECHAS DE LA URL O USAR POR DEFECTO EL MES ACTUAL
+        const { startDate, endDate } = req.query;
+        
+        let start = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        let end = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
 
-        // 1. TRAEMOS TODO EN PARALELO
+        if (startDate && endDate) {
+            start = new Date(startDate as string);
+            end = new Date(endDate as string);
+            end.setHours(23, 59, 59, 999); // Aseguramos que tome hasta el último segundo de ese día
+        }
+
+        // 2. CONSULTAS A PRISMA (Usando 'start' y 'end')
         const [movements, playedBookings] = await Promise.all([
-            // Movimientos de caja (Bar + Pagos de turnos)
             prisma.cashMovement.findMany({
                 where: {
                     clubId: clubId,
                     type: 'INCOME',
-                    date: { gte: startOfMonth, lte: endOfMonth }
+                    date: { gte: start, lte: end }
                 },
                 select: { date: true, amount: true, description: true, method: true }
             }),
-            // Solo los turnos que se jugaron (Status = COMPLETED)
             prisma.booking.count({
                 where: {
                     court: { clubId: clubId },
-                    startDateTime: { gte: startOfMonth, lte: endOfMonth },
-                    status: 'COMPLETED' // 🔥 ACÁ ES DONDE CAMBIAMOS A "JUGADOS"
+                    startDateTime: { gte: start, lte: end },
+                    status: 'COMPLETED' 
                 }
             })
         ]);
 
-        // 2. PROCESAMOS MOVIMIENTOS
+        // 3. PROCESAMIENTO
         const dailyMap = new Map();
         const methodMap: Record<string, number> = {};
         let totalTurnos = 0;
         let totalBar = 0;
 
         movements.forEach(m => {
-            const day = m.date.getDate();
+            // 🔥 CAMBIO CLAVE: Formateamos como "DD/MM" para evitar mezclar meses
+            const dayStr = m.date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
             const amount = Number(m.amount);
-            
-            // Separación Bar vs Turnos basada en tu descripción
             const isProduct = m.description && m.description.includes('Venta Extra:');
 
-            const current = dailyMap.get(day) || { turnos: 0, bar: 0 };
+            const current = dailyMap.get(dayStr) || { turnos: 0, bar: 0 };
             
             if (isProduct) {
                 current.bar += amount;
@@ -1088,22 +1095,24 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
                 current.turnos += amount;
                 totalTurnos += amount;
             }
-            dailyMap.set(day, current);
+            dailyMap.set(dayStr, current);
 
-            // Acumulamos para la torta de pagos
             methodMap[m.method] = (methodMap[m.method] || 0) + amount;
         });
 
-        // 3. Formatear para el gráfico
-        const dailyEvolution = Array.from(dailyMap, ([day, values]) => ({ 
-            day: `Día ${day}`, 
-            ...values 
-        })).sort((a, b) => parseInt(a.day.split(' ')[1]) - parseInt(b.day.split(' ')[1]));
+        // 4. ORDENAR Y FORMATEAR PARA EL GRÁFICO
+        const dailyEvolution = Array.from(dailyMap, ([day, values]) => {
+            // Convertimos "DD/MM" de vuelta a fecha para ordenar correctamente
+            const [d, m] = day.split('/');
+            const sortDate = new Date(new Date().getFullYear(), Number(m) - 1, Number(d)).getTime();
+            return { day, sortDate, ...values };
+        })
+        .sort((a, b) => a.sortDate - b.sortDate)
+        .map(({ sortDate, ...rest }) => rest); // Limpiamos el campo de ordenamiento
 
-        // 4. RESPUESTA FINAL
         res.json({
             totalRevenue: totalTurnos + totalBar,
-            totalBookings: playedBookings, // Usamos el conteo de jugados
+            totalBookings: playedBookings,
             dailyEvolution: dailyEvolution,
             paymentMethods: Object.entries(methodMap).map(([name, value]) => ({ name, value }))
         });
