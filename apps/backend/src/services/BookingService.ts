@@ -537,38 +537,47 @@ export class BookingService {
     ? PaymentStatus.DEBT
     : PaymentStatus.PAID;
 
-    const updated = await prisma.booking.update({
-        where: { id: bookingId },
-        data: { 
-            status: BookingStatus.CONFIRMED, // La cancha está ocupada
-            paymentStatus: paymentStatus,    // <--- ACÁ SE GENERA LA DEUDA O EL PAGO
-            // Opcional: Si tenés una columna para guardar el método en la reserva:
-            // paymentMethod: paymentMethod 
-        },
-        include: { user: true, court: { include: { club: true } }, activity: true }
-    });
+    const bookingClubId = booking.court?.club?.id;
+    if (!bookingClubId) {
+        throw new Error('No se pudo determinar el club de la reserva para registrar el movimiento');
+    }
 
-    // 4. Lógica de CAJA (Solo entra plata si NO es deuda)
-    if (paymentMethod !== 'DEBT') {
-        try {
-            const price = Number(updated.price || 0);
+    const updated = await prisma.$transaction(async (tx) => {
+        const updatedBooking = await tx.booking.update({
+            where: { id: bookingId },
+            data: {
+                status: BookingStatus.CONFIRMED,
+                paymentStatus: paymentStatus,
+            },
+            include: { user: true, court: { include: { club: true } }, activity: true }
+        });
+
+        if (paymentMethod !== 'DEBT') {
+            const price = Number(updatedBooking.price || 0);
             if (price > 0) {
-                await this.cashRepository.create({
-                    date: new Date(),
-                    type: 'INCOME',
-                    amount: price,
-                    description: `Cobro Turno #${updated.id} - ${updated.court.name}`,
-                    method: paymentMethod, 
-                    bookingId: updated.id
+                await tx.cashMovement.create({
+                    data: {
+                        date: new Date(),
+                        type: 'INCOME',
+                        amount: price,
+                        description: `Cobro cancha reserva #${updatedBooking.id}`,
+                        method: paymentMethod,
+                        bookingId: updatedBooking.id,
+                        clubId: bookingClubId,
+                        userId: updatedBooking.userId ?? undefined,
+                        guestName: updatedBooking.guestName ?? undefined,
+                        guestPhone: updatedBooking.guestPhone ?? undefined,
+                        guestDni: updatedBooking.guestDni ?? undefined,
+                        isSettled: true,
+                    }
                 });
             }
-        } catch (error) {
-            console.error("⚠️ Error caja:", error);
+        } else {
+            console.log(`📝 Deuda registrada al cliente ${updatedBooking.guestName} por Reserva #${updatedBooking.id}`);
         }
-    } else {
-        // Log para control
-        console.log(`📝 Deuda registrada al cliente ${updated.guestName} por Reserva #${updated.id}`);
-    }
+
+        return updatedBooking;
+    });
 
     return this.bookingRepo.mapToEntity(updated);
 }
