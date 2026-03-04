@@ -165,6 +165,7 @@ export class BookingService {
             .filter((movement) => {
                 if (movement.type !== 'INCOME') return false;
                 if (movement.method !== 'DEBT') return false;
+                if (movement.isSettled !== false) return false;
                 const description = String(movement.description || '').toLowerCase();
                 return description.startsWith('deuda cancha reserva #');
             })
@@ -1640,6 +1641,7 @@ async registerCourtDebtPortion(
             .filter((movement) => {
                 if (movement.type !== 'INCOME') return false;
                 if (movement.method !== 'DEBT') return false;
+                if (movement.isSettled !== false) return false;
                 const description = String(movement.description || '').toLowerCase();
                 return description.startsWith('deuda cancha reserva #');
             })
