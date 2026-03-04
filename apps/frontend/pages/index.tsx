@@ -632,6 +632,9 @@ export default function Home() {
             </span>
         </div>
         <div className="flex items-center gap-4 relative">
+            <button onClick={() => setShowContact(true)} className="hidden md:flex items-center gap-2 px-5 py-2 rounded-full border border-[#D4C5B0]/30 text-[#D4C5B0] font-bold text-sm hover:bg-[#D4C5B0] hover:text-[#347048] transition-all">
+                <span>Contacto</span>
+            </button>
             {user ? (
               <>
                 {!isAdmin && (
@@ -737,11 +740,7 @@ export default function Home() {
                   )}
                 </div>
               </>
-            ) : (
-              <button onClick={() => setShowContact(true)} className="hidden md:flex items-center gap-2 px-5 py-2 rounded-full border border-[#D4C5B0]/30 text-[#D4C5B0] font-bold text-sm hover:bg-[#D4C5B0] hover:text-[#347048] transition-all">
-                  <span>Contacto</span>
-              </button>
-            )}
+            ) : null}
             {!user && (
                 <Link href="/login" className="px-5 py-2 rounded-full bg-[#D4C5B0] text-[#347048] font-bold hover:bg-[#B9CF32] transition-all text-sm shadow-lg shadow-[#347048]/50">
                     Ingresar

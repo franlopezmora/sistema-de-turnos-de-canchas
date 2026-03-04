@@ -953,6 +953,45 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
         }
     }
 
+    courtDebtPortion = async (req: Request, res: Response) => {
+        try {
+            const paramsSchema = z.object({
+                id: z.preprocess((v) => Number(v), z.number().int().positive())
+            });
+            const bodySchema = z.object({
+                amount: z.preprocess((v) => Number(v), z.number().positive())
+            });
+
+            const paramsParsed = paramsSchema.safeParse(req.params);
+            const bodyParsed = bodySchema.safeParse(req.body);
+
+            if (!paramsParsed.success) {
+                return res.status(400).json({ error: paramsParsed.error.format() });
+            }
+            if (!bodyParsed.success) {
+                return res.status(400).json({ error: bodyParsed.error.format() });
+            }
+
+            const userId = Number((req as any)?.user?.userId);
+            if (!Number.isFinite(userId) || userId <= 0) {
+                return res.status(401).json({ error: 'No autorizado' });
+            }
+
+            const clubId = (req as any).clubId;
+            const result = await this.bookingService.registerCourtDebtPortion(
+                paramsParsed.data.id,
+                userId,
+                bodyParsed.data.amount,
+                clubId
+            );
+
+            return res.json(result);
+        } catch (error: any) {
+            console.error('❌ Error en courtDebtPortion:', error);
+            return res.status(400).json({ error: error.message || 'Error al registrar deuda parcial de cancha' });
+        }
+    }
+
     getFinancialSummary = async (req: Request, res: Response) => {
         try {
             const paramsSchema = z.object({

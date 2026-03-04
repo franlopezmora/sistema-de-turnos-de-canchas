@@ -117,7 +117,7 @@ export class BookingService {
     private calculateBookingFinancials(booking: {
         price: unknown;
         items: Array<{ price: unknown; quantity: number }>;
-        cashMovements: Array<{ type: string; amount: unknown }>;
+        cashMovements: Array<{ type: string; amount: unknown; method?: string | null }>;
     }) {
         const courtPrice = Number(booking.price || 0);
         const itemsTotal = booking.items.reduce(
@@ -125,7 +125,7 @@ export class BookingService {
             0
         );
         const totalPaid = booking.cashMovements
-            .filter((movement) => movement.type === 'INCOME')
+            .filter((movement) => movement.type === 'INCOME' && movement.method !== 'DEBT')
             .reduce((sum, movement) => sum + Number(movement.amount), 0);
         const total = courtPrice + itemsTotal;
         const remaining = Math.max(0, total - totalPaid);
@@ -150,7 +150,7 @@ export class BookingService {
         const total = courtTotal + itemsTotal;
 
         const totalPaid = booking.cashMovements
-            .filter((movement) => movement.type === 'INCOME')
+            .filter((movement) => movement.type === 'INCOME' && movement.method !== 'DEBT')
             .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
 
         const itemsPaid = booking.items
@@ -160,12 +160,23 @@ export class BookingService {
         const itemsDebt = Math.max(0, itemsTotal - itemsPaid);
         const paidAvailableForCourt = Math.max(0, totalPaid - itemsPaid);
         const courtPaid = Math.min(courtTotal, paidAvailableForCourt);
-        const courtDebt = Math.max(0, courtTotal - courtPaid);
+
+        const courtDebtRegistered = booking.cashMovements
+            .filter((movement) => {
+                if (movement.type !== 'INCOME') return false;
+                if (movement.method !== 'DEBT') return false;
+                const description = String(movement.description || '').toLowerCase();
+                return description.startsWith('deuda cancha reserva #');
+            })
+            .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
+
+        const courtDebt = Math.max(0, courtTotal - courtPaid - courtDebtRegistered);
         const remaining = Math.max(0, total - totalPaid);
 
         const courtPayments = booking.cashMovements
             .filter((movement) => {
                 if (movement.type !== 'INCOME') return false;
+                if (movement.method === 'DEBT') return false;
                 const description = String(movement.description || '');
                 return !description.startsWith('Venta Extra:');
             })
@@ -1329,7 +1340,7 @@ async payBookingDebt(bookingId: number, paymentMethod: string) {
 
     // 3. Calcular Pagos (Sumamos solo movimientos positivos tipo INCOME)
     const totalPaid = booking.cashMovements
-        .filter(m => m.type === 'INCOME') // Aseguramos no restar devoluciones si las hubiera
+        .filter(m => m.type === 'INCOME' && m.method !== 'DEBT') // Solo pagos reales, no movimientos de deuda
         .reduce((acc, mov) => acc + Number(mov.amount), 0);
     
     // 4. Calcular Items
@@ -1549,6 +1560,103 @@ async registerPartialPayment(
     });
 }
 
+async registerCourtDebtPortion(
+    bookingId: number,
+    userId: number,
+    amount: number,
+    clubId?: number
+) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error('El monto de deuda debe ser mayor a 0');
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const booking = await tx.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                court: { include: { club: true } },
+                items: true,
+                cashMovements: true
+            }
+        });
+
+        if (!booking) throw new Error('Reserva no encontrada');
+        if (clubId != null && booking.court.club.id !== clubId) {
+            throw new Error('No tienes acceso a esta reserva');
+        }
+        if (booking.status === BookingStatus.CANCELLED) {
+            throw new Error('No se puede registrar deuda en una reserva cancelada');
+        }
+        if (booking.status === BookingStatus.COMPLETED) {
+            throw new Error('No se puede modificar el cobro de una reserva finalizada');
+        }
+
+        const totalPaid = booking.cashMovements
+            .filter((movement) => movement.type === 'INCOME' && movement.method !== 'DEBT')
+            .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
+
+        const itemsPaid = booking.items
+            .filter((item) => {
+                const paymentMethod = (item as unknown as { paymentMethod?: string | null }).paymentMethod;
+                return Boolean(paymentMethod && paymentMethod !== 'DEBT');
+            })
+            .reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+
+        const paidAvailableForCourt = Math.max(0, totalPaid - itemsPaid);
+        const courtTotal = Number(booking.price || 0);
+        const courtPaid = Math.min(courtTotal, paidAvailableForCourt);
+
+        const existingCourtDebtRegistered = booking.cashMovements
+            .filter((movement) => {
+                if (movement.type !== 'INCOME') return false;
+                if (movement.method !== 'DEBT') return false;
+                const description = String(movement.description || '').toLowerCase();
+                return description.startsWith('deuda cancha reserva #');
+            })
+            .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
+
+        const maxCourtDebtRegisterable = Math.max(0, courtTotal - courtPaid - existingCourtDebtRegistered);
+        if (amount > maxCourtDebtRegisterable + 0.01) {
+            throw new Error('La deuda parcial de cancha supera el saldo disponible para dejar en cuenta');
+        }
+
+        await tx.cashMovement.create({
+            data: {
+                date: new Date(),
+                type: 'INCOME',
+                amount,
+                description: `Deuda cancha reserva #${booking.id}`,
+                method: 'DEBT',
+                bookingId: booking.id,
+                clubId: booking.court.club.id,
+                userId: booking.userId ?? undefined,
+                guestName: booking.guestName ?? undefined,
+                guestPhone: booking.guestPhone ?? undefined,
+                guestDni: booking.guestDni ?? undefined,
+                isSettled: false
+            }
+        });
+
+        const updated = await tx.booking.update({
+            where: { id: booking.id },
+            data: {
+                status: booking.status === BookingStatus.PENDING ? BookingStatus.CONFIRMED : booking.status,
+                paymentStatus: PaymentStatus.DEBT
+            }
+        });
+
+        return {
+            booking: updated,
+            summary: {
+                courtDebtRegisteredBefore: existingCourtDebtRegistered,
+                courtDebtRegisteredNow: amount,
+                courtDebtRegisteredAfter: existingCourtDebtRegistered + amount,
+                registeredBy: userId
+            }
+        };
+    });
+}
+
 
 async getClubDebtors(clubId: number) {
         const clubConfig = await prisma.club.findUnique({ where: { id: clubId }, select: { timeZone: true } });
@@ -1576,10 +1684,10 @@ async getClubDebtors(clubId: number) {
         },
         items: {
           // Acá mantenemos la corrección del producto
-          select: { price: true, quantity: true, product: { select: { name: true } } }
+                    select: { price: true, quantity: true, paymentMethod: true, product: { select: { name: true } } }
         },
         cashMovements: {
-          select: { amount: true }
+                    select: { amount: true, type: true, method: true, description: true, isSettled: true }
         },
         court: {
           // 🌎 ACÁ VOLVEMOS A PEDIR EL TIMEZONE DEL CLUB
@@ -1678,11 +1786,25 @@ async getClubDebtors(clubId: number) {
       const courtPrice = Number(booking.price || 0);
       const itemsPrice = booking.items.reduce((acc, item) => acc + (Number(item.price) * item.quantity), 0);
       const total = courtPrice + itemsPrice;
-      const paid = booking.cashMovements.reduce((acc, mov) => acc + Number(mov.amount), 0);
-      const debt = total - paid;
-      
-      const isDebtStatus = ['DEBT', 'PARTIAL'].includes(booking.paymentStatus);
-      const hasPendingDebt = isDebtStatus && debt > 0;
+            const paid = booking.cashMovements
+                .filter((mov) => mov.type === 'INCOME' && mov.method !== 'DEBT')
+                .reduce((acc, mov) => acc + Number(mov.amount), 0);
+
+            const courtDebtInAccount = booking.cashMovements
+                .filter((mov) => {
+                    if (mov.type !== 'INCOME') return false;
+                    if (mov.method !== 'DEBT') return false;
+                    const description = String(mov.description || '').toLowerCase();
+                    return description.startsWith('deuda cancha reserva #') && mov.isSettled === false;
+                })
+                .reduce((acc, mov) => acc + Number(mov.amount || 0), 0);
+
+            const itemsDebtInAccount = booking.items
+                .filter((item) => item.paymentMethod === 'DEBT')
+                .reduce((acc, item) => acc + (Number(item.price) * item.quantity), 0);
+
+            const debt = courtDebtInAccount + itemsDebtInAccount;
+            const hasPendingDebt = debt > 0.01;
 
       // Usamos el TimeZone por defecto ya que no existe en la DB
       // 🌎 Lógica internacional lista para escalar
@@ -1704,11 +1826,14 @@ async getClubDebtors(clubId: number) {
         courtName: booking.court.name,
         price: total,
         amount: debt,
+        courtDebtInAccount,
+        itemsDebtInAccount,
         paid: paid,
         items: booking.items.map(i => ({
             name: i.product?.name || 'Producto sin nombre', // 👈 Ajustado acá
             price: Number(i.price),
-            quantity: i.quantity
+            quantity: i.quantity,
+            paymentMethod: i.paymentMethod ?? null
         }))
       };
 

@@ -66,6 +66,7 @@ router.get('/history/:userId', authMiddleware, (req, res) => bookingController.g
 router.patch('/:id/payment-status', authMiddleware, (req, res) => bookingController.updateStatus(req, res));
 router.post('/:id/split-payment', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, (req, res) => bookingController.splitPayment(req, res));
 router.post('/:id/partial-payment', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, (req, res) => bookingController.partialPayment(req, res));
+router.post('/:id/court-debt-portion', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, (req, res) => bookingController.courtDebtPortion(req, res));
 
 
 export default router;

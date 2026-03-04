@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ClubAdminService } from '../services/ClubAdminService';
-import { confirmBooking as confirmBookingService, getBookingFinancialSummary, registerBookingPartialPayment } from '../services/BookingService';
+import { confirmBooking as confirmBookingService, getBookingFinancialSummary, registerBookingCourtDebtPortion, registerBookingPartialPayment } from '../services/BookingService';
 import { Trash2, Plus, ShoppingCart, Receipt, Lock, ChevronDown, Check, X, Banknote, FileText, Star } from 'lucide-react';
 import PaymentCalculator, { type PaymentCalculatorResult } from './PaymentCalculator';
 // import { BookingTicket } from './BookingTicket'; // Si no lo usás, podés borrar esta línea
@@ -299,6 +299,12 @@ export default function BookingConsumption(
           await registerBookingPartialPayment(bookingId, courtOrDebtPortion, result.method);
           setBookingIsPendingLocal(false);
         }
+      } else {
+        const debtCourtPortion = Math.max(0, Number(result.courtAmount || 0));
+        if (debtCourtPortion > 0.01) {
+          await registerBookingCourtDebtPortion(bookingId, debtCourtPortion);
+          setBookingIsPendingLocal(false);
+        }
       }
 
       const selectedTempKeys = new Set(selectedItems.map((item) => String(item.tempId || item.id || '')));
@@ -309,6 +315,7 @@ export default function BookingConsumption(
 
       const updatedSummary = await getBookingFinancialSummary(bookingId);
       setFinancialSummary(updatedSummary || null);
+      setShowPaymentModal(false);
     } catch (error: any) {
       alert('Error: ' + (error.message || 'No se pudo registrar el pago'));
     } finally {

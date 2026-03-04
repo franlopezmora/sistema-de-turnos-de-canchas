@@ -42,6 +42,13 @@ const formatSaleDescription = (raw?: string) => {
   return value.replace(/^venta\s*:\s*/i, '').trim() || 'Venta registrada en caja';
 };
 
+const getEntryReference = (entry: any) => {
+  const isSale = entry?.sourceType === 'SALE';
+  const stableId = Number(isSale ? (entry?.movementId ?? entry?.id) : (entry?.bookingId ?? entry?.id));
+  if (!Number.isFinite(stableId) || stableId <= 0) return isSale ? 'V-?' : 'R-?';
+  return `${isSale ? 'V' : 'R'}-${stableId}`;
+};
+
 const sortByCreationDesc = (a: any, b: any) => {
   const createdA = new Date(a?.createdAt || `${a?.date || ''}T${a?.time || '00:00'}:00`).getTime();
   const createdB = new Date(b?.createdAt || `${b?.date || ''}T${b?.time || '00:00'}:00`).getTime();
@@ -311,27 +318,42 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                   .filter((b: any) => ['DEBT', 'PARTIAL', 'PENDING'].includes(b.paymentStatus))
                     .map((booking: any) => {
                       const isSale = booking.sourceType === 'SALE';
-                        const itemsTotal = (booking.items || []).reduce((sum: any, item: any) => sum + (Number(item.price) * item.quantity), 0);
-                        const courtPrice = Number(booking.price) - itemsTotal; 
-                        const totalPaid = Number(booking.paid);
-                        let isCourtPaid = totalPaid >= courtPrice;
-                        let remainingPayment = isCourtPaid ? totalPaid - courtPrice : totalPaid;
+                      const itemsTotal = (booking.items || []).reduce((sum: number, item: any) => sum + (Number(item.price) * item.quantity), 0);
+                      const courtPrice = Number(booking.price) - itemsTotal;
+                      const totalPaid = Number(booking.paid || 0);
+                      const explicitCourtDebt = Number(booking.courtDebtInAccount || 0);
+                      const isCourtPaid = !isSale && explicitCourtDebt <= 0.01;
 
-                        const itemsWithStatus = (booking.items || []).map((item: any) => {
-                            const itemCost = Number(item.price) * item.quantity;
-                            let isPaid = false;
-                            if (remainingPayment >= itemCost) { remainingPayment -= itemCost; isPaid = true; }
-                            return { ...item, isPaid }; 
-                        });
+                      let remainingPaymentForLegacy = Math.max(0, totalPaid - (isCourtPaid ? courtPrice : 0));
+
+                      const itemsWithStatus = (booking.items || []).map((item: any) => {
+                        const itemCost = Number(item.price) * item.quantity;
+                        const method = String(item.paymentMethod || '').toUpperCase();
+
+                        if (method === 'DEBT') {
+                          return { ...item, isPaid: false };
+                        }
+
+                        if (method === 'CASH' || method === 'TRANSFER') {
+                          return { ...item, isPaid: true };
+                        }
+
+                        let isPaid = false;
+                        if (remainingPaymentForLegacy >= itemCost) {
+                          remainingPaymentForLegacy -= itemCost;
+                          isPaid = true;
+                        }
+                        return { ...item, isPaid };
+                      });
 
                         return (
                         <div key={booking.id} className="bg-white p-5 rounded-[1.5rem] border-2 border-[#347048]/5 flex justify-between items-center shadow-sm">
                             <div className="flex flex-col flex-1">
                                 <div className="flex items-center gap-3 mb-3">
-                                    <span className="font-black text-[#347048] text-sm bg-[#347048]/5 px-3 py-1 rounded-lg italic">#{booking.id}</span>
+                                  <span className="font-black text-[#347048] text-sm bg-[#347048]/5 px-3 py-1 rounded-lg italic">{getEntryReference(booking)}</span>
                                     <span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(booking.date)}</span>
                                 </div>
-                                <div className={`text-sm font-black uppercase tracking-tight flex justify-between mb-2 pr-10 ${isCourtPaid ? 'text-[#347048]/20 line-through' : 'text-[#347048]'}`}>
+                                <div className={`text-sm font-black uppercase tracking-tight flex justify-between mb-2 pr-10 ${!isSale && isCourtPaid ? 'text-[#347048]/20 line-through' : 'text-[#347048]'}`}>
                                     <span>{isSale ? 'Venta extra' : `Cancha: ${booking.courtName || booking.court?.name}`}</span>
                                     <span className="text-xs opacity-60 font-mono">${(isSale ? Number(booking.price || 0) : courtPrice)}</span>
                                 </div>
@@ -473,16 +495,16 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                 selectedClientHistory.history
                   .slice()
                   .sort(sortByCreationDesc)
-                  .map((booking: any, index: number) => {
+                  .map((booking: any) => {
                     const isSale = booking.sourceType === 'SALE';
                     const status = booking.status;
                     const pStatus = booking.paymentStatus;
                     const itemsTotal = (booking.items || []).reduce((sum: number, item: any) => sum + Number(item.price) * item.quantity, 0);
                     const courtPrice = Number(booking.price || 0) - itemsTotal;
                     return (
-                      <div key={booking.id} className="bg-white p-5 rounded-[1.5rem] border border-[#347048]/5 flex justify-between items-center shadow-sm">
+                      <div key={`${booking.sourceType || 'BOOKING'}-${booking.movementId || booking.bookingId || booking.id}`} className="bg-white p-5 rounded-[1.5rem] border border-[#347048]/5 flex justify-between items-center shadow-sm">
                         <div className="flex flex-col gap-2 flex-1">
-                          <div className="flex items-center gap-3"><span className="font-black text-[#347048] text-sm italic">#{index + 1}</span><span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(booking.date)} · {booking.time}</span></div>
+                          <div className="flex items-center gap-3"><span className="font-black text-[#347048] text-sm italic">{getEntryReference(booking)}</span><span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(booking.date)} · {booking.time}</span></div>
                           <div className="text-xs font-black text-[#347048] uppercase tracking-tight">{isSale ? `Venta extra: ${formatSaleDescription(booking.description)}` : `Cancha: ${booking.courtName || booking.court?.name}`} <span className="opacity-40 ml-2 font-mono">${(isSale ? Number(booking.price || 0) : courtPrice).toLocaleString()}</span></div>
                           <div className="flex flex-wrap gap-2 mt-1">
                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${status === 'CANCELLED' ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{bookingStatusLabel[status] ?? status}</span>

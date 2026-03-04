@@ -188,6 +188,26 @@ export const registerBookingPartialPayment = async (
   return res.json();
 };
 
+export const registerBookingCourtDebtPortion = async (
+  bookingId: number,
+  amount: number
+) => {
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+
+  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/court-debt-portion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount })
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || error.message || 'No se pudo registrar la deuda parcial de cancha');
+  }
+
+  return res.json();
+};
+
 export const getBookingFinancialSummary = async (bookingId: number) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
