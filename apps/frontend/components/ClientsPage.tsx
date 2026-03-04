@@ -119,6 +119,15 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const topClient = clients.reduce((prev, current) => (prev.totalBookings > current.totalBookings) ? prev : current, {name: '-', totalBookings: 0});
 
   const handleOpenPayModal = (target: { type: 'BOOKING' | 'SALE'; id: number }) => {
+    const selectedEntry = selectedDebtor?.bookings?.find(
+      (entry: any) => (target.type === 'SALE' ? entry.movementId : entry.id) === target.id
+    );
+
+    if (!selectedEntry || Number(selectedEntry.amount || 0) <= 0.01) {
+      showInfo('Este registro ya no tiene deuda pendiente.', 'Sin deuda');
+      return;
+    }
+
     setDebtTarget(target);
     setShowPayMethodModal(true);
   };
@@ -160,6 +169,11 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   };
 
   console.log("LOS CLIENTES QUE LLEGAN SON:", filteredClients);
+
+  const selectedDebtorPendingEntries = (selectedDebtor?.bookings || [])
+    .slice()
+    .sort(sortByCreationDesc)
+    .filter((entry: any) => Number(entry.amount || 0) > 0.01);
   
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -312,11 +326,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                 </div>
 
                 <div className="p-8 overflow-y-auto custom-scrollbar space-y-4 bg-white/40">
-                  {selectedDebtor.bookings
-                  .slice()
-                  .sort(sortByCreationDesc)
-                  .filter((b: any) => ['DEBT', 'PARTIAL', 'PENDING'].includes(b.paymentStatus))
-                    .map((booking: any) => {
+                  {selectedDebtorPendingEntries.length > 0 ? selectedDebtorPendingEntries.map((booking: any) => {
                       const isSale = booking.sourceType === 'SALE';
                       const itemsTotal = (booking.items || []).reduce((sum: number, item: any) => sum + (Number(item.price) * item.quantity), 0);
                       const courtPrice = Number(booking.price) - itemsTotal;
@@ -381,7 +391,9 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                             </div>
                         </div>
                         );
-                    })}
+                    }) : (
+                      <p className="text-center text-[#347048]/40 font-black py-8 uppercase italic">Sin deuda pendiente</p>
+                    )}
                 </div>
             </div>
         </div>
@@ -418,7 +430,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                 
         {/* Buscamos el monto exacto de la reserva que estamos saldando */}
         {(() => {
-          const bookingInfo = selectedDebtor?.bookings.find((b: any) => (debtTarget?.type === 'SALE' ? b.movementId : b.id) === debtTarget?.id);
+          const bookingInfo = selectedDebtorPendingEntries.find((b: any) => (debtTarget?.type === 'SALE' ? b.movementId : b.id) === debtTarget?.id);
           return bookingInfo ? (
             <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
               A SALDAR: <span className="text-[#347048] text-lg font-black">${bookingInfo.amount.toLocaleString()}</span>

@@ -806,7 +806,7 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
                 0
             );
             const totalPaid = bookingWithTotals.cashMovements
-                .filter((movement) => movement.type === 'INCOME')
+                .filter((movement) => movement.type === 'INCOME' && movement.method !== 'DEBT')
                 .reduce((sum, movement) => sum + Number(movement.amount), 0);
             const total = Number(bookingWithTotals.price || 0) + itemsTotal;
             const remaining = total - totalPaid;

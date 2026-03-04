@@ -1229,15 +1229,9 @@ async updatePaymentStatus(id: number, status: 'PAID' | 'DEBT' | 'PARTIAL') {
         throw new Error("No se puede modificar el pago de una reserva cancelada");
     }
 
-    // Para reservas ya completadas solo permitimos marcar como pagadas (cerrar deuda),
-    // pero nunca volver a DEBT/PARTIAL.
-    if (booking.status === 'COMPLETED' && status !== 'PAID') {
-        throw new Error("Solo se puede marcar como pagado un turno ya completado");
-    }
-
     // 2. LÓGICA DE CAJA AUTOMÁTICA 💰
     // Si el nuevo estado es PAGADO y antes NO lo era... ¡Cobramos la cancha!
-    if (status === 'PAID' && booking.paymentStatus !== 'PAID') {
+    if (status === 'PAID' && booking.paymentStatus !== 'PAID' && booking.status !== 'COMPLETED') {
         
         console.log(`💰 Cobrando Alquiler de Cancha automáticamente: $${booking.price}`);
 
@@ -1368,22 +1362,52 @@ async payBookingDebt(bookingId: number, paymentMethod: string) {
         throw new Error('No se pudo determinar el club asociado a la reserva (clubId faltante)');
     }
 
-    const movement = await prisma.cashMovement.create({
-        data: {
-            amount: debtAmount,
-            type: 'INCOME',
-            description: `Saldo final reserva #${booking.id} (Cancha + Consumos)`, 
-            method: paymentMethod,
-            bookingId: booking.id,
-            clubId: clubIdForMovement,
-            date: new Date()
-        }
-    });
+    const normalizedPaymentMethod = paymentMethod === 'TRANSFER' ? 'TRANSFER' : 'CASH';
 
-    // 8. Actualizar Reserva a PAGADO
-    await prisma.booking.update({
-        where: { id: bookingId },
-        data: { paymentStatus: 'PAID' } // No tocamos el campo 'paid' porque no existe
+    const movement = await prisma.$transaction(async (tx) => {
+        const createdMovement = await tx.cashMovement.create({
+            data: {
+                amount: debtAmount,
+                type: 'INCOME',
+                description: `Saldo final reserva #${booking.id} (Cancha + Consumos)`,
+                method: normalizedPaymentMethod,
+                bookingId: booking.id,
+                clubId: clubIdForMovement,
+                date: new Date()
+            }
+        });
+
+        // Si había ítems marcados en DEBT, al saldar deuda quedan cobrados con el método elegido.
+        await tx.bookingItem.updateMany({
+            where: {
+                bookingId: booking.id,
+                paymentMethod: 'DEBT'
+            },
+            data: {
+                paymentMethod: normalizedPaymentMethod
+            }
+        });
+
+        // Si había movimientos de deuda de cancha/otros pendientes, quedan saldados.
+        await tx.cashMovement.updateMany({
+            where: {
+                bookingId: booking.id,
+                type: 'INCOME',
+                method: 'DEBT',
+                isSettled: false
+            } as any,
+            data: {
+                isSettled: true
+            }
+        });
+
+        // Finalmente marcamos la reserva como pagada.
+        await tx.booking.update({
+            where: { id: bookingId },
+            data: { paymentStatus: 'PAID' }
+        });
+
+        return createdMovement;
     });
 
     return movement;
