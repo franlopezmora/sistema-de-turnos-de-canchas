@@ -92,7 +92,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
       setLoading(true); // Prendemos el loader al buscar datos nuevos
       const { startDate, endDate } = getDateRange(activePeriod, periodOffset);
       
-      const url = `http://localhost:4000/api/clubs/${finalSlug}/admin/stats/dashboard?startDate=${startDate}&endDate=${endDate}`;
+      const url = `/api/clubs/${finalSlug}/admin/stats/dashboard?startDate=${startDate}&endDate=${endDate}`;
       
       const response = await fetchWithAuth(url);
       
