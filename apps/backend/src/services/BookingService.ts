@@ -1329,30 +1329,36 @@ async payBookingDebt(bookingId: number, paymentMethod: string) {
         throw new Error("No se puede cobrar la deuda de una reserva cancelada");
     }
 
-    // 2. DIAGNÓSTICO: Ver qué trae la base de datos
     const dbPrice = Number(booking.price);
-
-    // 3. Calcular Pagos (Sumamos solo movimientos positivos tipo INCOME)
-    const totalPaid = booking.cashMovements
-        .filter(m => m.type === 'INCOME' && m.method !== 'DEBT') // Solo pagos reales, no movimientos de deuda
-        .reduce((acc, mov) => acc + Number(mov.amount), 0);
-    
-    // 4. Calcular Items
     const itemsTotal = booking.items.reduce((acc, item) => acc + (Number(item.price) * item.quantity), 0);
+    const grandTotal = dbPrice + itemsTotal;
 
-    // 5. Calcular GRAN TOTAL
-    // IMPORTANTE: Asumimos que booking.price es SOLO la cancha.
-    const grandTotal = dbPrice + itemsTotal; 
+    // Deuda en cuenta = deuda de cancha registrada (movimientos DEBT pendientes)
+    // + ítems marcados como DEBT.
+    const courtDebtInAccount = booking.cashMovements
+        .filter((movement) => movement.type === 'INCOME' && movement.method === 'DEBT' && movement.isSettled === false)
+        .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
 
-    // 6. Calcular DEUDA REAL
-    let debtAmount = grandTotal - totalPaid;
+    const itemsDebtInAccount = booking.items
+        .filter((item) => item.paymentMethod === 'DEBT')
+        .reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
 
+    const debtAmount = courtDebtInAccount + itemsDebtInAccount;
 
-    
-    if (debtAmount <= 0) {
-        console.log("Error: La deuda es 0 o negativa.");
-        throw new Error("Esta reserva ya figura como pagada.");
+    if (debtAmount <= 0.01) {
+        throw new Error('No hay deuda en cuenta pendiente para esta reserva.');
     }
+
+    const totalPaidBefore = booking.cashMovements
+        .filter((movement) => movement.type === 'INCOME' && movement.method !== 'DEBT')
+        .reduce((sum, movement) => sum + Number(movement.amount || 0), 0);
+
+    const totalPaidAfter = totalPaidBefore + debtAmount;
+    const remainingAfter = Math.max(0, grandTotal - totalPaidAfter);
+
+    let nextPaymentStatus: PaymentStatus = PaymentStatus.DEBT;
+    if (remainingAfter <= 0.01) nextPaymentStatus = PaymentStatus.PAID;
+    else if (totalPaidAfter > 0.01) nextPaymentStatus = PaymentStatus.PARTIAL;
 
     // 7. Guardar Movimiento
     
@@ -1369,7 +1375,7 @@ async payBookingDebt(bookingId: number, paymentMethod: string) {
             data: {
                 amount: debtAmount,
                 type: 'INCOME',
-                description: `Saldo final reserva #${booking.id} (Cancha + Consumos)`,
+                description: `Cobro deuda en cuenta reserva #${booking.id}`,
                 method: normalizedPaymentMethod,
                 bookingId: booking.id,
                 clubId: clubIdForMovement,
@@ -1401,10 +1407,10 @@ async payBookingDebt(bookingId: number, paymentMethod: string) {
             }
         });
 
-        // Finalmente marcamos la reserva como pagada.
+        // Recalculamos estado final según lo efectivamente pagado.
         await tx.booking.update({
             where: { id: bookingId },
-            data: { paymentStatus: 'PAID' }
+            data: { paymentStatus: nextPaymentStatus }
         });
 
         return createdMovement;
