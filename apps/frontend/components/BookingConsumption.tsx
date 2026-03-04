@@ -40,6 +40,13 @@ interface BookingFinancialSummary {
   totalPaid: number;
   remaining: number;
   paymentStatus: 'PAID' | 'DEBT' | 'PARTIAL';
+  courtPayments?: Array<{
+    id: number;
+    amount: number;
+    method: string;
+    description?: string;
+    date: string;
+  }>;
 }
 
 // --- COMPONENTE DROPDOWN CUSTOM (ESTILO WIMBLEDON LANDING) ---
@@ -226,6 +233,14 @@ export default function BookingConsumption(
   const isCourtPartial = !isCourtFullyPaid && courtPaid > 0.01;
   const basePrice = Number(baseCourtPrice ?? 0);
   const lightsExtra = basePrice > 0 ? Math.max(courtTotal - basePrice, 0) : 0;
+  const courtPayments = Array.isArray(financialSummary?.courtPayments) ? financialSummary.courtPayments : [];
+
+  const formatMethodLabel = (method?: string) => {
+    if (method === 'CASH') return 'Efectivo';
+    if (method === 'TRANSFER') return 'Digital';
+    if (method === 'DEBT') return 'Cuenta';
+    return method || 'Sin método';
+  };
 
   const consumptionTotal = cartItems
     .filter(item => item.isNew)
@@ -430,6 +445,17 @@ export default function BookingConsumption(
             <span>Cancha pagado / deuda</span>
             <span>${courtPaid.toLocaleString()} / ${courtPriceToPay.toLocaleString()}</span>
           </div>
+          {courtPayments.length > 0 && (
+            <div className="rounded-xl bg-white/70 border border-[#347048]/10 p-2 space-y-1">
+              <p className="text-[9px] font-black uppercase tracking-widest text-[#347048]/50">Detalle pagos cancha</p>
+              {courtPayments.map((payment) => (
+                <div key={payment.id} className="flex justify-between items-center text-[10px] font-black text-[#347048]">
+                  <span>{formatMethodLabel(payment.method)}</span>
+                  <span>${Number(payment.amount || 0).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
           
           {lightsExtra > 0 && (
             <div className="flex justify-between text-[10px] font-black text-[#926699] uppercase tracking-widest">
@@ -480,6 +506,7 @@ export default function BookingConsumption(
       {showPaymentModal && (
         <PaymentCalculator
           courtPending={courtPriceToPay}
+          courtBaseTotal={courtTotal}
           cartItems={cartItems.filter((item) => item.isNew).map((item) => ({
             id: item.id,
             tempId: item.tempId,

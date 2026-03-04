@@ -19,6 +19,7 @@ export type PaymentCalculatorResult = {
 
 export interface PaymentCalculatorProps {
   courtPending: number;
+  courtBaseTotal?: number;
   cartItems: PaymentCalculatorItem[];
   alreadyPaid: number;
   grandTotal: number;
@@ -28,6 +29,7 @@ export interface PaymentCalculatorProps {
 
 export default function PaymentCalculator({
   courtPending,
+  courtBaseTotal,
   cartItems,
   alreadyPaid,
   grandTotal,
@@ -40,6 +42,11 @@ export default function PaymentCalculator({
   const [courtPortion, setCourtPortion] = useState<number>(0);
 
   const safeCourtPending = Math.max(0, Number(courtPending || 0));
+  const safeCourtBaseTotal = Math.max(0, Number(courtBaseTotal ?? courtPending ?? 0));
+  const quarterBase = safeCourtBaseTotal / 4;
+  const halfBase = safeCourtBaseTotal / 2;
+  const canSelectQuarter = quarterBase <= safeCourtPending + 0.01;
+  const canSelectHalf = halfBase <= safeCourtPending + 0.01;
   const finalPending = Math.max(0, Number(grandTotal || 0) - Number(alreadyPaid || 0));
 
   const selectedProductsTotal = useMemo(
@@ -205,13 +212,25 @@ export default function PaymentCalculator({
               <div className="p-3 bg-[#347048]/5 rounded-xl border border-[#347048]/10">
                 <div className="text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2">Alquiler de cancha</div>
                 <div className="grid grid-cols-2 gap-2">
-                  <label className={`flex justify-center items-center p-2 rounded-lg border cursor-pointer transition-all ${courtPortion === safeCourtPending / 4 ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048]' : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50'}`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === safeCourtPending / 4} onChange={() => setCourtPortion(safeCourtPending / 4)} />
-                    <span className="text-xs font-bold">1/4 (${(safeCourtPending / 4).toLocaleString()})</span>
+                  <label className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
+                    !canSelectQuarter
+                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                      : courtPortion === quarterBase
+                        ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048] cursor-pointer'
+                        : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50 cursor-pointer'
+                  }`}>
+                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === quarterBase} onChange={() => setCourtPortion(quarterBase)} disabled={!canSelectQuarter} />
+                    <span className="text-xs font-bold">1/4 (${quarterBase.toLocaleString()})</span>
                   </label>
-                  <label className={`flex justify-center items-center p-2 rounded-lg border cursor-pointer transition-all ${courtPortion === safeCourtPending / 2 ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048]' : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50'}`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === safeCourtPending / 2} onChange={() => setCourtPortion(safeCourtPending / 2)} />
-                    <span className="text-xs font-bold">1/2 (${(safeCourtPending / 2).toLocaleString()})</span>
+                  <label className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
+                    !canSelectHalf
+                      ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                      : courtPortion === halfBase
+                        ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048] cursor-pointer'
+                        : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50 cursor-pointer'
+                  }`}>
+                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === halfBase} onChange={() => setCourtPortion(halfBase)} disabled={!canSelectHalf} />
+                    <span className="text-xs font-bold">1/2 (${halfBase.toLocaleString()})</span>
                   </label>
                   <label className={`flex justify-center items-center p-2 rounded-lg border cursor-pointer transition-all col-span-2 ${courtPortion === safeCourtPending ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048]' : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50'}`}>
                     <input type="radio" name="court-portion" className="hidden" checked={courtPortion === safeCourtPending} onChange={() => setCourtPortion(safeCourtPending)} />

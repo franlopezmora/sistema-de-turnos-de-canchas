@@ -163,6 +163,21 @@ export class BookingService {
         const courtDebt = Math.max(0, courtTotal - courtPaid);
         const remaining = Math.max(0, total - totalPaid);
 
+        const courtPayments = booking.cashMovements
+            .filter((movement) => {
+                if (movement.type !== 'INCOME') return false;
+                const description = String(movement.description || '');
+                return !description.startsWith('Venta Extra:');
+            })
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+            .map((movement) => ({
+                id: movement.id,
+                amount: Number(movement.amount || 0),
+                method: movement.method,
+                description: movement.description,
+                date: movement.date
+            }));
+
         let paymentStatus: PaymentStatus = PaymentStatus.DEBT;
         if (remaining <= 0.01) paymentStatus = PaymentStatus.PAID;
         else if (totalPaid > 0.01) paymentStatus = PaymentStatus.PARTIAL;
@@ -178,7 +193,8 @@ export class BookingService {
             total,
             totalPaid,
             remaining,
-            paymentStatus
+            paymentStatus,
+            courtPayments
         };
     }
 
