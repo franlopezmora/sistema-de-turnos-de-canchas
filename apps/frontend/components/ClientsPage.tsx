@@ -419,54 +419,61 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       }
     }}
   >
-      <div className="bg-[#EBE1D8] border-4 border-white p-8 rounded-[2.5rem] shadow-2xl max-w-sm w-full relative">
-        <button 
-          onClick={() => setShowPayMethodModal(false)}
-          className="absolute top-6 right-6 bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
-          title="Cerrar ventana"
-        >
-          <X size={20} strokeWidth={3} />
-        </button>
+      <div className="bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] shadow-2xl max-w-sm w-full max-h-[88vh] overflow-hidden flex flex-col">
+        <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+          <div className="sticky top-0 z-20 bg-[#EBE1D8] border-b border-[#347048]/10 px-8 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-2xl font-black text-[#347048] text-center uppercase tracking-tight italic">¿Método de cobro?</h3>
+              <button
+                onClick={() => setShowPayMethodModal(false)}
+                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100 shrink-0"
+                title="Cerrar ventana"
+              >
+                <X size={20} strokeWidth={3} />
+              </button>
+            </div>
+          </div>
 
-        <h3 className="text-2xl font-black text-[#347048] mb-2 text-center uppercase tracking-tight italic">¿Método de cobro?</h3>
-                
-        {/* Buscamos el monto exacto de la reserva que estamos saldando */}
-        {(() => {
-          const bookingInfo = selectedDebtorPendingEntries.find((b: any) => (debtTarget?.type === 'SALE' ? b.movementId : b.id) === debtTarget?.id);
-          return bookingInfo ? (
-            <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
-              A SALDAR: <span className="text-[#347048] text-lg font-black">${bookingInfo.amount.toLocaleString()}</span>
-            </p>
-          ) : (
-            <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
-              Se registrará en caja diaria
-            </p>
-          );
-        })()}
+          <div className="p-8">
+            {/* Buscamos el monto exacto de la reserva que estamos saldando */}
+            {(() => {
+              const bookingInfo = selectedDebtorPendingEntries.find((b: any) => (debtTarget?.type === 'SALE' ? b.movementId : b.id) === debtTarget?.id);
+              return bookingInfo ? (
+                <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
+                  A SALDAR: <span className="text-[#347048] text-lg font-black">${bookingInfo.amount.toLocaleString()}</span>
+                </p>
+              ) : (
+                <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
+                  Se registrará en caja diaria
+                </p>
+              );
+            })()}
 
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <button
-            onClick={() => processDebtPayment('CASH')}
-            className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
-          >
-            <Banknote size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-            <span className="font-black text-[10px] uppercase tracking-widest">Efectivo</span>
-          </button>
-          <button
-            onClick={() => processDebtPayment('TRANSFER')}
-            className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
-          >
-            <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-            <span className="font-black text-[10px] uppercase tracking-widest">Digital</span>
-          </button>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <button
+                onClick={() => processDebtPayment('CASH')}
+                className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
+              >
+                <Banknote size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+                <span className="font-black text-[10px] uppercase tracking-widest">Efectivo</span>
+              </button>
+              <button
+                onClick={() => processDebtPayment('TRANSFER')}
+                className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
+              >
+                <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+                <span className="font-black text-[10px] uppercase tracking-widest">Digital</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowPayMethodModal(false)}
+              className="w-full text-[#347048]/40 hover:text-[#347048] text-[10px] font-black uppercase tracking-widest hover:underline transition-all"
+            >
+              Cancelar operación
+            </button>
+          </div>
         </div>
-                
-        <button 
-          onClick={() => setShowPayMethodModal(false)}
-          className="w-full text-[#347048]/40 hover:text-[#347048] text-[10px] font-black uppercase tracking-widest hover:underline transition-all"
-        >
-          Cancelar operación
-        </button>
       </div>
     </div>,
     document.body

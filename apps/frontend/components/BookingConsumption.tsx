@@ -297,7 +297,6 @@ export default function BookingConsumption(
 
       const updatedSummary = await getBookingFinancialSummary(bookingId);
       setFinancialSummary(updatedSummary || null);
-      setShowPaymentModal(false);
     } catch (error: any) {
       alert('Error: ' + (error.message || 'No se pudo registrar el pago'));
     } finally {

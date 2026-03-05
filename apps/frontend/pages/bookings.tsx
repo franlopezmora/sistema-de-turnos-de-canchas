@@ -219,8 +219,8 @@ export default function MyBookingsPage() {
     <div className="min-h-screen bg-[#347048] relative overflow-hidden text-[#D4C5B0]">
       {/* Fondo Decorativo */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none opacity-20">
-        <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-[#B9CF32] rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#926699] rounded-full blur-[120px]"></div>
+        <div className="absolute top-[-10%] right-[-10%] w-[420px] h-[420px] bg-[#B9CF32]/30 rounded-full"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[360px] h-[360px] bg-[#926699]/30 rounded-full"></div>
       </div>
 
       <div className="relative z-10 flex flex-col min-h-screen">

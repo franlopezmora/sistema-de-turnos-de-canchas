@@ -397,6 +397,9 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
                       className={`${inputClass} pl-12`}
                       value={formData.price}
                       onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      onWheel={(event) => {
+                        event.currentTarget.blur();
+                      }}
                     />
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/40 group-focus-within:text-[#B9CF32] transition-colors">
                         <DollarSign size={18} strokeWidth={2.5} />
@@ -416,6 +419,9 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
                         className={`${inputClass} pl-12`}
                         value={formData.stock}
                         onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                        onWheel={(event) => {
+                          event.currentTarget.blur();
+                        }}
                       />
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/40 group-focus-within:text-[#B9CF32] transition-colors">
                           <Box size={18} strokeWidth={2.5} />

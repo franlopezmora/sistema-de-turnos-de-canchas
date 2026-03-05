@@ -163,7 +163,7 @@ export default function PaymentCalculator({
 
   return (
     <div
-      className="fixed inset-0 bg-[#347048]/80 backdrop-blur-[2px] flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 bg-[#347048]/85 flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
       onMouseDown={(event) => {
         backdropRef.current = event.target === event.currentTarget;
       }}
@@ -177,22 +177,26 @@ export default function PaymentCalculator({
         className="bg-[#EBE1D8] border-4 border-white rounded-[2rem] shadow-2xl shadow-[#347048]/30 max-w-md w-full max-h-[88vh] overflow-hidden relative flex flex-col text-[#347048]"
         onClick={(event) => event.stopPropagation()}
       >
-        <button
-          onClick={onClose}
-          className="absolute top-6 right-6 bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100 z-10"
-          title="Cerrar ventana"
-        >
-          <X size={20} strokeWidth={3} />
-        </button>
-
         <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
+          <div className="sticky top-0 z-20 bg-[#EBE1D8] border-b border-[#347048]/10 px-6 sm:px-7 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-black mb-1 uppercase tracking-tight italic text-[#347048]">Registrar pago</h3>
+                <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-[0.2em]">
+                  Saldo pendiente: <span className="text-[#347048] font-black text-sm">${finalPending.toLocaleString()}</span>
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100 shrink-0"
+                title="Cerrar ventana"
+              >
+                <X size={20} strokeWidth={3} />
+              </button>
+            </div>
+          </div>
+
         <div className="px-6 sm:px-7 py-6 sm:py-7">
-        <div className="text-center mb-5 mt-1">
-          <h3 className="text-2xl font-black mb-1 uppercase tracking-tight italic text-[#347048]">Registrar pago</h3>
-          <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-[0.2em]">
-            Saldo pendiente: <span className="text-[#347048] font-black text-sm">${finalPending.toLocaleString()}</span>
-          </p>
-        </div>
 
         <div className="bg-white border-2 border-[#B9CF32]/20 rounded-[1.25rem] p-4 mb-5 shadow-sm">
           <div className="flex justify-between items-center mb-3 border-b border-[#347048]/10 pb-2">
