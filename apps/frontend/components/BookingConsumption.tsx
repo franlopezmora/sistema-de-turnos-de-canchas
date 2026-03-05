@@ -229,8 +229,13 @@ export default function BookingConsumption(
   const courtTotal = Number(financialSummary?.courtTotal ?? fallbackCourtTotal);
   const courtPaid = Number(financialSummary?.courtPaid ?? (paymentStatus === 'PAID' ? fallbackCourtTotal : 0));
   const courtPriceToPay = Math.max(0, Number(financialSummary?.courtDebt ?? (courtTotal - courtPaid)));
-  const isCourtFullyPaid = courtPriceToPay <= 0.01;
-  const isCourtPartial = !isCourtFullyPaid && courtPaid > 0.01;
+  const courtDebtInAccount = Math.max(0, courtTotal - courtPaid - courtPriceToPay);
+  const hasCourtPaid = courtPaid > 0.01;
+  const hasCourtDebtInAccount = courtDebtInAccount > 0.01;
+  const hasCourtPendingToRegister = courtPriceToPay > 0.01;
+  const isCourtFullyPaid = !hasCourtDebtInAccount && !hasCourtPendingToRegister;
+  const isCourtOnlyPending = !hasCourtPaid && !hasCourtDebtInAccount && hasCourtPendingToRegister;
+  const isCourtOnlyInAccount = !hasCourtPaid && hasCourtDebtInAccount && !hasCourtPendingToRegister;
   const basePrice = Number(baseCourtPrice ?? 0);
   const lightsExtra = basePrice > 0 ? Math.max(courtTotal - basePrice, 0) : 0;
   const courtPayments = Array.isArray(financialSummary?.courtPayments) ? financialSummary.courtPayments : [];
@@ -443,12 +448,12 @@ export default function BookingConsumption(
             <div className="flex items-center gap-3">
               {isCourtFullyPaid ? (
                 <span className="px-2 py-0.5 rounded-md font-black border bg-emerald-100 text-emerald-700 border-emerald-200">PAGADO</span>
-              ) : isCourtPartial ? (
-                <span className="px-2 py-0.5 rounded-md font-black border bg-blue-100 text-blue-700 border-blue-200">PARCIAL</span>
-              ) : paymentStatus === 'PENDING' ? (
+              ) : isCourtOnlyInAccount ? (
+                <span className="px-2 py-0.5 rounded-md font-black border bg-yellow-100 text-yellow-700 border-yellow-200">EN CUENTA</span>
+              ) : isCourtOnlyPending ? (
                 <span className="px-2 py-0.5 rounded-md font-black border bg-slate-100 text-slate-700 border-slate-200">PENDIENTE</span>
               ) : (
-                <span className="px-2 py-0.5 rounded-md font-black border bg-yellow-100 text-yellow-700 border-yellow-200">EN CUENTA</span>
+                <span className="px-2 py-0.5 rounded-md font-black border bg-blue-100 text-blue-700 border-blue-200">PARCIAL</span>
               )}
               <span className={isCourtFullyPaid ? "line-through opacity-50" : ""}>
                 ${courtTotal.toLocaleString()}
@@ -456,8 +461,16 @@ export default function BookingConsumption(
             </div>
           </div>
           <div className="flex justify-between text-[10px] font-black text-[#347048]/70 uppercase tracking-widest">
-            <span>Cancha pagado / deuda</span>
-            <span>${courtPaid.toLocaleString()} / ${courtPriceToPay.toLocaleString()}</span>
+            <span>Cancha pagado</span>
+            <span>${courtPaid.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-[10px] font-black text-yellow-700 uppercase tracking-widest">
+            <span>Cancha en cuenta (cliente)</span>
+            <span>${courtDebtInAccount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-[10px] font-black text-[#926699] uppercase tracking-widest">
+            <span>Cancha pendiente (sin registrar)</span>
+            <span>${courtPriceToPay.toLocaleString()}</span>
           </div>
           {courtPayments.length > 0 && (
             <div className="rounded-xl bg-white/70 border border-[#347048]/10 p-2 space-y-1">
