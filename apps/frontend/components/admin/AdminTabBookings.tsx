@@ -7,6 +7,8 @@ import {
   cancelBooking,
   confirmBooking as confirmBookingService,
   splitBookingPayment as splitBookingPaymentService,
+  getBookingFinancialSummary,
+  registerBookingCourtDebtPortion,
   createBooking,
   createFixedBooking,
   cancelFixedBooking,
@@ -829,7 +831,18 @@ export default function AdminTabBookings() {
   const handleConfirmBooking = async (method: 'CASH' | 'TRANSFER' | 'DEBT') => {
     if (!selectedBookingId) return;
     try {
-        await confirmBookingService(selectedBookingId, method);
+        if (method === 'DEBT') {
+          const summary = await getBookingFinancialSummary(selectedBookingId);
+          const courtPendingToDebt = Math.max(0, Number(summary?.courtDebt || 0));
+
+          if (courtPendingToDebt > 0.01) {
+            await registerBookingCourtDebtPortion(selectedBookingId, courtPendingToDebt);
+          } else {
+            await confirmBookingService(selectedBookingId, 'DEBT');
+          }
+        } else {
+          await confirmBookingService(selectedBookingId, method);
+        }
         setShowPaymentModal(false);
         loadSchedule(); 
         showInfo('Cobro registrado correctamente.', "Listo");

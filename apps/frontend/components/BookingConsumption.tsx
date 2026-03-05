@@ -200,29 +200,6 @@ export default function BookingConsumption(
     setCartItems(cartItems.filter(i => item.isNew ? i.tempId !== item.tempId : i.id !== item.id));
   };
 
-  const handleSaveChanges = async (targetBookingStatus: 'PAID' | 'DEBT' | 'PARTIAL', itemPaymentMethod: 'CASH' | 'DEBT' | 'TRANSFER') => {
-    try {
-      setSaving(true);
-      if (bookingStatus === 'PENDING') {
-        await confirmBookingService(bookingId, itemPaymentMethod);
-      } else {
-        await ClubAdminService.updateBookingPaymentStatus(bookingId, targetBookingStatus);
-      }
-      const deletePromises = itemsToDelete.map(id => ClubAdminService.removeItemFromBooking(id));
-      const newItems = cartItems.filter(i => i.isNew);
-      const addPromises = newItems.map(item => 
-        ClubAdminService.addItemToBooking(bookingId, item.productId, item.quantity, itemPaymentMethod)
-      );
-      await Promise.all([...deletePromises, ...addPromises]);
-      onConfirm(); 
-      onClose();
-    } catch (error: any) {
-      alert("Error: " + (error.message || "Intente nuevamente"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const isCancelled = bookingStatus === 'CANCELLED';
 
   const fallbackCourtTotal = Number(courtPrice || 0);
@@ -326,6 +303,24 @@ export default function BookingConsumption(
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleRegisterAllInDebt = async () => {
+    const newItems = cartItems.filter((item) => item.isNew);
+    const selectedItemKeys = newItems.map((item) => item.tempId || item.id || '');
+    const itemsTotal = newItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const courtAmount = Math.max(0, Number(courtPriceToPay || 0));
+    const totalToRegister = courtAmount + itemsTotal;
+
+    if (totalToRegister <= 0.01) return;
+
+    await handleCalculatedPaymentConfirm({
+      method: 'DEBT',
+      amount: totalToRegister,
+      courtAmount,
+      paidItemIds: [],
+      selectedItemKeys
+    });
   };
 
   // Convertimos los productos cargados en opciones para el CustomSelect
@@ -509,8 +504,7 @@ export default function BookingConsumption(
       <div className="grid grid-cols-2 gap-4 pt-2 relative z-0">
         <button 
           onClick={() => {
-              const nextStatus = (paymentStatus === 'PAID' || paymentStatus === 'PARTIAL') ? 'PARTIAL' : 'DEBT';
-              handleSaveChanges(nextStatus, 'DEBT');
+              handleRegisterAllInDebt();
           }}
           disabled={saving || !hasPendingCharges || isCancelled}
           className="flex flex-col items-center justify-center gap-1 py-4 bg-[#EBE1D8] border-2 border-[#347048]/20 text-[#347048] font-black uppercase text-[10px] tracking-widest rounded-2xl transition-all hover:bg-white shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
