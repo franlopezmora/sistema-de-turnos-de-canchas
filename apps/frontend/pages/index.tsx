@@ -8,6 +8,10 @@ import { Search, MapPin, Calendar, TrendingUp, ShieldCheck, ArrowRight, Menu, X,
 import Link from 'next/link';
 import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
+// Importamos los íconos de la librería
+import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Pádel)
+import { IoFootballOutline } from "react-icons/io5"; // Pelota de fútbol limpia
+import { IoTennisballOutline } from "react-icons/io5"; // Pelota de tenis limpia
 
 // ReactDOM portal removed: menu will be rendered inside the sidebar to keep positioning stable under zoom
 
@@ -264,61 +268,40 @@ export default function Home() {
   }, [clubs, isAdmin, user]);
 
   const sportOptions = useMemo(() => ([
-    {
-      value: 'padel',
-      label: 'Pádel',
-      icon: (
-        <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true">
-          <g>
-            <circle cx="12.41" cy="3.19" r="0.62" fill="currentColor" />
-            <circle cx="14.17" cy="4.99" r="0.62" fill="currentColor" />
-            <circle cx="15.94" cy="6.8" r="0.62" fill="currentColor" />
-            <circle cx="10.61" cy="4.96" r="0.62" fill="currentColor" />
-            <circle cx="12.37" cy="6.75" r="0.62" fill="currentColor" />
-            <circle cx="14.14" cy="8.56" r="0.62" fill="currentColor" />
-            <circle cx="8.81" cy="6.72" r="0.62" fill="currentColor" />
-            <circle cx="10.56" cy="8.52" r="0.62" fill="currentColor" />
-            <circle cx="12.34" cy="10.33" r="0.62" fill="currentColor" />
-            <path
-              fill="currentColor"
-              d="M17.94,9.89a4.1,4.1,0,0,0,1.11-3.43A5.72,5.72,0,0,0,18,4l-.75-1-1-1-.15-.16A7.65,7.65,0,0,0,14.39.59,4.17,4.17,0,0,0,9.53,1,14.21,14.21,0,0,0,7.91,2.59,9.38,9.38,0,0,0,6,5.77c-.2.54-.28,1.12-.45,1.72-.42,1.36-.77,2.69-1.15,4a1.61,1.61,0,0,1-.42.74L2.77,13.47a.3.3,0,0,1-.41,0h0a.3.3,0,0,0-.43,0L.3,15.06a1,1,0,0,0,0,1.39l2.13,2.18a1,1,0,0,0,1.39,0L5.45,17a.32.32,0,0,0,0-.45h0a.29.29,0,0,1,0-.38L6.66,15a1.93,1.93,0,0,1,.78-.43l4-1,.3-.06a12.76,12.76,0,0,0,1.51-.36A11.46,11.46,0,0,0,17.94,9.89ZM3.3,17.54a.37.37,0,0,1-.52,0h0L1.4,16.12a.37.37,0,0,1,0-.52h0l.85-.84a.36.36,0,0,1,.51,0h0a.23.23,0,0,0,.29,0l1.57-1.52a.36.36,0,0,1,.51,0h0l.61.62a.37.37,0,0,1,0,.52h0L4.17,15.88a.24.24,0,0,0,0,.3h0a.37.37,0,0,1,0,.51Zm4.2-4.26A1.18,1.18,0,0,1,6.39,13L6,12.62a1.37,1.37,0,0,1-.26-1.12c.1-.38.2-.77.32-1.15A6.59,6.59,0,0,0,8.69,13ZM12.83,12a4.3,4.3,0,0,1-3.41,0A4.38,4.38,0,0,1,7.11,6.25,10.13,10.13,0,0,1,8.85,3.43c.27-.26.5-.55.75-.82A5,5,0,0,1,11,1.55a3,3,0,0,1,2.59.09,8.65,8.65,0,0,1,2.57,2.05,7.32,7.32,0,0,1,1.31,1.9A3,3,0,0,1,17,9,10.36,10.36,0,0,1,12.83,12Z"
-            />
-          </g>
-        </svg>
-      )
-    },
-    {
-      value: 'futbol',
-      label: 'Fútbol',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7l3 2-1 4h-4l-1-4 3-2z" />
-          <path d="M7 9l-3 2 2 4" />
-          <path d="M17 9l3 2-2 4" />
-        </svg>
-      )
-    },
-    {
-      value: 'tenis',
-      label: 'Tenis',
-      icon: (
-        <svg viewBox="0 0 69.447 69.447" className="h-4 w-4" aria-hidden="true">
-          <g transform="translate(-1271.769 -1574.648)">
-            <path
-              d="M1341.208,1609.372a34.719,34.719,0,1,1-34.72-34.724A34.724,34.724,0,0,1,1341.208,1609.372Z"
-              fill="currentColor"
-            />
-            <path
-              d="M1311.144,1574.993a35.139,35.139,0,0,0-4.61-.344,41.069,41.069,0,0,1-34.369,29.735,34.3,34.3,0,0,0-.381,4.635l.183-.026a45.921,45.921,0,0,0,39.149-33.881Zm29.721,34.692a45.487,45.487,0,0,0-33.488,34.054l-.071.313a34.54,34.54,0,0,0,4.818-.455,41.218,41.218,0,0,1,28.686-29.194,36.059,36.059,0,0,0,.388-4.8Z"
-              fill="currentColor"
-              opacity="0.55"
-            />
-          </g>
-        </svg>
-      )
-    }
-  ]), []);
+  {
+    value: 'padel',
+    label: 'Pádel',
+    icon: (
+      <svg viewBox="0 0 20 20" className="h-5 w-5" aria-hidden="true">
+        <g>
+          <circle cx="12.41" cy="3.19" r="0.62" fill="currentColor" />
+          <circle cx="14.17" cy="4.99" r="0.62" fill="currentColor" />
+          <circle cx="15.94" cy="6.8" r="0.62" fill="currentColor" />
+          <circle cx="10.61" cy="4.96" r="0.62" fill="currentColor" />
+          <circle cx="12.37" cy="6.75" r="0.62" fill="currentColor" />
+          <circle cx="14.14" cy="8.56" r="0.62" fill="currentColor" />
+          <circle cx="8.81" cy="6.72" r="0.62" fill="currentColor" />
+          <circle cx="10.56" cy="8.52" r="0.62" fill="currentColor" />
+          <circle cx="12.34" cy="10.33" r="0.62" fill="currentColor" />
+          <path
+            fill="currentColor"
+            d="M17.94,9.89a4.1,4.1,0,0,0,1.11-3.43A5.72,5.72,0,0,0,18,4l-.75-1-1-1-.15-.16A7.65,7.65,0,0,0,14.39.59,4.17,4.17,0,0,0,9.53,1,14.21,14.21,0,0,0,7.91,2.59,9.38,9.38,0,0,0,6,5.77c-.2.54-.28,1.12-.45,1.72-.42,1.36-.77,2.69-1.15,4a1.61,1.61,0,0,1-.42.74L2.77,13.47a.3.3,0,0,1-.41,0h0a.3.3,0,0,0-.43,0L.3,15.06a1,1,0,0,0,0,1.39l2.13,2.18a1,1,0,0,0,1.39,0L5.45,17a.32.32,0,0,0,0-.45h0a.29.29,0,0,1,0-.38L6.66,15a1.93,1.93,0,0,1,.78-.43l4-1,.3-.06a12.76,12.76,0,0,0,1.51-.36A11.46,11.46,0,0,0,17.94,9.89ZM3.3,17.54a.37.37,0,0,1-.52,0h0L1.4,16.12a.37.37,0,0,1,0-.52h0l.85-.84a.36.36,0,0,1,.51,0h0a.23.23,0,0,0,.29,0l1.57-1.52a.36.36,0,0,1,.51,0h0l.61.62a.37.37,0,0,1,0,.52h0L4.17,15.88a.24.24,0,0,0,0,.3h0a.37.37,0,0,1,0,.51Zm4.2-4.26A1.18,1.18,0,0,1,6.39,13L6,12.62a1.37,1.37,0,0,1-.26-1.12c.1-.38.2-.77.32-1.15A6.59,6.59,0,0,0,8.69,13ZM12.83,12a4.3,4.3,0,0,1-3.41,0A4.38,4.38,0,0,1,7.11,6.25,10.13,10.13,0,0,1,8.85,3.43c.27-.26.5-.55.75-.82A5,5,0,0,1,11,1.55a3,3,0,0,1,2.59.09,8.65,8.65,0,0,1,2.57,2.05,7.32,7.32,0,0,1,1.31,1.9A3,3,0,0,1,17,9,10.36,10.36,0,0,1,12.83,12Z"
+          />
+        </g>
+      </svg>
+    )
+  },
+  {
+    value: 'futbol',
+    label: 'Fútbol',
+    icon: <IoFootballOutline className="h-5 w-5" /> // Dejás la de la librería que estaba buena
+  },
+  {
+    value: 'tenis',
+    label: 'Tenis',
+    icon: <IoTennisballOutline className="h-5 w-5" /> // Dejás la de la librería
+  }
+]), []);
 
   const selectedSport = sportOptions.find((sport) => sport.value === searchSport) || sportOptions[0];
 
@@ -875,31 +858,57 @@ export default function Home() {
           <ChevronRight size={14} className="text-[#B9CF32] transition-transform group-hover:translate-x-0.5" />
         </div>
 
-        {showSportDropdown && (
-          <div className="absolute top-full left-0 w-full md:w-[240px] mt-4 bg-white rounded-2xl shadow-xl border border-[#347048]/10 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-3 bg-[#EBE1D8]/30 border-b border-[#347048]/5">
-              <span className="text-xs font-bold text-[#347048] uppercase tracking-wider">Elegí deporte</span>
+       {showSportDropdown && (
+  <div className="absolute top-full left-0 w-full md:w-[240px] mt-4 bg-[#Fdfbf7] rounded-3xl shadow-xl border border-[#347048]/10 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200">
+    
+    {/* ENCABEZADO CENTRADO COMO EN LA FOTO */}
+    <div className="py-5 border-b border-[#347048]/5 flex justify-center">
+      <span className="text-xs font-black text-[#347048] uppercase tracking-widest">
+        Elegí deporte
+      </span>
+    </div>
+
+    {/* LISTA DE DEPORTES */}
+    <ul className="max-h-60 overflow-y-auto flex flex-col py-2">
+      {sportOptions.map((sport) => {
+        // Comparamos el valor actual con el del loop para saber si está seleccionado
+        const isSelected = searchSport === sport.value; 
+
+        return (
+          <li
+            key={sport.value || 'all'}
+            onClick={() => {
+              setSearchSport(sport.value);
+              setShowSportDropdown(false);
+            }}
+            className="px-6 py-3.5 hover:bg-[#347048]/5 cursor-pointer flex items-center justify-between group transition-colors border-b border-[#347048]/5 last:border-0"
+          >
+            <div className="flex items-center gap-4">
+              {/* CÍRCULO DEL ÍCONO CON COLOR DINÁMICO */}
+              <div 
+                className={`flex items-center justify-center w-10 h-10 rounded-full transition-colors ${
+                  isSelected 
+                    ? 'bg-[#347048] text-[#Fdfbf7]' // Seleccionado: Fondo verde oscuro, ícono claro
+                    : 'bg-[#EBE1D8] text-[#347048]' // Normal: Fondo beige, ícono verde oscuro
+                }`}
+              >
+                {sport.icon}
+              </div>
+              
+              {/* NOMBRE DEL DEPORTE */}
+              <span className={`text-[16px] text-[#347048] ${isSelected ? 'font-bold' : 'font-medium'}`}>
+                {sport.label}
+              </span>
             </div>
-            <ul className="max-h-60 overflow-y-auto">
-              {sportOptions.map((sport) => (
-                <li
-                  key={sport.value || 'all'}
-                  onClick={() => {
-                    setSearchSport(sport.value);
-                    setShowSportDropdown(false);
-                  }}
-                  className="px-4 py-3 hover:bg-[#B9CF32]/10 cursor-pointer flex items-center justify-between group transition-colors border-b border-gray-50 last:border-0"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="bg-[#EBE1D8] p-1.5 rounded-full text-[#347048]">{sport.icon}</div>
-                    <span className="text-[#347048] font-medium text-sm">{sport.label}</span>
-                  </div>
-                  <ChevronRight size={14} className="text-[#B9CF32] opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:translate-x-1" />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+
+            {/* Dejé el chevron que tenías porque es un lindo detalle de UX al hacer hover */}
+            <ChevronRight size={16} className="text-[#B9CF32] opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
+          </li>
+        );
+      })}
+    </ul>
+  </div>
+)}
       </div>
 
   <div className="flex-1 w-full relative group">
