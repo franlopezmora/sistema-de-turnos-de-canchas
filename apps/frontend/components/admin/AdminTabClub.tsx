@@ -4,6 +4,7 @@ import { ClubService, Club } from '../../services/ClubService';
 import { getCourts } from '../../services/CourtService';
 import AppModal from '../AppModal';
 import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle, Clock } from 'lucide-react';
+import { normalizeSessionUser } from '../../utils/session';
 
 type FixedBookingActivitySetting = {
   key: string;
@@ -66,10 +67,7 @@ const buildActivitySettingsFromCourts = (courts: any[], existingRaw?: unknown): 
   const byKey = new Map<string, string>();
 
   for (const court of Array.isArray(courts) ? courts : []) {
-    const activities = [
-      ...(Array.isArray(court?.activities) ? court.activities : []),
-      ...(court?.activityType ? [court.activityType] : [])
-    ];
+    const activities = court?.activityType ? [court.activityType] : [];
 
     for (const activity of activities) {
       const name = String(activity?.name || '').trim();
@@ -154,8 +152,9 @@ export default function AdminTabClub() {
       let clubId: number | null = null;
       if (userStr) {
         try {
-          const user = JSON.parse(userStr);
-          if (user?.clubId) clubId = user.clubId;
+          const user = normalizeSessionUser(JSON.parse(userStr));
+          if (user?.activeClubId) clubId = Number(user.activeClubId);
+          else if (user?.clubId) clubId = Number(user.clubId);
         } catch { /* noop */ }
       }
       if (!clubId) {

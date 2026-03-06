@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ClubService } from '../services/ClubService';
 import { z } from 'zod';
+import { validateOpeningDays } from '../utils/ActivityScheduleHelper';
 
 const fixedBookingActivityConfigSchema = z.object({
     fixedBookingDaysAhead: z.union([z.number(), z.string()]).transform((v) => Number(v)).pipe(z.number().int().positive()),
@@ -33,12 +34,6 @@ export class ClubController {
                 openingDays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
                 professorDiscountEnabled: z.boolean().optional(),
                 professorDiscountPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
-                scheduleMode: z.string().optional().nullable(),
-                scheduleOpenTime: z.string().optional().nullable(),
-                scheduleCloseTime: z.string().optional().nullable(),
-                scheduleIntervalMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
-                scheduleDurations: z.array(z.number()).optional().nullable(),
-                scheduleFixedSlots: z.array(z.string()).optional().nullable(),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable()
             });
             const parsed = createClubSchema.safeParse(req.body);
@@ -47,8 +42,13 @@ export class ClubController {
             }
             const { slug, name, addressLine, city, province, country, contact, phone, logoUrl, clubImageUrl, instagramUrl, facebookUrl, websiteUrl, description,
                 lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays, professorDiscountEnabled, professorDiscountPercent,
-                scheduleMode, scheduleOpenTime, scheduleCloseTime, scheduleIntervalMinutes, scheduleDurations, scheduleFixedSlots,
                 fixedBookingSettingsByActivity } = parsed.data;
+
+            const openingDaysErrors = validateOpeningDays(openingDays);
+            if (openingDaysErrors.length > 0) {
+                return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
+
             const club = await this.clubService.createClub(
                 slug,
                 name,
@@ -69,12 +69,6 @@ export class ClubController {
                 lightsFromHour ?? null,
                 Boolean(professorDiscountEnabled),
                 professorDiscountPercent ?? null,
-                scheduleMode ?? undefined,
-                scheduleOpenTime ?? null,
-                scheduleCloseTime ?? null,
-                scheduleIntervalMinutes ?? null,
-                Array.isArray(scheduleDurations) ? scheduleDurations : null,
-                Array.isArray(scheduleFixedSlots) ? scheduleFixedSlots : null,
                 fixedBookingSettingsByActivity ?? null,
                 Array.isArray(openingDays) ? openingDays : null
             );
@@ -147,12 +141,6 @@ export class ClubController {
                 lightsFromHour: z.string().optional().nullable(),
                 professorDiscountEnabled: z.boolean().optional(),
                 professorDiscountPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
-                scheduleMode: z.string().optional(),
-                scheduleOpenTime: z.string().optional().nullable(),
-                scheduleCloseTime: z.string().optional().nullable(),
-                scheduleIntervalMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
-                scheduleDurations: z.array(z.number()).optional().nullable(),
-                scheduleFixedSlots: z.array(z.string()).optional().nullable(),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
                 openingDays: z.array(z.number().int().min(0).max(6)).optional()
             });
@@ -180,15 +168,14 @@ export class ClubController {
                 lightsFromHour,
                 professorDiscountEnabled,
                 professorDiscountPercent,
-                scheduleMode,
-                scheduleOpenTime,
-                scheduleCloseTime,
-                scheduleIntervalMinutes,
-                scheduleDurations,
-                scheduleFixedSlots,
                 fixedBookingSettingsByActivity,
                 openingDays
             } = parsed.data;
+
+            const openingDaysErrors = validateOpeningDays(openingDays);
+            if (openingDaysErrors.length > 0) {
+                return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
 
             const club = await this.clubService.updateClub(id, {
                 slug,
@@ -210,12 +197,6 @@ export class ClubController {
                 lightsFromHour: (lightsFromHour === '' || lightsFromHour == null) ? null : lightsFromHour,
                 professorDiscountEnabled: typeof professorDiscountEnabled === 'boolean' ? professorDiscountEnabled : undefined,
                 professorDiscountPercent: professorDiscountPercent ?? null,
-                scheduleMode: scheduleMode || undefined,
-                scheduleOpenTime: (scheduleOpenTime === '' || scheduleOpenTime == null) ? null : scheduleOpenTime,
-                scheduleCloseTime: (scheduleCloseTime === '' || scheduleCloseTime == null) ? null : scheduleCloseTime,
-                scheduleIntervalMinutes: scheduleIntervalMinutes ?? null,
-                scheduleDurations: Array.isArray(scheduleDurations) ? scheduleDurations : undefined,
-                scheduleFixedSlots: Array.isArray(scheduleFixedSlots) ? scheduleFixedSlots : undefined,
                 fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
                 openingDays: Array.isArray(openingDays) ? openingDays : undefined
             });
@@ -227,8 +208,9 @@ export class ClubController {
 
     createCourt = async (req: Request, res: Response) => {
         try {
-            const { clubId, name, surface, activityIds } = req.body;
-            const court = await this.clubService.registerCourt(clubId, name, surface, activityIds);
+            const { clubId, name, surface, activityTypeId, activityIds } = req.body;
+            const resolvedActivityTypeId = activityTypeId ?? (Array.isArray(activityIds) ? activityIds[0] : undefined);
+            const court = await this.clubService.registerCourt(clubId, name, surface, resolvedActivityTypeId);
             res.status(201).json(court);
         } catch (error: any) {
             res.status(400).json({ error: error.message });

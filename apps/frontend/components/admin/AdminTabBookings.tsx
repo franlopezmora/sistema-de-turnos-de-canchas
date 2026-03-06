@@ -21,6 +21,7 @@ import DatePickerDark from '../../components/ui/DatePickerDark';
 import { Trash2, Check, ShoppingCart, Calendar as CalendarIcon, RefreshCw, ChevronDown, CalendarPlus, Repeat, Banknote, CreditCard, FileText, X, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'; 
 import { ClubService, Club } from '../../services/ClubService';
 import { getApiUrl } from '../../utils/apiUrl';
+import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 
 const CLUB_TIME_SLOTS = [
   '08:00', '09:30', '11:00', '12:30',
@@ -530,12 +531,9 @@ export default function AdminTabBookings() {
     try {
       const userStored = localStorage.getItem('user');
       if (userStored) {
-        const user = JSON.parse(userStored);
-        const foundSlug = user.slug || user.clubSlug || (user.club && user.club.slug);
+        const user = normalizeSessionUser(JSON.parse(userStored));
+        const foundSlug = getActiveClubSlug(user);
         if (foundSlug) return foundSlug;
-        if (user.lastName && user.lastName.toLowerCase() !== 'admin') {
-             return user.lastName.toLowerCase().trim().replace(/\s+/g, '-');
-        }
       }
     } catch (e) { console.error(e); }
     return ''; 

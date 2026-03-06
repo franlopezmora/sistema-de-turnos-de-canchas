@@ -11,14 +11,10 @@ export const getCourts = async () => {
 };
 
 export const createCourt = async (name: string, sport: string) => {
+    void name;
+    void sport;
     if (!getToken()) throw new Error('No hay token. Tenés que loguearte de nuevo.');
-    const res = await fetchWithAuth(`${apiBase()}/courts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, surface: sport, clubId: 1 })
-    });
-    if (!res.ok) throw new Error('Error al crear cancha');
-    return res.json();
+    throw new Error('La creación de canchas está deshabilitada en esta versión.');
 };
 
 export const suspendCourt = async (courtId: number) => {

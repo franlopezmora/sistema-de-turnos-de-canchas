@@ -21,6 +21,7 @@ function getOrCreateGuestId() {
 import { getApiUrl } from '../utils/apiUrl';
 import { ClubService } from './ClubService';
 import { ClubAdminService } from './ClubAdminService';
+import { normalizeSessionUser } from '../utils/session';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
@@ -104,10 +105,11 @@ export const cancelBooking = async (bookingId: number) => {
   try {
     const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
     if (rawUser) {
-      const parsed = JSON.parse(rawUser || '{}');
-      if (parsed?.role === 'ADMIN' && parsed?.clubId) {
+      const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
+      const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+      if (parsed?.role === 'ADMIN' && Number.isFinite(adminClubId) && adminClubId > 0) {
         // Obtener slug y llamar al servicio admin
-        const club = await ClubService.getClubById(Number(parsed.clubId));
+        const club = await ClubService.getClubById(adminClubId);
         return await ClubAdminService.cancelBooking(club.slug, bookingId);
       }
     }

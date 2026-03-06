@@ -3,6 +3,8 @@ import { Wallet, ArrowUpCircle, ArrowDownCircle, Banknote, CreditCard, Plus, Rec
 import { getApiUrl } from '../../utils/apiUrl';
 import { searchClients } from '../../services/BookingService';
 import { ClubService } from '../../services/ClubService';
+import { fetchWithAuth } from '../../utils/apiClient';
+import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 
 // Tipos
 interface Movement {
@@ -126,8 +128,8 @@ const AdminCashDashboard = () => {
 
       const userStored = localStorage.getItem('user');
       if (userStored) {
-        const user = JSON.parse(userStored);
-        const foundSlug = user.slug || user.clubSlug || (user.club && user.club.slug);
+        const user = normalizeSessionUser(JSON.parse(userStored));
+        const foundSlug = getActiveClubSlug(user);
         if (foundSlug) return foundSlug;
       }
     } catch (e) { console.error(e); }
@@ -144,8 +146,8 @@ const AdminCashDashboard = () => {
     try {
       const userStored = localStorage.getItem('user');
       if (!userStored) return '';
-      const user = JSON.parse(userStored);
-      const clubId = Number(user.clubId || user.club?.id);
+      const user = normalizeSessionUser(JSON.parse(userStored));
+      const clubId = Number(user?.activeClubId || user?.clubId || user?.club?.id);
       if (!Number.isFinite(clubId) || clubId <= 0) return '';
       const club = await ClubService.getClubById(clubId);
       const resolvedSlug = club?.slug || '';
@@ -160,15 +162,10 @@ const AdminCashDashboard = () => {
   const fetchCash = async () => {
     try {
       const apiBase = `${getApiUrl()}/api`;
-      const token = localStorage.getItem('token');
-
-      if (!token) return;
-
-      const res = await fetch(`${apiBase}/cash`, {
+      const res = await fetchWithAuth(`${apiBase}/cash`, {
          method: 'GET',
          headers: {
-           'Content-Type': 'application/json',
-           'Authorization': `Bearer ${token}` 
+           'Content-Type': 'application/json'
          }
       });
 
@@ -193,14 +190,10 @@ const AdminCashDashboard = () => {
   const fetchProducts = async () => {
     try {
       const apiBase = `${getApiUrl()}/api`;
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const res = await fetch(`${apiBase}/cash/products`, {
+      const res = await fetchWithAuth(`${apiBase}/cash/products`, {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         }
       });
 
@@ -266,14 +259,12 @@ const AdminCashDashboard = () => {
     e.preventDefault();
     if (!newMove.amount || !newMove.description) return;
     
-    const token = localStorage.getItem('token');
     const apiBase = `${getApiUrl()}/api`;
 
-    await fetch(`${apiBase}/cash`, {
+    await fetchWithAuth(`${apiBase}/cash`, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(newMove)
     });
@@ -329,14 +320,12 @@ const AdminCashDashboard = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
       const apiBase = `${getApiUrl()}/api`;
 
-      const res = await fetch(`${apiBase}/cash/product-sale`, {
+      const res = await fetchWithAuth(`${apiBase}/cash/product-sale`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           productId: Number(productSale.productId),

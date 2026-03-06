@@ -15,6 +15,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:data:migrate:activity-club": "ts-node prisma/data-migration-activitytype-club.ts",
     "db:setup": "bash setup-db-simple.sh",
     "db:setup:win": "setup-db.bat",
     "db:reset": "docker rm -f sistema-postgres && npm run db:setup",

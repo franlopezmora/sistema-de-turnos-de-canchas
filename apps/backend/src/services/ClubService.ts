@@ -33,12 +33,6 @@ export class ClubService {
         lightsFromHour?: string | null,
         professorDiscountEnabled: boolean = false,
         professorDiscountPercent?: number | null,
-        scheduleMode?: string,
-        scheduleOpenTime?: string | null,
-        scheduleCloseTime?: string | null,
-        scheduleIntervalMinutes?: number | null,
-        scheduleDurations?: number[] | null,
-        scheduleFixedSlots?: string[] | null,
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null
         ,
         openingDays?: number[] | null
@@ -63,12 +57,6 @@ export class ClubService {
             lightsFromHour,
             professorDiscountEnabled,
             professorDiscountPercent,
-            scheduleMode,
-            scheduleOpenTime,
-            scheduleCloseTime,
-            scheduleIntervalMinutes,
-            scheduleDurations,
-            scheduleFixedSlots,
             fixedBookingSettingsByActivity
             ,
             openingDays
@@ -113,12 +101,6 @@ export class ClubService {
             lightsFromHour?: string | null;
             professorDiscountEnabled?: boolean;
             professorDiscountPercent?: number | null;
-            scheduleMode?: string;
-            scheduleOpenTime?: string | null;
-            scheduleCloseTime?: string | null;
-            scheduleIntervalMinutes?: number | null;
-            scheduleDurations?: number[] | null;
-            scheduleFixedSlots?: string[] | null;
             fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
             openingDays?: number[] | null;
         }
@@ -128,18 +110,24 @@ export class ClubService {
         return await this.clubRepo.updateClub(id, data);
     }
 
-    async registerCourt(clubId: number, name: string, surface: string, activityIds: number[]) {
+    async registerCourt(clubId: number, name: string, surface: string, activityTypeId: number | number[]) {
         const club = await this.clubRepo.findClubById(clubId);
         if (!club) throw new Error("Club no encontrado");
 
-    const court = new Court(0, name, false, surface, club, false, null);
-
-        for (const actId of activityIds) {
-            const activity = await this.activityRepo.findById(actId);
-            if (activity) {
-                court.supportedActivities.push(activity);
-            }
+        const normalizedActivityTypeId = Array.isArray(activityTypeId)
+            ? Number(activityTypeId[0])
+            : Number(activityTypeId);
+        if (!Number.isInteger(normalizedActivityTypeId) || normalizedActivityTypeId <= 0) {
+            throw new Error("Actividad inválida");
         }
+
+        const activity = await this.activityRepo.findById(normalizedActivityTypeId);
+        if (!activity) throw new Error("Actividad no encontrada");
+        if (activity.clubId && Number(activity.clubId) !== Number(clubId)) {
+            throw new Error("La actividad no pertenece a este club");
+        }
+
+        const court = new Court(0, name, false, surface, club, false, activity);
 
         return await this.clubRepo.saveCourt(court);
     }
@@ -150,7 +138,7 @@ async getClients(clubId: number) {
     // Buscamos todas las reservas de ese club (incluyendo CANCELLED para mantener historial)
     const bookings: any[] = await prisma.booking.findMany({
         where: {
-            court: { clubId: clubId },
+            clubId,
         },
         select: {
             guestName: true,

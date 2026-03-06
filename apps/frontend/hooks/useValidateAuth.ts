@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { getToken } from '../services/AuthService';
 import { fetchWithAuth } from '../utils/apiClient';
 import { getApiUrl } from '../utils/apiUrl';
+import { persistSessionUser, type MembershipLite } from '../utils/session';
 
 export interface AuthUser {
   id: number;
@@ -12,6 +13,9 @@ export interface AuthUser {
   phoneNumber: string | null;
   role: string;
   clubId: number | null;
+  memberships?: MembershipLite[];
+  activeClubId?: number | null;
+  club?: { id?: number; slug?: string | null } | null;
 }
 
 const apiBase = () => `${getApiUrl()}/api`;
@@ -44,10 +48,13 @@ export function useValidateAuth(options: UseValidateAuthOptions = {}): { authChe
         const res = await fetchWithAuth(`${apiBase()}/auth/me`, { method: 'GET' });
         if (!res.ok) return;
         const data: AuthUser = await res.json();
+        const normalized = persistSessionUser(data as any) as AuthUser | null;
         if (typeof window !== 'undefined') {
-          localStorage.setItem('user', JSON.stringify(data));
+          if (!normalized) {
+            localStorage.removeItem('user');
+          }
         }
-        setUser(data);
+        setUser(normalized || data);
         setAuthChecked(true);
       } catch {
         // 401/403: fetchWithAuth hace logout; el redirect al home lo maneja la app

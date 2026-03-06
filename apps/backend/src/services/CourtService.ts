@@ -1,4 +1,5 @@
 import { CourtRepository } from '../repositories/CourtRepository';
+import { getUserClubContext } from '../utils/getUserClubContext';
 // Si tienes tipos definidos para la cancha, impórtalos aquí (ej: CreateCourtDto)
 
 export class CourtService {
@@ -6,6 +7,11 @@ export class CourtService {
 
     constructor() {
         this.courtRepository = new CourtRepository();
+    }
+
+    async resolveClubIdForUser(userId: number, preferredClubId?: number) {
+        const context = await getUserClubContext(userId, preferredClubId);
+        return context.clubId;
     }
 
 

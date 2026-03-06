@@ -5,6 +5,7 @@ import { prisma } from '../prisma';
 import { whatsappService } from '../services/WhatsappService';
 import { TimeHelper } from '../utils/TimeHelper';
 import { ProductService } from '../services/ProductService';
+import { getUserClubContext } from '../utils/getUserClubContext';
 
 export class BookingController {
     private productService = new ProductService();
@@ -502,11 +503,16 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
             if (!user?.userId) {
                 return res.status(401).json({ error: 'No autorizado' });
             }
-            const fullUser = await prisma.user.findUnique({ where: { id: user.userId }, select: { clubId: true } });
+            let clubContext: { clubId: number } | null = null;
+            try {
+                clubContext = await getUserClubContext(Number(user.userId));
+            } catch {
+                clubContext = null;
+            }
             const requestUser = {
                 userId: user.userId,
                 role: user.role ?? 'MEMBER',
-                clubId: fullUser?.clubId ?? null
+                clubId: clubContext?.clubId ?? null
             };
             const history = await this.bookingService.getUserHistory(userId, requestUser);
             const payload = history.map((b: any) => ({
@@ -1067,7 +1073,7 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
             }),
             prisma.booking.count({
                 where: {
-                    court: { clubId: clubId },
+                    clubId,
                     startDateTime: { gte: start, lte: end },
                     status: 'COMPLETED' 
                 }

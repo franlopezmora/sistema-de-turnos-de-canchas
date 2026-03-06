@@ -3,7 +3,14 @@ export class ActivityType {
         public id: number,
         public name: string,
         public description: string,
-        public defaultDurationMinutes: number
+        public defaultDurationMinutes: number,
+        public clubId?: number,
+        public scheduleMode?: 'FIXED' | 'RANGE',
+        public scheduleOpenTime?: string | null,
+        public scheduleCloseTime?: string | null,
+        public scheduleIntervalMinutes?: number | null,
+        public scheduleDurations?: number[] | null,
+        public scheduleFixedSlots?: Array<{ start: string; duration: number }> | null
     ) {}
 }
 

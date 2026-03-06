@@ -306,8 +306,8 @@ export class ClubAdminService {
     return res.json();
   }
 
-  /** Lista de deudores: sin slug usa el club del token (admin unificado). */
-  static async getDebtors(slug?: string) {
+  /** Lista de deudores: usa el club del token (admin unificado). */
+  static async getDebtors() {
     if (!getToken()) throw new Error('No autenticado');
     const res = await fetchWithAuth(`${apiBase()}/bookings/debtors/list`);
     if (!res.ok) throw new Error('Error cargando deudores');

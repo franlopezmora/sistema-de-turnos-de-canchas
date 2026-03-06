@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ClubAdminService } from '../services/ClubAdminService';
 import { Phone, DollarSign, Calendar, Users, Trophy, Search, X, CheckCircle, Receipt, Banknote, CreditCard } from 'lucide-react';
-import { useRouter } from 'next/router';
 import AppModal from './AppModal';
 import { getApiUrl } from '../utils/apiUrl';
+import { fetchWithAuth } from '../utils/apiClient';
 
 const formatDate = (dateInput: any) => {
   if (!dateInput) return '-';
@@ -63,9 +63,7 @@ interface ClientsPageProps {
 }
 
 export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
-  const router = useRouter();
-  const slugFromQuery = router.query.slug as string | undefined;
-  const slug = clubSlug ?? slugFromQuery;
+  void clubSlug;
 
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,13 +91,13 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const loadClients = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await ClubAdminService.getDebtors(slug);
+      const data = await ClubAdminService.getDebtors();
       setClients(data);
       return data;
     } catch (error) { console.error(error); }
     finally { setLoading(false); }
     return null;
-  }, [slug]);
+  }, []);
 
   useEffect(() => {
     loadClients();
@@ -135,15 +133,14 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const processDebtPayment = async (method: 'CASH' | 'TRANSFER') => {
     if (!debtTarget) return;
     try {
-      const token = localStorage.getItem('token');
       const endpoint = debtTarget.type === 'BOOKING' ? '/api/bookings/pay-debt' : '/api/cash/sale-debt/pay';
       const payload = debtTarget.type === 'BOOKING'
         ? { bookingId: debtTarget.id, paymentMethod: method }
         : { movementId: debtTarget.id, paymentMethod: method };
 
-      const response = await fetch(`${getApiUrl()}${endpoint}`, {
+      const response = await fetchWithAuth(`${getApiUrl()}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error('Error al procesar');

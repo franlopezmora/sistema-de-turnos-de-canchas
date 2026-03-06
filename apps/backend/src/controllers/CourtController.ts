@@ -37,7 +37,7 @@ export class CourtController {
 
             const newCourt = await prisma.court.create({
                 data,
-                include: { club: true, activities: true, activityType: true } as any
+                include: { club: true, activityType: true } as any
             });
 
             res.status(201).json(newCourt);
@@ -89,7 +89,7 @@ export class CourtController {
             const updatedCourt = await prisma.court.update({
                 where: { id: Number(id) },
                 data,
-                include: { club: true, activities: true, activityType: true } as any
+                include: { club: true, activityType: true } as any
             });
 
             res.json(updatedCourt);
@@ -134,7 +134,7 @@ export class CourtController {
                 data: {
                     isUnderMaintenance: true
                 },
-                include: { club: true, activities: true, activityType: true } as any
+                include: { club: true, activityType: true } as any
             });
 
             res.json({ message: "Cancha suspendida exitosamente", court: suspendedCourt });
@@ -166,7 +166,7 @@ export class CourtController {
                 data: {
                     isUnderMaintenance: false
                 },
-                include: { club: true, activities: true }
+                include: { club: true, activityType: true }
             });
 
             res.json({ message: "Cancha reactivada exitosamente", court: reactivatedCourt });

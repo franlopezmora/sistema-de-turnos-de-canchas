@@ -3,14 +3,24 @@ import { CashService } from '../services/CashService';
 import { prisma } from '../prisma';
 import { z } from 'zod';
 import { ProductService } from '../services/ProductService';
+import { getUserClubContext } from '../utils/getUserClubContext';
+import { EventService } from '../services/EventService';
+import { AuditLogService } from '../services/AuditLogService';
+import { NotificationService } from '../services/NotificationService';
 
 export class CashController {
     private cashService: CashService;
     private productService: ProductService;
+    private eventService: EventService;
+    private auditLogService: AuditLogService;
+    private notificationService: NotificationService;
 
     constructor(cashService: CashService) {
         this.cashService = cashService;
         this.productService = new ProductService();
+        this.eventService = new EventService();
+        this.auditLogService = new AuditLogService();
+        this.notificationService = new NotificationService();
     }
 
     // Usamos arrow functions para no perder el 'this'
@@ -45,7 +55,8 @@ export class CashController {
                 date: new Date(),
                 clubId
             };
-            const movement = await this.cashService.addMovement(cleanData);
+            const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
+            const movement = await this.cashService.addMovement(cleanData, actorUserId);
             res.json(movement);
         } catch (error) {
             console.error("❌ Error en createMovement:", error);
@@ -97,8 +108,12 @@ export class CashController {
             }
 
             if (userId) {
-                const user = await prisma.user.findFirst({ where: { id: userId, clubId } });
-                if (!user) {
+                    try {
+                        const userContext = await getUserClubContext(Number(userId), Number(clubId));
+                        if (!userContext || userContext.clubId !== Number(clubId)) {
+                            return res.status(400).json({ error: 'El cliente seleccionado no pertenece al club' });
+                        }
+                    } catch {
                     return res.status(400).json({ error: 'El cliente seleccionado no pertenece al club' });
                 }
             }
@@ -150,6 +165,44 @@ export class CashController {
 
                 return created;
             });
+
+            const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
+
+            await this.eventService.productSold(clubId, {
+                productId: product.id,
+                productName: product.name,
+                quantity: qty,
+                amount,
+                userId: userId ?? null,
+                actorUserId: actorUserId ?? null,
+                movementIds: movements.map((movement) => movement.id)
+            });
+
+            await this.auditLogService.create({
+                clubId,
+                userId: actorUserId ?? null,
+                entity: 'Product',
+                entityId: String(product.id),
+                action: 'PRODUCT_SALE',
+                payload: {
+                    quantity: qty,
+                    amount,
+                    movementIds: movements.map((movement) => movement.id),
+                    soldToUserId: userId ?? null,
+                    guestName: guestName || null,
+                    guestPhone: guestPhone || null,
+                    guestDni: guestDni || null
+                }
+            });
+
+            if (userId) {
+                await this.notificationService.createNotification(
+                    userId,
+                    clubId,
+                    'Compra registrada',
+                    `Se registró la venta de ${qty}x ${product.name}.`
+                );
+            }
 
             res.json({ movements, total: amount });
         } catch (error) {

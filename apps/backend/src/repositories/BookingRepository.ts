@@ -22,7 +22,8 @@ export class BookingRepository {
             guestEmail: booking.guestEmail,
             guestPhone: booking.guestPhone,
             courtId: booking.court.id,
-            activityId: booking.activity.id
+            activityId: booking.activity.id,
+            clubId: booking.court.club.id
         };
 
         const saved = await prisma.booking.create({
@@ -125,9 +126,7 @@ export class BookingRepository {
             where: {
                 startDateTime: { gte: startUtc, lte: endUtc },
                 status: { not: 'CANCELLED' },
-                court: {
-                    clubId: clubId
-                }
+                clubId
             },
             include: {
                 user: true,
@@ -176,11 +175,25 @@ export class BookingRepository {
                 dbItem.court.club.lightsFromHour ?? null,
                 dbItem.court.club.professorDiscountEnabled ?? false,
                 dbItem.court.club.professorDiscountPercent ?? null,
+                null,
+                null,
             dbItem.court.club.createdAt,
             dbItem.court.club.updatedAt
         );
     const court = new Court(dbItem.court.id, dbItem.court.name, dbItem.court.isIndoor, dbItem.court.surface, club, dbItem.court.isUnderMaintenance, null);
-        const activity = new ActivityType(dbItem.activity.id, dbItem.activity.name, dbItem.activity.description, dbItem.activity.defaultDurationMinutes);
+        const activity = new ActivityType(
+            dbItem.activity.id,
+            dbItem.activity.name,
+            dbItem.activity.description,
+            dbItem.activity.defaultDurationMinutes,
+            dbItem.activity.clubId,
+            dbItem.activity.scheduleMode,
+            dbItem.activity.scheduleOpenTime,
+            dbItem.activity.scheduleCloseTime,
+            dbItem.activity.scheduleIntervalMinutes,
+            Array.isArray(dbItem.activity.scheduleDurations) ? dbItem.activity.scheduleDurations : null,
+            Array.isArray(dbItem.activity.scheduleFixedSlots) ? dbItem.activity.scheduleFixedSlots : null
+        );
 
         const booking = new Booking(
             dbItem.id,

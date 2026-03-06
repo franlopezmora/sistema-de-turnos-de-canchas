@@ -14,8 +14,19 @@ import { ActivityType } from '../entities/ActivityType';
 import { PaymentStatus, BookingStatus } from '@prisma/client';
 import { CashRepository } from '../repositories/CashRepository';
 import { ProductRepository } from '../repositories/ProductRepository';
+import { buildSlotsFromSchedule, normalizeSchedule } from '../utils/ActivityScheduleHelper';
+import { getUserClubContext } from '../utils/getUserClubContext';
+import { PricingService } from './PricingService';
+import { EventService } from './EventService';
+import { AuditLogService } from './AuditLogService';
+import { NotificationService } from './NotificationService';
 
 export class BookingService {
+    private readonly pricingService = new PricingService();
+    private readonly eventService = new EventService();
+    private readonly auditLogService = new AuditLogService();
+    private readonly notificationService = new NotificationService();
+
     constructor(
         private bookingRepo: BookingRepository,
         private courtRepo: CourtRepository,
@@ -24,6 +35,11 @@ export class BookingService {
         private cashRepository: CashRepository,
         private productRepository: ProductRepository
     ) {}
+
+    async resolveClubIdForUser(userId: number, preferredClubId?: number) {
+        const context = await getUserClubContext(userId, preferredClubId);
+        return context.clubId;
+    }
 
     private defaultFixedSlots = [
         "08:00", "09:30", "11:00", "12:30", "14:00", "15:30", "17:30", "19:00", "20:30", "22:00"
@@ -49,11 +65,26 @@ export class BookingService {
         return parsed.length > 0 ? parsed : [fallback];
     }
 
-    private normalizeFixedSlots(raw: any) {
-        const parsed = Array.isArray(raw)
-            ? raw.map((v) => String(v)).filter((v) => /^\d{2}:\d{2}$/.test(v))
-            : [];
-        return parsed.length > 0 ? parsed : this.defaultFixedSlots;
+    private resolveActivitySchedule(activity: ActivityType | null | undefined) {
+        const normalized = normalizeSchedule(
+            {
+                scheduleMode: activity?.scheduleMode,
+                scheduleOpenTime: activity?.scheduleOpenTime,
+                scheduleCloseTime: activity?.scheduleCloseTime,
+                scheduleIntervalMinutes: activity?.scheduleIntervalMinutes,
+                scheduleDurations: activity?.scheduleDurations,
+                scheduleFixedSlots: activity?.scheduleFixedSlots
+            },
+            activity?.defaultDurationMinutes ?? 90
+        );
+
+        // Fallback de compatibilidad para actividades FIXED sin slots configurados.
+        if (normalized.mode === 'FIXED' && normalized.fixedSlots.length === 0) {
+            const fallbackDuration = normalized.durations[0] ?? activity?.defaultDurationMinutes ?? 90;
+            normalized.fixedSlots = this.defaultFixedSlots.map((start) => ({ start, duration: fallbackDuration }));
+        }
+
+        return normalized;
     }
 
     private normalizeActivityKey(name: string | null | undefined) {
@@ -106,49 +137,68 @@ export class BookingService {
         }
     }
 
-    private buildRangeSlots(openTime: string, closeTime: string, intervalMinutes: number, durationMinutes: number) {
-        const openMinutes = this.toMinutes(openTime);
-        const closeMinutesRaw = this.toMinutes(closeTime);
-        if (openMinutes === null || closeMinutesRaw === null) return [];
-        const closeMinutes = closeMinutesRaw <= openMinutes ? closeMinutesRaw + 24 * 60 : closeMinutesRaw;
-        const slots: Array<{ slotTime: string; dayOffset: number }> = [];
-        for (let t = openMinutes; t + durationMinutes <= closeMinutes; t += intervalMinutes) {
-            const displayTotal = t % (24 * 60);
-            const dayOffset = t >= 24 * 60 ? 1 : 0;
-            slots.push({ slotTime: this.fromMinutes(displayTotal), dayOffset });
-        }
-        return slots;
+    private resolveScheduleSlots(activity: ActivityType, durationMinutes: number) {
+        return buildSlotsFromSchedule(
+            {
+                scheduleMode: activity.scheduleMode,
+                scheduleOpenTime: activity.scheduleOpenTime,
+                scheduleCloseTime: activity.scheduleCloseTime,
+                scheduleIntervalMinutes: activity.scheduleIntervalMinutes,
+                scheduleDurations: activity.scheduleDurations,
+                scheduleFixedSlots: activity.scheduleFixedSlots
+            },
+            activity.defaultDurationMinutes,
+            durationMinutes
+        );
     }
 
-    private resolveScheduleSlots(club: any, durationMinutes: number) {
-        const mode = club?.scheduleMode || 'FIXED';
-        if (mode === 'RANGE') {
-            const openTime = club?.scheduleOpenTime || '08:00';
-            const closeTime = club?.scheduleCloseTime || '22:00';
-            const intervalMinutes = Number(club?.scheduleIntervalMinutes || 30);
-            return this.buildRangeSlots(openTime, closeTime, intervalMinutes, durationMinutes);
+    private assertValidDuration(durationMinutes: number) {
+        if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+            throw new Error('La duración del turno debe ser mayor a 0');
         }
-        // For FIXED mode, return objects with dayOffset 0
-        const fixed = this.normalizeFixedSlots(club?.scheduleFixedSlots);
-        // Si el club define horario de apertura/cierre, filtrar los slots que queden dentro
-        const open = this.toMinutes(club?.scheduleOpenTime);
-        const close = this.toMinutes(club?.scheduleCloseTime);
-        if (open !== null && close !== null) {
-            return fixed
-                .map((s: string) => ({ slotTime: s, dayOffset: 0 }))
-                .filter((obj: { slotTime: string; dayOffset: number }) => {
-                    const start = this.toMinutes(obj.slotTime);
-                    if (start === null) return false;
-                    // calcular fin del turno en minutos locales
-                    const end = start + durationMinutes;
-                    // normalizar cierre (si close <= open, se asume cruce de medianoche)
-                    let closeMinutes = close;
-                    if (closeMinutes <= open) closeMinutes += 24 * 60;
-                    const startNormalized = start < open ? start + 24 * 60 : start;
-                    return startNormalized >= open && end <= closeMinutes;
-                });
+    }
+
+    private assertValidRange(startDateTime: Date, endDateTime: Date) {
+        if (Number.isNaN(startDateTime.getTime()) || Number.isNaN(endDateTime.getTime())) {
+            throw new Error('Fecha/hora inválida para la reserva');
         }
-        return fixed.map((s: string) => ({ slotTime: s, dayOffset: 0 }));
+        if (startDateTime.getTime() >= endDateTime.getTime()) {
+            throw new Error('La fecha/hora de inicio debe ser menor a la de fin');
+        }
+    }
+
+    private isOverlapConstraintError(error: unknown) {
+        const knownError = error as { code?: string; message?: string; meta?: { database_error?: string } };
+        const message = String(knownError?.message || '');
+        const dbMessage = String(knownError?.meta?.database_error || '');
+
+        return (
+            knownError?.code === 'P2004' &&
+            (
+                message.includes('booking_no_overlap_per_court') ||
+                dbMessage.includes('booking_no_overlap_per_court') ||
+                message.toLowerCase().includes('exclusion constraint') ||
+                dbMessage.toLowerCase().includes('exclusion constraint')
+            )
+        );
+    }
+
+    private mapActivityType(activity: any): ActivityType | null {
+        if (!activity) return null;
+
+        return new ActivityType(
+            activity.id,
+            activity.name,
+            activity.description,
+            activity.defaultDurationMinutes,
+            activity.clubId,
+            activity.scheduleMode,
+            activity.scheduleOpenTime,
+            activity.scheduleCloseTime,
+            activity.scheduleIntervalMinutes,
+            Array.isArray(activity.scheduleDurations) ? activity.scheduleDurations : null,
+            Array.isArray(activity.scheduleFixedSlots) ? activity.scheduleFixedSlots : null
+        );
     }
 
     private calculateBookingFinancials(booking: {
@@ -302,8 +352,10 @@ export class BookingService {
         const activity = await this.activityRepo.findById(activityId);
         if (!activity) throw new Error("Actividad no existe");
         const clubConfig = (court as any)?.club;
-        const allowedDurations = this.normalizeDurations(clubConfig?.scheduleDurations, activity.defaultDurationMinutes);
+        const activitySchedule = this.resolveActivitySchedule(activity);
+        const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
+        this.assertValidDuration(effectiveDuration);
         // Permitir override para profesores: si se indica isProfessorOverride y se solicita 60, permitir aunque no esté en allowedDurations
         if (!allowedDurations.includes(effectiveDuration)) {
             if (!(isProfessorOverride && effectiveDuration === 60)) {
@@ -315,7 +367,7 @@ export class BookingService {
                 const clubTimeZone = (clubConfig && clubConfig.timeZone) ? clubConfig.timeZone : 'America/Argentina/Buenos_Aires';
                 const localForSlot = TimeHelper.utcToLocal(startDateTime, clubTimeZone);
                 const slotTime = `${String(localForSlot.getHours()).padStart(2, '0')}:${String(localForSlot.getMinutes()).padStart(2, '0')}`;
-        const possibleSlots = this.resolveScheduleSlots(clubConfig, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
+        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
         const possibleSlotTimes = possibleSlots.map(s => s.slotTime);
         if (!possibleSlotTimes.includes(slotTime)) {
             throw new Error("Horario no permitido por el club");
@@ -327,11 +379,12 @@ export class BookingService {
         }
 
         const endDateTime = new Date(startDateTime.getTime() + effectiveDuration * 60000);
+        this.assertValidRange(startDateTime, endDateTime);
 
         // Validar que la reserva quede dentro del horario de apertura/cierre si el club lo define
         try {
-            const openStr = clubConfig?.scheduleOpenTime;
-            const closeStr = clubConfig?.scheduleCloseTime;
+            const openStr = activitySchedule.mode === 'RANGE' ? activitySchedule.openTime : null;
+            const closeStr = activitySchedule.mode === 'RANGE' ? activitySchedule.closeTime : null;
             if (openStr && closeStr) {
                 const localStart = TimeHelper.utcToLocal(startDateTime, clubTimeZone);
                 const localEnd = TimeHelper.utcToLocal(endDateTime, clubTimeZone);
@@ -350,8 +403,8 @@ export class BookingService {
             throw err;
         }
 
-    // Calcular precio base y extra por luces según configuración del club
-        const BASE_PRICE = Number((court as any)?.price ?? 0);
+    // Calcular precio base dinámico por reglas horarias y extra por luces según configuración del club
+        const BASE_PRICE = await this.pricingService.calculateCourtPrice(courtId, startDateTime);
         if (!Number.isFinite(BASE_PRICE) || BASE_PRICE <= 0) {
             throw new Error('Precio de cancha no configurado.');
         }
@@ -401,27 +454,77 @@ export class BookingService {
                 throw new Error(`El turno ${startDateTime.toISOString()} ya está confirmado.`);
             }
 
-            const saved = await tx.booking.create({
-                data: {
-                    startDateTime,
-                    endDateTime,
-                    price: finalPrice,
-                    status: BookingStatus.PENDING,
-                    // userId puede ser null para invitado
-                    userId: user ? user.id : undefined,
-                    guestIdentifier: guestIdentifier,
-                    guestName: guestName,
-                    guestEmail: guestEmail,
-                    guestPhone: guestPhone,
-                    guestDni: guestDni,
-                    courtId: courtId,
-                    activityId: activityId
-                },
-                include: { user: true, court: { include: { club: true } }, activity: true }
-            });
+            let saved;
+            try {
+                saved = await tx.booking.create({
+                    data: {
+                        startDateTime,
+                        endDateTime,
+                        price: finalPrice,
+                        status: BookingStatus.PENDING,
+                        userId: user ? user.id : undefined,
+                        guestIdentifier: guestIdentifier,
+                        guestName: guestName,
+                        guestEmail: guestEmail,
+                        guestPhone: guestPhone,
+                        guestDni: guestDni,
+                        courtId: courtId,
+                        activityId: activityId,
+                        clubId: (court as any).club.id
+                    },
+                    include: { user: true, court: { include: { club: true } }, activity: true }
+                });
+            } catch (error) {
+                if (this.isOverlapConstraintError(error)) {
+                    throw new Error('El turno seleccionado ya fue reservado por otro usuario');
+                }
+                throw error;
+            }
 
             return saved;
         });
+
+        console.info('[BOOKING] Reserva creada', {
+            bookingId: created.id,
+            courtId,
+            activityId,
+            clubId: (court as any).club.id,
+            startDateTime: created.startDateTime.toISOString(),
+            endDateTime: created.endDateTime.toISOString()
+        });
+
+        await this.eventService.bookingCreated((court as any).club.id, {
+            bookingId: created.id,
+            clubId: (court as any).club.id,
+            userId: user?.id ?? null,
+            courtId,
+            activityId,
+            amount: Number(created.price || 0)
+        });
+
+        await this.auditLogService.create({
+            clubId: (court as any).club.id,
+            userId: user?.id ?? null,
+            entity: 'Booking',
+            entityId: String(created.id),
+            action: 'BOOKING_CREATE',
+            payload: {
+                courtId,
+                activityId,
+                startDateTime: created.startDateTime,
+                endDateTime: created.endDateTime,
+                amount: Number(created.price || 0)
+            }
+        });
+
+        if (user?.id) {
+            await this.notificationService.createNotification(
+                user.id,
+                (court as any).club.id,
+                'Reserva creada',
+                `Reserva #${created.id} creada para ${court.name}.`
+            );
+        }
 
         return this.bookingRepo.mapToEntity(created);
     }
@@ -432,6 +535,7 @@ export class BookingService {
 
         const activity = await this.activityRepo.findById(activityId);
         if (!activity) throw new Error("Actividad no encontrada");
+        const activitySchedule = this.resolveActivitySchedule(activity);
 
         const clubTimeZone = (court as any)?.club?.timeZone ?? 'America/Argentina/Buenos_Aires';
         const clubConfig = (court as any)?.club;
@@ -452,13 +556,13 @@ export class BookingService {
                 status: { not: 'CANCELLED' }
             }
         });
-        const allowedDurations = this.normalizeDurations((court as any)?.club?.scheduleDurations, activity.defaultDurationMinutes);
+        const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
         if (!allowedDurations.includes(effectiveDuration)) {
             throw new Error("Duración no permitida por el club");
         }
 
-        const possibleSlots = this.resolveScheduleSlots((court as any)?.club, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
+        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
 
         const anchors = [
             (() => { const d = new Date(date); d.setDate(d.getDate() - 1); return d; })(),
@@ -561,6 +665,41 @@ export class BookingService {
 
         // 2. Ahora sí, procedemos a cancelar (Soft Delete o cambio de estado)
         await this.bookingRepo.delete(bookingId, cancelledByUserId);
+
+        console.info('[BOOKING] Reserva cancelada', {
+            bookingId,
+            cancelledByUserId,
+            clubId: booking.court.club.id
+        });
+
+        await this.eventService.bookingCancelled(booking.court.club.id, {
+            bookingId,
+            userId: booking.user?.id ?? null,
+            cancelledByUserId,
+            clubId: booking.court.club.id
+        });
+
+        await this.auditLogService.create({
+            clubId: booking.court.club.id,
+            userId: cancelledByUserId,
+            entity: 'Booking',
+            entityId: String(bookingId),
+            action: 'BOOKING_CANCEL',
+            payload: {
+                cancelledByUserId,
+                courtId: booking.court.id,
+                activityId: booking.activity.id
+            }
+        });
+
+        if (booking.user?.id) {
+            await this.notificationService.createNotification(
+                booking.user.id,
+                booking.court.club.id,
+                'Reserva cancelada',
+                `Reserva #${bookingId} cancelada correctamente.`
+            );
+        }
         
         const updated = await this.bookingRepo.findById(bookingId);
         return updated;
@@ -628,6 +767,40 @@ export class BookingService {
         return updatedBooking;
     });
 
+    const paidAmount = Number(updated.price || 0);
+    if (paymentMethod !== 'DEBT' && paidAmount > 0) {
+        await this.eventService.paymentReceived(bookingClubId, {
+            bookingId: updated.id,
+            userId: updated.user?.id ?? null,
+            amount: paidAmount,
+            method: paymentMethod,
+            clubId: bookingClubId
+        });
+    }
+
+    await this.auditLogService.create({
+        clubId: bookingClubId,
+        userId,
+        entity: 'Payment',
+        entityId: String(updated.id),
+        action: 'PAYMENT_CREATE',
+        payload: {
+            bookingId: updated.id,
+            method: paymentMethod,
+            amount: paidAmount,
+            paymentStatus
+        }
+    });
+
+    if (updated.user?.id && paymentMethod !== 'DEBT' && paidAmount > 0) {
+        await this.notificationService.createNotification(
+            updated.user.id,
+            bookingClubId,
+            'Pago recibido',
+            `Pago registrado para la reserva #${updated.id}.`
+        );
+    }
+
     return this.bookingRepo.mapToEntity(updated);
 }
 
@@ -639,11 +812,15 @@ export class BookingService {
             if (requestUser.role !== 'ADMIN' || requestUser.clubId == null) {
                 throw new Error("No tienes permiso para ver el historial de otro usuario");
             }
-            const requestedUser = await prisma.user.findUnique({
-                where: { id: requestedUserId },
-                select: { clubId: true }
-            });
-            if (!requestedUser || requestedUser.clubId !== requestUser.clubId) {
+
+            let requestedUserContext: { clubId: number } | null = null;
+            try {
+                requestedUserContext = await getUserClubContext(requestedUserId, requestUser.clubId);
+            } catch {
+                requestedUserContext = null;
+            }
+
+            if (!requestedUserContext || requestedUserContext.clubId !== requestUser.clubId) {
                 throw new Error("No tienes permiso para ver el historial de otro usuario");
             }
         }
@@ -664,7 +841,7 @@ export class BookingService {
         if (clubId) {
             allCourts = await prisma.court.findMany({
                 where: { clubId, isUnderMaintenance: false },
-                include: { club: true, activities: true }
+                include: { club: true, activityType: true }
             });
         } else {
             allCourts = await this.courtRepo.findAll();
@@ -681,7 +858,7 @@ export class BookingService {
             gte: startUtc,
             lte: endUtc
         },
-        ...(clubId ? { court: { clubId: clubId } } : {}),
+        ...(clubId ? { clubId } : {}),
         status: { not: 'CANCELLED' }
     },
     include: {
@@ -697,12 +874,6 @@ export class BookingService {
     }
 });
 
-        const clubConfigForSlots = clubId ? await prisma.club.findUnique({ where: { id: clubId } }) : null;
-        const defaultDuration = 90;
-        const durations = this.normalizeDurations(clubConfigForSlots?.scheduleDurations, defaultDuration);
-        const effectiveDuration = durations[0] ?? defaultDuration;
-        const possibleSlots = this.resolveScheduleSlots(clubConfigForSlots, effectiveDuration);
-
         const schedule = [];
 
         // Consider slots coming from anchor = date and anchor = date - 1
@@ -712,6 +883,12 @@ export class BookingService {
         ];
 
         for (const court of activeCourts) {
+            const courtActivity = this.mapActivityType((court as any).activityType);
+            if (!courtActivity) continue;
+            const courtSchedule = this.resolveActivitySchedule(courtActivity);
+            const courtDuration = courtSchedule.durations[0] ?? courtActivity.defaultDurationMinutes;
+            const possibleSlots = this.resolveScheduleSlots(courtActivity, courtDuration);
+
             const seen = new Set<string>();
             for (const anchor of anchors) {
                 for (const slotObj of possibleSlots as Array<{ slotTime: string; dayOffset: number }>) {
@@ -793,14 +970,17 @@ export class BookingService {
 
         const activity = await this.activityRepo.findById(activityId);
         if (!activity) throw new Error("Actividad no encontrada");
+        const activitySchedule = this.resolveActivitySchedule(activity);
 
-        const allowedDurations = this.normalizeDurations(null, activity.defaultDurationMinutes);
+        const activeActivityCourts = activeCourts.filter((court: any) => Number(court.activityTypeId) === Number(activityId));
+
+        const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? activity.defaultDurationMinutes;
         if (!allowedDurations.includes(effectiveDuration)) {
             throw new Error("Duración no permitida por el club");
         }
 
-        const possibleSlots = this.resolveScheduleSlots(null, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
+        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
 
         const anchors = [
             (() => { const d = new Date(date); d.setDate(d.getDate() - 1); return d; })(),
@@ -822,7 +1002,7 @@ export class BookingService {
 
                 const slotDateTime = TimeHelper.localSlotToUtc(slotDateCandidate, slotObj.slotTime, timeZone);
 
-                const hasAvailableCourt = activeCourts.some(court => {
+                const hasAvailableCourt = activeActivityCourts.some(court => {
                     const booking = bookings.find(b => {
                         const courtMatch = b.court.id === court.id;
                         const bookingUTCTime = Date.UTC(
@@ -859,6 +1039,7 @@ export class BookingService {
     }>> {
         const allCourts = await this.courtRepo.findAll(clubId);
         const activeCourts = allCourts.filter(court => !court.isUnderMaintenance);
+        const activityCourts = activeCourts.filter((court: any) => Number(court.activityTypeId) === Number(activityId));
 
         const clubConfig = clubId ? await prisma.club.findUnique({ where: { id: clubId } }) : null;
         const timeZone = clubConfig?.timeZone ?? 'America/Argentina/Buenos_Aires';
@@ -871,11 +1052,17 @@ export class BookingService {
                     lte: endUtc
                 },
                 status: { not: 'CANCELLED' },
-                ...(clubId ? { court: { clubId: clubId } } : {})
+                ...(clubId ? { clubId } : {})
             },
             include: { court: true }
         });
-        const activity = await this.activityRepo.findById(activityId);
+
+        if (activityCourts.length === 0) {
+            return [];
+        }
+
+        const activity = this.mapActivityType((activityCourts[0] as any).activityType)
+            ?? await this.activityRepo.findById(activityId);
         if (!activity) throw new Error("Actividad no encontrada");
 
         // Si el club (si se indicó) está cerrado ese día, no devolvemos horarios
@@ -883,20 +1070,14 @@ export class BookingService {
             return [];
         }
 
-        const activityCourts = activeCourts.filter((court: any) =>
-            Array.isArray(court.activities) && court.activities.some((act: any) => act.id === activityId)
-        );
-
-        if (activityCourts.length === 0) {
-            return [];
-        }
-        const allowedDurations = this.normalizeDurations(clubConfig?.scheduleDurations, activity.defaultDurationMinutes);
+        const activitySchedule = this.resolveActivitySchedule(activity);
+        const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
         if (!allowedDurations.includes(effectiveDuration)) {
             throw new Error("Duración no permitida por el club");
         }
 
-        const possibleSlots = this.resolveScheduleSlots(clubConfig, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
+        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
 
         const now = new Date();
 
@@ -1007,6 +1188,7 @@ export class BookingService {
 
         const activity = await this.activityRepo.findById(activityId);
         const duration = isProfessorOverride ? 60 : (activity ? activity.defaultDurationMinutes : 60);
+        this.assertValidDuration(duration);
         const clubConfigForFixed = (court as any)?.club;
         const fixedConfig = this.resolveFixedBookingConfig(clubConfigForFixed, activity ?? null);
 
@@ -1022,6 +1204,11 @@ export class BookingService {
         const localEnd = TimeHelper.utcToLocal(new Date(startDateTime.getTime() + duration * 60000), clubTimeZone);
         const startTime = `${String(localStart.getHours()).padStart(2, '0')}:${String(localStart.getMinutes()).padStart(2, '0')}`;
         const endTime = `${String(localEnd.getHours()).padStart(2, '0')}:${String(localEnd.getMinutes()).padStart(2, '0')}`;
+        const startTimeMinutes = TimeHelper.timeToMinutes(startTime);
+        const endTimeMinutes = TimeHelper.timeToMinutes(endTime);
+        if (startTimeMinutes >= endTimeMinutes) {
+            throw new Error('Horario inválido para turno fijo: start debe ser menor a end');
+        }
         const dayOfWeek = localStart.getDay();
 
         // Verificar días de apertura del club antes de crear turnos fijos
@@ -1038,9 +1225,12 @@ export class BookingService {
             }
         });
 
-        const overlapsFixed = existingFixed.some((fixed) =>
-            TimeHelper.isOverlapping(startTime, endTime, fixed.startTime, fixed.endTime)
-        );
+        const overlapsFixed = existingFixed.some((fixed) => {
+            const fixedStart = Number((fixed as any).startTimeMinutes);
+            const fixedEnd = Number((fixed as any).endTimeMinutes);
+            if (!Number.isFinite(fixedStart) || !Number.isFinite(fixedEnd)) return false;
+            return startTimeMinutes < fixedEnd && endTimeMinutes > fixedStart;
+        });
 
         if (overlapsFixed) {
             throw new Error("Ya existe un turno fijo en ese horario para esta cancha.");
@@ -1051,6 +1241,15 @@ export class BookingService {
         const lastStart = new Date(firstStart);
         lastStart.setDate(firstStart.getDate() + ((totalOccurrences - 1) * generationFrequencyDays));
         const lastEnd = new Date(lastStart.getTime() + duration * 60000);
+
+        console.info('[FIXED_BOOKING] Inicio de generación', {
+            courtId,
+            activityId,
+            clubId: (court as any)?.club?.id,
+            firstStart: firstStart.toISOString(),
+            totalOccurrences,
+            generationFrequencyDays
+        });
 
         return await prisma.$transaction(async (tx: any) => {
             
@@ -1064,10 +1263,11 @@ export class BookingService {
 
                     courtId,
                     activityId,
+                    clubId: (court as any).club.id,
                     startDate: firstStart,
                     dayOfWeek,
-                    startTime,
-                    endTime,
+                    startTimeMinutes,
+                    endTimeMinutes,
                     status: 'ACTIVE' // Asegurar estado activo al crear
                 }
             });
@@ -1090,6 +1290,7 @@ export class BookingService {
                 currentStart.setDate(startDateTime.getDate() + (i * generationFrequencyDays));
                 
                 const currentEnd = new Date(currentStart.getTime() + duration * 60000);
+                this.assertValidRange(currentStart, currentEnd);
 
                 const hasConflict = existingBookings.some((existing: any) => {
                     return (existing.startDateTime < currentEnd && existing.endDateTime > currentStart);
@@ -1121,6 +1322,7 @@ export class BookingService {
                         ...(guestDni ? { guestDni } : {}), // Guardar DNI en cada reserva hija
                         courtId,
                         activityId,
+                        clubId: (court as any).club.id,
                         fixedBookingId: fixedBooking.id
                     });
                 }
@@ -1128,8 +1330,23 @@ export class BookingService {
 
             // D. Guardar hijos
             if (bookingsToCreate.length > 0) {
-                await Promise.all(bookingsToCreate.map((data) => tx.booking.create({ data })));
+                try {
+                    await Promise.all(bookingsToCreate.map((data) => tx.booking.create({ data })));
+                } catch (error) {
+                    if (this.isOverlapConstraintError(error)) {
+                        throw new Error('Se detectó superposición de turnos durante la generación automática');
+                    }
+                    throw error;
+                }
             }
+
+            console.info('[FIXED_BOOKING] Generación completada', {
+                fixedBookingId: fixedBooking.id,
+                generatedCount: bookingsToCreate.length,
+                courtId,
+                activityId,
+                clubId: (court as any).club.id
+            });
 
             return { 
                 fixedBookingId: fixedBooking.id, 
@@ -1173,15 +1390,16 @@ export class BookingService {
                 fixedBookingId: fixedBookingId,
                 startDateTime: { gte: today }, // Solo las futuras
                 status: { not: 'CANCELLED' },
-                ...(clubId ? {
-                    court: {
-                        clubId: clubId
-                    }
-                } : {})
+                ...(clubId ? { clubId } : {})
             },
             data: {
                 status: 'CANCELLED'
             }
+        });
+
+        console.info('[FIXED_BOOKING] Turno fijo cancelado', {
+            fixedBookingId,
+            clubId: clubId ?? null
         });
         
         return { message: "Turno fijo cancelado de hoy en adelante" };
@@ -1306,9 +1524,7 @@ async getClientStats(clubId: number, userId: number) {
     // EXCLUIMOS 'PENDING' para que las reservas web no sumen deuda automáticamente.
     const debtBookings = await prisma.booking.findMany({
       where: {
-        court: {
-            clubId: clubId
-        },
+                clubId,
         userId,
         paymentStatus: {
           in: ['DEBT', 'PARTIAL'] // 👈 CLAVE: Solo estos estados suman deuda
@@ -1344,9 +1560,7 @@ async getClientStats(clubId: number, userId: number) {
     // 3. Contamos partidos jugados (Histórico)
     const totalBookings = await prisma.booking.count({
       where: {
-        court: {
-            clubId: clubId
-        },
+                clubId,
         userId,
         status: 'COMPLETED'
       }
@@ -1742,7 +1956,7 @@ async getClubDebtors(clubId: number) {
     // 1. Prisma SELECT - Solo pedimos los datos que el Frontend necesita, ni un byte más.
     const bookings = await prisma.booking.findMany({
       where: {
-        court: { clubId: clubId }
+                clubId
       },
       select: {
         id: true,

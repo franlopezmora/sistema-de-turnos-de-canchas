@@ -1,5 +1,6 @@
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
+import { ActiveClubProvider } from '../contexts/ActiveClubContext';
 
 // IMPORTANTE: Aquí buscamos el archivo en la carpeta styles
 import '../styles/globals.css'; 
@@ -39,7 +40,9 @@ export default function MyApp({ Component, pageProps }: AppProps) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </Head>
-      <Component {...pageProps} />
+      <ActiveClubProvider>
+        <Component {...pageProps} />
+      </ActiveClubProvider>
       {/* Portal para react-datepicker - renderiza fuera del stacking context */}
       <div id="datepicker-portal" />
     </>

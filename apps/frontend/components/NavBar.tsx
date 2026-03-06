@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getToken, logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { ClubService } from '../services/ClubService';
+import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
 import AppModal from './AppModal';
 import { Menu, Home, Calendar, Settings, LogOut, Phone, Mail, Check, Lock, MapPin } from 'lucide-react'; 
 
@@ -29,7 +30,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
 
     if (token && userStr) {
       try {
-        setUser(JSON.parse(userStr));
+        setUser(normalizeSessionUser(JSON.parse(userStr)));
       } catch {
         localStorage.removeItem('user');
         setUser(null);
@@ -105,9 +106,9 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
   const adminClubSlug = useMemo(() => {
     if (!user || !isAdmin) return null;
 
-    const directSlug = user.slug || user.clubSlug || user?.club?.slug;
-    if (typeof directSlug === 'string' && directSlug.trim()) {
-      return directSlug.trim();
+    const activeSlug = getActiveClubSlug(user);
+    if (activeSlug) {
+      return activeSlug;
     }
 
     const routeSlug = router.query.slug;
@@ -132,7 +133,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
         return;
       }
 
-      const clubId = Number(user?.clubId || user?.club?.id);
+      const clubId = Number(user?.activeClubId || user?.clubId || user?.club?.id);
       if (!Number.isFinite(clubId) || clubId <= 0) {
         setResolvedAdminClubSlug(null);
         return;

@@ -1,6 +1,7 @@
 // src/services/AuthService.ts
 
 import { getApiUrl } from '../utils/apiUrl';
+import { getEffectiveActiveClubId, persistSessionUser } from '../utils/session';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
@@ -15,7 +16,7 @@ export const login = async (email: string, password: string) => {
 
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.message || 'Error al iniciar sesión');
+    throw new Error(errorData.error || errorData.message || 'Error al iniciar sesión');
   }
 
   const data = await response.json();
@@ -27,7 +28,7 @@ export const login = async (email: string, password: string) => {
 
     // Opcional: Guardar datos del usuario si el back los devuelve
     if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
+        persistSessionUser(data.user);
     }
   }
 
@@ -45,7 +46,7 @@ export const register = async (firstName: string, lastName: string, email: strin
 
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.message || 'Error al registrar usuario');
+    throw new Error(errorData.error || errorData.message || 'Error al registrar usuario');
   }
 
   const data = await response.json();
@@ -56,6 +57,7 @@ export const logout = () => {
   // Limpiar token y datos del usuario en localStorage y navegar a '/'.
   localStorage.removeItem('token');
   localStorage.removeItem('user');
+  localStorage.removeItem('activeClubId');
   // Redirigimos siempre al home después de cerrar sesión.
   if (typeof window !== 'undefined') {
     window.location.href = '/';
@@ -69,3 +71,5 @@ export const getToken = () => {
     }
     return null;
 };
+
+export const getActiveClubId = () => getEffectiveActiveClubId();

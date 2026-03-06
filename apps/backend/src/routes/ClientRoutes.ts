@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../prisma';
 import { authMiddleware } from '../middleware/AuthMiddleware';
 import { requireRole } from '../middleware/RoleMiddleware';
+import { getUserClubContext } from '../utils/getUserClubContext';
 
 const router = Router();
 /** Middleware: verifica que clubSlug en query sea el club del admin autenticado */
@@ -11,9 +12,17 @@ const verifyClubSlugAccess = async (req: any, res: any, next: Function) => {
     if (!clubSlug) return res.status(400).json({ error: 'Falta el clubSlug' });
     const club = await prisma.club.findUnique({ where: { slug: String(clubSlug) } });
     if (!club) return res.status(404).json({ error: 'Club no encontrado' });
-    const fullUser = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { clubId: true } });
-    if (!fullUser || fullUser.clubId !== club.id) return res.status(403).json({ error: 'No tienes acceso a este club' });
+
+    let context;
+    try {
+      context = await getUserClubContext(Number(req.user.userId), club.id);
+    } catch {
+      return res.status(403).json({ error: 'No tienes acceso a este club' });
+    }
+
+    if (!context || context.clubId !== club.id) return res.status(403).json({ error: 'No tienes acceso a este club' });
     req.club = club;
+    req.clubContext = context;
     next();
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -29,9 +38,7 @@ router.get('/', authMiddleware, requireRole('ADMIN'), verifyClubSlugAccess, asyn
     // CORRECCIÓN APLICADA AQUÍ ABAJO 👇
     const bookings = await prisma.booking.findMany({
       where: {
-        court: {            // Entramos a la relación con la Cancha
-          clubId: club.id   // Filtramos las canchas de este club
-        }
+        clubId: club.id
       },
       orderBy: { createdAt: 'desc' },
       select: {

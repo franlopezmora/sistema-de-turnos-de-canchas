@@ -139,7 +139,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   };
   const [selectedDate, setSelectedDate] = useState<Date | null>(getTodayDate());
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [selectedCourt, setSelectedCourt] = useState<{ id: number; name: string; price?: number | null; activities?: Array<{ id: number; name: string }> } | null>(null);
+  const [selectedCourt, setSelectedCourt] = useState<{ id: number; name: string; price?: number | null; activityType?: { id: number; name: string } | null } | null>(null);
 
   const [selectedActivityFilter, setSelectedActivityFilter] = useState<string>('');
   // ...existing code...
@@ -194,11 +194,10 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     });
   };
 
-  const { slotsWithCourts, loading, error, refresh } = useAvailability(selectedDate, clubSlug, selectedDuration);
   const [disabledSlots, setDisabledSlots] = useState<Record<string, boolean>>({});
   const STORAGE_PREFIX = 'disabledSlots:';
 
-  const [allCourts, setAllCourts] = useState<Array<{ id: number; name: string; price?: number | null; activities?: Array<{ id: number; name: string }> }>>([]);
+  const [allCourts, setAllCourts] = useState<Array<{ id: number; name: string; price?: number | null; activityType?: { id: number; name: string } | null }>>([]);
   const activeCourts = useMemo(
     () => allCourts.filter((court: any) => !court?.isUnderMaintenance),
     [allCourts]
@@ -216,6 +215,26 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .trim();
+  const getCourtActivityName = (court: { activityType?: { name?: string } | null }) => String(court?.activityType?.name || '');
+  const selectedActivityId = useMemo(() => {
+    if (selectedCourt?.activityType?.id) {
+      return Number(selectedCourt.activityType.id);
+    }
+
+    if (selectedActivityFilter) {
+      const matchedCourt = activeCourts.find(
+        (court) => getCourtActivityName(court as any) === selectedActivityFilter && court?.activityType?.id
+      );
+      if (matchedCourt?.activityType?.id) {
+        return Number(matchedCourt.activityType.id);
+      }
+    }
+
+    const firstCourtWithActivity = activeCourts.find((court) => Number(court?.activityType?.id) > 0);
+    return firstCourtWithActivity?.activityType?.id ? Number(firstCourtWithActivity.activityType.id) : null;
+  }, [selectedCourt, selectedActivityFilter, activeCourts]);
+
+  const { slotsWithCourts, loading, error, refresh } = useAvailability(selectedDate, selectedActivityId, clubSlug, selectedDuration);
   const getTrimmedGuestInfo = () => {
     const trimmedPhone = guestPhone.replace(/\D/g, '');
     const firstName = guestFirstName.trim();
@@ -336,7 +355,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   })();
 
   const availableSlots = useMemo(() => {
-    if (!selectedDate) return [] as Array<{ slotTime: string; courts: Array<{ id: number; name: string; price?: number | null; activities?: Array<{ id: number; name: string }> }> }>;
+    if (!selectedDate) return [] as Array<{ slotTime: string; courts: Array<{ id: number; name: string; price?: number | null; activityType?: { id: number; name: string } | null }> }>;
     const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(
       selectedDate.getDate()
     ).padStart(2, '0')}`;
@@ -345,8 +364,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       .map((slot) => {
         const courtsToShow = (activeCourts.length > 0 ? activeCourts : slot.availableCourts).filter((court) => {
           if (selectedActivityFilter === 'ALL') return true;
-          const activities = (court as any).activities as Array<{ name: string }> | undefined;
-          return (activities || []).some((activity) => activity.name === selectedActivityFilter);
+          return getCourtActivityName(court as any) === selectedActivityFilter;
         });
 
         const availableCourts = courtsToShow.filter((court) => {
@@ -426,9 +444,15 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
           guestDni: guestInfo.guestDni    
       } : undefined;
 
+      const bookingActivityId = Number(selectedCourt.activityType?.id || selectedActivityId || 0);
+      if (!Number.isFinite(bookingActivityId) || bookingActivityId <= 0) {
+        showError('No se pudo identificar la actividad de la cancha seleccionada.');
+        return;
+      }
+
       const createResult = await createBooking(
         selectedCourt.id,
-        1,
+        bookingActivityId,
         selectedDate,
         selectedSlot,
         undefined,
@@ -597,7 +621,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
   useEffect(() => {
     if (!pendingSport || activeCourts.length === 0) return;
     const activityNames = Array.from(
-      new Set(activeCourts.flatMap((court) => court.activities?.map((activity) => activity.name) || []))
+      new Set(activeCourts.map((court) => getCourtActivityName(court)).filter(Boolean))
     );
     const normalizedTarget = normalizeText(pendingSport);
     const matched = activityNames.find((name) => normalizeText(name) === normalizedTarget);
@@ -612,7 +636,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
     if (activeCourts.length === 0) return;
 
     const uniqueActivities = Array.from(
-      new Set(activeCourts.flatMap((court) => court.activities?.map((activity) => activity.name) || []))
+      new Set(activeCourts.map((court) => getCourtActivityName(court)).filter(Boolean))
     );
 
     if (uniqueActivities.length === 1 && !selectedActivityFilter) {
@@ -710,9 +734,9 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
 };
 
   const availableActivities = useMemo(() => {
-    const allNames = activeCourts.flatMap((court) => 
-      court.activities?.map((activity) => activity.name) || []
-    );
+    const allNames = activeCourts
+      .map((court) => getCourtActivityName(court))
+      .filter(Boolean);
     return Array.from(new Set(allNames));
   }, [activeCourts]);
 
@@ -891,8 +915,14 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
               const handleSelectCourt = async () => {
                 if (!selectedDate || !selectedSlot) return;
                 try {
+                  const currentActivityId = Number((court as any).activityType?.id || selectedActivityId || 0);
+                  if (!Number.isFinite(currentActivityId) || currentActivityId <= 0) {
+                    showError('No se pudo identificar la actividad de la cancha.');
+                    return;
+                  }
+
                   const res = await fetch(
-                    `${apiBase()}/bookings/availability?courtId=${court.id}&date=${dateString}&activityId=1&durationMinutes=${selectedDuration}`
+                    `${apiBase()}/bookings/availability?courtId=${court.id}&date=${dateString}&activityId=${currentActivityId}&durationMinutes=${selectedDuration}`
                   );
                   if (!res.ok) {
                     setDisabledSlots((prev) => ({ ...prev, [slotKey]: true }));

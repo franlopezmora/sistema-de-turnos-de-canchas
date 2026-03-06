@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../prisma';
+import { getUserClubContext } from '../utils/getUserClubContext';
+import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 
 /**
  * Middleware para verificar que el usuario autenticado pertenece al club especificado en el slug
@@ -23,17 +25,14 @@ export const verifyClubAccess = async (req: Request, res: Response, next: NextFu
             return res.status(404).json({ error: 'Club no encontrado' });
         }
 
-        // Obtener el usuario completo de la base de datos
-        const fullUser = await prisma.user.findUnique({
-            where: { id: user.userId }
-        });
-
-        if (!fullUser) {
-            return res.status(401).json({ error: 'Usuario no encontrado' });
+        let context;
+        try {
+            context = await getUserClubContext(Number(user.userId), club.id);
+        } catch {
+            return res.status(403).json({ error: 'No tienes acceso a este club' });
         }
 
-        // Verificar que el usuario pertenece al club
-        if (fullUser.clubId !== club.id) {
+        if (!context || context.clubId !== club.id) {
             return res.status(403).json({ error: 'No tienes acceso a este club' });
         }
 
@@ -60,17 +59,14 @@ export const verifyClubAccessById = async (req: Request, res: Response, next: Ne
             return res.status(400).json({ error: 'ID de club inválido' });
         }
 
-        // Obtener el usuario completo de la base de datos
-        const fullUser = await prisma.user.findUnique({
-            where: { id: user.userId }
-        });
-
-        if (!fullUser) {
-            return res.status(401).json({ error: 'Usuario no encontrado' });
+        let context;
+        try {
+            context = await getUserClubContext(Number(user.userId), parsed);
+        } catch {
+            return res.status(403).json({ error: 'No tienes acceso a este club' });
         }
 
-        // Verificar que el usuario pertenece al club
-        if (fullUser.clubId !== parsed) {
+        if (!context || context.clubId !== parsed) {
             return res.status(403).json({ error: 'No tienes acceso a este club' });
         }
 
@@ -93,17 +89,15 @@ export const setAdminClubFromUser = async (req: Request, res: Response, next: Ne
         if (!user?.userId) {
             return res.status(401).json({ error: 'No autorizado' });
         }
-        const fullUser = await prisma.user.findUnique({
-            where: { id: user.userId },
-            select: { clubId: true }
-        });
-        if (!fullUser) {
-            return res.status(401).json({ error: 'Usuario no encontrado' });
-        }
-        if (fullUser.clubId == null) {
+        let context;
+        try {
+            const preferredClubId = getPreferredClubIdFromRequest(req);
+            context = await getUserClubContext(Number(user.userId), preferredClubId);
+        } catch {
             return res.status(403).json({ error: 'No tienes un club asignado' });
         }
-        (req as any).clubId = fullUser.clubId;
+
+        (req as any).clubId = context.clubId;
         next();
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -118,11 +112,12 @@ export const optionalSetAdminClubFromUser = async (req: Request, res: Response, 
     try {
         const user = (req as any).user;
         if (!user?.userId || user.role !== 'ADMIN') return next();
-        const fullUser = await prisma.user.findUnique({
-            where: { id: user.userId },
-            select: { clubId: true }
-        });
-        if (fullUser?.clubId != null) (req as any).clubId = fullUser.clubId;
+        try {
+            const preferredClubId = getPreferredClubIdFromRequest(req);
+            const context = await getUserClubContext(Number(user.userId), preferredClubId);
+            if (context?.clubId != null) (req as any).clubId = context.clubId;
+        } catch {
+        }
         next();
     } catch (error: any) {
         res.status(500).json({ error: error.message });

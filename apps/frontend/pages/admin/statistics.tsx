@@ -4,6 +4,7 @@ import AdminLayout from '../../components/AdminLayout';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabStatistics from '../../components/admin/AdminTabStatistics'; 
+import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 
 export default function AdminStatisticsPage() {
   // Obtenemos el usuario validado
@@ -15,10 +16,7 @@ export default function AdminStatisticsPage() {
     return <NotFound message="No tenés permiso para acceder." />;
   }
 
-  // 👇 INTELIGENCIA: Buscamos el slug en el objeto user. 
-  // (Depende de cómo sea tu usuario, suele ser user.club.slug o user.clubSlug)
-  // Probá con user.club?.slug primero.
-  const userSlug = (user as any).club?.slug || (user as any).slug || (user as any).clubSlug;
+  const userSlug = getActiveClubSlug(normalizeSessionUser(user as any));
 
   return (
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>

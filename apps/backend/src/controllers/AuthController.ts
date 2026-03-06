@@ -3,6 +3,7 @@ import { prisma } from '../prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
+import { getUserClubContext } from '../utils/getUserClubContext';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -80,6 +81,14 @@ export class AuthController {
                 { expiresIn: '6h' }
             );
 
+            let resolvedClubId: number | null = null;
+            try {
+                const clubContext = await getUserClubContext(user.id);
+                resolvedClubId = clubContext.clubId;
+            } catch {
+                resolvedClubId = null;
+            }
+
             res.json({ 
                 message: "Login exitoso", 
                 token,
@@ -90,7 +99,7 @@ export class AuthController {
                     email: user.email,
                     phoneNumber: user.phoneNumber,
                     role: user.role,
-                    clubId: user.clubId,
+                    clubId: resolvedClubId,
                     // 👉 4. ENVIAMOS EL DNI AL FRONTEND AL LOGUEARSE
                     dni: user.dni
                 } 
@@ -110,11 +119,28 @@ export class AuthController {
             const user = await prisma.user.findUnique({
                 where: { id: payload.userId },
                 // 👉 5. PEDIMOS QUE LA BD NOS TRAIGA EL DNI TAMBIÉN ACÁ
-                select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, role: true, clubId: true, dni: true, club: { select: { slug: true } } }
+                select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, role: true, dni: true }
             });
             if (!user) {
                 return res.status(401).json({ error: 'Usuario no encontrado' });
             }
+
+            let clubId: number | null = null;
+            let club: { slug: string } | null = null;
+
+            try {
+                const clubContext = await getUserClubContext(user.id);
+                clubId = clubContext.clubId;
+                const clubData = await prisma.club.findUnique({
+                    where: { id: clubContext.clubId },
+                    select: { slug: true }
+                });
+                club = clubData ?? null;
+            } catch {
+                clubId = null;
+                club = null;
+            }
+
             res.json({
                 id: user.id,
                 firstName: user.firstName,
@@ -122,10 +148,10 @@ export class AuthController {
                 email: user.email,
                 phoneNumber: user.phoneNumber,
                 role: user.role,
-                clubId: user.clubId,
+                clubId,
                 // 👉 6. LO DEVOLVEMOS AL FRONTEND
                 dni: user.dni,
-                club: user.club
+                club
             });
         } catch (error: any) {
             res.status(500).json({ error: error.message });

@@ -4,6 +4,7 @@
  * automáticamente a `/`.
  */
 import { getToken, logout } from '../services/AuthService';
+import { getActiveClubId } from '../services/AuthService';
 
 async function extractErrorMessage(res: Response): Promise<string> {
   try {
@@ -25,6 +26,12 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
   const token = getToken();
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
+
+    const activeClubId = getActiveClubId();
+    if (activeClubId) {
+      headers.set('x-active-club-id', String(activeClubId));
+      headers.set('x-club-id', String(activeClubId));
+    }
   }
 
   const res = await fetch(input, { ...init, headers });

@@ -1,5 +1,6 @@
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
+import { getUserClubContext } from '../utils/getUserClubContext';
 
 type ProductComponentInput = {
     componentProductId: number;
@@ -16,6 +17,16 @@ type ProductInput = {
 };
 
 export class ProductService {
+    async resolveClubIdForUser(userId: number, preferredClubId?: number) {
+        const context = await getUserClubContext(userId, preferredClubId);
+        return context.clubId;
+    }
+
+    async getProductsByUserContext(userId: number, preferredClubId?: number) {
+        const clubId = await this.resolveClubIdForUser(userId, preferredClubId);
+        return this.getProductsByClub(clubId);
+    }
+
 
     private sanitizeComponents(components: ProductComponentInput[] = []) {
         return components

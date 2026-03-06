@@ -17,7 +17,7 @@ interface AvailabilityResponse {
   slotsWithCourts: SlotWithCourts[];
 }
 
-export function useAvailability(date: Date | null, clubSlug?: string, durationMinutes?: number) {
+export function useAvailability(date: Date | null, activityId?: number | null, clubSlug?: string, durationMinutes?: number) {
   const [slotsWithCourts, setSlotsWithCourts] = useState<SlotWithCourts[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +31,11 @@ export function useAvailability(date: Date | null, clubSlug?: string, durationMi
     setSlotsWithCourts([]);
 
     try {
+      if (!Number.isFinite(activityId) || Number(activityId) <= 0) {
+        setSlotsWithCourts([]);
+        return;
+      }
+
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -43,7 +48,7 @@ export function useAvailability(date: Date | null, clubSlug?: string, durationMi
         : '';
 
       const res = await fetch(
-        `${apiBase}/bookings/availability-with-courts?activityId=1&date=${dateString}&t=${timestamp}${clubParam}${durationParam}`,
+        `${apiBase}/bookings/availability-with-courts?activityId=${Number(activityId)}&date=${dateString}&t=${timestamp}${clubParam}${durationParam}`,
         {
             cache: 'no-store',
             headers: {
@@ -64,7 +69,7 @@ export function useAvailability(date: Date | null, clubSlug?: string, durationMi
     } finally {
       setLoading(false);
     }
-  }, [date, apiBase, clubSlug, durationMinutes]);
+  }, [date, activityId, apiBase, clubSlug, durationMinutes]);
 
   useEffect(() => {
     fetchSlots();

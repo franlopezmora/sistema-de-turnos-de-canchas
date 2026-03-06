@@ -8,6 +8,7 @@ import { Search, MapPin, Calendar, TrendingUp, ShieldCheck, ArrowRight, Menu, X,
 import Link from 'next/link';
 import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
+import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
 // Importamos los íconos de la librería
 import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Pádel)
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de fútbol limpia
@@ -60,11 +61,6 @@ type LocationSuggestion = {
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const LOCATION_LIMIT = 6;
 const DEFAULT_RADIUS_KM = 20;
-const ACTIVITY_IDS_BY_SPORT: Record<string, number> = {
-  padel: 1,
-  tenis: 2,
-  futbol: 3
-};
 
 const normalizeText = (text: string) =>
   text
@@ -72,6 +68,18 @@ const normalizeText = (text: string) =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
+
+const sportAliases: Record<string, string[]> = {
+  padel: ['padel', 'pádel'],
+  tenis: ['tenis', 'tennis'],
+  futbol: ['futbol', 'fútbol', 'football']
+};
+
+const matchesSport = (activityName: string, sport: string) => {
+  const normalizedActivity = normalizeText(activityName);
+  const aliases = sportAliases[sport] || [sport];
+  return aliases.some((alias) => normalizedActivity.includes(normalizeText(alias)));
+};
 
 const fetchLocations = async (
   query: string,
@@ -255,15 +263,14 @@ export default function Home() {
   const adminClubSlug = useMemo(() => {
     if (!user || !isAdmin) return null;
 
-    const directSlug = user.slug || user.clubSlug || user?.club?.slug;
-    if (typeof directSlug === 'string' && directSlug.trim()) {
-      return directSlug.trim();
-    }
+    const normalizedUser = normalizeSessionUser(user);
+    const activeSlug = getActiveClubSlug(normalizedUser);
+    if (activeSlug) return activeSlug;
 
-    const clubId = Number(user.clubId || user?.club?.id);
-    if (!Number.isFinite(clubId) || clubId <= 0) return null;
+    const fallbackClubId = Number(normalizedUser?.activeClubId || normalizedUser?.clubId || normalizedUser?.club?.id);
+    if (!Number.isFinite(fallbackClubId) || fallbackClubId <= 0) return null;
 
-    const club = clubs.find((item) => Number(item.id) === clubId);
+    const club = clubs.find((item) => Number(item.id) === fallbackClubId);
     return club?.slug || null;
   }, [clubs, isAdmin, user]);
 
@@ -307,7 +314,11 @@ export default function Home() {
 
   useEffect(() => {
     const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-    if (userStr) { try { setUser(JSON.parse(userStr)); } catch {} }
+    if (userStr) {
+      try {
+        setUser(normalizeSessionUser(JSON.parse(userStr)));
+      } catch {}
+    }
 
     const loadClubs = async () => {
       try {
@@ -514,14 +525,27 @@ export default function Home() {
         }
       } catch (e) { /* noop */ }
 
-      const activityIds = searchSport
-        ? [ACTIVITY_IDS_BY_SPORT[searchSport]].filter(Boolean)
-        : Object.values(ACTIVITY_IDS_BY_SPORT);
-
-      if (activityIds.length > 0) {
+      if (searchSport) {
         const availabilityChecks = await Promise.all(
           finalClubs.map(async (club) => {
             try {
+              const courtsRes = await fetch(`${apiBase}/courts?clubSlug=${encodeURIComponent(club.slug)}`, {
+                cache: 'no-store'
+              });
+              if (!courtsRes.ok) return { hasSlots: false, times: [] };
+
+              const courts = await courtsRes.json();
+              const activityIds = Array.from(
+                new Set(
+                  (Array.isArray(courts) ? courts : [])
+                    .filter((court: any) => matchesSport(String(court?.activityType?.name || ''), searchSport))
+                    .map((court: any) => Number(court?.activityType?.id))
+                    .filter((activityId: number) => Number.isFinite(activityId) && activityId > 0)
+                )
+              );
+
+              if (activityIds.length === 0) return { hasSlots: false, times: [] };
+
               let hasSlots = false;
               const times: string[] = [];
               for (const activityId of activityIds) {

@@ -26,12 +26,6 @@ export class ClubRepository {
         lightsFromHour?: string | null,
         professorDiscountEnabled: boolean = false,
         professorDiscountPercent?: number | null,
-        scheduleMode?: string,
-        scheduleOpenTime?: string | null,
-        scheduleCloseTime?: string | null,
-        scheduleIntervalMinutes?: number | null,
-        scheduleDurations?: number[] | null,
-        scheduleFixedSlots?: string[] | null,
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null,
         openingDays?: number[] | null
     ): Promise<Club> {
@@ -58,12 +52,6 @@ export class ClubRepository {
             openingDays,
             professorDiscountEnabled,
             professorDiscountPercent,
-            scheduleMode,
-            scheduleOpenTime,
-            scheduleCloseTime,
-            scheduleIntervalMinutes,
-            scheduleDurations,
-            scheduleFixedSlots,
             fixedBookingSettingsByActivity
         };
 
@@ -79,18 +67,25 @@ export class ClubRepository {
                 surface: court.surface,
                 isUnderMaintenance: court.isUnderMaintenance,
                 club: { connect: { id: court.club.id } },
-                activities: {
-                    connect: court.supportedActivities.map(a => ({ id: a.id }))
-                }
+                ...(court.activityType?.id
+                    ? { activityType: { connect: { id: court.activityType.id } } }
+                    : {})
             },
-            include: { club: true, activities: true }
+            include: { club: true, activityType: true }
         });
 
-        const activities = saved.activities.map(a => new ActivityType(a.id, a.name, a.description, a.defaultDurationMinutes));
         const club = this.mapToClub(saved.club);
+        const activityType = saved.activityType
+            ? new ActivityType(
+                saved.activityType.id,
+                saved.activityType.name,
+                saved.activityType.description,
+                saved.activityType.defaultDurationMinutes,
+                (saved.activityType as any).clubId
+            )
+            : null;
         
-    const newCourt = new Court(saved.id, saved.name, saved.isIndoor, saved.surface, club, saved.isUnderMaintenance, null);
-        newCourt.supportedActivities = activities;
+    const newCourt = new Court(saved.id, saved.name, saved.isIndoor, saved.surface, club, saved.isUnderMaintenance, activityType);
         
         return newCourt;
     }
@@ -98,16 +93,23 @@ export class ClubRepository {
     async findCourtById(id: number): Promise<Court | undefined> {
         const found = await prisma.court.findUnique({
             where: { id },
-            include: { club: true, activities: true }
+            include: { club: true, activityType: true }
         });
 
         if (!found) return undefined;
 
-        const activities = found.activities.map(a => new ActivityType(a.id, a.name, a.description, a.defaultDurationMinutes));
         const club = this.mapToClub(found.club);
+        const activityType = found.activityType
+            ? new ActivityType(
+                found.activityType.id,
+                found.activityType.name,
+                found.activityType.description,
+                found.activityType.defaultDurationMinutes,
+                (found.activityType as any).clubId
+            )
+            : null;
         
-    const court = new Court(found.id, found.name, found.isIndoor, found.surface, club, found.isUnderMaintenance, null);
-        court.supportedActivities = activities;
+    const court = new Court(found.id, found.name, found.isIndoor, found.surface, club, found.isUnderMaintenance, activityType);
         return court;
     }
 
@@ -133,12 +135,6 @@ export class ClubRepository {
             club.lightsFromHour ?? null,
             club.professorDiscountEnabled ?? false,
             club.professorDiscountPercent ?? null,
-            club.scheduleMode,
-            club.scheduleOpenTime ?? null,
-            club.scheduleCloseTime ?? null,
-            club.scheduleIntervalMinutes ?? null,
-            club.scheduleDurations ?? null,
-            club.scheduleFixedSlots ?? null,
             club.fixedBookingSettingsByActivity ?? null,
             club.openingDays ?? null
         );
@@ -186,22 +182,18 @@ export class ClubRepository {
         lightsFromHour?: string | null;
         professorDiscountEnabled?: boolean;
         professorDiscountPercent?: number | null;
-        scheduleMode?: string;
-        scheduleOpenTime?: string | null;
-        scheduleCloseTime?: string | null;
-        scheduleIntervalMinutes?: number | null;
-        scheduleDurations?: number[] | null;
-        scheduleFixedSlots?: string[] | null;
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
         openingDays?: number[] | null;
     }): Promise<Club> {
+        const clubData = data as any;
+
         if (data.city && data.province && data.country) {
             const location = await this.ensureLocation(data.city, data.province, data.country);
-            data.locationId = location.id;
+            (clubData as any).locationId = location.id;
         }
         const updated = await prisma.club.update({
             where: { id },
-            data: data as any
+            data: clubData as any
         });
         return this.mapToClub(updated);
     }
@@ -228,12 +220,6 @@ export class ClubRepository {
             dbClub.lightsFromHour ?? null,
             dbClub.professorDiscountEnabled ?? false,
             dbClub.professorDiscountPercent ?? null,
-            dbClub.scheduleMode ?? undefined,
-            dbClub.scheduleOpenTime ?? null,
-            dbClub.scheduleCloseTime ?? null,
-            dbClub.scheduleIntervalMinutes ?? null,
-            Array.isArray(dbClub.scheduleDurations) ? dbClub.scheduleDurations : null,
-            Array.isArray(dbClub.scheduleFixedSlots) ? dbClub.scheduleFixedSlots : null,
             (dbClub.fixedBookingSettingsByActivity ?? null) as FixedBookingSettingsByActivity | null,
             Array.isArray(dbClub.openingDays) ? dbClub.openingDays : null,
             dbClub.createdAt,

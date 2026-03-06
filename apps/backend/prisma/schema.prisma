@@ -17,6 +17,13 @@ enum Role {
   GUEST
 }
 
+enum MembershipRole {
+  OWNER
+  ADMIN
+  STAFF
+  CUSTOMER
+}
+
 enum BookingStatus {
   PENDING
   CONFIRMED
@@ -36,6 +43,12 @@ enum ScheduleMode {
   RANGE
 }
 
+enum FixedBookingStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
 //
 // MODELOS
 //
@@ -51,12 +64,13 @@ model User {
   isProfessor   Boolean        @default(false)
   dni       String?
 
-  clubId        Int?
-  club          Club?          @relation(fields: [clubId], references: [id])
-
   bookings      Booking[]
   fixedBookings FixedBooking[]
   cashMovements CashMovement[]
+  memberships   Membership[]
+  payments      Payment[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
 }
 
 model Club {
@@ -93,21 +107,40 @@ model Club {
   professorDiscountEnabled Boolean @default(false)
   professorDiscountPercent Float?
 
-  scheduleMode            ScheduleMode @default(FIXED)
-  scheduleOpenTime        String?
-  scheduleCloseTime       String?
-  scheduleIntervalMinutes Int?
-  scheduleDurations       Json?
-  scheduleFixedSlots      Json?
   fixedBookingSettingsByActivity Json?
 
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
 
   courts        Court[]
-  users         User[]
+  activities    ActivityType[]
+  bookings      Booking[]
   products      Product[]
   cashMovements CashMovement[]
+  memberships   Membership[]
+  fixedBookings FixedBooking[]
+  payments      Payment[]
+  notifications Notification[]
+  courtPriceRules CourtPriceRule[]
+  auditLogs     AuditLog[]
+  events        Event[]
+  settings      ClubSettings?
+}
+
+model Membership {
+  id     String         @id @default(cuid())
+  userId Int
+  clubId Int
+  role   MembershipRole
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, clubId])
+  @@index([clubId])
+  @@index([userId])
 }
 
 model Location {
@@ -133,16 +166,37 @@ model Court {
   price              Float   @default(0)
 
   activityTypeId Int?
-  activityType   ActivityType? @relation("CourtActivityType", fields: [activityTypeId], references: [id])
+  activityType   ActivityType? @relation(fields: [activityTypeId], references: [id])
 
   clubId Int
   club   Club @relation(fields: [clubId], references: [id])
 
-  activities    ActivityType[]
   bookings      Booking[]
   fixedBookings FixedBooking[]
+  priceRules    CourtPriceRule[]
 
   @@index([clubId])
+}
+
+model CourtPriceRule {
+  id           Int      @id @default(autoincrement())
+
+  courtId      Int
+  court        Court    @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  clubId       Int
+  club         Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  dayOfWeek    Int
+  startMinutes Int
+  endMinutes   Int
+  price        Float
+
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([courtId])
+  @@index([clubId])
+  @@index([courtId, dayOfWeek])
 }
 
 model ActivityType {
@@ -151,10 +205,21 @@ model ActivityType {
   description            String
   defaultDurationMinutes Int
 
-  primaryCourts          Court[]        @relation("CourtActivityType")
+  clubId                 Int
+  club                   Club           @relation(fields: [clubId], references: [id])
+
+  scheduleMode           ScheduleMode   @default(FIXED)
+  scheduleOpenTime       String?
+  scheduleCloseTime      String?
+  scheduleIntervalMinutes Int?
+  scheduleDurations      Json?
+  scheduleFixedSlots     Json?
+
   courts                 Court[]
   bookings               Booking[]
   fixedBookings          FixedBooking[]
+
+  @@index([clubId])
 }
 
 model Booking {
@@ -187,13 +252,20 @@ model Booking {
   activityId Int
   activity   ActivityType @relation(fields: [activityId], references: [id])
 
+  clubId Int
+  club   Club @relation(fields: [clubId], references: [id])
+
   fixedBookingId Int?
   fixedBooking   FixedBooking? @relation(fields: [fixedBookingId], references: [id])
 
   items          BookingItem[]
   cashMovements  CashMovement[]
+  payments       Payment[]
 
-  @@index([courtId, startDateTime])
+  @@index([courtId, startDateTime], map: "booking_court_day")
+  @@index([courtId, endDateTime])
+  @@index([clubId, startDateTime], map: "booking_club_day")
+  @@index([activityId, startDateTime], map: "booking_activity_day")
   @@index([startDateTime])
 }
 
@@ -202,11 +274,11 @@ model FixedBooking {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   dayOfWeek Int
-  startTime String
-  endTime   String
+  startTimeMinutes Int
+  endTimeMinutes   Int
   startDate DateTime @db.Timestamptz(3)
 
-  status     String   @default("ACTIVE")
+  status     FixedBookingStatus @default(ACTIVE)
   guestPhone String?
   guestDni   String?
   guestName  String?
@@ -220,9 +292,111 @@ model FixedBooking {
   activityId Int
   activity   ActivityType @relation(fields: [activityId], references: [id])
 
+  clubId Int
+  club   Club @relation(fields: [clubId], references: [id])
+
   bookings Booking[]
 
   @@index([courtId, dayOfWeek])
+  @@index([clubId])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  amount    Decimal  @db.Decimal(10, 2)
+  method    String
+  status    PaymentStatus @default(PENDING)
+
+  bookingId Int?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  clubId Int
+  club   Club @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  @@index([clubId])
+  @@index([clubId, createdAt])
+  @@index([bookingId])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  title     String
+  message   String
+  channel   String?
+  isRead    Boolean  @default(false)
+  status    String?
+  sentAt    DateTime? @db.Timestamptz(3)
+
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  clubId Int
+  club   Club @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  @@index([clubId])
+  @@index([clubId, createdAt])
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+
+  clubId    Int
+  club      Club     @relation(fields: [clubId], references: [id])
+
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
+
+  entity    String
+  entityId  String
+  action    String
+  payload   Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([clubId])
+  @@index([entity, entityId])
+}
+
+model Event {
+  id        String   @id @default(cuid())
+
+  clubId    Int
+  club      Club     @relation(fields: [clubId], references: [id])
+
+  type      String
+  payload   Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  processed Boolean  @default(false)
+
+  @@index([clubId])
+  @@index([type])
+}
+
+model ClubSettings {
+  id                         Int      @id @default(autoincrement())
+
+  clubId                     Int      @unique
+  club                       Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  timeZone                   String
+  openingDays                Json?
+
+  lightsEnabled              Boolean
+  lightsExtraAmount          Float?
+  lightsFromHour             Int?
+
+  professorDiscountEnabled   Boolean
+  professorDiscountPercent   Float?
+
+  createdAt                  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
 }
 
 model Product {

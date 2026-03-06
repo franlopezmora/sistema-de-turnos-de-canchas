@@ -21,6 +21,7 @@ import CashRoutes from './routes/CashRoutes';
 import { errorHandler } from './middleware/ErrorHandler';
 import { authMiddleware } from './middleware/AuthMiddleware';
 import { requireRole } from './middleware/RoleMiddleware';
+import { EventProcessor } from './services/EventProcessor';
 
 const app = express();
 
@@ -54,7 +55,15 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization', 'Cache-Control', 'Pragma', 'Expires']
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Cache-Control',
+    'Pragma',
+    'Expires',
+    'X-Active-Club-Id',
+    'X-Club-Id'
+  ]
 }));
 
 /* =====================================================
@@ -75,6 +84,7 @@ if (!process.env.DATABASE_URL) {
 
 const BOOKINGS_COMPLETION_INTERVAL_MS =
   Number(process.env.BOOKINGS_COMPLETION_INTERVAL_MS) || 60_000;
+const EVENT_PROCESSOR_INTERVAL_MS = Number(process.env.EVENT_PROCESSOR_INTERVAL_MS) || 15_000;
 
 /* =====================================================
    MIDDLEWARES
@@ -165,6 +175,7 @@ app.get('/whatsapp/status', (_req: Request, res: Response) => {
 const startServer = async () => {
   try {
     await prisma.$connect();
+    const eventProcessor = new EventProcessor();
 
     const completePastBookings = async () => {
       try {
@@ -252,7 +263,16 @@ const startServer = async () => {
       BOOKINGS_COMPLETION_INTERVAL_MS
     );
 
+    const eventInterval = setInterval(async () => {
+      try {
+        await eventProcessor.processPending(50);
+      } catch (error) {
+        console.error('❌ Error procesando eventos pendientes:', error);
+      }
+    }, EVENT_PROCESSOR_INTERVAL_MS);
+
     interval.unref?.();
+    eventInterval.unref?.();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server listening on port ${PORT}`);
