@@ -2021,7 +2021,22 @@ async getClubDebtors(clubId: number) {
             client.bookings.sort(sortByCreatedAtDesc);
         }
 
-    return Array.from(clientsMap.values());
+    return Array.from(clientsMap.values()).sort((a: any, b: any) => {
+        const debtA = Number(a?.totalDebt || 0);
+        const debtB = Number(b?.totalDebt || 0);
+        const isDebtorA = debtA > 0.01;
+        const isDebtorB = debtB > 0.01;
+
+        if (isDebtorA !== isDebtorB) {
+            return isDebtorA ? -1 : 1;
+        }
+
+        if (isDebtorA && isDebtorB && debtA !== debtB) {
+            return debtB - debtA;
+        }
+
+        return String(a?.name || '').localeCompare(String(b?.name || ''), 'es', { sensitivity: 'base' });
+    });
 }
 
 }

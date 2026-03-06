@@ -1,43 +1,100 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ClubService, Club } from '../../services/ClubService';
+import { getCourts } from '../../services/CourtService';
 import AppModal from '../AppModal';
 import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle, Clock } from 'lucide-react';
 
-const FIXED_BOOKING_ACTIVITY_KEYS = ['PADEL', 'FUTBOL', 'TENIS'] as const;
-type FixedBookingActivityKey = (typeof FIXED_BOOKING_ACTIVITY_KEYS)[number];
-
-const FIXED_BOOKING_ACTIVITY_LABELS: Record<FixedBookingActivityKey, string> = {
-  PADEL: 'Pádel',
-  FUTBOL: 'Fútbol',
-  TENIS: 'Tenis'
+type FixedBookingActivitySetting = {
+  key: string;
+  label: string;
 };
 
-const getDefaultFixedBookingSettingsForm = () => ({
-  PADEL: { fixedBookingDaysAhead: '90', fixedBookingGenerationFrequencyDays: '7' },
-  FUTBOL: { fixedBookingDaysAhead: '90', fixedBookingGenerationFrequencyDays: '7' },
-  TENIS: { fixedBookingDaysAhead: '90', fixedBookingGenerationFrequencyDays: '7' }
-});
+type FixedBookingSettingsForm = Record<string, {
+  fixedBookingDaysAhead: string;
+  fixedBookingGenerationFrequencyDays: string;
+}>;
 
-const toFixedBookingSettingsForm = (raw: unknown) => {
-  const base = getDefaultFixedBookingSettingsForm();
+const DEFAULT_FIXED_BOOKING_DAYS_AHEAD = '90';
+const DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS = '7';
+
+const normalizeActivityKey = (name: string) =>
+  name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase();
+
+const formatActivityLabelFromKey = (key: string) => {
+  if (!key) return '';
+  return key.charAt(0) + key.slice(1).toLowerCase();
+};
+
+const buildFixedBookingSettingsForm = (
+  activitySettings: FixedBookingActivitySetting[],
+  raw: unknown
+): FixedBookingSettingsForm => {
+  const base = activitySettings.reduce((acc, activity) => {
+    acc[activity.key] = {
+      fixedBookingDaysAhead: DEFAULT_FIXED_BOOKING_DAYS_AHEAD,
+      fixedBookingGenerationFrequencyDays: DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS
+    };
+    return acc;
+  }, {} as FixedBookingSettingsForm);
+
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
   const source = raw as Record<string, any>;
 
-  for (const key of FIXED_BOOKING_ACTIVITY_KEYS) {
-    const config = source[key];
+  for (const activity of activitySettings) {
+    const config = source[activity.key];
     if (!config || typeof config !== 'object') continue;
     const daysAhead = Number(config.fixedBookingDaysAhead);
     const generationFrequencyDays = Number(config.fixedBookingGenerationFrequencyDays);
+
     if (Number.isFinite(daysAhead) && daysAhead > 0) {
-      base[key].fixedBookingDaysAhead = String(Math.floor(daysAhead));
+      base[activity.key].fixedBookingDaysAhead = String(Math.floor(daysAhead));
     }
     if (Number.isFinite(generationFrequencyDays) && generationFrequencyDays > 0) {
-      base[key].fixedBookingGenerationFrequencyDays = String(Math.floor(generationFrequencyDays));
+      base[activity.key].fixedBookingGenerationFrequencyDays = String(Math.floor(generationFrequencyDays));
     }
   }
 
   return base;
+};
+
+const buildActivitySettingsFromCourts = (courts: any[], existingRaw?: unknown): FixedBookingActivitySetting[] => {
+  const byKey = new Map<string, string>();
+
+  for (const court of Array.isArray(courts) ? courts : []) {
+    const activities = [
+      ...(Array.isArray(court?.activities) ? court.activities : []),
+      ...(court?.activityType ? [court.activityType] : [])
+    ];
+
+    for (const activity of activities) {
+      const name = String(activity?.name || '').trim();
+      if (!name) continue;
+      const key = normalizeActivityKey(name);
+      if (!key) continue;
+      if (!byKey.has(key)) {
+        byKey.set(key, name);
+      }
+    }
+  }
+
+  if (byKey.size === 0 && existingRaw && typeof existingRaw === 'object' && !Array.isArray(existingRaw)) {
+    for (const key of Object.keys(existingRaw as Record<string, unknown>)) {
+      const normalizedKey = normalizeActivityKey(key);
+      if (!normalizedKey) continue;
+      if (!byKey.has(normalizedKey)) {
+        byKey.set(normalizedKey, formatActivityLabelFromKey(normalizedKey));
+      }
+    }
+  }
+
+  return Array.from(byKey.entries())
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
 };
 
 export default function AdminTabClub() {
@@ -70,8 +127,9 @@ export default function AdminTabClub() {
     scheduleDurations: '',
        scheduleFixedSlots: '',
        openingDays: '',
-       fixedBookingSettingsByActivity: getDefaultFixedBookingSettingsForm()
+        fixedBookingSettingsByActivity: {} as FixedBookingSettingsForm
   });
+      const [activitySettings, setActivitySettings] = useState<FixedBookingActivitySetting[]>([]);
      const [openingDaysSet, setOpeningDaysSet] = useState<number[]>([]);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -106,7 +164,10 @@ export default function AdminTabClub() {
       }
       if (clubId) {
         const clubData = await ClubService.getClubById(clubId);
+        const courtsData = await getCourts();
+        const nextActivitySettings = buildActivitySettingsFromCourts(courtsData, clubData.fixedBookingSettingsByActivity);
         setClub(clubData);
+        setActivitySettings(nextActivitySettings);
         setClubForm({
           slug: clubData.slug || '', name: clubData.name || '',
           addressLine: clubData.addressLine || '', city: clubData.city || '', province: clubData.province || '', country: clubData.country || '',
@@ -125,7 +186,7 @@ export default function AdminTabClub() {
           scheduleDurations: Array.isArray(clubData.scheduleDurations) ? clubData.scheduleDurations.join(', ') : '',
           scheduleFixedSlots: Array.isArray(clubData.scheduleFixedSlots) ? clubData.scheduleFixedSlots.join(', ') : '',
           openingDays: Array.isArray(clubData.openingDays) ? clubData.openingDays.join(',') : '',
-          fixedBookingSettingsByActivity: toFixedBookingSettingsForm(clubData.fixedBookingSettingsByActivity)
+          fixedBookingSettingsByActivity: buildFixedBookingSettingsForm(nextActivitySettings, clubData.fixedBookingSettingsByActivity)
           });
           setOpeningDaysSet(Array.isArray(clubData.openingDays) ? clubData.openingDays : []);
           setLogoPreview(clubData.logoUrl || null);
@@ -147,19 +208,21 @@ export default function AdminTabClub() {
       const durations = parseDurationList(clubForm.scheduleDurations);
       const fixedSlots = parseSlotList(clubForm.scheduleFixedSlots);
       const scheduleMode = clubForm.scheduleMode || 'FIXED';
-      const fixedBookingSettingsByActivity = FIXED_BOOKING_ACTIVITY_KEYS.reduce((acc, key) => {
-        const daysAhead = Number(clubForm.fixedBookingSettingsByActivity[key].fixedBookingDaysAhead);
-        const generationFrequencyDays = Number(clubForm.fixedBookingSettingsByActivity[key].fixedBookingGenerationFrequencyDays);
+      const fixedBookingSettingsByActivity = activitySettings.reduce((acc, activity) => {
+        const config = clubForm.fixedBookingSettingsByActivity[activity.key];
+        if (!config) return acc;
+        const daysAhead = Number(config.fixedBookingDaysAhead);
+        const generationFrequencyDays = Number(config.fixedBookingGenerationFrequencyDays);
 
         if (Number.isFinite(daysAhead) && daysAhead > 0 && Number.isFinite(generationFrequencyDays) && generationFrequencyDays > 0) {
-          acc[key] = {
+          acc[activity.key] = {
             fixedBookingDaysAhead: Math.floor(daysAhead),
             fixedBookingGenerationFrequencyDays: Math.floor(generationFrequencyDays)
           };
         }
 
         return acc;
-      }, {} as Record<FixedBookingActivityKey, { fixedBookingDaysAhead: number; fixedBookingGenerationFrequencyDays: number }>);
+      }, {} as Record<string, { fixedBookingDaysAhead: number; fixedBookingGenerationFrequencyDays: number }>);
 
         const payload: any = {
         ...clubForm,
@@ -532,14 +595,19 @@ export default function AdminTabClub() {
 
                 <div className="md:col-span-2 bg-white/40 p-4 rounded-2xl border border-white">
                   <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Turnos fijos por actividad</h4>
+                  {activitySettings.length === 0 ? (
+                    <p className="text-[11px] font-bold text-[#347048]/60">
+                      No hay actividades asociadas al club. Asigná actividades a las canchas para configurar turnos fijos por actividad.
+                    </p>
+                  ) : (
                   <div className="space-y-3">
-                    {FIXED_BOOKING_ACTIVITY_KEYS.map((activityKey) => (
-                      <div key={activityKey} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                    {activitySettings.map((activity) => (
+                      <div key={activity.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                         <div>
                           <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Actividad</label>
                           <input
                             type="text"
-                            value={FIXED_BOOKING_ACTIVITY_LABELS[activityKey]}
+                            value={activity.label}
                             readOnly
                             className="w-full h-11 bg-[#EBE1D8] border-2 border-transparent rounded-xl px-4 text-[#347048] font-black text-sm"
                           />
@@ -550,13 +618,16 @@ export default function AdminTabClub() {
                             type="number"
                             min={1}
                             step={1}
-                            value={clubForm.fixedBookingSettingsByActivity[activityKey].fixedBookingDaysAhead}
+                            value={clubForm.fixedBookingSettingsByActivity[activity.key]?.fixedBookingDaysAhead ?? DEFAULT_FIXED_BOOKING_DAYS_AHEAD}
                             onChange={(e) => setClubForm((prev) => ({
                               ...prev,
                               fixedBookingSettingsByActivity: {
                                 ...prev.fixedBookingSettingsByActivity,
-                                [activityKey]: {
-                                  ...prev.fixedBookingSettingsByActivity[activityKey],
+                                [activity.key]: {
+                                  ...(prev.fixedBookingSettingsByActivity[activity.key] || {
+                                    fixedBookingDaysAhead: DEFAULT_FIXED_BOOKING_DAYS_AHEAD,
+                                    fixedBookingGenerationFrequencyDays: DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS
+                                  }),
                                   fixedBookingDaysAhead: e.target.value
                                 }
                               }
@@ -570,13 +641,16 @@ export default function AdminTabClub() {
                             type="number"
                             min={1}
                             step={1}
-                            value={clubForm.fixedBookingSettingsByActivity[activityKey].fixedBookingGenerationFrequencyDays}
+                            value={clubForm.fixedBookingSettingsByActivity[activity.key]?.fixedBookingGenerationFrequencyDays ?? DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS}
                             onChange={(e) => setClubForm((prev) => ({
                               ...prev,
                               fixedBookingSettingsByActivity: {
                                 ...prev.fixedBookingSettingsByActivity,
-                                [activityKey]: {
-                                  ...prev.fixedBookingSettingsByActivity[activityKey],
+                                [activity.key]: {
+                                  ...(prev.fixedBookingSettingsByActivity[activity.key] || {
+                                    fixedBookingDaysAhead: DEFAULT_FIXED_BOOKING_DAYS_AHEAD,
+                                    fixedBookingGenerationFrequencyDays: DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS
+                                  }),
                                   fixedBookingGenerationFrequencyDays: e.target.value
                                 }
                               }
@@ -587,6 +661,7 @@ export default function AdminTabClub() {
                       </div>
                     ))}
                   </div>
+                  )}
                 </div>
 
                 {clubForm.scheduleMode === 'RANGE' ? (
