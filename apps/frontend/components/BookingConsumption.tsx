@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ClubAdminService } from '../services/ClubAdminService';
-import { confirmBooking as confirmBookingService, getBookingFinancialSummary, registerBookingCourtDebtPortion, registerBookingPartialPayment } from '../services/BookingService';
-import { Trash2, Plus, ShoppingCart, Receipt, Lock, ChevronDown, Check, X, Banknote, FileText, Star } from 'lucide-react';
+import { getBookingFinancialSummary, registerBookingPartialPayment } from '../services/BookingService';
+import { Trash2, Plus, ShoppingCart, Receipt, Lock, ChevronDown, Check, X, Banknote, Star } from 'lucide-react';
 import PaymentCalculator, { type PaymentCalculatorResult } from './PaymentCalculator';
 // import { BookingTicket } from './BookingTicket'; // Si no lo usás, podés borrar esta línea
 
@@ -24,22 +24,23 @@ interface CartItem {
   productName: string;
   quantity: number;
   price: number;
-  paymentMethod?: 'CASH' | 'TRANSFER' | 'DEBT' | null;
+  paymentMethod?: 'CASH' | 'TRANSFER' | null;
   isNew: boolean;
 }
 
 interface BookingFinancialSummary {
   bookingId: number;
-  courtTotal: number;
-  courtPaid: number;
-  courtDebt: number;
-  itemsTotal: number;
-  itemsPaid: number;
-  itemsDebt: number;
+  accountId?: string;
+  courtTotal?: number;
+  courtPaid?: number;
+  courtDebt?: number;
+  itemsTotal?: number;
+  itemsPaid?: number;
+  itemsDebt?: number;
   total: number;
   totalPaid: number;
   remaining: number;
-  paymentStatus: 'PAID' | 'DEBT' | 'PARTIAL';
+  paymentStatus: string;
   courtPayments?: Array<{
     id: number;
     amount: number;
@@ -126,6 +127,7 @@ export default function BookingConsumption(
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [financialSummary, setFinancialSummary] = useState<BookingFinancialSummary | null>(null);
   const [bookingIsPendingLocal, setBookingIsPendingLocal] = useState(bookingStatus === 'PENDING');
+  const paymentInFlightRef = useRef(false);
 
   // Formulario
   const [selectedProductId, setSelectedProductId] = useState<string>('');
@@ -203,9 +205,24 @@ export default function BookingConsumption(
   const isCancelled = bookingStatus === 'CANCELLED';
 
   const fallbackCourtTotal = Number(courtPrice || 0);
+  const hasSummary = Boolean(financialSummary);
+  const accountRemaining = Number(financialSummary?.remaining || 0);
   const courtTotal = Number(financialSummary?.courtTotal ?? fallbackCourtTotal);
-  const courtPaid = Number(financialSummary?.courtPaid ?? (paymentStatus === 'PAID' ? fallbackCourtTotal : 0));
-  const courtPriceToPay = Math.max(0, Number(financialSummary?.courtDebt ?? (courtTotal - courtPaid)));
+  const courtPaid = Number(
+    financialSummary?.courtPaid ??
+    (hasSummary
+      ? Math.max(0, Math.min(courtTotal, courtTotal - accountRemaining))
+      : (paymentStatus === 'PAID' ? fallbackCourtTotal : 0))
+  );
+  const courtPriceToPay = Math.max(
+    0,
+    Number(
+      financialSummary?.courtDebt ??
+      (hasSummary
+        ? Math.min(courtTotal, accountRemaining)
+        : (courtTotal - courtPaid))
+    )
+  );
   const courtDebtInAccount = Math.max(0, courtTotal - courtPaid - courtPriceToPay);
   const hasCourtPaid = courtPaid > 0.01;
   const hasCourtDebtInAccount = courtDebtInAccount > 0.01;
@@ -220,7 +237,6 @@ export default function BookingConsumption(
   const formatMethodLabel = (method?: string) => {
     if (method === 'CASH') return 'Efectivo';
     if (method === 'TRANSFER') return 'Digital';
-    if (method === 'DEBT') return 'Cuenta';
     return method || 'Sin método';
   };
 
@@ -239,13 +255,14 @@ export default function BookingConsumption(
   const hasPendingCharges = finalTotal > 0;
 
   const handleCalculatedPaymentConfirm = async (result: PaymentCalculatorResult) => {
+    if (paymentInFlightRef.current) {
+      return;
+    }
+
+    paymentInFlightRef.current = true;
+
     try {
       setSaving(true);
-
-      if (bookingIsPendingLocal && result.method === 'DEBT') {
-        await confirmBookingService(bookingId, 'DEBT');
-        setBookingIsPendingLocal(false);
-      }
 
       const deletePromises = itemsToDelete.map((id) => ClubAdminService.removeItemFromBooking(id));
       const newItems = cartItems.filter((item) => item.isNew);
@@ -270,23 +287,15 @@ export default function BookingConsumption(
         });
       }
 
-      if (result.method !== 'DEBT') {
-        const paidItemsAmount = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-        const courtOrDebtPortion = Math.max(0, Number(result.courtAmount || 0));
-        const expectedAmount = paidItemsAmount + courtOrDebtPortion;
-        if (Math.abs(expectedAmount - result.amount) > 0.01) {
-          throw new Error('El monto registrado no coincide con los conceptos seleccionados. Reintentá.');
-        }
-        if (courtOrDebtPortion > 0.01) {
-          await registerBookingPartialPayment(bookingId, courtOrDebtPortion, result.method);
-          setBookingIsPendingLocal(false);
-        }
-      } else {
-        const debtCourtPortion = Math.max(0, Number(result.courtAmount || 0));
-        if (debtCourtPortion > 0.01) {
-          await registerBookingCourtDebtPortion(bookingId, debtCourtPortion);
-          setBookingIsPendingLocal(false);
-        }
+      const paidItemsAmount = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const courtPortion = Math.max(0, Number(result.courtAmount || 0));
+      const expectedAmount = paidItemsAmount + courtPortion;
+      if (Math.abs(expectedAmount - result.amount) > 0.01) {
+        throw new Error('El monto registrado no coincide con los conceptos seleccionados. Reintentá.');
+      }
+      if (courtPortion > 0.01) {
+        await registerBookingPartialPayment(bookingId, courtPortion, result.method);
+        setBookingIsPendingLocal(false);
       }
 
       const selectedTempKeys = new Set(selectedItems.map((item) => String(item.tempId || item.id || '')));
@@ -297,29 +306,27 @@ export default function BookingConsumption(
 
       const updatedSummary = await getBookingFinancialSummary(bookingId);
       setFinancialSummary(updatedSummary || null);
+      setShowPaymentModal(false);
+      onConfirm();
     } catch (error: any) {
-      alert('Error: ' + (error.message || 'No se pudo registrar el pago'));
+      const message = error?.message || 'No se pudo registrar el pago';
+
+      if (String(message).toLowerCase().includes('saldo pendiente')) {
+        try {
+          const refreshedSummary = await getBookingFinancialSummary(bookingId);
+          setFinancialSummary(refreshedSummary || null);
+        } catch {
+        }
+        setShowPaymentModal(false);
+        onConfirm();
+        alert('Ese saldo ya fue cancelado. Se actualizó el estado del turno.');
+      } else {
+        alert('Error: ' + message);
+      }
     } finally {
       setSaving(false);
+      paymentInFlightRef.current = false;
     }
-  };
-
-  const handleRegisterAllInDebt = async () => {
-    const newItems = cartItems.filter((item) => item.isNew);
-    const selectedItemKeys = newItems.map((item) => item.tempId || item.id || '');
-    const itemsTotal = newItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const courtAmount = Math.max(0, Number(courtPriceToPay || 0));
-    const totalToRegister = courtAmount + itemsTotal;
-
-    if (totalToRegister <= 0.01) return;
-
-    await handleCalculatedPaymentConfirm({
-      method: 'DEBT',
-      amount: totalToRegister,
-      courtAmount,
-      paidItemIds: [],
-      selectedItemKeys
-    });
   };
 
   // Convertimos los productos cargados en opciones para el CustomSelect
@@ -402,18 +409,14 @@ export default function BookingConsumption(
                       </span>
                     ) : (
                       <span className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-widest ${
-                        item.paymentMethod === 'DEBT'
-                          ? 'text-yellow-700'
-                          : item.paymentMethod === 'TRANSFER'
+                        item.paymentMethod === 'TRANSFER'
                             ? 'text-blue-700'
                             : item.paymentMethod === 'CASH'
                               ? 'text-emerald-700'
                               : 'text-[#347048]/40'
                       }`}>
                         <Lock size={8} />
-                        {item.paymentMethod === 'DEBT'
-                          ? 'En cuenta'
-                          : item.paymentMethod === 'TRANSFER'
+                        {item.paymentMethod === 'TRANSFER'
                             ? 'Pagado digital'
                             : item.paymentMethod === 'CASH'
                               ? 'Pagado efectivo'
@@ -500,17 +503,7 @@ export default function BookingConsumption(
       </div>
 
       {/* BOTONES DE ACCIÓN */}
-      <div className="grid grid-cols-2 gap-4 pt-2 relative z-0">
-        <button 
-          onClick={() => {
-              handleRegisterAllInDebt();
-          }}
-          disabled={saving || !hasPendingCharges || isCancelled}
-          className="flex flex-col items-center justify-center gap-1 py-4 bg-[#EBE1D8] border-2 border-[#347048]/20 text-[#347048] font-black uppercase text-[10px] tracking-widest rounded-2xl transition-all hover:bg-white shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          <div className="flex items-center gap-2"><FileText size={18} strokeWidth={2.5} /> Registrar en cuenta</div>
-        </button>
-        
+      <div className="grid grid-cols-1 gap-4 pt-2 relative z-0">
         <button 
           onClick={() => {
             setShowPaymentModal(true);
@@ -538,6 +531,7 @@ export default function BookingConsumption(
           grandTotal={finalTotal}
           onClose={() => setShowPaymentModal(false)}
           onConfirm={handleCalculatedPaymentConfirm}
+          submitting={saving}
         />
       )}
     </div>

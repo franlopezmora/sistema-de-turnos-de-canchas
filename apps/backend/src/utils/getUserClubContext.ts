@@ -6,18 +6,6 @@ export type UserClubContext = {
     role: MembershipRole;
 };
 
-const rolePriority: Record<MembershipRole, number> = {
-    OWNER: 0,
-    ADMIN: 1,
-    STAFF: 2,
-    CUSTOMER: 3
-};
-
-const pickBestMembership = (rows: Array<{ clubId: number; role: MembershipRole }>) => {
-    if (rows.length === 0) return null;
-    return [...rows].sort((a, b) => rolePriority[a.role] - rolePriority[b.role])[0] ?? null;
-};
-
 export const getUserClubContext = async (userId: number, preferredClubId?: number): Promise<UserClubContext> => {
     if (!Number.isInteger(userId) || userId <= 0) {
         throw new Error('userId inválido');
@@ -47,24 +35,12 @@ export const getUserClubContext = async (userId: number, preferredClubId?: numbe
         select: { clubId: true, role: true }
     });
 
-    const selectedMembership = pickBestMembership(memberships);
-    if (selectedMembership) {
-        return selectedMembership;
+    if (memberships.length === 1) {
+        return memberships[0];
     }
 
-    try {
-        const legacyRows = await prisma.$queryRaw<Array<{ clubId: number | null }>>`
-            SELECT "clubId"
-            FROM "User"
-            WHERE "id" = ${userId}
-            LIMIT 1
-        `;
-
-        const legacyClubId = legacyRows[0]?.clubId ?? null;
-        if (legacyClubId != null) {
-            return { clubId: Number(legacyClubId), role: MembershipRole.OWNER };
-        }
-    } catch {
+    if (memberships.length > 1) {
+        throw new Error('Debe seleccionar un club activo');
     }
 
     throw new Error('No se pudo resolver el club del usuario');

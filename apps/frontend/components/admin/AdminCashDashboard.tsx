@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Banknote, CreditCard, Plus, Receipt, History, ChevronDown, Check, FileText, Phone, IdCard } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Banknote, CreditCard, Plus, Receipt, History, ChevronDown, Check, Phone, IdCard } from 'lucide-react';
 import { searchClients } from '../../services/BookingService';
 import { ClubService } from '../../services/ClubService';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
@@ -12,7 +12,7 @@ interface Movement {
   type: 'INCOME' | 'EXPENSE';
   amount: number;
   description: string;
-  method: 'CASH' | 'TRANSFER' | 'DEBT';
+  method: 'CASH' | 'TRANSFER';
 }
 
 interface Balance {
@@ -32,7 +32,7 @@ interface Product {
 }
 
 type SplitSalePaymentDraft = {
-  method: 'CASH' | 'TRANSFER' | 'DEBT';
+  method: 'CASH' | 'TRANSFER';
   amount: string;
 };
 
@@ -114,11 +114,11 @@ const AdminCashDashboard = () => {
 
   // Formulario
   const [newMove, setNewMove] = useState({ description: '', amount: '', type: 'INCOME', method: 'CASH' });
-  const [productSale, setProductSale] = useState({ productId: '', quantity: '1', method: 'CASH' as 'CASH' | 'TRANSFER' | 'DEBT', clientQuery: '' });
+  const [productSale, setProductSale] = useState({ productId: '', quantity: '1', method: 'CASH' as 'CASH' | 'TRANSFER', clientQuery: '' });
   const [splitSaleEnabled, setSplitSaleEnabled] = useState(false);
   const [splitSalePayments, setSplitSalePayments] = useState<SplitSalePaymentDraft[]>([{ method: 'CASH', amount: '' }]);
 
-  const getClubSlug = () => {
+  const getClubSlug = useCallback(() => {
     try {
       const path = typeof window !== 'undefined' ? window.location.pathname : '';
       const parts = path.split('/').filter(Boolean);
@@ -133,9 +133,9 @@ const AdminCashDashboard = () => {
       }
     } catch (e) { console.error(e); }
     return '';
-  };
+  }, []);
 
-  const resolveClubSlug = async () => {
+  const resolveClubSlug = useCallback(async () => {
     const directSlug = getClubSlug();
     if (directSlug) {
       setSearchClubSlug(directSlug);
@@ -156,13 +156,24 @@ const AdminCashDashboard = () => {
       console.error('Error resolviendo slug de club para búsqueda de clientes:', error);
       return '';
     }
-  };
+  }, [getClubSlug]);
 
   const fetchCash = async () => {
     try {
       const data = await CashService.getSummary();
       if (data && data.balance) setBalance(data.balance);
-      if (data && data.movements) setMovements(data.movements);
+      if (data && data.movements) {
+        const normalizedMovements: Movement[] = (Array.isArray(data.movements) ? data.movements : []).map((movement: any) => ({
+          id: Number(movement?.id || 0),
+          date: String(movement?.createdAt || movement?.date || new Date().toISOString()),
+          type: movement?.type === 'PAYMENT_IN' || movement?.type === 'DEPOSIT' || movement?.type === 'INCOME' ? 'INCOME' : 'EXPENSE',
+          amount: Number(movement?.amount || 0),
+          description: String(movement?.concept || movement?.description || 'Movimiento'),
+          method: movement?.method === 'CASH' ? 'CASH' : 'TRANSFER'
+        }));
+
+        setMovements(normalizedMovements);
+      }
 
     } catch (error) {
       console.error("❌ Error cargando la caja:", error);
@@ -188,7 +199,7 @@ const AdminCashDashboard = () => {
 
   useEffect(() => {
     resolveClubSlug();
-  }, []);
+  }, [resolveClubSlug]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -272,8 +283,7 @@ const AdminCashDashboard = () => {
       }))
       .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
 
-    const hasDebtInSplit = splitSaleEnabled && parsedSplitPayments.some((payment) => payment.method === 'DEBT');
-    const hasDebtInSale = productSale.method === 'DEBT' || hasDebtInSplit;
+    const hasDebtInSale = false;
     const fallbackGuestName = productSale.clientQuery.trim();
 
     if (splitSaleEnabled) {
@@ -417,7 +427,11 @@ const AdminCashDashboard = () => {
                     <div className="flex items-center gap-4">
                         <div className="text-right pr-4 border-r border-[#347048]/10">
                             <span className="block text-xs font-black text-[#347048]">
-                                {new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                {(() => {
+                                  const parsed = new Date(m.date);
+                                  if (Number.isNaN(parsed.getTime())) return '--:--';
+                                  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                })()}
                             </span>
                             <span className="text-[9px] font-bold text-[#347048]/40 uppercase">Hora</span>
                         </div>
@@ -428,14 +442,10 @@ const AdminCashDashboard = () => {
                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest flex items-center gap-1 w-fit ${
                               m.method === 'CASH'
                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                                : m.method === 'DEBT'
-                                  ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                  : 'bg-blue-50 text-blue-600 border-blue-100'
+                                : 'bg-blue-50 text-blue-600 border-blue-100'
                             }`}>
                               {m.method === 'CASH'
                                 ? <><Banknote size={10} strokeWidth={3} /> Efectivo</>
-                                : m.method === 'DEBT'
-                                ? <><FileText size={10} strokeWidth={3} /> Fiado</>
                                 : <><CreditCard size={10} strokeWidth={3} /> Digital</>}
                             </span>
                         </div>
@@ -606,7 +616,7 @@ const AdminCashDashboard = () => {
               </div>
               <div className="col-span-2">
                 <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Medio de pago</label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setProductSale({ ...productSale, method: 'CASH' })}
@@ -637,21 +647,6 @@ const AdminCashDashboard = () => {
                     />
                     Digital
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setProductSale({ ...productSale, method: 'DEBT' })}
-                    className={`h-14 w-full px-4 flex items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
-                      productSale.method === 'DEBT'
-                        ? 'bg-[#926699] border-[#926699] text-[#EBE1D8] shadow-lg scale-105'
-                        : 'bg-white border-transparent text-[#347048]/40 hover:bg-white/80'}`}
-                  >
-                    <FileText
-                      size={16}
-                      strokeWidth={2.5}
-                      className={productSale.method === 'DEBT' ? 'text-[#EBE1D8]' : 'text-[#347048]/40'}
-                    />
-                    Fiado
-                  </button>
                 </div>
                 <button
                   type="button"
@@ -660,49 +655,48 @@ const AdminCashDashboard = () => {
                 >
                   {splitSaleEnabled ? 'Usar pago simple' : 'Dividir pago'}
                 </button>
-              </div>
 
-              {splitSaleEnabled && (
-                <div className="col-span-2 space-y-2">
-                  {splitSalePayments.map((payment, index) => (
-                    <div key={`split-sale-${index}`} className="grid grid-cols-12 gap-2">
-                      <select
-                        value={payment.method}
-                        onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, method: e.target.value as 'CASH' | 'TRANSFER' | 'DEBT' } : item))}
-                        className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
-                      >
-                        <option value="CASH">Efectivo</option>
-                        <option value="TRANSFER">Digital</option>
-                        <option value="DEBT">Fiado</option>
-                      </select>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={payment.amount}
-                        onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, amount: e.target.value } : item))}
-                        className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
-                        placeholder="Monto"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setSplitSalePayments((prev) => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== index))}
-                        className="col-span-2 h-11 rounded-xl border border-red-200 text-red-500 font-black text-xs"
-                        disabled={splitSalePayments.length === 1}
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setSplitSalePayments((prev) => [...prev, { method: 'TRANSFER', amount: '' }])}
-                    className="w-full h-10 rounded-xl border border-[#347048]/20 bg-white text-[#347048] text-[10px] font-black uppercase tracking-widest"
-                  >
-                    + Agregar tramo
-                  </button>
-                </div>
-              )}
+                {splitSaleEnabled && (
+                  <div className="mt-2 space-y-2">
+                    {splitSalePayments.map((payment, index) => (
+                      <div key={`split-sale-${index}`} className="grid grid-cols-12 gap-2">
+                        <select
+                          value={payment.method}
+                          onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, method: e.target.value as 'CASH' | 'TRANSFER' } : item))}
+                          className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
+                        >
+                          <option value="CASH">Efectivo</option>
+                          <option value="TRANSFER">Digital</option>
+                        </select>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={payment.amount}
+                          onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, amount: e.target.value } : item))}
+                          className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
+                          placeholder="Monto"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSplitSalePayments((prev) => prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== index))}
+                          className="col-span-2 h-11 rounded-xl border border-red-200 text-red-500 font-black text-xs"
+                          disabled={splitSalePayments.length === 1}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setSplitSalePayments((prev) => [...prev, { method: 'TRANSFER', amount: '' }])}
+                      className="w-full h-10 rounded-xl border border-[#347048]/20 bg-white text-[#347048] text-[10px] font-black uppercase tracking-widest"
+                    >
+                      + Agregar tramo
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {saleError && (

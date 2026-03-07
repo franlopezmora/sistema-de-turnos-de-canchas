@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, CreditCard, FileText, X } from 'lucide-react';
+import { Banknote, CreditCard, X } from 'lucide-react';
 
 export interface PaymentCalculatorItem {
   id?: number;
@@ -10,7 +10,7 @@ export interface PaymentCalculatorItem {
 }
 
 export type PaymentCalculatorResult = {
-  method: 'CASH' | 'TRANSFER' | 'DEBT';
+  method: 'CASH' | 'TRANSFER';
   amount: number;
   courtAmount: number;
   paidItemIds: number[];
@@ -25,6 +25,7 @@ export interface PaymentCalculatorProps {
   grandTotal: number;
   onClose: () => void;
   onConfirm: (result: PaymentCalculatorResult) => Promise<void>;
+  submitting?: boolean;
 }
 
 export default function PaymentCalculator({
@@ -34,9 +35,11 @@ export default function PaymentCalculator({
   alreadyPaid,
   grandTotal,
   onClose,
-  onConfirm
+  onConfirm,
+  submitting = false
 }: PaymentCalculatorProps) {
   const backdropRef = useRef<boolean>(false);
+  const initializedSelectionRef = useRef<boolean>(false);
   const [paymentAmount, setPaymentAmount] = useState<number | string>('');
   const [selectedProductKeys, setSelectedProductKeys] = useState<Array<string | number>>([]);
   const [courtPortion, setCourtPortion] = useState<number>(0);
@@ -108,6 +111,20 @@ export default function PaymentCalculator({
   const unassignedAmount = Math.max(0, amountEntered - selectedTotal);
 
   useEffect(() => {
+    if (initializedSelectionRef.current) return;
+
+    const allProductKeys = cartItems.map((item) => item.tempId || item.id || '');
+    const productsTotal = cartItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+    const defaultTotal = safeCourtPending + productsTotal;
+
+    setCourtPortion(safeCourtPending);
+    setSelectedProductKeys(allProductKeys);
+    setPaymentAmount(defaultTotal > 0 ? defaultTotal.toString() : '');
+
+    initializedSelectionRef.current = true;
+  }, [cartItems, safeCourtPending]);
+
+  useEffect(() => {
     if (selectedTotal > 0) {
       setPaymentAmount(selectedTotal.toString());
     }
@@ -131,7 +148,8 @@ export default function PaymentCalculator({
     setPaymentAmount('');
   };
 
-  const handlePaymentConfirm = async (method: 'CASH' | 'TRANSFER' | 'DEBT') => {
+  const handlePaymentConfirm = async (method: 'CASH' | 'TRANSFER') => {
+    if (submitting) return;
     if (!amountEntered || amountEntered <= 0) return;
 
     const numericItemIds = Array.from(
@@ -170,7 +188,7 @@ export default function PaymentCalculator({
       onClick={(event) => {
         const startedOnBackdrop = backdropRef.current;
         backdropRef.current = false;
-        if (startedOnBackdrop && event.target === event.currentTarget) onClose();
+        if (!submitting && startedOnBackdrop && event.target === event.currentTarget) onClose();
       }}
     >
       <div
@@ -188,6 +206,7 @@ export default function PaymentCalculator({
               </div>
               <button
                 onClick={onClose}
+                disabled={submitting}
                 className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100 shrink-0"
                 title="Cerrar ventana"
               >
@@ -202,10 +221,10 @@ export default function PaymentCalculator({
           <div className="flex justify-between items-center mb-3 border-b border-[#347048]/10 pb-2">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#347048]/70">Qué vas a cobrar</p>
             <div className="flex gap-2">
-              <button type="button" onClick={handleSelectAll} className="text-[9px] font-black uppercase tracking-widest text-[#347048] bg-[#B9CF32]/30 border border-[#B9CF32]/40 px-2.5 py-1 rounded-md">
+              <button type="button" onClick={handleSelectAll} disabled={submitting} className="text-[9px] font-black uppercase tracking-widest text-[#347048] bg-[#B9CF32]/30 border border-[#B9CF32]/40 px-2.5 py-1 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
                 Todo
               </button>
-              <button type="button" onClick={handleClearSelection} className="text-[9px] font-black uppercase tracking-widest text-red-500 bg-red-50 border border-red-100 px-2.5 py-1 rounded-md">
+              <button type="button" onClick={handleClearSelection} disabled={submitting} className="text-[9px] font-black uppercase tracking-widest text-red-500 bg-red-50 border border-red-100 px-2.5 py-1 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
                 Nada
               </button>
             </div>
@@ -223,7 +242,7 @@ export default function PaymentCalculator({
                         ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048] cursor-pointer'
                         : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50 cursor-pointer'
                   }`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === quarterBase} onChange={() => setCourtPortion(quarterBase)} disabled={!canSelectQuarter} />
+                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === quarterBase} onChange={() => setCourtPortion(quarterBase)} disabled={!canSelectQuarter || submitting} />
                     <span className="text-xs font-bold">1/4 (${quarterBase.toLocaleString()})</span>
                   </label>
                   <label className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
@@ -233,11 +252,11 @@ export default function PaymentCalculator({
                         ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048] cursor-pointer'
                         : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50 cursor-pointer'
                   }`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === halfBase} onChange={() => setCourtPortion(halfBase)} disabled={!canSelectHalf} />
+                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === halfBase} onChange={() => setCourtPortion(halfBase)} disabled={!canSelectHalf || submitting} />
                     <span className="text-xs font-bold">1/2 (${halfBase.toLocaleString()})</span>
                   </label>
                   <label className={`flex justify-center items-center p-2 rounded-lg border cursor-pointer transition-all col-span-2 ${courtPortion === safeCourtPending ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048]' : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50'}`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === safeCourtPending} onChange={() => setCourtPortion(safeCourtPending)} />
+                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === safeCourtPending} onChange={() => setCourtPortion(safeCourtPending)} disabled={submitting} />
                     <span className="text-xs font-bold">Saldo (${safeCourtPending.toLocaleString()})</span>
                   </label>
                 </div>
@@ -259,6 +278,7 @@ export default function PaymentCalculator({
                             type="checkbox"
                             className="w-4 h-4 rounded text-[#926699] focus:ring-[#926699] border-gray-300"
                             checked={isSelected}
+                            disabled={submitting}
                             onChange={(event) => {
                               if (event.target.checked) setSelectedProductKeys((prev) => [...prev, itemKey]);
                               else setSelectedProductKeys((prev) => prev.filter((value) => value !== itemKey));
@@ -283,6 +303,7 @@ export default function PaymentCalculator({
             <input
               type="number"
               value={paymentAmount}
+              disabled={submitting}
               onChange={(event) => setPaymentAmount(event.target.value)}
               onWheel={(event) => {
                 event.currentTarget.blur();
@@ -300,6 +321,7 @@ export default function PaymentCalculator({
                 setPaymentAmount(finalPending);
                 handleSelectAll();
               }}
+              disabled={submitting}
               className="text-[#347048]/40 hover:text-[#926699] transition-colors"
             >
               Completar total
@@ -339,7 +361,7 @@ export default function PaymentCalculator({
             <button
               type="button"
               onClick={() => handlePaymentConfirm('CASH')}
-              disabled={!paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
+              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
               className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Banknote size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
@@ -349,23 +371,13 @@ export default function PaymentCalculator({
             <button
               type="button"
               onClick={() => handlePaymentConfirm('TRANSFER')}
-              disabled={!paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
+              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
               className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
               <span className="font-black text-[10px] uppercase tracking-widest">Digital</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => handlePaymentConfirm('DEBT')}
-            disabled={!paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
-            className="w-full flex items-center justify-center gap-3 p-4 bg-[#926699]/10 border-2 border-[#926699]/30 hover:border-[#926699] rounded-2xl text-[#926699] transition-all hover:scale-[1.02] active:scale-95 shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileText size={24} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
-            <span className="font-black text-[11px] uppercase tracking-widest">Registrar en cuenta</span>
-          </button>
         </div>
         </div>
         </div>
@@ -373,6 +385,7 @@ export default function PaymentCalculator({
         <button
           type="button"
           onClick={onClose}
+          disabled={submitting}
           className="w-full mt-3 mb-6 px-6 sm:px-7 text-[#347048]/40 hover:text-[#347048] text-[10px] font-black uppercase tracking-widest hover:underline transition-all"
         >
           Cancelar operación

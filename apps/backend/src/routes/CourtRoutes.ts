@@ -11,13 +11,13 @@ const courtController = new CourtController();
 router.get('/', optionalAuthMiddleware, optionalSetAdminClubFromUser, courtController.getAllCourts);
 
 // Alta de canchas deshabilitada: solo se gestiona desde base de datos.
-router.post('/', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, (_req, res) => {
+router.post('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (_req, res) => {
 	res.status(403).json({ error: 'Alta de canchas deshabilitada. Contacte soporte.' });
 });
-router.put('/:id', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, courtController.updateCourt);
-router.put('/:id/suspend', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, courtController.suspendCourt);
-router.put('/:id/reactivate', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, courtController.reactivateCourt);
-router.delete('/:id', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, courtController.deleteCourt);
+router.put('/:id', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), courtController.updateCourt);
+router.put('/:id/suspend', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), courtController.suspendCourt);
+router.put('/:id/reactivate', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), courtController.reactivateCourt);
+router.delete('/:id', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), courtController.deleteCourt);
 
 export default router;
 

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ProductService } from '../services/ProductService';
-import { ClubRepository } from '../repositories/ClubRepository'; // Asegurate de tener esto o usar Prisma directo para validar el club
+import { ClubRepository } from '../repositories/ClubRepository';
+import { sanitizeString } from '../utils/sanitize';
 
 export class ProductController {
     private productService: ProductService;
@@ -35,10 +36,10 @@ export class ProductController {
             if (!club) return res.status(404).json({ error: 'Club no encontrado' });
 
             const newProduct = await this.productService.createProduct(club.id, {
-                name,
+                name: sanitizeString(String(name ?? ''), 200),
                 price: Number(price),
                 stock: Number(stock ?? 0),
-                category,
+                category: category ? sanitizeString(String(category), 100) : undefined,
                 isCombo: Boolean(isCombo),
                 components: Array.isArray(components) ? components : []
             });
@@ -59,13 +60,17 @@ export class ProductController {
             const club = await this.clubRepository.findBySlug(slug as string);
             if (!club) return res.status(404).json({ error: 'Club no encontrado' });
 
-            const updatedProduct = await this.productService.updateProductByClub(Number(id), club.id, {
+            const updateData: any = {
                 ...data,
                 price: data.price !== undefined ? Number(data.price) : undefined,
                 stock: data.stock !== undefined ? Number(data.stock) : undefined,
                 isCombo: data.isCombo !== undefined ? Boolean(data.isCombo) : undefined,
                 components: Array.isArray(data.components) ? data.components : undefined
-            });
+            };
+            if (data.name != null) updateData.name = sanitizeString(String(data.name), 200);
+            if (data.category != null) updateData.category = sanitizeString(String(data.category), 100);
+
+            const updatedProduct = await this.productService.updateProductByClub(Number(id), club.id, updateData);
             if (!updatedProduct) return res.status(404).json({ error: 'Producto no encontrado' });
             res.json(updatedProduct);
         } catch (error) {

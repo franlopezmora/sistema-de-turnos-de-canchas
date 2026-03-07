@@ -22,6 +22,7 @@ type ActivityTypeSummary = {
   id: number;
   name: string;
   defaultDurationMinutes?: number | null;
+  scheduleDurations?: number[] | null;
 };
 
 type CourtSummary = {
@@ -32,6 +33,18 @@ type CourtSummary = {
 };
 
 const DEFAULT_DURATION_MINUTES = 90;
+
+const normalizeActivityDurations = (raw: unknown, fallback: number) => {
+  const parsed = Array.isArray(raw)
+    ? raw.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0)
+    : [];
+
+  if (parsed.length > 0) {
+    return Array.from(new Set(parsed));
+  }
+
+  return [fallback];
+};
 
 // --- COMPONENTE DROPDOWN CUSTOM (ESTILO WIMBLEDON LANDING) ---
 const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
@@ -222,19 +235,24 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     return firstCourtWithActivity?.activityType?.id ? Number(firstCourtWithActivity.activityType.id) : null;
   }, [selectedCourt, selectedActivityFilter, activeCourts]);
 
-  const selectedActivityDuration = useMemo(() => {
+  const selectedActivityDurations = useMemo(() => {
     if (!Number.isFinite(selectedActivityId) || Number(selectedActivityId) <= 0) {
-      return DEFAULT_DURATION_MINUTES;
+      return [DEFAULT_DURATION_MINUTES];
     }
 
     const matchedCourt = activeCourts.find(
       (court) => Number(court?.activityType?.id) === Number(selectedActivityId)
     );
-    const duration = Number(matchedCourt?.activityType?.defaultDurationMinutes);
-    return Number.isFinite(duration) && duration > 0 ? duration : DEFAULT_DURATION_MINUTES;
+
+    const fallbackDuration = Number(matchedCourt?.activityType?.defaultDurationMinutes);
+    const safeFallback = Number.isFinite(fallbackDuration) && fallbackDuration > 0
+      ? fallbackDuration
+      : DEFAULT_DURATION_MINUTES;
+
+    return normalizeActivityDurations(matchedCourt?.activityType?.scheduleDurations, safeFallback);
   }, [activeCourts, selectedActivityId]);
 
-  const durationOptions = useMemo(() => [selectedActivityDuration], [selectedActivityDuration]);
+  const durationOptions = useMemo(() => selectedActivityDurations, [selectedActivityDurations]);
 
   const { slotsWithCourts, loading, error, refresh } = useAvailability(selectedDate, selectedActivityId, clubSlug, selectedDuration);
   const getTrimmedGuestInfo = () => {
@@ -329,11 +347,11 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   }, [clubSlug]);
 
   useEffect(() => {
-    if (selectedDuration === selectedActivityDuration) return;
-    setSelectedDuration(selectedActivityDuration);
+    if (durationOptions.includes(selectedDuration)) return;
+    setSelectedDuration(durationOptions[0]);
     setSelectedSlot(null);
     setSelectedCourt(null);
-  }, [selectedActivityDuration, selectedDuration]);
+  }, [durationOptions, selectedDuration]);
 
   // --- LÓGICA DE FILTRADO (Sin cambios) ---
   const filteredSlotsWithCourts = (() => {

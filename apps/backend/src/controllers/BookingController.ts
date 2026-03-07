@@ -2,10 +2,11 @@ import { Request, Response } from 'express';
 import { BookingService } from '../services/BookingService';
 import { z } from 'zod';
 import { prisma } from '../prisma';
-import { whatsappService } from '../services/WhatsappService';
 import { TimeHelper } from '../utils/TimeHelper';
 import { ProductService } from '../services/ProductService';
 import { getUserClubContext } from '../utils/getUserClubContext';
+import { getPreferredClubIdFromRequest } from '../utils/clubContext';
+import { sanitizeString } from '../utils/sanitize';
 
 export class BookingController {
     private productService = new ProductService();
@@ -64,7 +65,12 @@ export class BookingController {
                 return res.status(400).json({ error: parsed.error.format() });
             }
 
-            const { courtId, startDateTime, date: dateStr, slotTime, activityId, durationMinutes, guestIdentifier, guestName, guestEmail, guestPhone, guestDni, isProfessor } = parsed.data;
+            let { courtId, startDateTime, date: dateStr, slotTime, activityId, durationMinutes, guestIdentifier, guestName, guestEmail, guestPhone, guestDni, isProfessor } = parsed.data;
+            guestName = guestName ? sanitizeString(guestName, 200) : undefined;
+            guestIdentifier = guestIdentifier ? sanitizeString(guestIdentifier, 100) : undefined;
+            guestEmail = guestEmail ? sanitizeString(guestEmail, 254) : undefined;
+            guestPhone = guestPhone ? sanitizeString(guestPhone, 30) : undefined;
+            guestDni = guestDni ? sanitizeString(guestDni, 20) : undefined;
 
             // Resolve startDate: prefer date+slotTime (local) if provided, otherwise use startDateTime ISO
             let startDate: Date;
@@ -85,7 +91,8 @@ export class BookingController {
             }
             
             const userRole = user?.role;
-            const isAdmin = userRole === 'ADMIN';
+            const membershipRole = String((req as any).membershipRole || '');
+            const isAdmin = userRole === 'ADMIN' || membershipRole === 'OWNER' || membershipRole === 'ADMIN';
             const asGuest = Boolean((req.body as any)?.asGuest);
             const forceGuest = isAdmin && asGuest;
             const effectiveUserId = forceGuest ? null : (userIdFromToken ? Number(userIdFromToken) : null);
@@ -135,134 +142,12 @@ export class BookingController {
                 Number(activityId),
                 allowGuestWithoutContact,
                 applyProfessorDiscount,
-                durationMinutes
+                durationMinutes,
+                isAdmin
             );
 
             const courtWithClub = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: true } });
             const clubTimeZone = (courtWithClub?.club as any)?.timeZone ?? 'America/Argentina/Buenos_Aires';
-
-            // 👇👇👇 INICIO BLOQUE WHATSAPP MEJORADO 👇👇👇
-            try {
-                let clientPhone: string | null = null;
-                let clientName: string = 'Jugador';
-
-                // 1. Datos del Cliente
-                if (guestPhone) {
-                    // Si escribiste un teléfono en el formulario (caso Admin cargando a otro), usamos ese
-                    clientPhone = guestPhone;
-                    clientName = guestName || 'Jugador';
-                } else if (userIdFromToken) {
-                    // Si NO hay teléfono manual pero hay token (usuario reservando desde su propia cuenta)
-                    const fullUser = await prisma.user.findUnique({ where: { id: Number(userIdFromToken) } });
-                    if (fullUser) {
-                        clientPhone = fullUser.phoneNumber;
-                        clientName = fullUser.firstName || 'Jugador';
-                    }
-                } else {
-                    // Caso de invitado desde la web
-                    clientPhone = effectiveGuestPhone || null;
-                    clientName = effectiveGuestName || 'Jugador';
-                }
-
-                // 2. Datos de Fecha y Hora local
-                const localForWhatsApp = TimeHelper.utcToLocal(startDate, clubTimeZone);
-                const dia = String(localForWhatsApp.getDate()).padStart(2, '0');
-                const mes = String(localForWhatsApp.getMonth() + 1).padStart(2, '0');
-                const anio = localForWhatsApp.getFullYear();
-                const horas = String(localForWhatsApp.getHours()).padStart(2, '0');
-                const minutos = String(localForWhatsApp.getMinutes()).padStart(2, '0');
-                const dateStr = `${dia}/${mes}/${anio}`;
-                const timeStr = `${horas}:${minutos}`;
-
-                // 3. Datos del Club (Evitando errores de tipado de TypeScript con "any")
-                const clubData = courtWithClub?.club as any;
-                const clubName = clubData?.name || 'el complejo';
-                const courtName = courtWithClub?.name || 'Cancha';
-                const clubPhoneRaw = clubData?.phone || clubData?.phoneNumber;
-                
-                // Limpieza de números (sacar guiones, espacios, el + del principio)
-                const cleanClientPhone = clientPhone ? clientPhone.replace(/\D/g, '') : null;
-                const cleanClubPhone = clubPhoneRaw ? clubPhoneRaw.replace(/\D/g, '') : null;
-
-                // 4. Armado de Textos
-                const clientMessage = `
-🎾 *¡Reserva Registrada en ${clubName}!* 🎾
-
-Hola *${clientName}*, tu turno ha sido agendado a través de TuCancha.
-
-📅 *Fecha:* ${dateStr}
-⏰ *Hora:* ${timeStr}
-📍 *Cancha:* ${courtName}
-💰 *Monto del turno:* $${result.price || 0}
-
-⚠️ *INFORMACIÓN IMPORTANTE:*
-Para confirmar tu asistencia, coordinar el pago de la seña o por cualquier consulta, por favor comunicate directamente con la administración del club:
-📱 *WhatsApp del Club:* ${cleanClubPhone ? `https://wa.me/${cleanClubPhone}` : 'No disponible'}
-
-¡Gracias por usar nuestro sistema!
-                `.trim();
-                const clubMessage = `
-🔔 *¡Nueva Reserva!* 🔔
-
-Ingresó un nuevo turno web en *${clubName}*.
-
-👤 *Cliente:* ${clientName} 
-📞 *Tel:* ${cleanClientPhone ? `wa.me/${cleanClientPhone}` : 'No registrado'}
-📅 *Fecha:* ${dateStr}
-⏰ *Hora:* ${timeStr}
-📍 *Cancha:* ${courtName}
-💰 *Monto:* $${result.price || 28000}
-                `.trim();
-
-               // 5. Lista de envíos
-            const notifications = [];
-
-            // 1. Siempre intentamos mandarle al cliente
-            if (cleanClientPhone) {
-                notifications.push({ target: 'Cliente', phone: cleanClientPhone, message: clientMessage });
-            }
-
-            // 2. AL CLUB SOLO LE MANDAMOS SI NO ES EL ADMIN EL QUE ESTÁ CREANDO EL TURNO
-            // Si vos (Admin) cargás el turno, no necesitás que el bot te mande un mensaje a vos mismo.
-            if (cleanClubPhone && !isAdmin) { 
-                notifications.push({ target: 'Club', phone: cleanClubPhone, message: clubMessage });
-            }
-            
-                // 6. Loop de despacho con la instancia unificada
-                for (const notif of notifications) {
-                    if (process.env.DISABLE_WHATSAPP === 'true' || process.env.DISABLE_WHATSAPP === '1') {
-                        try {
-                            const fetchFn = (globalThis as any).fetch;
-                            if (typeof fetchFn !== 'function') throw new Error('fetch no disponible en el runtime');
-                            const resp = await fetchFn('http://wpp-service:3002/send', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ number: notif.phone, message: notif.message })
-                            });
-                            if (!resp.ok) {
-                                const text = await resp.text();
-                                console.error(`❌ Error wpp-service (${notif.target}):`, resp.status, text);
-                            } else {
-                                console.log(`✅ Mensaje enviado vía wpp-service a ${notif.target} (${notif.phone})`);
-                            }
-                        } catch (e) {
-                            console.error(`❌ Error llamando wpp-service para ${notif.target}:`, e);
-                        }
-                    } else {
-                        try {
-                            // Tu servicio nativo de whatsapp
-                            await whatsappService.sendMessage(notif.phone, notif.message);
-                            console.log(`✅ Mensaje directo enviado a ${notif.target} (${notif.phone})`);
-                        } catch (err) {
-                            console.error(`❌ Falló envío directo a ${notif.target}:`, err);
-                        }
-                    }
-                }
-
-            } catch (waError) {
-                console.error("❌ Error general procesando notificaciones de WhatsApp:", waError);
-            }
-            // 👆👆👆 FIN BLOQUE WHATSAPP MEJORADO 👆👆👆
 
             // Retornamos la respuesta al cliente
             const localForRefresh = TimeHelper.utcToLocal(startDate, clubTimeZone);
@@ -327,131 +212,6 @@ Ingresó un nuevo turno web en *${clubName}*.
             const user = (req as any).user;
             const clubId = (req as any).clubId;
             const result = await this.bookingService.cancelBooking(Number(bookingId), user?.userId, clubId);
-
-            // --- INICIO NOTIFICACIONES WHATSAPP DE CANCELACIÓN ---
-            try {
-                // 1. Traemos la reserva completa para leer los datos
-                const fullBooking: any = await prisma.booking.findUnique({
-                    where: { id: Number(req.params.id || req.body.bookingId) }, // Asegurate de usar el ID correcto según tu ruta
-                    include: {
-                        user: true,
-                        court: { include: { club: true } }
-                    }
-                });
-
-                if (fullBooking) {
-                    let clientPhone: string | null = null;
-                    let clientName: string = 'Jugador';
-
-                    // 2. Extraemos datos del Cliente
-                    if (fullBooking.user) {
-                        clientPhone = fullBooking.user.phone || fullBooking.user.phoneNumber;
-                        clientName = fullBooking.user.name || fullBooking.user.firstName || 'Jugador';
-                    } else {
-                        clientPhone = fullBooking.guestPhone;
-                        clientName = fullBooking.guestName || 'Jugador';
-                    }
-
-                    // 3. Extraemos datos del Club
-                    const clubData = fullBooking.court?.club;
-                    const clubName = clubData?.name || 'el complejo';
-                    const courtName = fullBooking.court?.name || 'Cancha';
-                    const clubPhoneRaw = clubData?.phone || clubData?.phoneNumber;
-
-                    // Limpieza de números
-                    const cleanClientPhone = clientPhone ? clientPhone.replace(/\D/g, '') : null;
-                    const cleanClubPhone = clubPhoneRaw ? clubPhoneRaw.replace(/\D/g, '') : null;
-
-                    // 4. Fechas y Horas locales
-                    // (Asumo que tenés TimeHelper importado en este controlador)
-                    const localForWhatsApp = TimeHelper.utcToLocal(fullBooking.startDateTime, clubData?.timeZone || 'America/Argentina/Cordoba');
-                    const dia = String(localForWhatsApp.getDate()).padStart(2, '0');
-                    const mes = String(localForWhatsApp.getMonth() + 1).padStart(2, '0');
-                    const anio = localForWhatsApp.getFullYear();
-                    const horas = String(localForWhatsApp.getHours()).padStart(2, '0');
-                    const minutos = String(localForWhatsApp.getMinutes()).padStart(2, '0');
-                    const dateStr = `${dia}/${mes}/${anio}`;
-                    const timeStr = `${horas}:${minutos}`;
-
-                    // 5. Armado de Textos (Versión Cancelación)
-                    const clientMessage = `
-❌ *Reserva Cancelada en ${clubName}* ❌
-
-Hola *${clientName}*, te confirmamos que tu turno ha sido anulado a través del sistema.
-
-📅 *Fecha:* ${dateStr}
-⏰ *Hora:* ${timeStr}
-📍 *Cancha:* ${courtName}
-
-⚠️ *Aviso:* Si tenías una seña abonada, por favor comunicate con la administración para gestionar tu cuenta:
-📱 *WhatsApp del Club:* ${cleanClubPhone ? `https://wa.me/${cleanClubPhone}` : 'No disponible'}
-
-¡Te esperamos la próxima!
-                    `.trim();
-
-                    const clubMessage = `
-⚠️ *¡Turno Cancelado por Usuario!* ⚠️
-
-Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
-
-👤 *Cliente:* ${clientName}
-📞 *Tel:* ${cleanClientPhone ? `wa.me/${cleanClientPhone}` : 'No registrado'}
-📅 *Fecha:* ${dateStr}
-⏰ *Hora:* ${timeStr}
-📍 *Cancha:* ${courtName}
-
-ℹ️ *La cancha ya se encuentra disponible para nuevas reservas en la grilla.*
-                    `.trim();
-
-                    // 6. Lista de envíos
-                    const notifications = [];
-
-                    // Siempre notificamos al cliente
-                    if (cleanClientPhone) {
-                        notifications.push({ target: 'Cliente', phone: cleanClientPhone, message: clientMessage });
-                    }
-
-                    // Al club le notificamos para que sepa que se le liberó la cancha
-                    // (Si querés que no le llegue si lo cancela un Admin, podés agregar el && !isAdmin acá)
-                    if (cleanClubPhone) {
-                        notifications.push({ target: 'Club', phone: cleanClubPhone, message: clubMessage });
-                    }
-
-                    // 7. Loop de despacho con la instancia unificada (TU CÓDIGO EXACTO)
-                    for (const notif of notifications) {
-                        if (process.env.DISABLE_WHATSAPP === 'true' || process.env.DISABLE_WHATSAPP === '1') {
-                            try {
-                                const fetchFn = (globalThis as any).fetch;
-                                if (typeof fetchFn !== 'function') throw new Error('fetch no disponible en el runtime');
-                                const resp = await fetchFn('http://wpp-service:3002/send', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ number: notif.phone, message: notif.message })
-                                });
-                                if (!resp.ok) {
-                                    const text = await resp.text();
-                                    console.error(`❌ Error wpp-service (${notif.target}):`, resp.status, text);
-                                } else {
-                                    console.log(`✅ Mensaje enviado vía wpp-service a ${notif.target} (${notif.phone})`);
-                                }
-                            } catch (e) {
-                                console.error(`❌ Error llamando wpp-service para ${notif.target}:`, e);
-                            }
-                        } else {
-                            try {
-                                // Usamos el servicio de whatsapp inyectado o importado
-                                await whatsappService.sendMessage(notif.phone, notif.message);
-                                console.log(`✅ Mensaje directo de CANCELACIÓN enviado a ${notif.target} (${notif.phone})`);
-                            } catch (err) {
-                                console.error(`❌ Falló envío directo a ${notif.target}:`, err);
-                            }
-                        }
-                    }
-                }
-            } catch (waError) {
-                console.error("❌ Error general procesando notificaciones de WhatsApp para CANCELACIÓN:", waError);
-            }
-            // --- FIN NOTIFICACIONES WHATSAPP ---
             res.json({ message: "Reserva cancelada", booking: result });
         } catch (error: any) {
             if (error.message === "No tienes acceso a esta reserva") {
@@ -460,38 +220,6 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
             res.status(400).json({ error: error.message });
         }
     }
-
-    confirmBooking = async (req: Request, res: Response) => {
-        try {
-            const confirmSchema = z.object({
-                bookingId: z.preprocess((v) => Number(v), z.number().int().positive()),
-                paymentMethod: z.enum(['CASH', 'TRANSFER', 'DEBT']).optional()
-            });
-            const parsed = confirmSchema.safeParse(req.body);
-            if (!parsed.success) {
-                return res.status(400).json({ error: parsed.error.format() });
-            }
-            const { bookingId, paymentMethod } = parsed.data;
-            const userId = (req as any).user?.userId;
-            if (!userId) {
-                return res.status(401).json({ error: 'No autorizado' });
-            }
-            const clubId = (req as any).clubId as number | undefined;
-            const result = await this.bookingService.confirmBooking(
-                bookingId,
-                userId,
-                paymentMethod ?? 'CASH',
-                clubId
-            );
-            res.json(result);
-        } catch (error: any) {
-            console.error("Error en confirmBooking:", error);
-            if (error.message === "No tienes acceso a esta reserva") {
-                return res.status(403).json({ error: error.message });
-            }
-            res.status(400).json({ error: error.message });
-        }
-    };
 
     getHistory = async (req: Request, res: Response) => {
         try {
@@ -505,13 +233,13 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
             }
             let clubContext: { clubId: number } | null = null;
             try {
-                clubContext = await getUserClubContext(Number(user.userId));
+                clubContext = await getUserClubContext(Number(user.userId), getPreferredClubIdFromRequest(req));
             } catch {
                 clubContext = null;
             }
             const requestUser = {
                 userId: user.userId,
-                role: user.role ?? 'MEMBER',
+                role: (req as any).membershipRole ?? user.role ?? 'MEMBER',
                 clubId: clubContext?.clubId ?? null
             };
             const history = await this.bookingService.getUserHistory(userId, requestUser);
@@ -669,7 +397,8 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
             }
             const { userId, courtId, activityId, startDateTime, guestName, guestPhone, guestDni, isProfessor } = parsed.data;
             const user = (req as any).user;
-            const isAdmin = user?.role === 'ADMIN';
+            const membershipRole = String((req as any).membershipRole || '');
+            const isAdmin = user?.role === 'ADMIN' || membershipRole === 'OWNER' || membershipRole === 'ADMIN';
             const clubId = (req as any).clubId;
 
             if (!userId && !isAdmin) {
@@ -714,10 +443,13 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
     // OBTENER CONSUMOS (GET)
     getItems = async (req: Request, res: Response) => {
         try {
-            const { id } = req.params; // El ID de la reserva viene en la URL
-            
-            // Llamamos al servicio (asegurate que tu servicio tenga este método)
-            const items = await this.bookingService.getBookingItems(Number(id));
+            const { id } = req.params;
+            const clubId = Number((req as any).clubId);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: 'Club inválido' });
+            }
+
+            const items = await this.bookingService.getBookingItems(Number(id), clubId);
             
             res.json(items);
         } catch (error) {
@@ -733,7 +465,7 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
                 bookingId: z.preprocess((v) => (v === undefined || v === null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
                 productId: z.preprocess((v) => Number(v), z.number().int().positive()),
                 quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
-                paymentMethod: z.enum(['CASH', 'TRANSFER', 'DEBT']).optional()
+                paymentMethod: z.enum(['CASH', 'TRANSFER', 'MERCADOPAGO', 'CARD', 'OTHER']).optional()
             });
             const paramId = req.params.id || req.params.bookingId;
             const bodyParsed = addItemSchema.safeParse(req.body);
@@ -749,88 +481,19 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
             if (!Number.isInteger(bookingId) || bookingId < 1) {
                 return res.status(400).json({ error: "bookingId inválido" });
             }
-
-            const resolvedPaymentMethod: 'CASH' | 'TRANSFER' | 'DEBT' = paymentMethod ?? 'CASH';
-
-        // Validaciones básicas...
-        const booking = await prisma.booking.findUnique({ 
-            where: { id: bookingId }, // Usamos el ID seguro
-            include: { court: true }
-        });
-        if (!booking) return res.status(404).json({ error: "Reserva no encontrada" });
-
-        const product = await prisma.product.findUnique({ where: { id: Number(productId) } });
-        if (!product) return res.status(404).json({ error: "Producto no encontrado" });
-
-        if (product.clubId !== booking.court.clubId) {
-            return res.status(400).json({ error: 'El producto no pertenece al club de la reserva' });
-        }
-
-        const newItem = await prisma.$transaction(async (tx) => {
-            await this.productService.consumeStock(booking.court.clubId, Number(productId), Number(quantity), tx);
-
-            const createdItem = await tx.bookingItem.create({
-                data: {
-                    bookingId: bookingId,
-                    productId: Number(productId),
-                    quantity: Number(quantity),
-                        price: Number(product.price),
-                        paymentMethod: resolvedPaymentMethod
-                }
-            });
-
-            if (resolvedPaymentMethod !== 'DEBT') {
-                await tx.cashMovement.create({
-                    data: {
-                        date: new Date(),
-                        type: 'INCOME',
-                        amount: Number(product.price) * Number(quantity),
-                        description: `Venta Extra: ${quantity}x ${product.name} (Reserva #${bookingId})`,
-                        method: resolvedPaymentMethod,
-                        bookingId: bookingId,
-                        clubId: booking.court.clubId
-                    }
-                });
-            } else if (booking.paymentStatus === 'PAID') {
-                await tx.booking.update({
-                    where: { id: bookingId },
-                    data: { paymentStatus: 'PARTIAL' }
-                });
+            const clubId = Number((req as any).clubId);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: "Club inválido" });
             }
-
-            return createdItem;
-        });
-
-        const bookingWithTotals = await prisma.booking.findUnique({
-            where: { id: bookingId },
-            include: { items: true, cashMovements: true }
-        });
-
-        if (bookingWithTotals) {
-            const itemsTotal = bookingWithTotals.items.reduce(
-                (sum, item) => sum + Number(item.price) * item.quantity,
-                0
+            const newItem = await this.bookingService.addItemToBooking(
+                bookingId,
+                Number(productId),
+                Number(quantity),
+                clubId,
+                paymentMethod ?? 'CASH'
             );
-            const totalPaid = bookingWithTotals.cashMovements
-                .filter((movement) => movement.type === 'INCOME' && movement.method !== 'DEBT')
-                .reduce((sum, movement) => sum + Number(movement.amount), 0);
-            const total = Number(bookingWithTotals.price || 0) + itemsTotal;
-            const remaining = total - totalPaid;
 
-            let nextStatus: 'PAID' | 'DEBT' | 'PARTIAL';
-            if (remaining <= 0) nextStatus = 'PAID';
-            else if (totalPaid > 0) nextStatus = 'PARTIAL';
-            else nextStatus = 'DEBT';
-
-            if (bookingWithTotals.paymentStatus !== nextStatus) {
-                await prisma.booking.update({
-                    where: { id: bookingId },
-                    data: { paymentStatus: nextStatus }
-                });
-            }
-        }
-
-        return res.json(newItem);
+            return res.json(newItem);
 
     } catch (error: any) { // 👇 Le ponemos 'any' para poder leer el mensaje
         console.error("❌ Error en addItem:", error);
@@ -844,204 +507,18 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
     //  ELIMINAR CONSUMO (DELETE)
     removeItem = async (req: Request, res: Response) => {
         try {
-            const { itemId } = req.params; // OJO: Acá esperamos el ID del item, no de la reserva
+            const { itemId } = req.params;
+            const clubId = Number((req as any).clubId);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: 'Club inválido' });
+            }
 
-            await this.bookingService.removeItemFromBooking(Number(itemId));
+            await this.bookingService.removeItemFromBooking(String(itemId), clubId);
             
             res.json({ message: 'Consumo eliminado y stock devuelto' });
         } catch (error) {
             console.error(error);
             res.status(500).json({ error: 'Error al eliminar el consumo' });
-        }
-    }
-
-    updateStatus = async (req: Request, res: Response) => {
-        const updateStatusSchema = z.object({
-            id: z.preprocess((v) => Number(v), z.number().int().positive())
-        });
-        const bodySchema = z.object({
-            paymentStatus: z.enum(['PAID', 'DEBT', 'PARTIAL'])
-        });
-        const paramsParsed = updateStatusSchema.safeParse(req.params);
-        const bodyParsed = bodySchema.safeParse(req.body);
-        if (!paramsParsed.success) {
-            return res.status(400).json({ error: paramsParsed.error.format() });
-        }
-        if (!bodyParsed.success) {
-            return res.status(400).json({ error: bodyParsed.error.format() });
-        }
-        const { id } = paramsParsed.data;
-        const { paymentStatus } = bodyParsed.data;
-        await this.bookingService.updatePaymentStatus(id, paymentStatus);
-        res.json({ success: true });
-    }
-
-    splitPayment = async (req: Request, res: Response) => {
-        try {
-            const paramsSchema = z.object({
-                id: z.preprocess((v) => Number(v), z.number().int().positive())
-            });
-            const bodySchema = z.object({
-                payments: z.array(z.object({
-                    method: z.enum(['CASH', 'TRANSFER', 'DEBT']),
-                    amount: z.preprocess((v) => Number(v), z.number().positive())
-                })).min(1)
-            });
-
-            const paramsParsed = paramsSchema.safeParse(req.params);
-            const bodyParsed = bodySchema.safeParse(req.body);
-
-            if (!paramsParsed.success) {
-                return res.status(400).json({ error: paramsParsed.error.format() });
-            }
-            if (!bodyParsed.success) {
-                return res.status(400).json({ error: bodyParsed.error.format() });
-            }
-
-            const userId = Number((req as any)?.user?.userId);
-            if (!Number.isFinite(userId) || userId <= 0) {
-                return res.status(401).json({ error: 'No autorizado' });
-            }
-
-            const clubId = (req as any).clubId;
-            const result = await this.bookingService.registerSplitPayment(
-                paramsParsed.data.id,
-                userId,
-                bodyParsed.data.payments,
-                clubId
-            );
-
-            return res.json(result);
-        } catch (error: any) {
-            console.error('❌ Error en splitPayment:', error);
-            return res.status(400).json({ error: error.message || 'Error al registrar pago dividido' });
-        }
-    }
-
-    partialPayment = async (req: Request, res: Response) => {
-        try {
-            const paramsSchema = z.object({
-                id: z.preprocess((v) => Number(v), z.number().int().positive())
-            });
-            const bodySchema = z.object({
-                amount: z.preprocess((v) => Number(v), z.number().positive()),
-                method: z.enum(['CASH', 'TRANSFER'])
-            });
-
-            const paramsParsed = paramsSchema.safeParse(req.params);
-            const bodyParsed = bodySchema.safeParse(req.body);
-
-            if (!paramsParsed.success) {
-                return res.status(400).json({ error: paramsParsed.error.format() });
-            }
-            if (!bodyParsed.success) {
-                return res.status(400).json({ error: bodyParsed.error.format() });
-            }
-
-            const userId = Number((req as any)?.user?.userId);
-            if (!Number.isFinite(userId) || userId <= 0) {
-                return res.status(401).json({ error: 'No autorizado' });
-            }
-
-            const clubId = (req as any).clubId;
-            const result = await this.bookingService.registerPartialPayment(
-                paramsParsed.data.id,
-                userId,
-                bodyParsed.data.amount,
-                bodyParsed.data.method,
-                clubId
-            );
-
-            return res.json(result);
-        } catch (error: any) {
-            console.error('❌ Error en partialPayment:', error);
-            return res.status(400).json({ error: error.message || 'Error al registrar pago parcial' });
-        }
-    }
-
-    courtDebtPortion = async (req: Request, res: Response) => {
-        try {
-            const paramsSchema = z.object({
-                id: z.preprocess((v) => Number(v), z.number().int().positive())
-            });
-            const bodySchema = z.object({
-                amount: z.preprocess((v) => Number(v), z.number().positive())
-            });
-
-            const paramsParsed = paramsSchema.safeParse(req.params);
-            const bodyParsed = bodySchema.safeParse(req.body);
-
-            if (!paramsParsed.success) {
-                return res.status(400).json({ error: paramsParsed.error.format() });
-            }
-            if (!bodyParsed.success) {
-                return res.status(400).json({ error: bodyParsed.error.format() });
-            }
-
-            const userId = Number((req as any)?.user?.userId);
-            if (!Number.isFinite(userId) || userId <= 0) {
-                return res.status(401).json({ error: 'No autorizado' });
-            }
-
-            const clubId = (req as any).clubId;
-            const result = await this.bookingService.registerCourtDebtPortion(
-                paramsParsed.data.id,
-                userId,
-                bodyParsed.data.amount,
-                clubId
-            );
-
-            return res.json(result);
-        } catch (error: any) {
-            console.error('❌ Error en courtDebtPortion:', error);
-            return res.status(400).json({ error: error.message || 'Error al registrar deuda parcial de cancha' });
-        }
-    }
-
-    getFinancialSummary = async (req: Request, res: Response) => {
-        try {
-            const paramsSchema = z.object({
-                id: z.preprocess((v) => Number(v), z.number().int().positive())
-            });
-            const paramsParsed = paramsSchema.safeParse(req.params);
-            if (!paramsParsed.success) {
-                return res.status(400).json({ error: paramsParsed.error.format() });
-            }
-
-            const summary = await this.bookingService.getBookingFinancialSummary(paramsParsed.data.id);
-            return res.json(summary);
-        } catch (error: any) {
-            console.error('❌ Error en getFinancialSummary:', error);
-            return res.status(400).json({ error: error.message || 'Error al obtener el resumen financiero' });
-        }
-    }
-
-    getDebtors = async (req: Request, res: Response) => {
-        try {
-            const clubId = (req as any).clubId;
-            const data = await this.bookingService.getClubDebtors(clubId);
-            res.json(data);
-        } catch (error) {
-            res.status(500).json({ error: 'Error al obtener clientes con deuda' });
-        }
-    }
-
-    payDebt = async (req: Request, res: Response) => {
-        try {
-            const payDebtSchema = z.object({
-                bookingId: z.preprocess((v) => Number(v), z.number().int().positive()),
-                paymentMethod: z.enum(['CASH', 'TRANSFER']).optional()
-            });
-            const parsed = payDebtSchema.safeParse(req.body);
-            if (!parsed.success) {
-                return res.status(400).json({ error: parsed.error.format() });
-            }
-            const { bookingId, paymentMethod } = parsed.data;
-            const result = await this.bookingService.payBookingDebt(bookingId, paymentMethod ?? 'CASH');
-            res.json({ message: "Deuda cobrada exitosamente", result });
-        } catch (error: any) {
-            console.error("Error en payDebt Controller:", error);
-            res.status(400).json({ error: error.message || "Error al cobrar deuda" });
         }
     }
 
@@ -1066,10 +543,10 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
             prisma.cashMovement.findMany({
                 where: {
                     clubId: clubId,
-                    type: 'INCOME',
-                    date: { gte: start, lte: end }
+                    type: 'PAYMENT_IN',
+                    createdAt: { gte: start, lte: end }
                 },
-                select: { date: true, amount: true, description: true, method: true }
+                select: { createdAt: true, amount: true, concept: true, method: true }
             }),
             prisma.booking.count({
                 where: {
@@ -1088,9 +565,9 @@ Un cliente acaba de cancelar su reserva desde la web en *${clubName}*.
 
         movements.forEach(m => {
             // 🔥 CAMBIO CLAVE: Formateamos como "DD/MM" para evitar mezclar meses
-            const dayStr = m.date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+            const dayStr = m.createdAt.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
             const amount = Number(m.amount);
-            const isProduct = m.description && m.description.includes('Venta Extra:');
+            const isProduct = String(m.concept || '').toLowerCase().includes('producto');
 
             const current = dailyMap.get(dayStr) || { turnos: 0, bar: 0 };
             

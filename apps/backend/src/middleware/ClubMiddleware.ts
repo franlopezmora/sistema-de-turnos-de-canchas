@@ -3,6 +3,14 @@ import { prisma } from '../prisma';
 import { getUserClubContext } from '../utils/getUserClubContext';
 import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 
+const handleClubContextError = (error: unknown, res: Response, fallbackMessage: string) => {
+    const message = error instanceof Error ? error.message : fallbackMessage;
+    if (message.includes('Debe seleccionar un club activo')) {
+        return res.status(400).json({ error: message });
+    }
+    return res.status(403).json({ error: fallbackMessage });
+};
+
 /**
  * Middleware para verificar que el usuario autenticado pertenece al club especificado en el slug
  * Debe usarse después de authMiddleware
@@ -28,17 +36,18 @@ export const verifyClubAccess = async (req: Request, res: Response, next: NextFu
         let context;
         try {
             context = await getUserClubContext(Number(user.userId), club.id);
-        } catch {
-            return res.status(403).json({ error: 'No tienes acceso a este club' });
+        } catch (error) {
+            return handleClubContextError(error, res, 'No tienes acceso a este club');
         }
 
         if (!context || context.clubId !== club.id) {
             return res.status(403).json({ error: 'No tienes acceso a este club' });
         }
 
-        // Agregar el club al request para uso posterior
         (req as any).club = club;
         (req as any).clubId = club.id;
+        (req as any).membershipRole = context.role;
+        (req as any).setLogContext?.({ clubId: club.id });
 
         next();
     } catch (error: any) {
@@ -62,8 +71,8 @@ export const verifyClubAccessById = async (req: Request, res: Response, next: Ne
         let context;
         try {
             context = await getUserClubContext(Number(user.userId), parsed);
-        } catch {
-            return res.status(403).json({ error: 'No tienes acceso a este club' });
+        } catch (error) {
+            return handleClubContextError(error, res, 'No tienes acceso a este club');
         }
 
         if (!context || context.clubId !== parsed) {
@@ -71,6 +80,8 @@ export const verifyClubAccessById = async (req: Request, res: Response, next: Ne
         }
 
         (req as any).clubId = parsed;
+        (req as any).membershipRole = context.role;
+        (req as any).setLogContext?.({ clubId: parsed });
         next();
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -93,11 +104,13 @@ export const setAdminClubFromUser = async (req: Request, res: Response, next: Ne
         try {
             const preferredClubId = getPreferredClubIdFromRequest(req);
             context = await getUserClubContext(Number(user.userId), preferredClubId);
-        } catch {
-            return res.status(403).json({ error: 'No tienes un club asignado' });
+        } catch (error) {
+            return handleClubContextError(error, res, 'No tienes un club asignado');
         }
 
         (req as any).clubId = context.clubId;
+        (req as any).membershipRole = context.role;
+        (req as any).setLogContext?.({ clubId: context.clubId });
         next();
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -111,11 +124,15 @@ export const setAdminClubFromUser = async (req: Request, res: Response, next: Ne
 export const optionalSetAdminClubFromUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const user = (req as any).user;
-        if (!user?.userId || user.role !== 'ADMIN') return next();
+        if (!user?.userId) return next();
         try {
             const preferredClubId = getPreferredClubIdFromRequest(req);
             const context = await getUserClubContext(Number(user.userId), preferredClubId);
-            if (context?.clubId != null) (req as any).clubId = context.clubId;
+            if (context?.clubId != null) {
+                (req as any).clubId = context.clubId;
+                (req as any).membershipRole = context.role;
+                (req as any).setLogContext?.({ clubId: context.clubId });
+            }
         } catch {
         }
         next();

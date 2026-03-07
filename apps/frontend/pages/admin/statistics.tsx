@@ -4,7 +4,7 @@ import AdminLayout from '../../components/AdminLayout';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabStatistics from '../../components/admin/AdminTabStatistics'; 
-import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
+import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
 
 export default function AdminStatisticsPage() {
   // Obtenemos el usuario validado
@@ -12,7 +12,7 @@ export default function AdminStatisticsPage() {
 
   if (!authChecked || !user) return null;
 
-  if (user.role !== 'ADMIN') {
+  if (!hasAdminAccess(user)) {
     return <NotFound message="No tenés permiso para acceder." />;
   }
 

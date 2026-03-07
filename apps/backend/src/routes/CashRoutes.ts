@@ -22,8 +22,16 @@ const cashController = new CashController(cashService);
 router.get(
     '/', 
     authMiddleware, 
-    requireRole('ADMIN'), 
     setAdminClubFromUser, 
+    requireRole('ADMIN'), 
+    cashController.getSummary
+);
+
+router.get(
+    '/summary',
+    authMiddleware,
+    setAdminClubFromUser,
+    requireRole('ADMIN'),
     cashController.getSummary
 );
 
@@ -32,8 +40,8 @@ router.get(
 router.post(
     '/', 
     authMiddleware, 
-    requireRole('ADMIN'), // O requireRole(['ADMIN', 'STAFF']) si soportas array
     setAdminClubFromUser, 
+    requireRole('ADMIN'), // O requireRole(['ADMIN', 'STAFF']) si soportas array
     cashController.createMovement
 );
 
@@ -41,8 +49,8 @@ router.post(
 router.get(
     '/products',
     authMiddleware,
-    requireRole('ADMIN'),
     setAdminClubFromUser,
+    requireRole('ADMIN'),
     cashController.getProducts
 );
 
@@ -50,17 +58,9 @@ router.get(
 router.post(
     '/product-sale',
     authMiddleware,
-    requireRole('ADMIN'),
     setAdminClubFromUser,
+    requireRole('ADMIN'),
     cashController.createProductSale
-);
-
-router.post(
-    '/sale-debt/pay',
-    authMiddleware,
-    requireRole('ADMIN'),
-    setAdminClubFromUser,
-    cashController.paySaleDebt
 );
 
 export default router;

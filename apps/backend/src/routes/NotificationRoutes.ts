@@ -7,8 +7,8 @@ import { setAdminClubFromUser } from '../middleware/ClubMiddleware';
 const router = Router();
 const notificationController = new NotificationController();
 
-router.get('/', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, notificationController.list);
-router.patch('/:id/read', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, notificationController.markRead);
-router.patch('/read-all', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, notificationController.markAllRead);
+router.get('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), notificationController.list);
+router.patch('/:id/read', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), notificationController.markRead);
+router.patch('/read-all', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), notificationController.markAllRead);
 
 export default router;

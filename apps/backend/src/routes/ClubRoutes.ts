@@ -21,7 +21,7 @@ router.get('/:id', clubController.getClubById);
 
 // Rutas protegidas: solo el admin del club puede actualizar ese club
 router.post('/', authMiddleware, requireRole('ADMIN'), clubController.createClub);
-router.put('/:id', authMiddleware, requireRole('ADMIN'), verifyClubAccessById, clubController.updateClub);
-router.patch('/:id', authMiddleware, requireRole('ADMIN'), verifyClubAccessById, clubController.updateClub);
+router.put('/:id', authMiddleware, verifyClubAccessById, requireRole('ADMIN'), clubController.updateClub);
+router.patch('/:id', authMiddleware, verifyClubAccessById, requireRole('ADMIN'), clubController.updateClub);
 
 export default router;

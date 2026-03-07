@@ -7,8 +7,8 @@ import { setAdminClubFromUser } from '../middleware/ClubMiddleware';
 const router = Router();
 const eventController = new EventController();
 
-router.get('/', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, eventController.list);
-router.post('/', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, eventController.create);
-router.post('/process-pending', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, eventController.processPending);
+router.get('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), eventController.list);
+router.post('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), eventController.create);
+router.post('/process-pending', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), eventController.processPending);
 
 export default router;

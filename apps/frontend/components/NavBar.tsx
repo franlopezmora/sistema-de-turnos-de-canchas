@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getToken, logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { ClubService } from '../services/ClubService';
 import { NotificationService, NotificationItem } from '../services/NotificationService';
-import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
+import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 import AppModal from './AppModal';
 import { Menu, Home, Calendar, Settings, LogOut, Phone, Mail, Check, Lock, MapPin, Bell } from 'lucide-react'; 
 
@@ -101,9 +101,9 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showUserMenu, showNotifications]);
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = hasAdminAccess(user);
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     if (!isAdmin || !user?.id) {
       setNotifications([]);
       return;
@@ -114,11 +114,11 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
     } catch {
       setNotifications([]);
     }
-  };
+  }, [isAdmin, user?.id]);
 
   useEffect(() => {
     loadNotifications();
-  }, [isAdmin, user?.id]);
+  }, [loadNotifications]);
 
   const unreadCount = notifications.filter((item) => !item.isRead).length;
 

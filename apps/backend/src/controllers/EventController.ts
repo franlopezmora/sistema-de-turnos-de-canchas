@@ -1,11 +1,9 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../prisma';
-import { EventProcessor } from '../services/EventProcessor';
 import { EventService } from '../services/EventService';
 
 export class EventController {
-  private readonly processor = new EventProcessor();
   private readonly eventService = new EventService();
 
   list = async (req: Request, res: Response) => {
@@ -57,17 +55,8 @@ export class EventController {
   };
 
   processPending = async (req: Request, res: Response) => {
-    try {
-      const bodySchema = z.object({
-        batchSize: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().max(500).optional())
-      });
-      const parsed = bodySchema.safeParse(req.body ?? {});
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
-
-      const result = await this.processor.processPending(parsed.data.batchSize ?? 50);
-      return res.json({ success: true, ...result });
-    } catch (error: any) {
-      return res.status(500).json({ error: error.message || 'Error al procesar eventos pendientes' });
-    }
+    return res.status(410).json({
+      error: 'El procesamiento legacy de Event fue retirado. Use el worker de OutboxMessage.'
+    });
   };
 }

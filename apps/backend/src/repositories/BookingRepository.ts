@@ -87,9 +87,7 @@ export class BookingRepository {
     async delete(id: number, cancelledBy?: number): Promise<void> {
         const data: any = {
             status: 'CANCELLED',
-            cancelledAt: new Date(),
-            // Una reserva cancelada no debe seguir contando como pagada o en deuda.
-            paymentStatus: 'PENDING'
+            cancelledAt: new Date()
         };
         if (cancelledBy) data.cancelledBy = cancelledBy;
         await prisma.booking.update({
@@ -170,11 +168,12 @@ export class BookingRepository {
             dbItem.court.club.facebookUrl || undefined,
             dbItem.court.club.websiteUrl || undefined,
             dbItem.court.club.description || undefined,
+            dbItem.court.club.timeZone ?? 'America/Argentina/Buenos_Aires',
             dbItem.court.club.lightsEnabled ?? false,
-            dbItem.court.club.lightsExtraAmount ?? null,
+            dbItem.court.club.lightsExtraAmount != null ? Number(dbItem.court.club.lightsExtraAmount) : null,
                 dbItem.court.club.lightsFromHour ?? null,
                 dbItem.court.club.professorDiscountEnabled ?? false,
-                dbItem.court.club.professorDiscountPercent ?? null,
+                dbItem.court.club.professorDiscountPercent != null ? Number(dbItem.court.club.professorDiscountPercent) : null,
                 null,
                 null,
             dbItem.court.club.createdAt,
@@ -199,7 +198,7 @@ export class BookingRepository {
             dbItem.id,
             dbItem.startDateTime,
             dbItem.endDateTime,
-            dbItem.price,
+            Number(dbItem.price || 0),
             user,
             court,
             activity,
@@ -209,8 +208,7 @@ export class BookingRepository {
             dbItem.guestEmail,
             dbItem.guestPhone,
             dbItem.fixedBookingId || null,
-            dbItem.guestDni,
-            dbItem.paymentStatus
+            dbItem.guestDni
         );
         if (dbItem.cancelledBy) booking.cancelledBy = dbItem.cancelledBy;
         if (dbItem.cancelledAt) booking.cancelledAt = dbItem.cancelledAt;

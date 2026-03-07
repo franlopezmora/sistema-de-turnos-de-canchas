@@ -23,6 +23,7 @@ const verifyClubSlugAccess = async (req: any, res: any, next: Function) => {
     if (!context || context.clubId !== club.id) return res.status(403).json({ error: 'No tienes acceso a este club' });
     req.club = club;
     req.clubContext = context;
+    req.membershipRole = context.role;
     next();
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -30,7 +31,7 @@ const verifyClubSlugAccess = async (req: any, res: any, next: Function) => {
 };
 
 // GET /clients?clubSlug=... — solo el admin de ese club puede ver la lista
-router.get('/', authMiddleware, requireRole('ADMIN'), verifyClubSlugAccess, async (req, res) => {
+router.get('/', authMiddleware, verifyClubSlugAccess, requireRole('ADMIN'), async (req, res) => {
   try {
     const club = (req as any).club;
 

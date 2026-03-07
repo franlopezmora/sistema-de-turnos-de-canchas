@@ -8,7 +8,7 @@ import { Search, MapPin, Calendar, TrendingUp, ShieldCheck, ArrowRight, Menu, X,
 import Link from 'next/link';
 import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
-import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
+import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 // Importamos los íconos de la librería
 import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Pádel)
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de fútbol limpia
@@ -259,7 +259,7 @@ export default function Home() {
     const initials = `${first.charAt(0)}${last.charAt(0)}`.trim();
     return initials || 'TU';
   }, [user]);
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = hasAdminAccess(user);
   const adminClubSlug = useMemo(() => {
     if (!user || !isAdmin) return null;
 

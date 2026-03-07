@@ -21,7 +21,8 @@ function getOrCreateGuestId() {
 import { getApiUrl } from '../utils/apiUrl';
 import { ClubService } from './ClubService';
 import { ClubAdminService } from './ClubAdminService';
-import { normalizeSessionUser } from '../utils/session';
+import { hasAdminAccess, normalizeSessionUser } from '../utils/session';
+import { getOrCreateBookingAccount, getAccountSummary, getAccountById, registerPayment } from './AccountService';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
@@ -34,7 +35,7 @@ export const createBooking = async (
   userId?: number,
   // 👇 Aceptamos 'dni' también en el tipo para evitar errores de TS
   guestInfo?: { name?: string; email?: string; phone?: string; guestDni?: string; dni?: string },
-  options?: { asGuest?: boolean; guestIdentifier?: string; isProfessor?: boolean; durationMinutes?: number }
+  options?: { asGuest?: boolean; guestIdentifier?: string; isProfessor?: boolean; durationMinutes?: number; openAccount?: boolean }
 ) => {
   const token = getToken();
   const guestId = token ? undefined : getOrCreateGuestId();
@@ -67,6 +68,7 @@ export const createBooking = async (
       ...(options?.asGuest ? { asGuest: true } : {}),
         ...(options?.isProfessor ? { isProfessor: true } : {}),
         ...(Number.isFinite(options?.durationMinutes) ? { durationMinutes: options?.durationMinutes } : {}),
+      ...(options?.openAccount ? { openAccount: true } : {}),
       
       // El ID del usuario si corresponde
       ...(userId ? { userId } : {}) 
@@ -107,7 +109,7 @@ export const cancelBooking = async (bookingId: number) => {
     if (rawUser) {
       const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
       const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
-      if (parsed?.role === 'ADMIN' && Number.isFinite(adminClubId) && adminClubId > 0) {
+      if (hasAdminAccess(parsed) && Number.isFinite(adminClubId) && adminClubId > 0) {
         // Obtener slug y llamar al servicio admin
         const club = await ClubService.getClubById(adminClubId);
         return await ClubAdminService.cancelBooking(club.slug, bookingId);
@@ -132,41 +134,50 @@ export const cancelBooking = async (bookingId: number) => {
 
 export const confirmBooking = async (
   bookingId: number,
-  paymentMethod?: 'CASH' | 'TRANSFER' | 'DEBT'
+  paymentMethod?: 'CASH' | 'TRANSFER'
 ) => {
     if (!getToken()) throw new Error("Debes iniciar sesión como administrador.");
 
-    const res = await fetchWithAuth(`${apiBase()}/bookings/confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId, ...(paymentMethod ? { paymentMethod } : {}) })
-    });
+    const account = await getOrCreateBookingAccount(bookingId);
+    const summary = await getAccountSummary(account.id);
+    const remaining = Number(summary?.remaining || 0);
 
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || error.message || 'No se pudo confirmar el turno');
+    if (remaining <= 0.009) {
+      return { success: true, message: 'La cuenta ya está saldada' };
     }
-    return res.json();
+
+    return registerPayment({
+      accountId: account.id,
+      amount: remaining,
+      method: (paymentMethod ?? 'CASH') as 'CASH' | 'TRANSFER'
+    });
 };
 
 export const splitBookingPayment = async (
   bookingId: number,
-  payments: Array<{ method: 'CASH' | 'TRANSFER' | 'DEBT'; amount: number }>
+  payments: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>
 ) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
-  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/split-payment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payments })
-  });
+  const account = await getOrCreateBookingAccount(bookingId);
+  const summary = await getAccountSummary(account.id);
+  const remaining = Number(summary?.remaining || 0);
+  const totalRequested = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || error.message || 'No se pudo registrar el pago dividido');
+  if (Math.abs(totalRequested - remaining) > 0.009) {
+    throw new Error('La suma de pagos debe coincidir con el saldo pendiente');
   }
 
-  return res.json();
+  const results = [];
+  for (const payment of payments) {
+    results.push(await registerPayment({
+      accountId: account.id,
+      amount: Number(payment.amount),
+      method: payment.method
+    }));
+  }
+
+  return results;
 };
 
 export const registerBookingPartialPayment = async (
@@ -175,55 +186,60 @@ export const registerBookingPartialPayment = async (
   method: 'CASH' | 'TRANSFER'
 ) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
-
-  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/partial-payment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount, method })
+  const account = await getOrCreateBookingAccount(bookingId);
+  return registerPayment({
+    accountId: account.id,
+    amount,
+    method
   });
-
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || error.message || 'No se pudo registrar el pago parcial');
-  }
-
-  return res.json();
-};
-
-export const registerBookingCourtDebtPortion = async (
-  bookingId: number,
-  amount: number
-) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
-
-  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/court-debt-portion`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount })
-  });
-
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || error.message || 'No se pudo registrar la deuda parcial de cancha');
-  }
-
-  return res.json();
 };
 
 export const getBookingFinancialSummary = async (bookingId: number) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  const account = await getOrCreateBookingAccount(bookingId);
+  const summary = await getAccountSummary(account.id);
+  const accountDetail = await getAccountById(account.id);
 
-  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/financial-summary`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' }
-  });
+  const accountItems = Array.isArray(accountDetail?.items) ? accountDetail.items : [];
 
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || error.message || 'No se pudo obtener el resumen financiero');
-  }
+  const courtTotal = accountItems
+    .filter((item: any) => item?.type === 'BOOKING')
+    .reduce((sum: number, item: any) => sum + Number(item?.total || 0), 0);
 
-  return res.json();
+  const itemsTotal = accountItems
+    .filter((item: any) => item?.type !== 'BOOKING')
+    .reduce((sum: number, item: any) => sum + Number(item?.total || 0), 0);
+
+  const totalPaid = Number(summary.paymentsTotal || 0);
+  const itemsPaid = Math.min(itemsTotal, totalPaid);
+  const paidAvailableForCourt = Math.max(0, totalPaid - itemsPaid);
+  const courtPaid = Math.min(courtTotal, paidAvailableForCourt);
+  const itemsDebt = Math.max(0, itemsTotal - itemsPaid);
+  const courtDebt = Math.max(0, courtTotal - courtPaid);
+
+  const accountPayments = Array.isArray(accountDetail?.payments) ? accountDetail.payments : [];
+
+  return {
+    bookingId,
+    accountId: account.id,
+    courtTotal,
+    courtPaid,
+    courtDebt,
+    itemsTotal,
+    itemsPaid,
+    itemsDebt,
+    total: Number(summary.itemsTotal || 0),
+    totalPaid,
+    remaining: Number(summary.remaining || 0),
+    paymentStatus: Number(summary.remaining || 0) <= 0.009 ? 'PAID' : (totalPaid > 0 ? 'PARTIAL' : 'PENDING'),
+    courtPayments: accountPayments.map((payment: any) => ({
+      id: Number(payment?.id || 0),
+      amount: Number(payment?.amount || 0),
+      method: String(payment?.method || 'OTHER'),
+      description: payment?.description ? String(payment.description) : undefined,
+      date: payment?.createdAt ? new Date(payment.createdAt).toISOString() : new Date().toISOString()
+    }))
+  };
 };
 
 // --- 4. OBTENER SCHEDULE COMPLETO DEL DÍA (ADMIN) ---

@@ -150,10 +150,10 @@ export class ClubRepository {
             club.description,
             club.timeZone,
             club.lightsEnabled,
-            club.lightsExtraAmount ?? null,
+            club.lightsExtraAmount != null ? Number(club.lightsExtraAmount) : null,
             club.lightsFromHour ?? null,
             club.professorDiscountEnabled ?? false,
-            club.professorDiscountPercent ?? null,
+            club.professorDiscountPercent != null ? Number(club.professorDiscountPercent) : null,
             club.fixedBookingSettingsByActivity ?? null,
             club.openingDays ?? null
         );
@@ -258,10 +258,12 @@ export class ClubRepository {
             ? settings.openingDays
             : (Array.isArray(dbClub.openingDays) ? dbClub.openingDays : null);
         const resolvedLightsEnabled = settings?.lightsEnabled ?? dbClub.lightsEnabled ?? false;
-        const resolvedLightsExtraAmount = settings?.lightsExtraAmount ?? dbClub.lightsExtraAmount ?? null;
+        const resolvedLightsExtraAmountRaw = settings?.lightsExtraAmount ?? dbClub.lightsExtraAmount ?? null;
         const resolvedLightsFromHour = this.formatLightsFromHour(settings?.lightsFromHour) ?? dbClub.lightsFromHour ?? null;
         const resolvedProfessorDiscountEnabled = settings?.professorDiscountEnabled ?? dbClub.professorDiscountEnabled ?? false;
-        const resolvedProfessorDiscountPercent = settings?.professorDiscountPercent ?? dbClub.professorDiscountPercent ?? null;
+        const resolvedProfessorDiscountPercentRaw = settings?.professorDiscountPercent ?? dbClub.professorDiscountPercent ?? null;
+        const resolvedLightsExtraAmount = resolvedLightsExtraAmountRaw == null ? null : Number(resolvedLightsExtraAmountRaw);
+        const resolvedProfessorDiscountPercent = resolvedProfessorDiscountPercentRaw == null ? null : Number(resolvedProfessorDiscountPercentRaw);
 
         return new Club(
             dbClub.id,

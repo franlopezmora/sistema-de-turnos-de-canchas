@@ -33,7 +33,15 @@ export class CourtController {
                 isIndoor: isIndoor ?? false,
                 surface: surface ?? 'Sintético'
             };
-            if (activityTypeId != null) data.activityTypeId = activityTypeId;
+            if (activityTypeId != null) {
+                const activityType = await prisma.activityType.findFirst({
+                    where: { id: activityTypeId, clubId: Number(clubId) }
+                });
+                if (!activityType) {
+                    return res.status(400).json({ error: 'La actividad no pertenece al club actual' });
+                }
+                data.activityTypeId = activityTypeId;
+            }
 
             const newCourt = await prisma.court.create({
                 data,
@@ -83,7 +91,15 @@ export class CourtController {
                 isUnderMaintenance: isUnderMaintenance,
                 name: name
             };
-            if (activityTypeId) data.activityTypeId = Number(activityTypeId);
+            if (activityTypeId) {
+                const activityType = await prisma.activityType.findFirst({
+                    where: { id: Number(activityTypeId), clubId: Number(clubId) }
+                });
+                if (!activityType) {
+                    return res.status(400).json({ error: 'La actividad no pertenece al club actual' });
+                }
+                data.activityTypeId = Number(activityTypeId);
+            }
             if (price !== undefined && price !== null && Number.isFinite(Number(price))) data.price = Number(price);
 
             const updatedCourt = await prisma.court.update({

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -87,7 +87,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
   };
 
   // 4. Lógica de conexión con el Backend
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setLoading(true); // Prendemos el loader al buscar datos nuevos
       const { startDate, endDate } = getDateRange(activePeriod, periodOffset);
@@ -107,14 +107,14 @@ export default function AdminTabStatistics({ slugProp }: Props) {
     } finally {
       setLoading(false); // 🔥 TRAMPA EVITADA: Apagamos el loader falle o no la petición
     }
-  };
+  }, [activePeriod, periodOffset, finalSlug]);
 
   // ÚNICO VIGILANTE: Escucha cambios en los filtros o el slug y carga los datos
   useEffect(() => {
     if (finalSlug) { 
       loadStats();
     }
-  }, [activePeriod, periodOffset, finalSlug]);
+  }, [finalSlug, loadStats]);
 
   // 5. Renders condicionales
   if (loading && !stats) return (

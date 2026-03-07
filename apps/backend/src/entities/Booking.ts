@@ -21,7 +21,6 @@ export class Booking {
     guestEmail?: string;
     guestPhone?: string;
     guestDni?: string;
-    paymentStatus?: string;
 
     constructor(
         id: number,
@@ -37,8 +36,7 @@ export class Booking {
         guestEmail?: string,
         guestPhone?: string,
         public fixedBookingId?: number | null,
-        guestDni?: string,
-        paymentStatus?: string
+        guestDni?: string
     ) {
         this.id = id;
         this.startDateTime = startDateTime;
@@ -54,7 +52,6 @@ export class Booking {
         if (guestEmail) this.guestEmail = guestEmail;
         if (guestPhone) this.guestPhone = guestPhone;
         if (guestDni) this.guestDni = guestDni;
-        if (paymentStatus) this.paymentStatus = paymentStatus;
     }
 }
 

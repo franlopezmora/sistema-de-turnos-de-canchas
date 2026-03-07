@@ -1,81 +1,18 @@
 import 'dotenv/config';
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import QRCode from 'qrcode';
-import { whatsappService } from './services/WhatsappService';
-
+import { BookingStatus } from '@prisma/client';
+import { createApp } from './app';
 import { prisma } from './prisma';
-import { BookingStatus } from './entities/Enums';
-import { PaymentStatus } from '@prisma/client';
-
-import bookingRoutes from './routes/BookingRoutes';
-import CourtRoutes from './routes/CourtRoutes';
-import ClubRoutes from './routes/ClubRoutes';
-import ClubAdminRoutes from './routes/ClubAdminRoutes';
-import LocationRoutes from './routes/LocationRoutes';
-import authRoutes from './routes/AuthRoutes';
-import ClientRoutes from './routes/ClientRoutes';
-import HealthRoutes from './routes/HealthRoutes';
-import CashRoutes from './routes/CashRoutes';
-import PaymentRoutes from './routes/PaymentRoutes';
-import NotificationRoutes from './routes/NotificationRoutes';
-import EventRoutes from './routes/EventRoutes';
-import AuditLogRoutes from './routes/AuditLogRoutes';
-import CourtPriceRuleRoutes from './routes/CourtPriceRuleRoutes';
-
-import { errorHandler } from './middleware/ErrorHandler';
-import { authMiddleware } from './middleware/AuthMiddleware';
-import { requireRole } from './middleware/RoleMiddleware';
-import { EventProcessor } from './services/EventProcessor';
-
-const app = express();
-
-/* =====================================================
-   CORS
-===================================================== */
-
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-
-  // Dominio producción
-  'https://tucancha.app',
-  'https://www.tucancha.app',
-
-  // IP pública
-  'http://187.77.48.97',
-  'https://187.77.48.97'
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('❌ CORS bloqueado para:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'Cache-Control',
-    'Pragma',
-    'Expires',
-    'X-Active-Club-Id',
-    'X-Club-Id'
-  ]
-}));
-
-/* =====================================================
-   CONFIG
-===================================================== */
+import { metricsService } from './services/MetricsService';
+import { OutboxWorker } from './services/OutboxWorker';
+import { acquireDistributedLock } from './utils/distributedLock';
+import { featureFlags } from './config/featureFlags';
 
 const PORT = Number(process.env.PORT) || 3000;
+const BOOKINGS_COMPLETION_INTERVAL_MS = Number(process.env.BOOKINGS_COMPLETION_INTERVAL_MS) || 60_000;
+const OUTBOX_PROCESSOR_INTERVAL_MS = Number(process.env.OUTBOX_PROCESSOR_INTERVAL_MS) || 5_000;
+const BOOKINGS_COMPLETION_LOCK_TTL_MS = Number(process.env.BOOKINGS_COMPLETION_LOCK_TTL_MS) || 55_000;
+const PROCESS_ROLE = String(process.env.PROCESS_ROLE || 'all').toLowerCase();
+const RUN_BOOKING_COMPLETION_JOB = process.env.RUN_BOOKING_COMPLETION_JOB;
 
 if (!process.env.JWT_SECRET) {
   console.error('❌ Missing JWT_SECRET in environment.');
@@ -87,214 +24,120 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const BOOKINGS_COMPLETION_INTERVAL_MS =
-  Number(process.env.BOOKINGS_COMPLETION_INTERVAL_MS) || 60_000;
-const EVENT_PROCESSOR_INTERVAL_MS = Number(process.env.EVENT_PROCESSOR_INTERVAL_MS) || 15_000;
-
-/* =====================================================
-   MIDDLEWARES
-===================================================== */
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
-/* =====================================================
-   RUTAS
-===================================================== */
-
-app.use('/api/auth', authRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/courts', CourtRoutes);
-app.use('/api/clubs', ClubRoutes);
-app.use('/api/clubs', ClubAdminRoutes);
-app.use('/api/locations', LocationRoutes);
-app.use('/api/health', HealthRoutes);
-app.use('/api/cash', CashRoutes);
-app.use('/api/payments', PaymentRoutes);
-app.use('/api/notifications', NotificationRoutes);
-app.use('/api/events', EventRoutes);
-app.use('/api/audit-logs', AuditLogRoutes);
-app.use('/api/court-price-rules', CourtPriceRuleRoutes);
-app.use('/clients', ClientRoutes);
-
-app.get('/', (_req: Request, res: Response) => {
-  res.json({ message: 'API Sistema de Turnos' });
-});
-
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok' });
-});
-
-/* =====================================================
-   WHATSAPP
-===================================================== */
-
-app.get(
-  '/whatsapp/qr',
-  authMiddleware,
-  requireRole('ADMIN'),
-  async (_req: Request, res: Response) => {
-
-    const status = whatsappService.getStatus();
-
-    if (status.disabled) {
-      return res.status(200).send(`<h1>📵 WhatsApp Deshabilitado</h1>`);
-    }
-
-    const qr = whatsappService.getQR();
-
-    if (!qr) {
-      if (status.ready) {
-        return res.status(200).send(`<h1>✅ WhatsApp Conectado</h1>`);
-      }
-      return res
-        .status(404)
-        .send(`<meta http-equiv="refresh" content="5"><h1>⏳ Esperando QR...</h1>`);
-    }
-
-    try {
-      const qrSvg = await QRCode.toString(qr, {
-        type: 'svg',
-        width: 300,
-        margin: 2
-      });
-
-      res.status(200).send(`
-        <html>
-        <body style="text-align:center;font-family:sans-serif;">
-          <h1>📱 Escanea el código QR</h1>
-          ${qrSvg}
-        </body>
-        </html>
-      `);
-    } catch (error) {
-      console.error('Error generando QR:', error);
-      res.status(500).send('Error generando QR');
-    }
+const shouldRunApi = () => PROCESS_ROLE === 'all' || PROCESS_ROLE === 'api';
+const shouldRunWorker = () => {
+  return PROCESS_ROLE === 'all' || PROCESS_ROLE === 'worker';
+};
+const shouldRunScheduler = () => {
+  if (RUN_BOOKING_COMPLETION_JOB != null) {
+    return RUN_BOOKING_COMPLETION_JOB === 'true' || RUN_BOOKING_COMPLETION_JOB === '1';
   }
-);
+  return PROCESS_ROLE === 'all' || PROCESS_ROLE === 'scheduler';
+};
 
-app.get('/whatsapp/status', (_req: Request, res: Response) => {
-  res.json(whatsappService.getStatus());
-});
+const completePastBookings = async () => {
+  const lock = await acquireDistributedLock(
+    'scheduler:complete-past-bookings',
+    BOOKINGS_COMPLETION_LOCK_TTL_MS
+  );
 
-/* =====================================================
-   START SERVER
-===================================================== */
+  if (process.env.REDIS_URL && !lock) {
+    metricsService.recordSchedulerRun('complete_past_bookings', 'skipped');
+    return;
+  }
 
-const startServer = async () => {
   try {
-    await prisma.$connect();
-    const eventProcessor = new EventProcessor();
+    const now = new Date();
 
-    const completePastBookings = async () => {
-      try {
-        const now = new Date();
-
-        const candidates = await prisma.booking.findMany({
-          where: {
-            status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
-            startDateTime: { lt: now }
-          },
-          select: { id: true, endDateTime: true }
-        });
-
-        const toComplete = candidates
-          .filter(b => b.endDateTime.getTime() <= now.getTime())
-          .map(b => b.id);
-
-        if (toComplete.length > 0) {
-          // 1) Marcar como COMPLETED todos los turnos cuyo horario ya terminó
-          await prisma.booking.updateMany({
-            where: { id: { in: toComplete } },
-            data: { status: BookingStatus.COMPLETED }
-          });
-
-          // 2) Normalizar el estado de pago para evitar COMPLETED + PENDING
-          //    y registrar deuda real cuando no hubo cobro en caja.
-          const completed = await prisma.booking.findMany({
-            where: { id: { in: toComplete } },
-            include: {
-              items: true,
-              cashMovements: true
-            }
-          });
-
-          for (const booking of completed) {
-            // Solo normalizamos cuando la reserva sigue en PENDING
-            if (booking.paymentStatus !== PaymentStatus.PENDING) continue;
-
-            const basePrice = Number(booking.price || 0);
-            const itemsTotal = booking.items.reduce(
-              (sum, item) => sum + Number(item.price || 0) * item.quantity,
-              0
-            );
-            const total = basePrice + itemsTotal;
-
-            // Si el total es 0, no hay deuda que registrar
-            if (total <= 0) {
-              await prisma.booking.update({
-                where: { id: booking.id },
-                data: { paymentStatus: PaymentStatus.PAID }
-              });
-              continue;
-            }
-
-            const totalIncome = booking.cashMovements
-              .filter(m => m.type === 'INCOME')
-              .reduce((sum, m) => sum + Number(m.amount || 0), 0);
-
-            let nextStatus: PaymentStatus;
-            if (totalIncome <= 0) {
-              // Jugado sin pagar nada → deuda total
-              nextStatus = PaymentStatus.DEBT;
-            } else if (totalIncome < total) {
-              nextStatus = PaymentStatus.PARTIAL;
-            } else {
-              nextStatus = PaymentStatus.PAID;
-            }
-
-            // Aquí booking.paymentStatus es PENDING; nextStatus siempre es distinto → actualizamos
-            await prisma.booking.update({
-              where: { id: booking.id },
-              data: { paymentStatus: nextStatus }
-            });
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error completando turnos:', error);
-      }
-    };
-
-    await completePastBookings();
-
-    const interval = setInterval(
-      completePastBookings,
-      BOOKINGS_COMPLETION_INTERVAL_MS
-    );
-
-    const eventInterval = setInterval(async () => {
-      try {
-        await eventProcessor.processPending(50);
-      } catch (error) {
-        console.error('❌ Error procesando eventos pendientes:', error);
-      }
-    }, EVENT_PROCESSOR_INTERVAL_MS);
-
-    interval.unref?.();
-    eventInterval.unref?.();
-
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server listening on port ${PORT}`);
+    const candidates = await prisma.booking.findMany({
+      where: {
+        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        startDateTime: { lt: now }
+      },
+      select: { id: true, endDateTime: true }
     });
 
+    const toComplete = candidates
+      .filter((booking) => booking.endDateTime.getTime() <= now.getTime())
+      .map((booking) => booking.id);
+
+    if (toComplete.length > 0) {
+      await prisma.booking.updateMany({
+        where: { id: { in: toComplete } },
+        data: { status: BookingStatus.COMPLETED }
+      });
+    }
+    metricsService.recordSchedulerRun('complete_past_bookings', 'success');
   } catch (error) {
-    console.error('❌ Error fatal al iniciar el servidor:', error);
+    console.error('❌ Error completando turnos:', error);
+    metricsService.recordSchedulerRun('complete_past_bookings', 'error');
+  } finally {
+    await lock?.release();
+  }
+};
+
+const startApi = () => {
+  const app = createApp();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 API listening on port ${PORT}`);
+  });
+};
+
+const startWorker = () => {
+  if (!featureFlags.ENABLE_OUTBOX) {
+    console.log('🧰 Worker de outbox deshabilitado (ENABLE_OUTBOX=false)');
+    return;
+  }
+
+  const outboxWorker = new OutboxWorker();
+
+  const outboxInterval = setInterval(async () => {
+    try {
+      await outboxWorker.processPending(25);
+    } catch (error) {
+      console.error('❌ Error procesando outbox:', error);
+    }
+  }, OUTBOX_PROCESSOR_INTERVAL_MS);
+
+  console.log('🧰 Worker de outbox iniciado');
+};
+
+const startScheduler = async () => {
+  await completePastBookings();
+
+  const interval = setInterval(async () => {
+    await completePastBookings();
+  }, BOOKINGS_COMPLETION_INTERVAL_MS);
+
+  console.log('⏰ Scheduler de reservas iniciado');
+};
+
+const startRuntime = async () => {
+  try {
+    await prisma.$connect();
+
+    const runApi = shouldRunApi();
+    const runWorker = shouldRunWorker();
+    const runScheduler = shouldRunScheduler();
+
+    if (!runApi && !runWorker && !runScheduler) {
+      throw new Error(`PROCESS_ROLE inválido: ${PROCESS_ROLE}`);
+    }
+
+    if (runApi) {
+      startApi();
+    }
+    if (runWorker) {
+      startWorker();
+    }
+    if (runScheduler) {
+      await startScheduler();
+    }
+  } catch (error) {
+    console.error('❌ Error fatal al iniciar el runtime:', error);
     await prisma.$disconnect();
     process.exit(1);
   }
 };
 
-app.use(errorHandler);
-
-startServer();
+startRuntime();

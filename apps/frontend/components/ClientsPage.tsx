@@ -2,10 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ClientService } from '../services/ClientService';
-import { CashService } from '../services/CashService';
 import { Phone, DollarSign, Calendar, Users, Trophy, Search, X, CheckCircle, Receipt, Banknote, CreditCard } from 'lucide-react';
 import AppModal from './AppModal';
-import { fetchWithAuth } from '../utils/apiClient';
 
 const formatDate = (dateInput: any) => {
   if (!dateInput) return '-';
@@ -133,32 +131,10 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const processDebtPayment = async (method: 'CASH' | 'TRANSFER') => {
     if (!debtTarget) return;
     try {
-      if (debtTarget.type === 'BOOKING') {
-        const response = await fetchWithAuth(`/api/bookings/pay-debt`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bookingId: debtTarget.id, paymentMethod: method })
-        });
-        if (!response.ok) throw new Error('Error al procesar');
-      } else {
-        await CashService.paySaleDebt(debtTarget.id, method);
-      }
-
+      void method;
       setShowPayMethodModal(false);
       setDebtTarget(null);
-      const updatedClients = await loadClients();
-
-      if (selectedDebtor && Array.isArray(updatedClients)) {
-        const refreshed = updatedClients.find((client: any) => client.id === selectedDebtor.id);
-
-        if (!refreshed || refreshed.totalDebt <= 0) {
-          setSelectedDebtor(null);
-          showInfo(`La deuda ha sido saldada por completo.`, 'Éxito');
-        } else {
-          setSelectedDebtor(refreshed);
-          showInfo(`El cobro fue registrado en la caja diaria.`, 'Éxito');
-        }
-      }
+      showInfo('La cobranza de deuda legacy fue retirada. Gestioná el saldo desde Cuentas/Account.', 'Flujo migrado');
     } catch (error) { 
         // REEMPLAZO DE ALERT
         showError("No se pudo procesar el cobro. Intentá nuevamente."); 

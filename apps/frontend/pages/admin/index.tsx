@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
+import { hasAdminAccess } from '../../utils/session';
 
 export default function AdminIndex() {
   const router = useRouter();
@@ -9,11 +10,11 @@ export default function AdminIndex() {
 
   useEffect(() => {
     if (!authChecked || !user) return;
-    if (user.role !== 'ADMIN') return;
+    if (!hasAdminAccess(user)) return;
     router.replace('/admin/agenda');
   }, [authChecked, user, router]);
 
   if (!authChecked || !user) return null;
-  if (user.role !== 'ADMIN') return <NotFound message="No tenés permiso para acceder al panel de administración." />;
+  if (!hasAdminAccess(user)) return <NotFound message="No tenés permiso para acceder al panel de administración." />;
   return null;
 }

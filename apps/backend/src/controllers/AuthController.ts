@@ -4,8 +4,57 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { getUserClubContext } from '../utils/getUserClubContext';
+import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
+
+const membershipPriority: Record<string, number> = {
+    OWNER: 0,
+    ADMIN: 1,
+    STAFF: 2,
+    CUSTOMER: 3
+};
+
+const getMembershipsForUser = async (userId: number) => {
+    const memberships = await prisma.membership.findMany({
+        where: { userId },
+        select: {
+            clubId: true,
+            role: true,
+            club: {
+                select: {
+                    id: true,
+                    slug: true
+                }
+            }
+        }
+    });
+
+    return memberships.sort((left, right) => {
+        const leftPriority = membershipPriority[String(left.role)] ?? 99;
+        const rightPriority = membershipPriority[String(right.role)] ?? 99;
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+        return left.clubId - right.clubId;
+    });
+};
+
+const resolveActiveMembership = async (userId: number, preferredClubId?: number) => {
+    try {
+        const clubContext = await getUserClubContext(userId, preferredClubId);
+        const club = await prisma.club.findUnique({
+            where: { id: clubContext.clubId },
+            select: { id: true, slug: true }
+        });
+
+        return {
+            clubId: clubContext.clubId,
+            role: clubContext.role,
+            club: club ?? null
+        };
+    } catch {
+        return null;
+    }
+};
 
 // Asegurate de tener importados z, prisma, bcrypt y jwt arriba en tu archivo
 
@@ -17,7 +66,7 @@ export class AuthController {
             email: z.string().email(),
             password: z.string().min(6),
             phoneNumber: z.string().min(5),
-            role: z.enum(["MEMBER", "ADMIN"]),
+            role: z.enum(["MEMBER", "ADMIN"]).optional(),
             dni: z.string().min(7, "El DNI es muy corto").optional() // Dejalo opcional o sacale el .optional() si es obligatorio
         });
         
@@ -27,7 +76,7 @@ export class AuthController {
         }
         
         // 👉 2. DESESTRUCTURAMOS EL DNI
-        const { firstName, lastName, email, password, phoneNumber, role, dni } = parsed.data;
+        const { firstName, lastName, email, password, phoneNumber, dni } = parsed.data;
         
         try {
             const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -44,7 +93,7 @@ export class AuthController {
                     email, 
                     phoneNumber,
                     password: hashedPassword,
-                    role,
+                    role: 'MEMBER',
                     dni 
                 }
             });
@@ -81,13 +130,9 @@ export class AuthController {
                 { expiresIn: '6h' }
             );
 
-            let resolvedClubId: number | null = null;
-            try {
-                const clubContext = await getUserClubContext(user.id);
-                resolvedClubId = clubContext.clubId;
-            } catch {
-                resolvedClubId = null;
-            }
+            const memberships = await getMembershipsForUser(user.id);
+            const activeMembership = await resolveActiveMembership(user.id);
+            const resolvedClubId = activeMembership?.clubId ?? null;
 
             res.json({ 
                 message: "Login exitoso", 
@@ -100,6 +145,10 @@ export class AuthController {
                     phoneNumber: user.phoneNumber,
                     role: user.role,
                     clubId: resolvedClubId,
+                    memberships,
+                    activeClubId: resolvedClubId,
+                    activeMembership,
+                    club: activeMembership?.club ?? null,
                     // 👉 4. ENVIAMOS EL DNI AL FRONTEND AL LOGUEARSE
                     dni: user.dni
                 } 
@@ -125,21 +174,11 @@ export class AuthController {
                 return res.status(401).json({ error: 'Usuario no encontrado' });
             }
 
-            let clubId: number | null = null;
-            let club: { slug: string } | null = null;
-
-            try {
-                const clubContext = await getUserClubContext(user.id);
-                clubId = clubContext.clubId;
-                const clubData = await prisma.club.findUnique({
-                    where: { id: clubContext.clubId },
-                    select: { slug: true }
-                });
-                club = clubData ?? null;
-            } catch {
-                clubId = null;
-                club = null;
-            }
+            const memberships = await getMembershipsForUser(user.id);
+            const preferredClubId = getPreferredClubIdFromRequest(req);
+            const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
+            const clubId = activeMembership?.clubId ?? null;
+            const club = activeMembership?.club ?? null;
 
             res.json({
                 id: user.id,
@@ -149,6 +188,9 @@ export class AuthController {
                 phoneNumber: user.phoneNumber,
                 role: user.role,
                 clubId,
+                memberships,
+                activeClubId: clubId,
+                activeMembership,
                 // 👉 6. LO DEVOLVEMOS AL FRONTEND
                 dni: user.dni,
                 club

@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { login, register } from '../services/AuthService';
 import { ClubService } from '../services/ClubService';
 import { Mail, Lock, User, Phone, UserPlus, LogIn, AlertCircle, Loader2, IdCard, CheckCircle, Eye, EyeOff } from 'lucide-react'; // Agregamos IdCard y Eye
-import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
+import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -52,7 +52,7 @@ export default function LoginPage() {
         const data = await login(email, password);
         const normalizedUser = normalizeSessionUser(data?.user);
         const activeSlug = getActiveClubSlug(normalizedUser);
-        if (data?.user?.role === 'ADMIN') {
+        if (hasAdminAccess(normalizedUser)) {
           window.location.href = '/admin/agenda';
         } else if (returnTo) {
           window.location.href = returnTo;

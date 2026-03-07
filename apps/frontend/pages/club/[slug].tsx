@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import BookingGrid from '../../components/BookingGrid';
 import Navbar from '../../components/NavBar';
@@ -122,10 +123,13 @@ export default function ClubPage() {
             {/* 1. FONDO (BANNER DEL CLUB + OVERLAY) */}
             {club.clubImageUrl ? (
               <>
-                <img
+                <Image
                   src={club.clubImageUrl}
                   alt={`Banner de ${club.name}`}
+                  fill
+                  sizes="100vw"
                   className="absolute inset-0 h-full w-full object-cover"
+                  unoptimized
                 />
                 <div className="absolute inset-0 bg-gradient-to-br from-[#347048]/85 via-[#347048]/70 to-[#2a2438]/75" />
               </>
@@ -145,7 +149,14 @@ export default function ClubPage() {
                 <div className="absolute -inset-2 bg-gradient-to-tr from-[#B9CF32] to-[#926699] rounded-[2rem] blur-md opacity-60 group-hover:opacity-100 transition duration-500"></div>
                 <div className="relative h-32 w-32 md:h-40 md:w-40 bg-white rounded-[1.8rem] p-3 shadow-xl flex items-center justify-center transform group-hover:-translate-y-1 transition-transform duration-300">
                   {club.logoUrl ? (
-                    <img src={club.logoUrl} alt={club.name} className="w-full h-full object-contain" />
+                    <Image
+                      src={club.logoUrl}
+                      alt={club.name}
+                      fill
+                      sizes="160px"
+                      className="object-contain"
+                      unoptimized
+                    />
                   ) : (
                     <Trophy size={40} className="text-[#EBE1D8]/80" strokeWidth={2} />
                   )}

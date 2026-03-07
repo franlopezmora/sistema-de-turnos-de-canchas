@@ -15,6 +15,9 @@ import { verifyClubAccess } from '../middleware/ClubMiddleware';
 import { ProductController } from '../controllers/ProductController';
 import { ProductRepository } from '../repositories/ProductRepository';
 import { CashRepository } from '../repositories/CashRepository';
+import { prisma } from '../prisma';
+import { z } from 'zod';
+import { assertValidScheduleMode, normalizeSchedule } from '../utils/ActivityScheduleHelper';
 
 const router = Router();
 
@@ -50,55 +53,55 @@ const clubController = new ClubController(clubService);
 // Obtener schedule del admin para un club específico
 router.get('/:slug/admin/schedule', 
     authMiddleware, 
-    requireRole('ADMIN'), 
     verifyClubAccess, 
+    requireRole('ADMIN'), 
     bookingController.getAdminSchedule
 );
 
 // Obtener todas las canchas del club
 router.get('/:slug/admin/courts',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     courtController.getAllCourts
 );
 
 // Crear cancha en el club
 router.post('/:slug/admin/courts',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     courtController.createCourt
 );
 
 // Actualizar cancha (solo si pertenece al club)
 router.put('/:slug/admin/courts/:id',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     courtController.updateCourt
 );
 
 // Suspender/Reactivar cancha
 router.put('/:slug/admin/courts/:id/suspend',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     courtController.suspendCourt
 );
 
 router.put('/:slug/admin/courts/:id/reactivate',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     courtController.reactivateCourt
 );
 
 // Obtener información del club
 router.get('/:slug/admin/info',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     (req: any, res: any) => {
         res.json(req.club);
     }
@@ -107,8 +110,8 @@ router.get('/:slug/admin/info',
 // Actualizar información del club
 router.put('/:slug/admin/info',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     async (req: any, res: any) => {
         try {
             const club = await clubService.updateClub(Number(req.club.id), req.body);
@@ -119,81 +122,177 @@ router.put('/:slug/admin/info',
     }
 );
 
+router.get('/:slug/admin/activity-types',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    async (req: any, res: any) => {
+        try {
+            const clubId = Number(req.clubId || req.club?.id);
+            if (!Number.isFinite(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: 'No se pudo determinar el club activo' });
+            }
+
+            const activities = await prisma.activityType.findMany({
+                where: { clubId },
+                orderBy: { name: 'asc' }
+            });
+
+            res.json(activities);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message || 'Error al obtener actividades' });
+        }
+    }
+);
+
+router.put('/:slug/admin/activity-types/:id/schedule',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    async (req: any, res: any) => {
+        try {
+            const idSchema = z.preprocess((v) => Number(v), z.number().int().positive());
+            const idParsed = idSchema.safeParse(req.params.id);
+            if (!idParsed.success) {
+                return res.status(400).json({ error: 'ID de actividad inválido' });
+            }
+
+            const bodySchema = z.object({
+                scheduleMode: z.enum(['FIXED', 'RANGE']),
+                scheduleOpenTime: z.string().nullable().optional(),
+                scheduleCloseTime: z.string().nullable().optional(),
+                scheduleIntervalMinutes: z.union([z.number(), z.string()]).nullable().optional().transform((v) => {
+                    if (v === '' || v === undefined || v === null) return null;
+                    return Number(v);
+                }),
+                scheduleDurations: z.array(z.union([z.number(), z.string()])).optional(),
+                scheduleFixedSlots: z.array(z.object({
+                    start: z.string(),
+                    duration: z.union([z.number(), z.string()]).transform((v) => Number(v))
+                })).optional()
+            });
+
+            const bodyParsed = bodySchema.safeParse(req.body);
+            if (!bodyParsed.success) {
+                return res.status(400).json({ error: bodyParsed.error.format() });
+            }
+
+            const clubId = Number(req.clubId || req.club?.id);
+            if (!Number.isFinite(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: 'No se pudo determinar el club activo' });
+            }
+
+            const activity = await prisma.activityType.findUnique({ where: { id: idParsed.data } });
+            if (!activity) {
+                return res.status(404).json({ error: 'Actividad no encontrada' });
+            }
+            if (Number(activity.clubId) !== clubId) {
+                return res.status(403).json({ error: 'La actividad no pertenece a este club' });
+            }
+
+            const parsed = bodyParsed.data;
+            const fallbackDuration = Number(activity.defaultDurationMinutes) > 0 ? Number(activity.defaultDurationMinutes) : 60;
+
+            const normalized = normalizeSchedule(
+                {
+                    scheduleMode: parsed.scheduleMode,
+                    scheduleOpenTime: parsed.scheduleOpenTime ?? null,
+                    scheduleCloseTime: parsed.scheduleCloseTime ?? null,
+                    scheduleIntervalMinutes: parsed.scheduleIntervalMinutes ?? null,
+                    scheduleDurations: parsed.scheduleDurations,
+                    scheduleFixedSlots: parsed.scheduleFixedSlots
+                },
+                fallbackDuration
+            );
+
+            assertValidScheduleMode(normalized);
+
+            const updated = await prisma.activityType.update({
+                where: { id: activity.id },
+                data: {
+                    scheduleMode: normalized.mode,
+                    scheduleOpenTime: normalized.openTime,
+                    scheduleCloseTime: normalized.closeTime,
+                    scheduleIntervalMinutes: normalized.intervalMinutes,
+                    scheduleDurations: normalized.durations as any,
+                    scheduleFixedSlots: normalized.fixedSlots as any
+                }
+            });
+
+            res.json(updated);
+        } catch (error: any) {
+            res.status(400).json({ error: error.message || 'No se pudo actualizar la configuración de actividad' });
+        }
+    }
+);
+
 // Crear reserva fija
 router.post('/:slug/admin/bookings/fixed',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     bookingController.createFixed
 );
 
 // Cancelar reserva fija
 router.delete('/:slug/admin/bookings/fixed/:id',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     bookingController.cancelFixed
-);
-
-// Confirmar reserva
-router.post('/:slug/admin/bookings/confirm',
-    authMiddleware,
-    requireRole('ADMIN'),
-    verifyClubAccess,
-    bookingController.confirmBooking
 );
 
 // Cancelar reserva
 router.post('/:slug/admin/bookings/cancel',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     bookingController.cancelBooking
 );
 
 // 1. Obtener todos los productos del club
 router.get('/:slug/admin/products',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     productController.getAll
 );
 
 // 2. Crear un nuevo producto
 router.post('/:slug/admin/products',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     productController.create
 );
 
 // 3. Editar un producto existente (precio, stock, nombre)
 router.put('/:slug/admin/products/:id',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     productController.update
 );
 
 // 4. Eliminar un producto
 router.delete('/:slug/admin/products/:id',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     productController.delete
 );
 
 router.get('/:slug/admin/clients-list',
     authMiddleware,
-    requireRole('ADMIN'),
     verifyClubAccess,
+    requireRole('ADMIN'),
     clubController.getClubClientsList 
 );
 
 router.get('/:slug/admin/stats/dashboard', 
     authMiddleware,       
-    requireRole('ADMIN'), 
     verifyClubAccess,     
+    requireRole('ADMIN'), 
     bookingController.getDashboardStats
 );
 

@@ -13,6 +13,38 @@ services:
       - "5432:5432"
     restart: always
 
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_NAME=${POSTGRES_DB:-sistema}
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN:-500}
+      - DEFAULT_POOL_SIZE=${PGBOUNCER_DEFAULT_POOL_SIZE:-50}
+      - RESERVE_POOL_SIZE=${PGBOUNCER_RESERVE_POOL_SIZE:-10}
+      - RESERVE_POOL_TIMEOUT=${PGBOUNCER_RESERVE_POOL_TIMEOUT:-5}
+      - SERVER_RESET_QUERY=DISCARD ALL
+      - ADMIN_USERS=${POSTGRES_USER:-postgres}
+      - AUTH_TYPE=scram-sha-256
+      - IGNORE_STARTUP_PARAMETERS=extra_float_digits
+    depends_on:
+      - postgres
+    ports:
+      - "6432:5432"
+    restart: always
+
   backend:
     build:
       context: ./apps/backend
@@ -21,9 +53,61 @@ services:
       - ./apps/backend/.env
     environment:
       - TZ=UTC
-    command: sh -c "npx prisma migrate deploy && node dist/index.js"
+      - PROCESS_ROLE=api
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@pgbouncer:5432/sistema?schema=public}
+      - DIRECT_DATABASE_URL=${DIRECT_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/sistema?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - READ_DATABASE_URL=${READ_DATABASE_URL:-postgresql://postgres:postgres@pgbouncer:5432/sistema?schema=public}
+      - WHATSAPP_PROVIDER=${WHATSAPP_PROVIDER:-wpp_http}
+      - WPP_SERVICE_URL=${WPP_SERVICE_URL:-http://wpp-service:3002}
+    command: sh -c "node dist/index.js"
     depends_on:
       - postgres
+      - pgbouncer
+      - redis
+    restart: always
+
+  backend-worker:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      - TZ=UTC
+      - PROCESS_ROLE=worker
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@pgbouncer:5432/sistema?schema=public}
+      - DIRECT_DATABASE_URL=${DIRECT_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/sistema?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - READ_DATABASE_URL=${READ_DATABASE_URL:-postgresql://postgres:postgres@pgbouncer:5432/sistema?schema=public}
+      - WHATSAPP_PROVIDER=${WHATSAPP_PROVIDER:-wpp_http}
+      - WPP_SERVICE_URL=${WPP_SERVICE_URL:-http://wpp-service:3002}
+    command: sh -c "node dist/index.js"
+    depends_on:
+      - postgres
+      - pgbouncer
+      - redis
+      - wpp-service
+    restart: always
+
+  backend-scheduler:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      - TZ=UTC
+      - PROCESS_ROLE=scheduler
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@pgbouncer:5432/sistema?schema=public}
+      - DIRECT_DATABASE_URL=${DIRECT_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/sistema?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - READ_DATABASE_URL=${READ_DATABASE_URL:-postgresql://postgres:postgres@pgbouncer:5432/sistema?schema=public}
+    command: sh -c "node dist/index.js"
+    depends_on:
+      - postgres
+      - pgbouncer
+      - redis
     restart: always
 
   frontend:
@@ -62,8 +146,11 @@ services:
     depends_on:
       - frontend
       - backend
+      - backend-worker
+      - backend-scheduler
       - wpp-service
     restart: always
 
 volumes:
   db-data:
+  redis-data:

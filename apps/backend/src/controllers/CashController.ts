@@ -1,276 +1,101 @@
 import { Request, Response } from 'express';
-import { CashService } from '../services/CashService';
-import { prisma } from '../prisma';
 import { z } from 'zod';
-import { ProductService } from '../services/ProductService';
-import { getUserClubContext } from '../utils/getUserClubContext';
-import { EventService } from '../services/EventService';
-import { AuditLogService } from '../services/AuditLogService';
-import { NotificationService } from '../services/NotificationService';
+import { CashService } from '../services/CashService';
+import { CashShiftService } from '../services/CashShiftService';
+import { sanitizeString } from '../utils/sanitize';
 
 export class CashController {
-    private cashService: CashService;
-    private productService: ProductService;
-    private eventService: EventService;
-    private auditLogService: AuditLogService;
-    private notificationService: NotificationService;
+  constructor(private readonly cashService: CashService) {}
 
-    constructor(cashService: CashService) {
-        this.cashService = cashService;
-        this.productService = new ProductService();
-        this.eventService = new EventService();
-        this.auditLogService = new AuditLogService();
-        this.notificationService = new NotificationService();
+  getSummary = async (req: Request, res: Response) => {
+    try {
+      const clubId = Number((req as any).clubId);
+      const rawDate = typeof req.query.date === 'string' ? req.query.date : undefined;
+      const summary = rawDate
+        ? await this.cashService.getSummaryByDate(clubId, rawDate)
+        : await this.cashService.getDailySummary(clubId);
+      return res.json(summary);
+    } catch (error) {
+      return res.status(500).json({ error: 'Error al obtener caja' });
     }
+  };
 
-    // Usamos arrow functions para no perder el 'this'
-    getSummary = async (req: Request, res: Response) => {
-        try {
-            const clubId = (req as any).clubId;
-            const summary = await this.cashService.getDailySummary(clubId);
-            res.json(summary);
-        } catch (error) {
-            res.status(500).json({ error: 'Error al obtener caja' });
-        }
+  createMovement = async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        amount: z.preprocess((v) => Number(v), z.number().positive()),
+        concept: z.string().trim().min(1),
+        type: z.enum(['PAYMENT_IN', 'REFUND', 'WITHDRAW', 'DEPOSIT']),
+        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'MP'])
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+
+      const clubId = Number((req as any).clubId);
+      const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
+
+      const shiftService = new CashShiftService();
+      const currentShift = await shiftService.current(clubId);
+      if (!currentShift) {
+        return res.status(400).json({ error: 'No hay turno de caja abierto' });
+      }
+
+      const movement = await this.cashService.addMovement({
+        ...parsed.data,
+        concept: sanitizeString(parsed.data.concept, 500),
+        clubId,
+        cashShiftId: currentShift.id,
+        createdByUserId: actorUserId
+      }, actorUserId);
+
+      return res.status(201).json(movement);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Error al crear movimiento' });
     }
+  };
 
-    createMovement = async (req: Request, res: Response) => {
-        try {
-            const createMovementSchema = z.object({
-                amount: z.union([z.number(), z.string()]).transform((v) => (typeof v === 'string' ? parseFloat(v) : v)).pipe(z.number().finite()),
-                description: z.string().min(1),
-                type: z.enum(['INCOME', 'EXPENSE']),
-                method: z.enum(['CASH', 'TRANSFER'])
-            });
-            const parsed = createMovementSchema.safeParse(req.body);
-            if (!parsed.success) {
-                return res.status(400).json({ error: parsed.error.format() });
-            }
-            const clubId = (req as any).clubId;
-            const cleanData = {
-                amount: parsed.data.amount,
-                description: parsed.data.description,
-                type: parsed.data.type,
-                method: parsed.data.method,
-                date: new Date(),
-                clubId
-            };
-            const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
-            const movement = await this.cashService.addMovement(cleanData, actorUserId);
-            res.json(movement);
-        } catch (error) {
-            console.error("❌ Error en createMovement:", error);
-            res.status(500).json({ error: 'Error al crear movimiento' });
-        }
+  getProducts = async (req: Request, res: Response) => {
+    try {
+      const clubId = Number((req as any).clubId);
+      const products = await this.cashService.getProducts(clubId);
+      return res.json(products);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'No se pudieron obtener los productos' });
     }
+  };
 
-    // GET /api/cash/products: lista productos del club del admin
-    getProducts = async (req: Request, res: Response) => {
-        try {
-            const clubId = (req as any).clubId;
-            if (!clubId) return res.status(400).json({ error: 'No se pudo determinar el club' });
+  createProductSale = async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        productId: z.preprocess((v) => Number(v), z.number().int().positive()),
+        quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
+        method: z.enum(['CASH', 'TRANSFER']),
+        payments: z.array(z.object({
+          method: z.enum(['CASH', 'TRANSFER']),
+          amount: z.preprocess((v) => Number(v), z.number().positive())
+        })).optional(),
+        guestName: z.string().trim().optional(),
+        userId: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().optional())
+      });
 
-            const products = await this.productService.getProductsByClub(clubId);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
 
-            res.json(products);
-        } catch (error) {
-            res.status(500).json({ error: 'Error al obtener productos' });
-        }
+      const clubId = Number((req as any).clubId);
+      const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
+
+      const sale = await this.cashService.createProductSale({
+        clubId,
+        productId: parsed.data.productId,
+        quantity: parsed.data.quantity,
+        method: parsed.data.method,
+        payments: parsed.data.payments,
+        guestName: parsed.data.guestName ? sanitizeString(parsed.data.guestName, 200) : undefined
+      }, actorUserId);
+
+      return res.status(201).json(sale);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'No se pudo registrar la venta' });
     }
-
-    // POST /api/cash/product-sale: registrar venta de producto sin reserva
-    createProductSale = async (req: Request, res: Response) => {
-        try {
-            const productSaleSchema = z.object({
-                productId: z.preprocess((v) => Number(v), z.number().int().positive()),
-                quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
-                method: z.enum(['CASH', 'TRANSFER', 'DEBT']).optional(),
-                payments: z.array(z.object({
-                    method: z.enum(['CASH', 'TRANSFER', 'DEBT']),
-                    amount: z.preprocess((v) => Number(v), z.number().positive())
-                })).min(1).optional(),
-                userId: z.preprocess((v) => (v === undefined || v === null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
-                guestName: z.string().trim().optional(),
-                guestPhone: z.string().trim().optional(),
-                guestDni: z.string().trim().optional()
-            });
-            const parsed = productSaleSchema.safeParse(req.body);
-            if (!parsed.success) {
-                return res.status(400).json({ error: parsed.error.format() });
-            }
-            const clubId = (req as any).clubId;
-            if (!clubId) return res.status(400).json({ error: 'No se pudo determinar el club' });
-            const { productId, quantity: qty, method, payments, userId, guestName, guestPhone, guestDni } = parsed.data;
-
-            const hasDebtInSplit = Array.isArray(payments) && payments.some((payment) => payment.method === 'DEBT');
-            if ((method === 'DEBT' || hasDebtInSplit) && !userId && !guestDni && !guestPhone && !guestName) {
-                return res.status(400).json({ error: 'Debes vincular un cliente para dejar la venta en cuenta' });
-            }
-
-            if (userId) {
-                    try {
-                        const userContext = await getUserClubContext(Number(userId), Number(clubId));
-                        if (!userContext || userContext.clubId !== Number(clubId)) {
-                            return res.status(400).json({ error: 'El cliente seleccionado no pertenece al club' });
-                        }
-                    } catch {
-                    return res.status(400).json({ error: 'El cliente seleccionado no pertenece al club' });
-                }
-            }
-
-            const product = await prisma.product.findFirst({
-                where: { id: Number(productId), clubId, isActive: true }
-            });
-            if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
-
-            const amount = Number(product.price) * qty;
-            const normalizedPayments = payments?.map((payment) => ({
-                method: payment.method,
-                amount: Number(payment.amount)
-            }));
-
-            if (normalizedPayments && normalizedPayments.length > 0) {
-                const splitTotal = normalizedPayments.reduce((sum, payment) => sum + payment.amount, 0);
-                if (Math.abs(splitTotal - amount) > 0.01) {
-                    return res.status(400).json({ error: 'La suma de pagos debe coincidir con el total de la venta' });
-                }
-            }
-
-            const movements = await prisma.$transaction(async (tx) => {
-                await this.productService.consumeStock(clubId, product.id, qty, tx);
-
-                const paymentsToRegister = normalizedPayments && normalizedPayments.length > 0
-                    ? normalizedPayments
-                    : [{ method: method ?? 'CASH', amount }];
-
-                const created = [];
-                for (const paymentLine of paymentsToRegister) {
-                    const movement = await tx.cashMovement.create({
-                        data: {
-                            date: new Date(),
-                            type: 'INCOME',
-                            amount: paymentLine.amount,
-                            description: `${qty}x ${product.name}`,
-                            method: paymentLine.method,
-                            clubId,
-                            user: userId ? { connect: { id: userId } } : undefined,
-                            guestName: guestName || null,
-                            guestPhone: guestPhone || null,
-                            guestDni: guestDni || null,
-                            isSettled: paymentLine.method === 'DEBT' ? false : true
-                        }
-                    } as any);
-                    created.push(movement);
-                }
-
-                return created;
-            });
-
-            const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
-
-            await this.eventService.productSold(clubId, {
-                productId: product.id,
-                productName: product.name,
-                quantity: qty,
-                amount,
-                userId: userId ?? null,
-                actorUserId: actorUserId ?? null,
-                movementIds: movements.map((movement) => movement.id)
-            });
-
-            await this.auditLogService.create({
-                clubId,
-                userId: actorUserId ?? null,
-                entity: 'Product',
-                entityId: String(product.id),
-                action: 'PRODUCT_SALE',
-                payload: {
-                    quantity: qty,
-                    amount,
-                    movementIds: movements.map((movement) => movement.id),
-                    soldToUserId: userId ?? null,
-                    guestName: guestName || null,
-                    guestPhone: guestPhone || null,
-                    guestDni: guestDni || null
-                }
-            });
-
-            if (userId) {
-                await this.notificationService.createNotification(
-                    userId,
-                    clubId,
-                    'Compra registrada',
-                    `Se registró la venta de ${qty}x ${product.name}.`
-                );
-            }
-
-            res.json({ movements, total: amount });
-        } catch (error) {
-            console.error('❌ Error en createProductSale:', error);
-            res.status(500).json({ error: 'Error al registrar la venta' });
-        }
-    }
-
-    // POST /api/cash/sale-debt/pay: cobrar una deuda de venta extra
-    paySaleDebt = async (req: Request, res: Response) => {
-        try {
-            const schema = z.object({
-                movementId: z.preprocess((v) => Number(v), z.number().int().positive()),
-                paymentMethod: z.enum(['CASH', 'TRANSFER'])
-            });
-            const parsed = schema.safeParse(req.body);
-            if (!parsed.success) {
-                return res.status(400).json({ error: parsed.error.format() });
-            }
-
-            const clubId = (req as any).clubId;
-            if (!clubId) return res.status(400).json({ error: 'No se pudo determinar el club' });
-
-            const { movementId, paymentMethod } = parsed.data;
-
-            const debtMovement = await prisma.cashMovement.findFirst({
-                where: {
-                    id: movementId,
-                    clubId,
-                    method: 'DEBT',
-                    isSettled: false,
-                    type: 'INCOME'
-                }
-            } as any);
-
-            if (!debtMovement) {
-                return res.status(404).json({ error: 'No se encontró una deuda pendiente para ese movimiento' });
-            }
-
-            const result = await prisma.$transaction(async (tx) => {
-                const settled = await tx.cashMovement.update({
-                    where: { id: debtMovement.id },
-                    data: { isSettled: true }
-                } as any);
-
-                const payment = await tx.cashMovement.create({
-                    data: {
-                        date: new Date(),
-                        type: 'INCOME',
-                        amount: Number(debtMovement.amount),
-                        description: `Cobro deuda venta #${debtMovement.id}`,
-                        method: paymentMethod,
-                        clubId,
-                        user: (debtMovement as any).userId ? { connect: { id: (debtMovement as any).userId } } : undefined,
-                        guestName: (debtMovement as any).guestName ?? null,
-                        guestPhone: (debtMovement as any).guestPhone ?? null,
-                        guestDni: (debtMovement as any).guestDni ?? null,
-                        isSettled: true
-                    }
-                } as any);
-
-                return { settled, payment };
-            });
-
-            res.json(result);
-        } catch (error) {
-            console.error('❌ Error en paySaleDebt:', error);
-            res.status(500).json({ error: 'Error al cobrar deuda de venta' });
-        }
-    }
+  };
 }

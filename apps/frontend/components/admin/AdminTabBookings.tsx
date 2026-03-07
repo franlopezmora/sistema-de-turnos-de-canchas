@@ -5,20 +5,17 @@ import { getCourts } from '../../services/CourtService';
 import {
   getAdminSchedule,
   cancelBooking,
-  confirmBooking as confirmBookingService,
-  getBookingFinancialSummary,
-  registerBookingCourtDebtPortion,
-  registerBookingPartialPayment,
   createBooking,
   createFixedBooking,
   cancelFixedBooking,
   searchClients 
 } from '../../services/BookingService';
+import { getAccountSummary, getOrCreateBookingAccount, registerPayment } from '../../services/AccountService';
 import AppModal from '../AppModal';
 import BookingConsumption from '../BookingConsumption';
 import { useParams } from 'react-router-dom';
 import DatePickerDark from '../../components/ui/DatePickerDark';
-import { Trash2, Check, ShoppingCart, Calendar as CalendarIcon, RefreshCw, ChevronDown, CalendarPlus, Repeat, Banknote, CreditCard, FileText, X, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'; 
+import { Trash2, Check, ShoppingCart, Calendar as CalendarIcon, RefreshCw, ChevronDown, CalendarPlus, Repeat, Banknote, CreditCard, X, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'; 
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 
 const CLUB_TIME_SLOTS = [
@@ -28,6 +25,18 @@ const CLUB_TIME_SLOTS = [
 ];
 
 const DEFAULT_DURATION_MINUTES = 90;
+
+const normalizeActivityDurations = (raw: unknown, fallback: number) => {
+  const parsed = Array.isArray(raw)
+    ? raw.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0)
+    : [];
+
+  if (parsed.length > 0) {
+    return Array.from(new Set(parsed));
+  }
+
+  return [fallback];
+};
 
 // Layout constants
 const HEADER_HEIGHT = 64; // px reserved for court names header
@@ -185,7 +194,7 @@ const getFormattedDateLabel = (date: Date) => {
 };
 
 type SplitPaymentDraft = {
-  method: 'CASH' | 'TRANSFER' | 'DEBT';
+  method: 'CASH' | 'TRANSFER' | 'MERCADO_PAGO' | 'CARD' | 'OTHER';
   amount: string;
 };
 
@@ -239,16 +248,27 @@ export default function AdminTabBookings() {
   const [paymentMode, setPaymentMode] = useState<'single' | 'split'>('single');
   const [splitPayments, setSplitPayments] = useState<SplitPaymentDraft[]>([{ method: 'CASH', amount: '' }]);
   const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
+  const [selectedPaymentAccountId, setSelectedPaymentAccountId] = useState<string | null>(null);
+  const [paymentRemainingTarget, setPaymentRemainingTarget] = useState(0);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [isConsumptionPaymentOpen, setIsConsumptionPaymentOpen] = useState(false);
   const [selectedBookingDetail, setSelectedBookingDetail] = useState<{ booking: any; slotTime: string; courtName?: string } | null>(null);
   const params = useParams();
   const urlSlug = params.slug;
 
-  const handleOpenPaymentModal = (bookingId: number) => {
+  const handleOpenPaymentModal = async (bookingId: number) => {
     setSelectedBookingId(bookingId);
     setPaymentMode('single');
     setSplitPayments([{ method: 'CASH', amount: '' }]);
+    try {
+      const account = await getOrCreateBookingAccount(bookingId);
+      const summary = await getAccountSummary(account.id);
+      setSelectedPaymentAccountId(account.id);
+      setPaymentRemainingTarget(Number(summary?.remaining || 0));
+    } catch {
+      setSelectedPaymentAccountId(null);
+      setPaymentRemainingTarget(0);
+    }
     setShowPaymentModal(true);
   };
 
@@ -277,18 +297,22 @@ export default function AdminTabBookings() {
     [courts, manualBooking.courtId]
   );
 
-  const selectedActivityDefaultDuration = useMemo(() => {
-    const duration = Number(selectedManualCourt?.activityType?.defaultDurationMinutes);
-    return Number.isFinite(duration) && duration > 0 ? duration : DEFAULT_DURATION_MINUTES;
+  const selectedActivityDurations = useMemo(() => {
+    const defaultDuration = Number(selectedManualCourt?.activityType?.defaultDurationMinutes);
+    const safeDefaultDuration = Number.isFinite(defaultDuration) && defaultDuration > 0
+      ? defaultDuration
+      : DEFAULT_DURATION_MINUTES;
+
+    return normalizeActivityDurations(selectedManualCourt?.activityType?.scheduleDurations, safeDefaultDuration);
   }, [selectedManualCourt]);
 
   const manualDurationOptions = useMemo(() => {
-    const options = [selectedActivityDefaultDuration];
+    const options = selectedActivityDurations;
     if (manualBooking.isProfessor && !options.includes(60)) {
       return [60, ...options];
     }
     return options;
-  }, [manualBooking.isProfessor, selectedActivityDefaultDuration]);
+  }, [manualBooking.isProfessor, selectedActivityDurations]);
 
   const isManualPrevDisabled = () => {
     const today = parseLocalDate(getTodayLocalDate());
@@ -510,7 +534,7 @@ export default function AdminTabBookings() {
       setScheduleBookings(data || []);
       setLastUpdate(new Date());
     } catch (error: any) { showError('Error: ' + error.message); } finally { setLoadingSchedule(false); }
-  }, [scheduleDate, courts]);
+  }, [scheduleDate]);
 
   useEffect(() => { loadCourts(); }, [loadCourts]);
   useEffect(() => { loadSchedule(); }, [loadSchedule]);
@@ -676,7 +700,8 @@ export default function AdminTabBookings() {
                 asGuest: true,
                 guestIdentifier: `admin_${dni}_${Date.now()}`,
                 isProfessor: manualBooking.isProfessor,
-                durationMinutes: manualBooking.durationMinutes
+                durationMinutes: manualBooking.durationMinutes,
+                openAccount: true
               }
             );
             showInfo('Reserva simple creada', 'Listo');
@@ -713,21 +738,22 @@ export default function AdminTabBookings() {
     }
   };
 
-  const handleConfirmBooking = async (method: 'CASH' | 'TRANSFER' | 'DEBT') => {
-    if (!selectedBookingId) return;
+  const handleConfirmBooking = async (method: 'CASH' | 'TRANSFER' | 'MERCADO_PAGO' | 'CARD' | 'OTHER') => {
+    if (!selectedBookingId || !selectedPaymentAccountId) return;
     try {
-        if (method === 'DEBT') {
-          const summary = await getBookingFinancialSummary(selectedBookingId);
-          const courtPendingToDebt = Math.max(0, Number(summary?.courtDebt || 0));
-
-          if (courtPendingToDebt > 0.01) {
-            await registerBookingCourtDebtPortion(selectedBookingId, courtPendingToDebt);
-          } else {
-            await confirmBookingService(selectedBookingId, 'DEBT');
-          }
-        } else {
-          await confirmBookingService(selectedBookingId, method);
+        const summary = await getAccountSummary(selectedPaymentAccountId);
+        const remaining = Math.max(0, Number(summary?.remaining || 0));
+        if (remaining <= 0.009) {
+          showInfo('La cuenta ya está saldada.', 'Listo');
+          setShowPaymentModal(false);
+          return;
         }
+
+        await registerPayment({
+          accountId: selectedPaymentAccountId,
+          amount: remaining,
+          method
+        });
         setShowPaymentModal(false);
         loadSchedule(); 
         showInfo('Cobro registrado correctamente.', "Listo");
@@ -754,11 +780,11 @@ export default function AdminTabBookings() {
     return sum + (Number.isFinite(amount) && amount > 0 ? amount : 0);
   }, 0);
 
-  const splitTargetTotal = Number(selectedBookingDetail?.booking?.price ?? selectedBooking?.price ?? 0);
+  const splitTargetTotal = Number(paymentRemainingTarget || 0);
   const splitRemaining = splitTargetTotal - splitEnteredTotal;
 
   const handleConfirmSplitPayment = async () => {
-    if (!selectedBookingId) return;
+    if (!selectedBookingId || !selectedPaymentAccountId) return;
 
     const parsedPayments = splitPayments
       .map((payment) => ({
@@ -772,7 +798,7 @@ export default function AdminTabBookings() {
       return;
     }
 
-    const summary = await getBookingFinancialSummary(selectedBookingId);
+    const summary = await getAccountSummary(selectedPaymentAccountId);
     const totalPending = Math.max(0, Number(summary?.remaining || 0));
     const enteredTotal = parsedPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
@@ -783,11 +809,11 @@ export default function AdminTabBookings() {
 
     try {
       for (const payment of parsedPayments) {
-        if (payment.method === 'DEBT') {
-          await registerBookingCourtDebtPortion(selectedBookingId, payment.amount);
-        } else {
-          await registerBookingPartialPayment(selectedBookingId, payment.amount, payment.method);
-        }
+        await registerPayment({
+          accountId: selectedPaymentAccountId,
+          amount: payment.amount,
+          method: payment.method
+        });
       }
       setShowPaymentModal(false);
       setPaymentMode('single');
@@ -1430,6 +1456,9 @@ export default function AdminTabBookings() {
               <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest">
                 {paymentMode === 'single' ? 'Selecciona el método de pago' : 'Ingresá múltiples pagos (debe sumar el total pendiente)'}
               </p>
+              <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest mt-1">
+                Saldo pendiente: ${paymentRemainingTarget.toLocaleString()}
+              </p>
             </div>
             {paymentMode === 'single' ? (
               <>
@@ -1443,10 +1472,6 @@ export default function AdminTabBookings() {
                     <span className="font-black text-xs uppercase tracking-tighter">Digital</span>
                   </button>
                 </div>
-                <button onClick={() => handleConfirmBooking('DEBT')} className="w-full py-4 flex items-center justify-center gap-2 bg-[#926699]/10 border-2 border-[#926699]/20 hover:bg-[#926699]/20 rounded-xl text-[#926699] font-black uppercase text-[10px] tracking-[0.2em] transition-all">
-                  <FileText size={16} strokeWidth={3} />
-                  <span>Dejar en Cuenta (Deuda)</span>
-                </button>
                 <button
                   onClick={() => setPaymentMode('split')}
                   className="w-full mt-3 py-3 bg-white border-2 border-[#347048]/20 hover:border-[#B9CF32] rounded-xl text-[#347048] font-black uppercase text-[10px] tracking-[0.2em]"
@@ -1460,12 +1485,14 @@ export default function AdminTabBookings() {
                   <div key={`split-payment-${index}`} className="grid grid-cols-12 gap-2 items-center">
                     <select
                       value={payment.method}
-                      onChange={(e) => updateSplitPayment(index, { method: e.target.value as 'CASH' | 'TRANSFER' | 'DEBT' })}
+                      onChange={(e) => updateSplitPayment(index, { method: e.target.value as 'CASH' | 'TRANSFER' | 'MERCADO_PAGO' | 'CARD' | 'OTHER' })}
                       className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
                     >
                       <option value="CASH">Efectivo</option>
                       <option value="TRANSFER">Digital</option>
-                      <option value="DEBT">Deuda</option>
+                      <option value="MERCADO_PAGO">MercadoPago</option>
+                      <option value="CARD">Tarjeta</option>
+                      <option value="OTHER">Otro</option>
                     </select>
                     <input
                       type="number"

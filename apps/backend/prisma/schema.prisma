@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 //
@@ -31,13 +32,6 @@ enum BookingStatus {
   COMPLETED
 }
 
-enum PaymentStatus {
-  PENDING
-  PAID
-  PARTIAL
-  DEBT
-}
-
 enum ScheduleMode {
   FIXED
   RANGE
@@ -47,6 +41,102 @@ enum FixedBookingStatus {
   ACTIVE
   PAUSED
   CANCELLED
+}
+
+enum AccountSource {
+  BOOKING
+  BAR
+  TABLE
+  MANUAL
+}
+
+enum AccountStatus {
+  OPEN
+  CLOSED
+}
+
+enum AccountItemType {
+  BOOKING
+  PRODUCT
+  SERVICE
+  ADJUSTMENT
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+  MERCADO_PAGO
+  OTHER
+}
+
+enum PaymentSource {
+  POS
+  ONLINE
+  BACKOFFICE
+}
+
+enum CashMovementType {
+  IN
+  OUT
+}
+
+enum CashMovementMethod {
+  CASH
+  TRANSFER
+  CARD
+  MP
+}
+
+enum LedgerEntryType {
+  ACCOUNT_ITEM
+  PAYMENT
+  REFUND
+  ADJUSTMENT
+}
+
+enum LedgerReferenceType {
+  ACCOUNT
+  ACCOUNT_ITEM
+  PAYMENT
+  BOOKING
+  MANUAL
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum LedgerAccount {
+  CASH
+  BANK
+  CARD_CLEARING
+  ONLINE_GATEWAY
+  ACCOUNTS_RECEIVABLE
+  BOOKING_REVENUE
+  BAR_REVENUE
+  ADJUSTMENTS
+  EXPENSE
+}
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementPosType {
+  PAYMENT_IN
+  REFUND
+  WITHDRAW
+  DEPOSIT
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
 }
 
 //
@@ -66,11 +156,13 @@ model User {
 
   bookings      Booking[]
   fixedBookings FixedBooking[]
-  cashMovements CashMovement[]
   memberships   Membership[]
-  payments      Payment[]
   notifications Notification[]
   auditLogs     AuditLog[]
+  cashShiftsOpened CashShift[] @relation("CashShiftOpenedBy")
+  ledgerEntries LedgerEntry[]
+  ledgerTransactionsCreated LedgerTransaction[]
+  cashMovementsCreated CashMovement[]
 }
 
 model Club {
@@ -98,14 +190,14 @@ model Club {
   timeZone     String    @default("America/Argentina/Buenos_Aires")
 
   lightsEnabled          Boolean @default(false)
-  lightsExtraAmount      Float?
+  lightsExtraAmount      Decimal? @db.Decimal(10, 2)
   lightsFromHour         String?
 
   // Días de apertura: array de enteros (0 Domingo .. 6 Sábado)
   openingDays            Json?
 
   professorDiscountEnabled Boolean @default(false)
-  professorDiscountPercent Float?
+  professorDiscountPercent Decimal? @db.Decimal(5, 2)
 
   fixedBookingSettingsByActivity Json?
 
@@ -119,12 +211,16 @@ model Club {
   cashMovements CashMovement[]
   memberships   Membership[]
   fixedBookings FixedBooking[]
-  payments      Payment[]
+  accounts      Account[]
   notifications Notification[]
   courtPriceRules CourtPriceRule[]
   auditLogs     AuditLog[]
   events        Event[]
+  outboxMessages OutboxMessage[]
   settings      ClubSettings?
+  cashRegisters CashRegister[]
+  ledgerEntries LedgerEntry[]
+  ledgerTransactions LedgerTransaction[]
 }
 
 model Membership {
@@ -163,7 +259,7 @@ model Court {
   isIndoor           Boolean
   surface            String
   isUnderMaintenance Boolean @default(false)
-  price              Float   @default(0)
+  price              Decimal @default(0) @db.Decimal(10, 2)
 
   activityTypeId Int?
   activityType   ActivityType? @relation(fields: [activityTypeId], references: [id])
@@ -190,7 +286,7 @@ model CourtPriceRule {
   dayOfWeek    Int
   startMinutes Int
   endMinutes   Int
-  price        Float
+  price        Decimal @db.Decimal(10, 2)
 
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
 
@@ -231,11 +327,10 @@ model Booking {
   cancelledBy     Int?
   cancelledAt     DateTime?     @db.Timestamptz(3)
 
-  price           Float
+  price           Decimal @db.Decimal(10, 2)
   createdAt       DateTime      @default(now()) @db.Timestamptz(3)
 
   status          BookingStatus @default(PENDING)
-  paymentStatus   PaymentStatus @default(PENDING)
 
   guestIdentifier String?
   guestName       String?
@@ -257,10 +352,6 @@ model Booking {
 
   fixedBookingId Int?
   fixedBooking   FixedBooking? @relation(fields: [fixedBookingId], references: [id])
-
-  items          BookingItem[]
-  cashMovements  CashMovement[]
-  payments       Payment[]
 
   @@index([courtId, startDateTime], map: "booking_court_day")
   @@index([courtId, endDateTime])
@@ -301,26 +392,92 @@ model FixedBooking {
   @@index([clubId])
 }
 
+model Account {
+  id           String       @id @default(cuid())
+  clubId       Int
+  club         Club          @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  sourceType   AccountSource
+  sourceId     String
+  status        AccountStatus @default(OPEN)
+  totalAmount   Decimal       @default(0) @db.Decimal(10, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(10, 2)
+
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
+  closedAt      DateTime?     @db.Timestamptz(3)
+
+  items         AccountItem[]
+  payments      Payment[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([clubId])
+  @@index([sourceType, sourceId])
+  @@index([status, createdAt])
+  @@unique([clubId, sourceType, sourceId])
+}
+
+model AccountItem {
+  id          String    @id @default(cuid())
+  accountId   String
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type        AccountItemType
+
+  productId   Int?
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  description String
+  quantity    Int
+  unitPrice   Decimal   @db.Decimal(10, 2)
+  total       Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  ledgerEntries LedgerEntry[]
+
+  @@index([accountId])
+  @@index([productId])
+}
+
 model Payment {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   amount    Decimal  @db.Decimal(10, 2)
-  method    String
-  status    PaymentStatus @default(PENDING)
+  method    PaymentMethod
+  source    PaymentSource @default(POS)
+  idempotencyKey String? @unique
 
-  bookingId Int?
-  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
 
-  userId Int?
-  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  cashShiftId String?
+  cashShift   CashShift? @relation(fields: [cashShiftId], references: [id], onDelete: SetNull)
 
-  clubId Int
-  club   Club @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  cashMovement CashMovement?
+  ledgerEntries LedgerEntry[]
 
-  @@index([clubId])
+  @@index([accountId])
+  @@index([source])
+  @@index([cashShiftId])
+  @@index([idempotencyKey])
+}
+
+model LedgerTransaction {
+  id              String            @id @default(cuid())
+  clubId          Int
+  club            Club              @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  type            LedgerEntryType
+  referenceType   LedgerReferenceType
+  referenceId     String
+
+  createdByUserId Int?
+  createdByUser   User?             @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+
+  entries         LedgerEntry[]
+
   @@index([clubId, createdAt])
-  @@index([bookingId])
-  @@index([userId])
+  @@index([referenceType, referenceId])
 }
 
 model Notification {
@@ -379,6 +536,76 @@ model Event {
   @@index([type])
 }
 
+model OutboxMessage {
+  id            String       @id @default(cuid())
+  clubId        Int
+  club          Club         @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  type          String
+  aggregateType String?
+  aggregateId   String?
+  payload       Json
+  dedupeKey     String?      @unique
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  availableAt   DateTime     @default(now()) @db.Timestamptz(3)
+  claimedAt     DateTime?    @db.Timestamptz(3)
+  claimedBy     String?
+  processedAt   DateTime?    @db.Timestamptz(3)
+  lastError     String?
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([clubId, createdAt])
+  @@index([type, status])
+  @@index([status, availableAt, createdAt])
+}
+
+model AccountSummaryProjection {
+  accountId    String        @id
+  clubId       Int
+  sourceType   AccountSource
+  sourceId     String
+  status       AccountStatus
+  totalAmount  Decimal       @db.Decimal(10, 2)
+  paidAmount   Decimal       @db.Decimal(10, 2)
+  remaining    Decimal       @db.Decimal(10, 2)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@index([clubId, status])
+  @@index([clubId, updatedAt])
+}
+
+model CashShiftSummaryProjection {
+  shiftId        String          @id
+  clubId         Int
+  cashRegisterId String
+  status         CashShiftStatus
+  openingAmount  Decimal         @db.Decimal(10, 2)
+  expectedCash   Decimal?        @db.Decimal(10, 2)
+  countedCash    Decimal?        @db.Decimal(10, 2)
+  difference     Decimal?        @db.Decimal(10, 2)
+  paymentIn      Decimal         @default(0) @db.Decimal(10, 2)
+  deposit        Decimal         @default(0) @db.Decimal(10, 2)
+  withdraw       Decimal         @default(0) @db.Decimal(10, 2)
+  refund         Decimal         @default(0) @db.Decimal(10, 2)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([clubId, status])
+  @@index([clubId, updatedAt])
+}
+
+model DailyCashSummaryProjection {
+  clubId     Int
+  day        DateTime @db.Date
+  cashIn     Decimal  @default(0) @db.Decimal(10, 2)
+  cashOut    Decimal  @default(0) @db.Decimal(10, 2)
+  netCash    Decimal  @default(0) @db.Decimal(10, 2)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@id([clubId, day])
+  @@index([day])
+}
+
 model ClubSettings {
   id                         Int      @id @default(autoincrement())
 
@@ -389,11 +616,11 @@ model ClubSettings {
   openingDays                Json?
 
   lightsEnabled              Boolean
-  lightsExtraAmount          Float?
+  lightsExtraAmount          Decimal? @db.Decimal(10, 2)
   lightsFromHour             Int?
 
   professorDiscountEnabled   Boolean
-  professorDiscountPercent   Float?
+  professorDiscountPercent   Decimal? @db.Decimal(5, 2)
 
   createdAt                  DateTime @default(now()) @db.Timestamptz(3)
   updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
@@ -415,9 +642,9 @@ model Product {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  bookingItems BookingItem[]
   components  ProductComponent[] @relation("ComboParent")
   usedInCombos ProductComponent[] @relation("ComboComponent")
+  accountItems AccountItem[]
 
   @@index([clubId])
 }
@@ -438,44 +665,104 @@ model ProductComponent {
   @@index([componentProductId])
 }
 
-model BookingItem {
-  id Int @id @default(autoincrement())
-
-  bookingId Int
-  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-
-  productId Int
-  product   Product @relation(fields: [productId], references: [id])
-
-  quantity Int
-  price    Float
-  paymentMethod String?
-}
-
 model CashMovement {
   id          Int      @id @default(autoincrement())
-  date        DateTime @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
-  type        String
-  amount      Float
-  description String
-  method      String
+  type        CashMovementPosType
+  method      CashMovementMethod
+  amount      Decimal  @db.Decimal(10, 2)
+  concept     String
 
-  bookingId Int?
-  booking   Booking? @relation(fields: [bookingId], references: [id])
+  cashShiftId String
+  cashShift   CashShift @relation(fields: [cashShiftId], references: [id], onDelete: Restrict)
 
-  userId Int?
-  user   User? @relation(fields: [userId], references: [id])
+  createdByUserId Int?
+  createdByUser   User? @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  guestName  String?
-  guestPhone String?
-  guestDni   String?
-
-  isSettled  Boolean @default(true)
+  paymentId   String?  @unique
+  payment     Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   clubId Int
   club   Club @relation(fields: [clubId], references: [id])
 
-  @@index([clubId, date])
-  @@index([clubId, userId])
+  @@index([clubId, createdAt])
+  @@index([paymentId])
+  @@index([cashShiftId])
+}
+
+model LedgerEntry {
+  id              String            @id @default(cuid())
+  transactionId   String
+  transaction     LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  clubId          Int
+  club            Club              @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  type            LedgerEntryType
+  referenceType   LedgerReferenceType
+  referenceId     String
+
+  accountId       String?
+  accountRef      Account?          @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  accountItemId   String?
+  accountItem     AccountItem?      @relation(fields: [accountItemId], references: [id], onDelete: SetNull)
+
+  paymentId       String?
+  payment         Payment?          @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  amount          Decimal           @db.Decimal(10, 2)
+  account         LedgerAccount
+  direction       LedgerDirection
+  description     String
+
+  createdByUserId Int?
+  createdByUser   User?             @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([transactionId])
+  @@index([account, createdAt])
+  @@index([clubId, createdAt])
+  @@index([accountId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model CashRegister {
+  id        String      @id @default(cuid())
+  clubId    Int
+  club      Club        @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name      String
+  location  String?
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+
+  shifts    CashShift[]
+
+  @@index([clubId])
+  @@unique([clubId, name])
+}
+
+model CashShift {
+  id              String          @id @default(cuid())
+  cashRegisterId  String
+  cashRegister    CashRegister    @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+
+  openedByUserId  Int
+  openedByUser    User            @relation("CashShiftOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+
+  openedAt        DateTime        @default(now()) @db.Timestamptz(3)
+  closedAt        DateTime?       @db.Timestamptz(3)
+
+  openingAmount   Decimal         @db.Decimal(10, 2)
+  expectedCash    Decimal?        @db.Decimal(10, 2)
+  countedCash     Decimal?        @db.Decimal(10, 2)
+  difference      Decimal?        @db.Decimal(10, 2)
+  status          CashShiftStatus @default(OPEN)
+
+  payments        Payment[]
+  movements       CashMovement[]
+
+  @@index([cashRegisterId, status])
+  @@index([openedAt])
 }

@@ -15,6 +15,7 @@ export interface AuthUser {
   clubId: number | null;
   memberships?: MembershipLite[];
   activeClubId?: number | null;
+  activeMembership?: MembershipLite | null;
   club?: { id?: number; slug?: string | null } | null;
 }
 

@@ -4,7 +4,7 @@ import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabProducts from '../../components/admin/AdminTabProducts';
 import Head from 'next/dist/shared/lib/head';
-import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
+import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
 
 export default function AdminProductsPage() {
   const { authChecked, user } = useValidateAuth({ requireAdmin: true });
@@ -18,7 +18,7 @@ export default function AdminProductsPage() {
   }, [authChecked, user]);
 
   if (!authChecked || !user) return null;
-  if (user.role !== 'ADMIN') return <NotFound message="No tenés permiso para acceder al panel de administración." />;
+  if (!hasAdminAccess(user)) return <NotFound message="No tenés permiso para acceder al panel de administración." />;
 
   return (
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>

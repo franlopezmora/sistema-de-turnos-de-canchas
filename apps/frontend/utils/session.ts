@@ -32,6 +32,14 @@ const toPositiveInt = (value: unknown): number | null => {
   return Math.floor(parsed);
 };
 
+const membershipPriority = (role?: string | null) => {
+  if (role === 'OWNER') return 0;
+  if (role === 'ADMIN') return 1;
+  if (role === 'STAFF') return 2;
+  if (role === 'CUSTOMER') return 3;
+  return 99;
+};
+
 export const getStoredUser = (): SessionUser | null => {
   if (typeof window === 'undefined') return null;
   const raw = localStorage.getItem(STORAGE_USER_KEY);
@@ -83,10 +91,23 @@ export const normalizeSessionUser = (user: SessionUser | null): SessionUser | nu
     });
   }
 
+  memberships.sort((left, right) => {
+    const leftPriority = membershipPriority(left.role);
+    const rightPriority = membershipPriority(right.role);
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+    return left.clubId - right.clubId;
+  });
+
+  const preferredMembership =
+    memberships.find((membership) => membership.role === 'OWNER' || membership.role === 'ADMIN') ||
+    memberships[0] ||
+    null;
+
   const preferredActiveClubId =
     toPositiveInt(user.activeClubId) ||
     toPositiveInt(user.activeMembership?.clubId) ||
     getStoredActiveClubId() ||
+    preferredMembership?.clubId ||
     memberships[0]?.clubId ||
     legacyClubId ||
     null;
@@ -164,4 +185,17 @@ export const getActiveClubSlug = (user?: SessionUser | null): string | null => {
   if (typeof slug === 'string' && slug.trim()) return slug.trim();
 
   return null;
+};
+
+export const getActiveMembershipRole = (user?: SessionUser | null): string | null => {
+  const normalized = normalizeSessionUser(user ?? getStoredUser());
+  return normalized?.activeMembership?.role || null;
+};
+
+export const hasAdminAccess = (user?: SessionUser | null): boolean => {
+  const normalized = normalizeSessionUser(user ?? getStoredUser());
+  if (!normalized) return false;
+  if (normalized.role === 'ADMIN') return true;
+  const activeRole = normalized.activeMembership?.role;
+  return activeRole === 'OWNER' || activeRole === 'ADMIN';
 };

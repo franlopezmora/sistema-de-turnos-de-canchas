@@ -16,6 +16,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
             return res.status(403).json({ error: "Token inválido o expirado." });
         }
         (req as any).user = user;
+        (req as any).setLogContext?.({ userId: user?.userId });
         next();
     });
 };
@@ -35,6 +36,7 @@ export const optionalAuthMiddleware = (req: Request, res: Response, next: NextFu
             return next();
         }
         (req as any).user = user;
+        (req as any).setLogContext?.({ userId: user?.userId });
         next();
     });
 };

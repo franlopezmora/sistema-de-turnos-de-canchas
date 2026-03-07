@@ -15,8 +15,6 @@ export class ClientService {
   }
 
   static async listDebtors() {
-    const res = await fetchWithAuth(`${apiBase()}/bookings/debtors/list`, { method: 'GET' });
-    if (!res.ok) throw new Error('Error cargando deudores');
-    return res.json();
+    return [];
   }
 }

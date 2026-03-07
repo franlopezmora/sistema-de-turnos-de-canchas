@@ -4,6 +4,26 @@ import { getApiUrl } from '../utils/apiUrl';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
+export type ActivityScheduleMode = 'FIXED' | 'RANGE';
+
+export type ActivityFixedSlot = {
+  start: string;
+  duration: number;
+};
+
+export type ClubActivityType = {
+  id: number;
+  name: string;
+  description?: string;
+  defaultDurationMinutes: number;
+  scheduleMode: ActivityScheduleMode;
+  scheduleOpenTime?: string | null;
+  scheduleCloseTime?: string | null;
+  scheduleIntervalMinutes?: number | null;
+  scheduleDurations?: number[] | null;
+  scheduleFixedSlots?: ActivityFixedSlot[] | null;
+};
+
 export class ClubAdminService {
   /**
    * Obtener el schedule del admin para un club específico
@@ -111,6 +131,50 @@ export class ClubAdminService {
       const error = await res.json();
       throw new Error(error.error || error.message || 'Error al cargar información del club');
     }
+    return res.json();
+  }
+
+  static async getActivityTypes(clubSlug: string): Promise<ClubActivityType[]> {
+    if (!getToken()) throw new Error('No autenticado');
+
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${clubSlug}/admin/activity-types`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || error.message || 'Error al cargar actividades');
+    }
+
+    return res.json();
+  }
+
+  static async updateActivityTypeSchedule(
+    clubSlug: string,
+    activityTypeId: number,
+    payload: {
+      scheduleMode: ActivityScheduleMode;
+      scheduleOpenTime?: string | null;
+      scheduleCloseTime?: string | null;
+      scheduleIntervalMinutes?: number | null;
+      scheduleDurations?: number[];
+      scheduleFixedSlots?: ActivityFixedSlot[];
+    }
+  ): Promise<ClubActivityType> {
+    if (!getToken()) throw new Error('No autenticado');
+
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${clubSlug}/admin/activity-types/${activityTypeId}/schedule`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || error.message || 'Error al actualizar configuración de actividad');
+    }
+
     return res.json();
   }
 
@@ -263,7 +327,7 @@ export class ClubAdminService {
     bookingId: number, 
     productId: number, 
     quantity: number, 
-    paymentMethod: 'CASH' | 'DEBT' | 'TRANSFER'
+    paymentMethod: 'CASH' | 'TRANSFER'
   ) {
     if (!getToken()) throw new Error('No autenticado');
     
@@ -293,38 +357,6 @@ export class ClubAdminService {
     });
     if (!res.ok) throw new Error('Error al eliminar consumo');
     return res.json();
-  }
-
-  static async updateBookingPaymentStatus(bookingId: number, status: 'PAID' | 'DEBT' | 'PARTIAL') {
-    if (!getToken()) throw new Error('No autenticado');
-    const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/payment-status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paymentStatus: status })
-    });
-    if (!res.ok) throw new Error('Error al actualizar el estado del pago');
-    return res.json();
-  }
-
-  /** Lista de deudores: usa el club del token (admin unificado). */
-  static async getDebtors() {
-    if (!getToken()) throw new Error('No autenticado');
-    const res = await fetchWithAuth(`${apiBase()}/bookings/debtors/list`);
-    if (!res.ok) throw new Error('Error cargando deudores');
-    return res.json();
-  }
-
-  static async markAsPaid(bookingIds: number[]) {
-    if (!getToken()) throw new Error('No autenticado');
-    const promises = bookingIds.map(id =>
-      fetchWithAuth(`${apiBase()}/bookings/${id}/payment-status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentStatus: 'PAID' })
-      })
-    );
-    await Promise.all(promises);
-    return true;
   }
 
   static async getClients(slug: string) {

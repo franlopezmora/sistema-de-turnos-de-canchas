@@ -1,18 +1,20 @@
 import { Request, Response } from 'express';
-import { PaymentStatus } from '@prisma/client';
 import { z } from 'zod';
 import { PaymentService } from '../services/PaymentService';
+import { mapPaymentDto } from '../dto/financialDto';
 
 export class PaymentController {
   private readonly paymentService = new PaymentService();
+  private resolveActorUserId(req: Request) {
+    const userId = Number((req as Request & { user?: { userId?: number } }).user?.userId || 0);
+    return Number.isFinite(userId) && userId > 0 ? userId : undefined;
+  }
 
   list = async (req: Request, res: Response) => {
     try {
       const querySchema = z.object({
-        bookingId: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
-        userId: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
-        status: z.nativeEnum(PaymentStatus).optional(),
-        method: z.string().trim().min(1).optional(),
+        accountId: z.string().trim().min(1).optional(),
+        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'MERCADO_PAGO', 'OTHER']).optional(),
         from: z.string().datetime().optional(),
         to: z.string().datetime().optional(),
         take: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().max(500).optional())
@@ -29,7 +31,7 @@ export class PaymentController {
         to: parsed.data.to ? new Date(parsed.data.to) : undefined
       });
 
-      return res.json(result);
+      return res.json(result.map(mapPaymentDto));
     } catch (error: any) {
       return res.status(500).json({ error: error.message || 'Error al listar pagos' });
     }
@@ -38,52 +40,34 @@ export class PaymentController {
   create = async (req: Request, res: Response) => {
     try {
       const bodySchema = z.object({
+        accountId: z.string().trim().min(1),
         amount: z.preprocess((v) => Number(v), z.number().positive()),
-        method: z.string().trim().min(1),
-        status: z.nativeEnum(PaymentStatus).optional(),
-        bookingId: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
-        userId: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().optional())
+        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'MERCADO_PAGO', 'OTHER']),
+        source: z.enum(['POS', 'ONLINE', 'BACKOFFICE']).optional(),
+        cashShiftId: z.string().trim().min(1).optional()
       });
 
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
 
       const clubId = Number((req as any).clubId);
+      const headerValue = req.headers['idempotency-key'];
+      const idempotencyKey = Array.isArray(headerValue) ? headerValue[0] : headerValue;
       const payment = await this.paymentService.create({
         clubId,
+        accountId: parsed.data.accountId,
         amount: parsed.data.amount,
         method: parsed.data.method,
-        status: parsed.data.status,
-        bookingId: parsed.data.bookingId,
-        userId: parsed.data.userId
+        source: parsed.data.source,
+        cashShiftId: parsed.data.cashShiftId,
+        createdByUserId: this.resolveActorUserId(req),
+        idempotencyKey: typeof idempotencyKey === 'string' && idempotencyKey.trim() ? idempotencyKey.trim() : undefined
       });
 
-      return res.status(201).json(payment);
+      return res.status(201).json(mapPaymentDto(payment));
     } catch (error: any) {
-      return res.status(500).json({ error: error.message || 'Error al crear pago' });
+      return res.status(400).json({ error: error.message || 'Error al crear pago' });
     }
   };
 
-  updateStatus = async (req: Request, res: Response) => {
-    try {
-      const paramsSchema = z.object({ id: z.string().min(1) });
-      const bodySchema = z.object({ status: z.nativeEnum(PaymentStatus) });
-
-      const paramsParsed = paramsSchema.safeParse(req.params);
-      const bodyParsed = bodySchema.safeParse(req.body);
-      if (!paramsParsed.success) return res.status(400).json({ error: paramsParsed.error.format() });
-      if (!bodyParsed.success) return res.status(400).json({ error: bodyParsed.error.format() });
-
-      const clubId = Number((req as any).clubId);
-      const updated = await this.paymentService.updateStatus(
-        paramsParsed.data.id,
-        clubId,
-        bodyParsed.data.status
-      );
-
-      return res.json(updated);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'Error al actualizar estado del pago' });
-    }
-  };
 }

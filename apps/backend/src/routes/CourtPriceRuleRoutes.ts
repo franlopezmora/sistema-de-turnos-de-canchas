@@ -7,9 +7,9 @@ import { setAdminClubFromUser } from '../middleware/ClubMiddleware';
 const router = Router();
 const controller = new CourtPriceRuleController();
 
-router.get('/', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, controller.list);
-router.post('/', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, controller.create);
-router.put('/:id', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, controller.update);
-router.delete('/:id', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, controller.remove);
+router.get('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), controller.list);
+router.post('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), controller.create);
+router.put('/:id', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), controller.update);
+router.delete('/:id', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), controller.remove);
 
 export default router;

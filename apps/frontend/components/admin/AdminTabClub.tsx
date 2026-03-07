@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ClubService, Club } from '../../services/ClubService';
 import { getCourts } from '../../services/CourtService';
+import { ClubAdminService, ClubActivityType } from '../../services/ClubAdminService';
 import AppModal from '../AppModal';
 import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle } from 'lucide-react';
 import { normalizeSessionUser } from '../../utils/session';
@@ -18,6 +19,80 @@ type FixedBookingSettingsForm = Record<string, {
 
 const DEFAULT_FIXED_BOOKING_DAYS_AHEAD = '90';
 const DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS = '7';
+
+type ActivityScheduleFormValue = {
+  scheduleMode: 'FIXED' | 'RANGE';
+  scheduleOpenTime: string;
+  scheduleCloseTime: string;
+  scheduleIntervalMinutes: string;
+  scheduleDurations: string;
+  scheduleFixedSlots: string;
+};
+
+const normalizeDurations = (value: unknown, fallback: number): number[] => {
+  const parsed = Array.isArray(value)
+    ? value.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0).map((item) => Math.floor(item))
+    : [];
+  if (parsed.length > 0) return Array.from(new Set(parsed));
+  return [Math.max(1, Math.floor(fallback || 60))];
+};
+
+const parseDurationsInput = (raw: string, fallback: number): number[] => {
+  const parsed = raw
+    .split(',')
+    .map((part) => Number(part.trim()))
+    .filter((item) => Number.isFinite(item) && item > 0)
+    .map((item) => Math.floor(item));
+
+  if (parsed.length > 0) return Array.from(new Set(parsed));
+  return [Math.max(1, Math.floor(fallback || 60))];
+};
+
+const parseFixedSlotsInput = (raw: string): Array<{ start: string; duration: number }> => {
+  const lines = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const slots: Array<{ start: string; duration: number }> = [];
+
+  for (const line of lines) {
+    const normalized = line.replace(' - ', '-').replace('|', '-').replace(',', '-');
+    const [startRaw, durationRaw] = normalized.split('-').map((part) => part.trim());
+    if (!startRaw || !durationRaw) {
+      throw new Error(`Formato de turno fijo inválido: "${line}". Usá HH:mm-60`);
+    }
+    if (!/^\d{2}:\d{2}$/.test(startRaw)) {
+      throw new Error(`Hora inválida en turno fijo: "${line}"`);
+    }
+    const duration = Number(durationRaw);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      throw new Error(`Duración inválida en turno fijo: "${line}"`);
+    }
+    slots.push({ start: startRaw, duration: Math.floor(duration) });
+  }
+
+  return slots;
+};
+
+const buildScheduleFormFromActivities = (activities: ClubActivityType[]): Record<number, ActivityScheduleFormValue> => {
+  return activities.reduce((acc, activity) => {
+    const safeDefault = Number(activity.defaultDurationMinutes) > 0 ? Number(activity.defaultDurationMinutes) : 60;
+    const durations = normalizeDurations(activity.scheduleDurations, safeDefault);
+    const fixedSlots = Array.isArray(activity.scheduleFixedSlots) ? activity.scheduleFixedSlots : [];
+
+    acc[activity.id] = {
+      scheduleMode: activity.scheduleMode === 'RANGE' ? 'RANGE' : 'FIXED',
+      scheduleOpenTime: activity.scheduleOpenTime || '08:00',
+      scheduleCloseTime: activity.scheduleCloseTime || '22:00',
+      scheduleIntervalMinutes: activity.scheduleIntervalMinutes != null ? String(activity.scheduleIntervalMinutes) : '30',
+      scheduleDurations: durations.join(', '),
+      scheduleFixedSlots: fixedSlots.map((slot) => `${slot.start}-${slot.duration}`).join('\n')
+    };
+
+    return acc;
+  }, {} as Record<number, ActivityScheduleFormValue>);
+};
 
 const normalizeActivityKey = (name: string) =>
   name
@@ -122,6 +197,8 @@ export default function AdminTabClub() {
     isWarning?: boolean; onConfirm?: () => Promise<void> | void; onCancel?: () => Promise<void> | void;
     closeOnBackdrop?: boolean; closeOnEscape?: boolean;
   }>({ show: false });
+  const [activityTypes, setActivityTypes] = useState<ClubActivityType[]>([]);
+  const [activityScheduleForm, setActivityScheduleForm] = useState<Record<number, ActivityScheduleFormValue>>({});
 
   const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
   const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
@@ -146,9 +223,12 @@ export default function AdminTabClub() {
       if (clubId) {
         const clubData = await ClubService.getClubById(clubId);
         const courtsData = await getCourts();
+        const activityTypesData = await ClubAdminService.getActivityTypes(clubData.slug);
         const nextActivitySettings = buildActivitySettingsFromCourts(courtsData, clubData.fixedBookingSettingsByActivity);
         setClub(clubData);
         setActivitySettings(nextActivitySettings);
+        setActivityTypes(Array.isArray(activityTypesData) ? activityTypesData : []);
+        setActivityScheduleForm(buildScheduleFormFromActivities(Array.isArray(activityTypesData) ? activityTypesData : []));
         setClubForm({
           slug: clubData.slug || '', name: clubData.name || '',
           addressLine: clubData.addressLine || '', city: clubData.city || '', province: clubData.province || '', country: clubData.country || '',
@@ -207,6 +287,26 @@ export default function AdminTabClub() {
         fixedBookingSettingsByActivity
       };
       const updatedClub = await ClubService.updateClub(club.id, payload);
+
+      for (const activity of activityTypes) {
+        const formConfig = activityScheduleForm[activity.id];
+        if (!formConfig) continue;
+
+        const durations = parseDurationsInput(formConfig.scheduleDurations, activity.defaultDurationMinutes);
+        const fixedSlots = formConfig.scheduleMode === 'FIXED'
+          ? parseFixedSlotsInput(formConfig.scheduleFixedSlots)
+          : [];
+
+        await ClubAdminService.updateActivityTypeSchedule(updatedClub.slug, activity.id, {
+          scheduleMode: formConfig.scheduleMode,
+          scheduleOpenTime: formConfig.scheduleMode === 'RANGE' ? formConfig.scheduleOpenTime : null,
+          scheduleCloseTime: formConfig.scheduleMode === 'RANGE' ? formConfig.scheduleCloseTime : null,
+          scheduleIntervalMinutes: formConfig.scheduleMode === 'RANGE' ? Number(formConfig.scheduleIntervalMinutes || 0) : null,
+          scheduleDurations: durations,
+          scheduleFixedSlots: fixedSlots
+        });
+      }
+
       setClub(updatedClub);
       showInfo('Información del club actualizada correctamente', 'Éxito');
     } catch (error: any) {
@@ -522,6 +622,122 @@ export default function AdminTabClub() {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-2">Configuración de horarios por actividad</h4>
+              <p className="text-[11px] font-bold text-[#347048]/60 mb-4">
+                Definí acá horario de entrada/salida, duración de turnos y turnos fijos por cada actividad.
+              </p>
+
+              {activityTypes.length === 0 ? (
+                <p className="text-[11px] font-bold text-[#347048]/60">No hay actividades configuradas para este club.</p>
+              ) : (
+                <div className="space-y-4">
+                  {activityTypes.map((activity) => {
+                    const cfg = activityScheduleForm[activity.id];
+                    if (!cfg) return null;
+                    return (
+                      <div key={activity.id} className="bg-white/40 p-4 rounded-2xl border border-white">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+                          <p className="text-sm font-black text-[#347048] uppercase tracking-wide">{activity.name}</p>
+                          <p className="text-[10px] font-black text-[#347048]/50 uppercase tracking-widest">
+                            Duración por defecto: {activity.defaultDurationMinutes} min
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Modo</label>
+                            <select
+                              value={cfg.scheduleMode}
+                              onChange={(e) => setActivityScheduleForm((prev) => ({
+                                ...prev,
+                                [activity.id]: { ...prev[activity.id], scheduleMode: e.target.value as 'FIXED' | 'RANGE' }
+                              }))}
+                              className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                            >
+                              <option value="FIXED">Turnos fijos</option>
+                              <option value="RANGE">Rango horario</option>
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Duraciones (min, separadas por coma)</label>
+                            <input
+                              type="text"
+                              value={cfg.scheduleDurations}
+                              onChange={(e) => setActivityScheduleForm((prev) => ({
+                                ...prev,
+                                [activity.id]: { ...prev[activity.id], scheduleDurations: e.target.value }
+                              }))}
+                              className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm"
+                              placeholder="60, 90"
+                            />
+                          </div>
+
+                          {cfg.scheduleMode === 'RANGE' ? (
+                            <>
+                              <div>
+                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Apertura</label>
+                                <input
+                                  type="time"
+                                  value={cfg.scheduleOpenTime}
+                                  onChange={(e) => setActivityScheduleForm((prev) => ({
+                                    ...prev,
+                                    [activity.id]: { ...prev[activity.id], scheduleOpenTime: e.target.value }
+                                  }))}
+                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Cierre</label>
+                                <input
+                                  type="time"
+                                  value={cfg.scheduleCloseTime}
+                                  onChange={(e) => setActivityScheduleForm((prev) => ({
+                                    ...prev,
+                                    [activity.id]: { ...prev[activity.id], scheduleCloseTime: e.target.value }
+                                  }))}
+                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Intervalo (min)</label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={cfg.scheduleIntervalMinutes}
+                                  onChange={(e) => setActivityScheduleForm((prev) => ({
+                                    ...prev,
+                                    [activity.id]: { ...prev[activity.id], scheduleIntervalMinutes: e.target.value }
+                                  }))}
+                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="md:col-span-4">
+                              <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Turnos fijos (uno por línea: HH:mm-60)</label>
+                              <textarea
+                                rows={4}
+                                value={cfg.scheduleFixedSlots}
+                                onChange={(e) => setActivityScheduleForm((prev) => ({
+                                  ...prev,
+                                  [activity.id]: { ...prev[activity.id], scheduleFixedSlots: e.target.value }
+                                }))}
+                                className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 py-3 text-[#347048] font-black text-sm resize-none"
+                                placeholder={'08:00-60\n09:00-60\n10:30-90'}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">

@@ -7,6 +7,6 @@ import { setAdminClubFromUser } from '../middleware/ClubMiddleware';
 const router = Router();
 const auditLogController = new AuditLogController();
 
-router.get('/', authMiddleware, requireRole('ADMIN'), setAdminClubFromUser, auditLogController.list);
+router.get('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), auditLogController.list);
 
 export default router;

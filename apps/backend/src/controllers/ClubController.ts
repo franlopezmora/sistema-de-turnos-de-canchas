@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { ClubService } from '../services/ClubService';
 import { z } from 'zod';
 import { validateOpeningDays } from '../utils/ActivityScheduleHelper';
+import { MediaStorageService } from '../services/MediaStorageService';
+import { sanitizeString } from '../utils/sanitize';
 
 const fixedBookingActivityConfigSchema = z.object({
     fixedBookingDaysAhead: z.union([z.number(), z.string()]).transform((v) => Number(v)).pipe(z.number().int().positive()),
@@ -9,6 +11,7 @@ const fixedBookingActivityConfigSchema = z.object({
 });
 
 export class ClubController {
+    private readonly mediaStorageService = new MediaStorageService();
     constructor(private clubService: ClubService) {}
 
     createClub = async (req: Request, res: Response) => {
@@ -50,6 +53,10 @@ export class ClubController {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
             }
 
+            const safeDescription = description != null ? sanitizeString(description) : null;
+            const normalizedLogoUrl = await this.mediaStorageService.normalizeAsset(logoUrl ?? null, 'logoUrl');
+            const normalizedClubImageUrl = await this.mediaStorageService.normalizeAsset(clubImageUrl ?? null, 'clubImageUrl');
+
             const club = await this.clubService.createClub(
                 slug,
                 name,
@@ -59,12 +66,12 @@ export class ClubController {
                 country,
                 contact,
                 phone ?? undefined,
-                logoUrl ?? undefined,
-                clubImageUrl ?? undefined,
+                normalizedLogoUrl ?? undefined,
+                normalizedClubImageUrl ?? undefined,
                 instagramUrl ?? undefined,
                 facebookUrl ?? undefined,
                 websiteUrl ?? undefined,
-                description ?? undefined,
+                safeDescription ?? undefined,
                 timeZone ?? 'America/Argentina/Buenos_Aires',
                 Boolean(lightsEnabled),
                 lightsExtraAmount ?? null,
@@ -176,11 +183,15 @@ export class ClubController {
                 openingDays
             } = parsed.data;
 
+            const normalizedLogoUrl = await this.mediaStorageService.normalizeAsset(logoUrl ?? null, 'logoUrl');
+            const normalizedClubImageUrl = await this.mediaStorageService.normalizeAsset(clubImageUrl ?? null, 'clubImageUrl');
+
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
             }
 
+            const safeDescription = description != null ? sanitizeString(description) : null;
             const club = await this.clubService.updateClub(id, {
                 slug,
                 name,
@@ -190,12 +201,12 @@ export class ClubController {
                 country,
                 contactInfo,
                 phone: phone === '' ? null : phone,
-                logoUrl: logoUrl === '' ? null : logoUrl,
-                clubImageUrl: clubImageUrl === '' ? null : clubImageUrl,
+                logoUrl: normalizedLogoUrl,
+                clubImageUrl: normalizedClubImageUrl,
                 instagramUrl: instagramUrl === '' ? null : instagramUrl,
                 facebookUrl: facebookUrl === '' ? null : facebookUrl,
                 websiteUrl: websiteUrl === '' ? null : websiteUrl,
-                description: description === '' ? null : description,
+                description: safeDescription === '' ? null : safeDescription,
                 timeZone,
                 lightsEnabled: typeof lightsEnabled === 'boolean' ? lightsEnabled : undefined,
                 lightsExtraAmount: lightsExtraAmount ?? null,
