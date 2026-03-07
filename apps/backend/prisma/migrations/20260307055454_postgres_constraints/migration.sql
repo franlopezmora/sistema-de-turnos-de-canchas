@@ -1,6 +1,25 @@
-UPDATE "Event"
-SET "processed" = true
-WHERE "processed" = false;
+-- This is an empty migration.
+
+
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'booking_no_overlap_per_court'
+  ) THEN
+    ALTER TABLE "Booking"
+    ADD CONSTRAINT "booking_no_overlap_per_court"
+    EXCLUDE USING gist (
+      "courtId" WITH =,
+      tstzrange("startDateTime", "endDateTime", '[)') WITH &&
+    )
+    WHERE ("status" <> 'CANCELLED');
+  END IF;
+END $$;
+
 
 CREATE UNIQUE INDEX IF NOT EXISTS "Account_clubId_sourceType_sourceId_key"
   ON "Account"("clubId", "sourceType", "sourceId");
@@ -10,7 +29,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "CashRegister_clubId_name_key"
 
 CREATE UNIQUE INDEX IF NOT EXISTS "CashShift_one_open_per_register_key"
   ON "CashShift"("cashRegisterId")
-  WHERE "status" = 'OPEN'::"CashShiftStatus";
+  WHERE "closedAt" IS NULL;
 
 CREATE OR REPLACE FUNCTION ensure_court_activity_same_club()
 RETURNS TRIGGER AS $$
@@ -192,6 +211,41 @@ CREATE TRIGGER trg_ensure_cash_movement_same_club
 BEFORE INSERT OR UPDATE ON "CashMovement"
 FOR EACH ROW
 EXECUTE FUNCTION ensure_cash_movement_same_club();
+
+CREATE INDEX IF NOT EXISTS "LedgerEntry_transactionId_idx"
+ON "LedgerEntry"("transactionId");
+
+CREATE OR REPLACE FUNCTION ensure_ledger_balanced()
+RETURNS TRIGGER AS $$
+DECLARE
+  debit_sum numeric;
+  credit_sum numeric;
+  tx_id text;
+BEGIN
+  tx_id := COALESCE(NEW."transactionId", OLD."transactionId");
+
+  SELECT
+    COALESCE(SUM(CASE WHEN direction='DEBIT' THEN amount ELSE 0 END),0),
+    COALESCE(SUM(CASE WHEN direction='CREDIT' THEN amount ELSE 0 END),0)
+  INTO debit_sum, credit_sum
+  FROM "LedgerEntry"
+  WHERE "transactionId" = tx_id;
+
+  IF debit_sum <> credit_sum THEN
+    RAISE EXCEPTION 'Ledger transaction not balanced';
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_ensure_ledger_balanced ON "LedgerEntry";
+
+CREATE CONSTRAINT TRIGGER trg_ensure_ledger_balanced
+AFTER INSERT OR UPDATE OR DELETE ON "LedgerEntry"
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION ensure_ledger_balanced();
 
 CREATE OR REPLACE FUNCTION ensure_ledger_entry_same_club()
 RETURNS TRIGGER AS $$

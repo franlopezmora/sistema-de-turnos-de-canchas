@@ -11,8 +11,23 @@ if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') 
   process.exit(1);
 }
 
+async function ensureSchemaReady() {
+  try {
+    await prisma.$queryRaw`SELECT 1 FROM "Club" LIMIT 1`;
+  } catch (error: any) {
+    if (
+      error?.code === 'P2021' ||
+      (error?.code === 'P2010' && (error?.meta?.code === '42P01' || String(error?.meta?.message || '').includes('does not exist')))
+    ) {
+      throw new Error('La base no tiene el esquema aplicado. Ejecutá primero: npx prisma migrate deploy');
+    }
+    throw error;
+  }
+}
+
 async function main() {
   console.log('🌱 Iniciando carga de datos de prueba...');
+  await ensureSchemaReady();
 
   // 2. Ubicaciones (¡Agregamos Madrid!)
   const locationRíoTercero = await prismaAny.location.upsert({
@@ -81,6 +96,36 @@ async function main() {
   });
   console.log(`✅ Club: ${club3.name} (TimeZone: Europe/Madrid)`);
 
+  const upsertClubSettings = async (club: any) => {
+    await prisma.clubSettings.upsert({
+      where: { clubId: club.id },
+      update: {
+        timeZone: club.timeZone,
+        openingDays: [1, 2, 3, 4, 5, 6],
+        lightsEnabled: true,
+        lightsExtraAmount: 5000,
+        lightsFromHour: 20,
+        professorDiscountEnabled: true,
+        professorDiscountPercent: 15
+      },
+      create: {
+        clubId: club.id,
+        timeZone: club.timeZone,
+        openingDays: [1, 2, 3, 4, 5, 6],
+        lightsEnabled: true,
+        lightsExtraAmount: 5000,
+        lightsFromHour: 20,
+        professorDiscountEnabled: true,
+        professorDiscountPercent: 15
+      }
+    });
+  };
+
+  await upsertClubSettings(club1);
+  await upsertClubSettings(club2);
+  await upsertClubSettings(club3);
+  console.log('✅ ClubSettings creado/actualizado');
+
   // 4. Actividades por club (multi-tenant)
   const ensureActivityType = async (clubId: number, name: string, description: string, defaultDurationMinutes: number) => {
     const existing = await prisma.activityType.findFirst({
@@ -146,6 +191,30 @@ async function main() {
   });
   console.log('✅ Canchas creadas');
 
+  const upsertProduct = async (clubId: number, name: string, price: number, stock: number, category: string) => {
+    const existing = await prisma.product.findFirst({ where: { clubId, name } });
+    if (existing) {
+      return prisma.product.update({
+        where: { id: existing.id },
+        data: { price, stock, category, isActive: true }
+      });
+    }
+    return prisma.product.create({
+      data: { clubId, name, price, stock, category, isActive: true }
+    });
+  };
+
+  await upsertProduct(club1.id, 'Gaseosa 500ml', 2500, 50, 'Bebidas');
+  await upsertProduct(club1.id, 'Agua 500ml', 1800, 60, 'Bebidas');
+  await upsertProduct(club1.id, 'Pelota de Pádel', 9000, 20, 'Insumos');
+
+  await upsertProduct(club2.id, 'Gatorade', 3000, 40, 'Bebidas');
+  await upsertProduct(club2.id, 'Toalla deportiva', 7000, 12, 'Insumos');
+
+  await upsertProduct(club3.id, 'Isotónica', 3500, 35, 'Bebidas');
+  await upsertProduct(club3.id, 'Grip over', 6000, 30, 'Insumos');
+  console.log('✅ Productos creados/actualizados');
+
   // 6. Usuarios
   const hashedPassword = await bcrypt.hash('123456', 10);
   const adminPassword = await bcrypt.hash('admin123', 10);
@@ -203,6 +272,44 @@ async function main() {
   await upsertMembership(lioUser.id, club1.id, MembershipRole.CUSTOMER);
 
   console.log('✅ Usuarios y memberships creados');
+
+  const upsertCashRegister = async (clubId: number) => {
+    return prisma.cashRegister.upsert({
+      where: { clubId_name: { clubId, name: 'Caja Principal' } },
+      update: {},
+      create: {
+        clubId,
+        name: 'Caja Principal',
+        location: 'Recepción'
+      }
+    });
+  };
+
+  const register1 = await upsertCashRegister(club1.id);
+  const register2 = await upsertCashRegister(club2.id);
+  const register3 = await upsertCashRegister(club3.id);
+
+  const ensureOpenShift = async (cashRegisterId: string, openedByUserId: number) => {
+    const openShift = await prisma.cashShift.findFirst({
+      where: { cashRegisterId, status: 'OPEN' }
+    });
+
+    if (openShift) return openShift;
+
+    return prisma.cashShift.create({
+      data: {
+        cashRegisterId,
+        openedByUserId,
+        openingAmount: 50000,
+        status: 'OPEN'
+      }
+    });
+  };
+
+  await ensureOpenShift(register1.id, adminTejas.id);
+  await ensureOpenShift(register2.id, adminCentral.id);
+  await ensureOpenShift(register3.id, adminMadrid.id);
+  console.log('✅ Caja principal y turnos de caja abiertos');
 }
 
 main()
