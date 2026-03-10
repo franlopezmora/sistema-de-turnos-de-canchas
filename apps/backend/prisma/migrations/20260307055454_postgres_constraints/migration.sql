@@ -7,8 +7,27 @@ WHERE "idempotencyKey" IS NOT NULL;
 -- FIN: migración 20260309193000_payment_idempotency_scoped
 
 -- INICIO: migración 20260309193500_validate_account_constraints
-ALTER TABLE "Account" VALIDATE CONSTRAINT account_amounts_non_negative;
-ALTER TABLE "Account" VALIDATE CONSTRAINT account_remaining_non_negative;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'account_amounts_non_negative'
+  ) THEN
+    ALTER TABLE "Account" VALIDATE CONSTRAINT account_amounts_non_negative;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'account_remaining_non_negative'
+  ) THEN
+    ALTER TABLE "Account" VALIDATE CONSTRAINT account_remaining_non_negative;
+  END IF;
+END $$;
 -- FIN: migración 20260309193500_validate_account_constraints
 
 -- INICIO: migración 20260310010000_booking_client_unique_fixes
@@ -16,11 +35,16 @@ ALTER TABLE "Account" VALIDATE CONSTRAINT account_remaining_non_negative;
 DROP INDEX IF EXISTS "booking_court_start_unique";
 
 -- Enforce client uniqueness by club on email/phone.
-CREATE UNIQUE INDEX IF NOT EXISTS "Client_clubId_email_key"
-ON "Client"("clubId", "email");
+DO $$
+BEGIN
+  IF to_regclass('public."Client"') IS NOT NULL THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS "Client_clubId_email_key"
+    ON "Client"("clubId", "email");
 
-CREATE UNIQUE INDEX IF NOT EXISTS "Client_clubId_phone_key"
-ON "Client"("clubId", "phone");
+    CREATE UNIQUE INDEX IF NOT EXISTS "Client_clubId_phone_key"
+    ON "Client"("clubId", "phone");
+  END IF;
+END $$;
 -- FIN: migración 20260310010000_booking_client_unique_fixes
 
 -- INICIO: migración 20260310190000_product_stock_idempotency
@@ -34,9 +58,20 @@ BEGIN
   END IF;
 END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS "Account_clubId_idempotencyKey_key"
-  ON "Account"("clubId", "idempotencyKey")
-  WHERE "idempotencyKey" IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'Account'
+      AND column_name = 'idempotencyKey'
+  ) THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS "Account_clubId_idempotencyKey_key"
+      ON "Account"("clubId", "idempotencyKey")
+      WHERE "idempotencyKey" IS NOT NULL;
+  END IF;
+END $$;
 -- FIN: migración 20260310190000_product_stock_idempotency
 -- This is an empty migration.
 

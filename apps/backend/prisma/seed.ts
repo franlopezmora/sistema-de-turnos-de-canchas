@@ -165,16 +165,22 @@ async function main() {
     duration: 90
   }));
 
-  await prisma.activityType.update({
-    where: { id: padelClub1.id },
-    data: {
-      scheduleMode: 'FIXED',
-      scheduleFixedSlots: lasTejasPadelFixedSlots,
-      scheduleOpenTime: null,
-      scheduleCloseTime: null,
-      scheduleIntervalMinutes: null
-    }
-  });
+  await Promise.all([
+    padelClub1.id,
+    tenisClub1.id,
+    futbolClub1.id
+  ].map((activityTypeId) =>
+    prisma.activityType.update({
+      where: { id: activityTypeId },
+      data: {
+        scheduleMode: 'FIXED',
+        scheduleFixedSlots: lasTejasPadelFixedSlots,
+        scheduleOpenTime: null,
+        scheduleCloseTime: null,
+        scheduleIntervalMinutes: null
+      }
+    })
+  ));
 
   console.log('✅ Actividades creadas/actualizadas por club');
 
