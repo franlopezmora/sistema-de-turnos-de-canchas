@@ -12,14 +12,14 @@ export class PricingService {
 
     const court = await prisma.court.findUnique({
       where: { id: courtId },
-      include: { club: { select: { timeZone: true } } }
+      include: { club: { include: { settings: true } } }
     });
 
     if (!court) {
       throw new Error('Cancha no encontrada');
     }
 
-    const timeZone = court.club?.timeZone ?? 'America/Argentina/Buenos_Aires';
+    const timeZone = court.club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
     const localStart = TimeHelper.utcToLocal(startDateTime, timeZone);
     const dayOfWeek = localStart.getDay();
     const startMinutes = localStart.getHours() * 60 + localStart.getMinutes();

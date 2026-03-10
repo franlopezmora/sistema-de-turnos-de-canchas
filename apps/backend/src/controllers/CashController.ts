@@ -1,29 +1,3 @@
-  // --- PATCH: VENTA DE PRODUCTOS CON IDEMPOTENCIA ---
-  createProductSale = async (req: Request, res: Response) => {
-    try {
-      const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
-      if (!idempotencyKey) {
-        return res.status(400).json({ error: "IDEMPOTENCY_KEY_REQUIRED" });
-      }
-      // ...validaciones y parseo de body...
-      // Suponiendo que ya existe un método en cashService:
-      // await this.cashService.createProductSale({...input, idempotencyKey}, ...)
-      // Aquí deberías adaptar el llamado real según tu lógica
-      // Ejemplo:
-      // const result = await this.cashService.createProductSale({ ...req.body, idempotencyKey }, ...);
-      // return res.status(201).json(result);
-      //
-      // Si necesitas el clubId y userId:
-      // const clubId = Number((req as any).clubId);
-      // const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
-      //
-      // return res.status(201).json(await this.cashService.createProductSale({ ...req.body, clubId, idempotencyKey }, actorUserId));
-      //
-      // Si tu endpoint ya existe, solo agrega el chequeo y pasa la key a cashService.
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'Error en venta de producto' });
-    }
-  }
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { CashService } from '../services/CashService';
@@ -92,6 +66,8 @@ export class CashController {
 
   createProductSale = async (req: Request, res: Response) => {
     try {
+      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+
       const schema = z.object({
         productId: z.preprocess((v) => Number(v), z.number().int().positive()),
         quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
@@ -103,7 +79,11 @@ export class CashController {
         guestName: z.string().trim().optional(),
         guestPhone: z.string().trim().optional(),
         guestDni: z.string().trim().optional(),
-        userId: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().optional())
+        userId: z.preprocess((v) => {
+          if (v == null || v === '') return undefined;
+          const n = Number(v);
+          return Number.isNaN(n) || n < 1 ? undefined : n;
+        }, z.number().int().positive().optional())
       });
 
       const parsed = schema.safeParse(req.body);
@@ -121,8 +101,9 @@ export class CashController {
         guestName: parsed.data.guestName ? sanitizeString(parsed.data.guestName, 200) : undefined,
         guestPhone: parsed.data.guestPhone ? sanitizeString(parsed.data.guestPhone, 30) : undefined,
         guestDni: parsed.data.guestDni ? sanitizeString(parsed.data.guestDni, 20) : undefined,
-        userId: parsed.data.userId
-      }, actorUserId);
+        userId: parsed.data.userId,
+        idempotencyKey
+      } as any, actorUserId);
 
       return res.status(201).json(sale);
     } catch (error: any) {

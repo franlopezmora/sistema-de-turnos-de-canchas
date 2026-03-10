@@ -168,44 +168,33 @@ model User {
 }
 
 model Club {
-  id           Int       @id @default(autoincrement())
-  slug         String    @unique
-  name         String
-  addressLine  String
-  city         String
-  province     String
-  country      String
+  id            Int       @id @default(autoincrement())
+  slug          String    @unique
+  name          String
+  addressLine   String
+  city          String
+  province      String
+  country       String
 
-  locationId   Int?
-  location     Location? @relation(fields: [locationId], references: [id])
+  locationId    Int?
+  location      Location? @relation(fields: [locationId], references: [id])
 
-  contactInfo  String
-  phone        String?
-  logoUrl      String?
-  clubImageUrl String?
-  instagramUrl String?
-  facebookUrl  String?
-  websiteUrl   String?
-  description  String?
+  contactInfo   String
+  phone         String?
+  logoUrl       String?
+  clubImageUrl  String?
+  instagramUrl  String?
+  facebookUrl   String?
+  websiteUrl    String?
+  description   String?
 
-  // Zona horaria IANA obligatoria
-  timeZone     String    @default("America/Argentina/Buenos_Aires")
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
 
-  lightsEnabled          Boolean @default(false)
-  lightsExtraAmount      Decimal? @db.Decimal(10, 2)
-  lightsFromHour         String?
+  // Configuración técnica/operativa movida a ClubSettings
+  settings      ClubSettings? 
 
-  // Días de apertura: array de enteros (0 Domingo .. 6 Sábado)
-  openingDays            Json?
-
-  professorDiscountEnabled Boolean @default(false)
-  professorDiscountPercent Decimal? @db.Decimal(5, 2)
-
-  fixedBookingSettingsByActivity Json?
-
-  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
-
+  // Relaciones
   courts        Court[]
   activities    ActivityType[]
   clients       Client[]
@@ -220,7 +209,6 @@ model Club {
   auditLogs     AuditLog[]
   events        Event[]
   outboxMessages OutboxMessage[]
-  settings      ClubSettings?
   cashRegisters CashRegister[]
   cashShifts    CashShift[]
   ledgerEntries LedgerEntry[]
@@ -428,6 +416,7 @@ model Account {
 
   sourceType   AccountSource
   sourceId     String
+  idempotencyKey String?
   status        AccountStatus @default(OPEN)
   totalAmount   Decimal       @default(0) @db.Decimal(10, 2)
   paidAmount    Decimal       @default(0) @db.Decimal(10, 2)
@@ -443,6 +432,7 @@ model Account {
   @@index([sourceType, sourceId])
   @@index([status, createdAt])
   @@unique([clubId, sourceType, sourceId])
+  @@index([idempotencyKey])
 }
 
 model AccountItem {
@@ -637,23 +627,30 @@ model DailyCashSummaryProjection {
 }
 
 model ClubSettings {
-  id                         Int      @id @default(autoincrement())
+  id                        Int      @id @default(autoincrement())
+  clubId                    Int      @unique
+  club                      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
-  clubId                     Int      @unique
-  club                       Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  // Zona horaria IANA
+  timeZone                  String   @default("America/Argentina/Buenos_Aires")
+  
+  // Días de apertura: [0, 1, 2, 3, 4, 5, 6]
+  openingDays               Json?    
 
-  timeZone                   String
-  openingDays                Json?
+  // Configuración de Luces
+  lightsEnabled             Boolean  @default(false)
+  lightsExtraAmount         Decimal? @db.Decimal(10, 2)
+  lightsFromHour            String?  // Ej: "19:00"
 
-  lightsEnabled              Boolean
-  lightsExtraAmount          Decimal? @db.Decimal(10, 2)
-  lightsFromHour             Int?
+  // Configuración de Profesores
+  professorDiscountEnabled  Boolean  @default(false)
+  professorDiscountPercent  Decimal? @db.Decimal(5, 2)
 
-  professorDiscountEnabled   Boolean
-  professorDiscountPercent   Decimal? @db.Decimal(5, 2)
+  // Configuración avanzada (Agregado para centralizar)
+  fixedBookingSettingsByActivity Json?
 
-  createdAt                  DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
+  createdAt                 DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime @updatedAt @db.Timestamptz(3)
 }
 
 model Product {

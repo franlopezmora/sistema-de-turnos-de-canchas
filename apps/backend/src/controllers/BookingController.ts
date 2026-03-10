@@ -77,8 +77,8 @@ export class BookingController {
             if (dateStr && slotTime) {
                 // Need club timezone: fetch court->club to get timeZone
                 try {
-                    const court = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: true } });
-                    const tz = (court?.club as any)?.timeZone ?? 'America/Argentina/Buenos_Aires';
+                    const court = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: { include: { settings: true } } } });
+                    const tz = court?.club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
                     startDate = TimeHelper.localSlotToUtc(dateStr, slotTime, tz);
                 } catch (e) {
                     return res.status(400).json({ error: 'Invalid date/slot combination or club timezone missing' });
@@ -147,8 +147,8 @@ export class BookingController {
                 isAdmin
             );
 
-            const courtWithClub = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: true } });
-            const clubTimeZone = (courtWithClub?.club as any)?.timeZone ?? 'America/Argentina/Buenos_Aires';
+            const courtWithClub = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: { include: { settings: true } } } });
+            const clubTimeZone = courtWithClub?.club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
 
             // Retornamos la respuesta al cliente
             const localForRefresh = TimeHelper.utcToLocal(startDate, clubTimeZone);

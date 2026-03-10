@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 import { Club } from '../entities/Club';
 import type { FixedBookingSettingsByActivity } from '../entities/Club';
@@ -31,7 +32,7 @@ export class ClubRepository {
         openingDays?: number[] | null
     ): Promise<Club> {
         const location = await this.ensureLocation(city, province, country);
-        const data: any = {
+        const clubData = {
             slug,
             name,
             addressLine,
@@ -46,29 +47,22 @@ export class ClubRepository {
             instagramUrl,
             facebookUrl,
             websiteUrl,
-            description,
-            timeZone,
-            lightsEnabled,
-            lightsExtraAmount,
-            lightsFromHour,
-            openingDays,
-            professorDiscountEnabled,
-            professorDiscountPercent,
-            fixedBookingSettingsByActivity
+            description
         };
 
         const saved = await prisma.club.create({
             data: {
-                ...data,
+                ...clubData,
                 settings: {
                     create: {
                         timeZone,
-                        openingDays,
+                        openingDays: openingDays ?? undefined,
                         lightsEnabled,
                         lightsExtraAmount,
-                        lightsFromHour: this.parseLightsFromHour(lightsFromHour),
+                        lightsFromHour: lightsFromHour ?? null,
                         professorDiscountEnabled,
-                        professorDiscountPercent
+                        professorDiscountPercent,
+                        fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined
                     }
                 }
             },
@@ -207,40 +201,65 @@ export class ClubRepository {
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
         openingDays?: number[] | null;
     }): Promise<Club> {
-        const clubData = data as any;
+        const clubFields = {
+            slug: data.slug,
+            name: data.name,
+            addressLine: data.addressLine,
+            city: data.city,
+            province: data.province,
+            country: data.country,
+            locationId: data.locationId,
+            contactInfo: data.contactInfo,
+            phone: data.phone,
+            logoUrl: data.logoUrl,
+            clubImageUrl: data.clubImageUrl,
+            instagramUrl: data.instagramUrl,
+            facebookUrl: data.facebookUrl,
+            websiteUrl: data.websiteUrl,
+            description: data.description
+        };
+        const cleanClubData: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(clubFields)) {
+            if (v !== undefined) cleanClubData[k] = v;
+        }
 
         if (data.city && data.province && data.country) {
             const location = await this.ensureLocation(data.city, data.province, data.country);
-            (clubData as any).locationId = location.id;
+            cleanClubData.locationId = location.id;
         }
+
         const updated = await prisma.club.update({
             where: { id },
             data: {
-                ...(clubData as any),
+                ...cleanClubData,
                 settings: {
                     upsert: {
                         create: {
                             timeZone: data.timeZone ?? 'America/Argentina/Buenos_Aires',
-                            openingDays: data.openingDays ?? null,
+                            openingDays: data.openingDays === null ? Prisma.JsonNull : (data.openingDays ?? undefined),
                             lightsEnabled: data.lightsEnabled ?? false,
                             lightsExtraAmount: data.lightsExtraAmount ?? null,
-                            lightsFromHour: this.parseLightsFromHour(data.lightsFromHour ?? null),
+                            lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : (data.lightsFromHour ?? null),
                             professorDiscountEnabled: data.professorDiscountEnabled ?? false,
-                            professorDiscountPercent: data.professorDiscountPercent ?? null
+                            professorDiscountPercent: data.professorDiscountPercent ?? null,
+                            fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : (data.fixedBookingSettingsByActivity ?? undefined)
                         },
                         update: {
                             ...(data.timeZone !== undefined ? { timeZone: data.timeZone } : {}),
-                            ...(data.openingDays !== undefined ? { openingDays: data.openingDays } : {}),
+                            ...(data.openingDays !== undefined ? { openingDays: data.openingDays === null ? Prisma.JsonNull : data.openingDays } : {}),
                             ...(data.lightsEnabled !== undefined ? { lightsEnabled: data.lightsEnabled } : {}),
                             ...(data.lightsExtraAmount !== undefined ? { lightsExtraAmount: data.lightsExtraAmount } : {}),
                             ...(data.lightsFromHour !== undefined
-                                ? { lightsFromHour: this.parseLightsFromHour(data.lightsFromHour) }
+                                ? { lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : null }
                                 : {}),
                             ...(data.professorDiscountEnabled !== undefined
                                 ? { professorDiscountEnabled: data.professorDiscountEnabled }
                                 : {}),
                             ...(data.professorDiscountPercent !== undefined
                                 ? { professorDiscountPercent: data.professorDiscountPercent }
+                                : {}),
+                            ...(data.fixedBookingSettingsByActivity !== undefined
+                                ? { fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : data.fixedBookingSettingsByActivity }
                                 : {})
                         }
                     }
@@ -253,17 +272,16 @@ export class ClubRepository {
 
     private mapToClub(dbClub: any): Club {
         const settings = dbClub.settings ?? null;
-        const resolvedTimeZone = settings?.timeZone ?? dbClub.timeZone ?? 'America/Argentina/Buenos_Aires';
-        const resolvedOpeningDays = Array.isArray(settings?.openingDays)
-            ? settings.openingDays
-            : (Array.isArray(dbClub.openingDays) ? dbClub.openingDays : null);
-        const resolvedLightsEnabled = settings?.lightsEnabled ?? dbClub.lightsEnabled ?? false;
-        const resolvedLightsExtraAmountRaw = settings?.lightsExtraAmount ?? dbClub.lightsExtraAmount ?? null;
-        const resolvedLightsFromHour = this.formatLightsFromHour(settings?.lightsFromHour) ?? dbClub.lightsFromHour ?? null;
-        const resolvedProfessorDiscountEnabled = settings?.professorDiscountEnabled ?? dbClub.professorDiscountEnabled ?? false;
-        const resolvedProfessorDiscountPercentRaw = settings?.professorDiscountPercent ?? dbClub.professorDiscountPercent ?? null;
+        const resolvedTimeZone = settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
+        const resolvedOpeningDays = Array.isArray(settings?.openingDays) ? settings.openingDays : null;
+        const resolvedLightsEnabled = settings?.lightsEnabled ?? false;
+        const resolvedLightsExtraAmountRaw = settings?.lightsExtraAmount ?? null;
+        const resolvedLightsFromHour = this.formatLightsFromHour(settings?.lightsFromHour) ?? null;
+        const resolvedProfessorDiscountEnabled = settings?.professorDiscountEnabled ?? false;
+        const resolvedProfessorDiscountPercentRaw = settings?.professorDiscountPercent ?? null;
         const resolvedLightsExtraAmount = resolvedLightsExtraAmountRaw == null ? null : Number(resolvedLightsExtraAmountRaw);
         const resolvedProfessorDiscountPercent = resolvedProfessorDiscountPercentRaw == null ? null : Number(resolvedProfessorDiscountPercentRaw);
+        const resolvedFixedBooking = (settings?.fixedBookingSettingsByActivity ?? null) as FixedBookingSettingsByActivity | null;
 
         return new Club(
             dbClub.id,
@@ -287,7 +305,7 @@ export class ClubRepository {
             resolvedLightsFromHour,
             resolvedProfessorDiscountEnabled,
             resolvedProfessorDiscountPercent,
-            (dbClub.fixedBookingSettingsByActivity ?? null) as FixedBookingSettingsByActivity | null,
+            resolvedFixedBooking,
             resolvedOpeningDays,
             dbClub.createdAt,
             dbClub.updatedAt

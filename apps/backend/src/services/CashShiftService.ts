@@ -29,6 +29,7 @@ export class CashShiftService {
       const shift = await tx.cashShift.create({
         data: {
           cashRegisterId: input.cashRegisterId,
+          clubId,
           openedByUserId,
           openingAmount: new Prisma.Decimal(input.openingAmount),
           status: 'OPEN'

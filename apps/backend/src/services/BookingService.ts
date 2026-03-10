@@ -104,23 +104,24 @@ export class BookingService {
 
     private resolveClubConfig(club: any) {
         const settings = club?.settings ?? null;
-        const lightsFromMinutes = settings?.lightsFromHour;
-        const normalizedLightsFromHour = Number.isFinite(Number(lightsFromMinutes))
-            ? this.fromMinutes(Number(lightsFromMinutes))
-            : club?.lightsFromHour ?? null;
+        const lightsFromHourRaw = settings?.lightsFromHour;
+        const normalizedLightsFromHour =
+            typeof lightsFromHourRaw === 'string'
+                ? lightsFromHourRaw
+                : Number.isFinite(Number(lightsFromHourRaw))
+                    ? this.fromMinutes(Number(lightsFromHourRaw))
+                    : null;
 
         return {
             ...club,
-            timeZone: settings?.timeZone ?? club?.timeZone ?? 'America/Argentina/Buenos_Aires',
-            openingDays: Array.isArray(settings?.openingDays)
-                ? settings.openingDays
-                : (Array.isArray(club?.openingDays) ? club.openingDays : null),
-            lightsEnabled: settings?.lightsEnabled ?? club?.lightsEnabled ?? false,
-            lightsExtraAmount: settings?.lightsExtraAmount ?? club?.lightsExtraAmount ?? null,
+            timeZone: settings?.timeZone ?? 'America/Argentina/Buenos_Aires',
+            openingDays: Array.isArray(settings?.openingDays) ? settings.openingDays : null,
+            lightsEnabled: settings?.lightsEnabled ?? false,
+            lightsExtraAmount: settings?.lightsExtraAmount ?? null,
             lightsFromHour: normalizedLightsFromHour,
-            professorDiscountEnabled: settings?.professorDiscountEnabled ?? club?.professorDiscountEnabled ?? false,
-            professorDiscountPercent: settings?.professorDiscountPercent ?? club?.professorDiscountPercent ?? null,
-            fixedBookingSettingsByActivity: club?.fixedBookingSettingsByActivity ?? null
+            professorDiscountEnabled: settings?.professorDiscountEnabled ?? false,
+            professorDiscountPercent: settings?.professorDiscountPercent ?? null,
+            fixedBookingSettingsByActivity: settings?.fixedBookingSettingsByActivity ?? null
         };
     }
 
@@ -1416,7 +1417,7 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         const activity = await this.activityRepo.findById(activityId);
         if (!activity) throw new Error("Actividad no encontrada");
         // Validar que la actividad pertenezca al mismo club que la cancha
-        if ((activity.clubId ?? null) !== (court.club?.id ?? null)) {
+        if ((activity.clubId ?? null) !== ((court as any)?.club?.id ?? null)) {
             throw new Error("ACTIVITY_CLUB_MISMATCH");
         }
         const duration = isProfessorOverride ? 60 : (activity ? activity.defaultDurationMinutes : 60);
@@ -1483,10 +1484,11 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
             generationFrequencyDays
         });
         // ATÓMICO: crear FixedBooking y bookings hijas en una sola transacción
+        let fixedBooking: any;
         let generatedCount = 0;
         await prisma.$transaction(async (tx) => {
             // A. Crear el "Padre" (Turno Fijo)
-            const fixedBooking = await tx.fixedBooking.create({
+            fixedBooking = await tx.fixedBooking.create({
                 data: {
                     ...(userId ? { userId } : {}),
                     ...(guestName ? { guestName } : {}),
@@ -1543,8 +1545,7 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
                         activityId,
                         isProfessorOverride,
                         duration,
-                        true,
-                        tx // Pasar el tx para que sea parte de la transacción
+                        true
                     );
 
                     await tx.booking.update({

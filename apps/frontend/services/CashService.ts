@@ -98,9 +98,17 @@ export class CashService {
     guestPhone?: string;
     guestDni?: string;
   }) {
+    const idempotencyKey =
+      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? (crypto as any).randomUUID()
+        : `product-sale-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
     const res = await fetchWithAuth(`${apiBase()}/cash/product-sale`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'idempotency-key': idempotencyKey
+      },
       body: JSON.stringify(payload)
     });
     if (!res.ok) {

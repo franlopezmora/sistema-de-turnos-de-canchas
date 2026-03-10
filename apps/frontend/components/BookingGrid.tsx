@@ -923,7 +923,8 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
               const handleSelectCourt = async () => {
                 if (!selectedDate || !selectedSlot) return;
                 const currentSlot = availableSlots.find((slot) => slot.slotTime === selectedSlot);
-                const availableCourtIds = new Set((currentSlot?.availableCourts || []).map((c) => c.id));
+                // `availableSlots` ya contiene solo las canchas disponibles para ese horario
+                const availableCourtIds = new Set((currentSlot?.courts || []).map((c) => c.id));
                 if (!availableCourtIds.has(court.id)) {
                   setDisabledSlots((prev) => ({ ...prev, [slotKey]: true }));
                   showError('Cancha ya no disponible.');

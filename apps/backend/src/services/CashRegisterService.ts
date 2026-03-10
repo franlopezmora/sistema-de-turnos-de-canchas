@@ -15,8 +15,7 @@ export class CashRegisterService {
       return tx.cashRegister.create({
         data: {
           clubId,
-          name: input.name,
-          location: input.location
+          name: input.name
         }
       });
     });

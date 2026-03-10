@@ -51,14 +51,12 @@ async function main() {
     update: {
       name: 'Las Tejas Pádel', addressLine: 'Sarmiento 60', city: 'Río Tercero', province: 'Córdoba', country: 'Argentina',
       locationId: locationRíoTercero.id, contactInfo: 'contacto@lastejas.com', phone: '+54 9 357 135 9791',
-      logoUrl: '/logo1.svg', instagramUrl: 'https://www.instagram.com/lastejaspadel/', description: 'Complejo deportivo Las Tejas Pádel',
-      timeZone: 'America/Argentina/Buenos_Aires'
+      logoUrl: '/logo1.svg', instagramUrl: 'https://www.instagram.com/lastejaspadel/', description: 'Complejo deportivo Las Tejas Pádel'
     },
     create: {
       slug: 'las-tejas', name: 'Las Tejas Pádel', addressLine: 'Sarmiento 60', city: 'Río Tercero', province: 'Córdoba', country: 'Argentina',
       locationId: locationRíoTercero.id, contactInfo: 'contacto@lastejas.com', phone: '+54 9 357 135 9791',
-      logoUrl: '/logo1.svg', instagramUrl: 'https://www.instagram.com/lastejaspadel/', description: 'Complejo deportivo Las Tejas Pádel',
-      timeZone: 'America/Argentina/Buenos_Aires'
+      logoUrl: '/logo1.svg', instagramUrl: 'https://www.instagram.com/lastejaspadel/', description: 'Complejo deportivo Las Tejas Pádel'
     }
   });
   console.log(`✅ Club: ${club1.name}`);
@@ -67,63 +65,58 @@ async function main() {
     where: { slug: 'club-central' },
     update: {
       name: 'Club Deportivo Central', addressLine: 'Av. Siempre Viva 742', city: 'Ciudad Autónoma de Buenos Aires', province: 'Buenos Aires', country: 'Argentina',
-      locationId: locationCaba.id, contactInfo: 'contacto@clubcentral.com', phone: '+54 9 11 1234 5678', description: 'Club deportivo con múltiples canchas',
-      timeZone: 'America/Argentina/Buenos_Aires'
+      locationId: locationCaba.id, contactInfo: 'contacto@clubcentral.com', phone: '+54 9 11 1234 5678', description: 'Club deportivo con múltiples canchas'
     },
     create: {
       slug: 'club-central', name: 'Club Deportivo Central', addressLine: 'Av. Siempre Viva 742', city: 'Ciudad Autónoma de Buenos Aires', province: 'Buenos Aires', country: 'Argentina',
-      locationId: locationCaba.id, contactInfo: 'contacto@clubcentral.com', phone: '+54 9 11 1234 5678', description: 'Club deportivo con múltiples canchas',
-      timeZone: 'America/Argentina/Buenos_Aires'
+      locationId: locationCaba.id, contactInfo: 'contacto@clubcentral.com', phone: '+54 9 11 1234 5678', description: 'Club deportivo con múltiples canchas'
     }
   });
   console.log(`✅ Club: ${club2.name}`);
 
-  // EL NUEVO CLUB INTERNACIONAL
   const club3 = await prismaAny.club.upsert({
     where: { slug: 'madrid-padel-center' },
     update: {
       name: 'Madrid Pádel Center', addressLine: 'Calle de Alcalá 500', city: 'Madrid', province: 'Madrid', country: 'España',
       locationId: locationMadrid.id, contactInfo: 'hola@madridpadel.es', phone: '+34 600 123 456', logoUrl: '/logo2.svg',
-      instagramUrl: 'https://www.instagram.com/madridpadelcenter/', description: 'El mejor complejo de pádel en la capital española',
-      timeZone: 'Europe/Madrid' 
+      instagramUrl: 'https://www.instagram.com/madridpadelcenter/', description: 'El mejor complejo de pádel en la capital española'
     },
     create: {
       slug: 'madrid-padel-center', name: 'Madrid Pádel Center', addressLine: 'Calle de Alcalá 500', city: 'Madrid', province: 'Madrid', country: 'España',
       locationId: locationMadrid.id, contactInfo: 'hola@madridpadel.es', phone: '+34 600 123 456', logoUrl: '/logo2.svg',
-      instagramUrl: 'https://www.instagram.com/madridpadelcenter/', description: 'El mejor complejo de pádel en la capital española',
-      timeZone: 'Europe/Madrid'
+      instagramUrl: 'https://www.instagram.com/madridpadelcenter/', description: 'El mejor complejo de pádel en la capital española'
     }
   });
   console.log(`✅ Club: ${club3.name} (TimeZone: Europe/Madrid)`);
 
-  const upsertClubSettings = async (club: any) => {
+  const upsertClubSettings = async (club: { id: number }, timeZone: string) => {
     await prisma.clubSettings.upsert({
       where: { clubId: club.id },
       update: {
-        timeZone: club.timeZone,
+        timeZone,
         openingDays: [1, 2, 3, 4, 5, 6],
         lightsEnabled: true,
         lightsExtraAmount: 5000,
-        lightsFromHour: 20,
+        lightsFromHour: '20:00',
         professorDiscountEnabled: true,
         professorDiscountPercent: 15
       },
       create: {
         clubId: club.id,
-        timeZone: club.timeZone,
+        timeZone,
         openingDays: [1, 2, 3, 4, 5, 6],
         lightsEnabled: true,
         lightsExtraAmount: 5000,
-        lightsFromHour: 20,
+        lightsFromHour: '20:00',
         professorDiscountEnabled: true,
         professorDiscountPercent: 15
       }
     });
   };
 
-  await upsertClubSettings(club1);
-  await upsertClubSettings(club2);
-  await upsertClubSettings(club3);
+  await upsertClubSettings(club1, 'America/Argentina/Buenos_Aires');
+  await upsertClubSettings(club2, 'America/Argentina/Buenos_Aires');
+  await upsertClubSettings(club3, 'Europe/Madrid');
   console.log('✅ ClubSettings creado/actualizado');
 
   // 4. Actividades por club (multi-tenant)

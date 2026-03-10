@@ -38,7 +38,7 @@ export class CashService {
     async getSummaryByDate(clubId: number | undefined, dateStr: string, userId?: number, preferredClubId?: number) {
         const resolvedClubId = await this.resolveClubId(clubId, userId, preferredClubId);
         const timeZone = resolvedClubId
-            ? ((await prisma.club.findUnique({ where: { id: resolvedClubId }, select: { timeZone: true } }))?.timeZone ?? 'America/Argentina/Buenos_Aires')
+            ? ((await prisma.club.findUnique({ where: { id: resolvedClubId }, include: { settings: true } }))?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires')
             : 'America/Argentina/Buenos_Aires';
 
         const [y, m, d] = String(dateStr).split('-').map((part) => Number(part));
@@ -206,6 +206,7 @@ export class CashService {
         guestPhone?: string;
         guestDni?: string;
         userId?: number;
+        idempotencyKey?: string;
     }, actorUserId?: number) {
         const quantity = Math.floor(Number(input.quantity));
         if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -242,6 +243,38 @@ export class CashService {
             throw new Error('La suma de pagos debe coincidir con el total de la venta');
         }
 
+        // Idempotencia: si viene idempotencyKey y ya existe una venta con esa key,
+        // devolvemos la misma respuesta sin volver a crear nada.
+        if (input.idempotencyKey) {
+            const existingAccount = await prisma.account.findFirst({
+                where: {
+                    clubId: input.clubId,
+                    sourceType: 'BAR',
+                    idempotencyKey: input.idempotencyKey
+                }
+            });
+
+            if (existingAccount) {
+                const existingPayments = await prisma.payment.findMany({
+                    where: { accountId: existingAccount.id }
+                });
+
+                const guestBits = [input.guestName, input.guestPhone, input.guestDni]
+                    .filter((value) => typeof value === 'string' && value.trim().length > 0)
+                    .map((value) => String(value).trim());
+                const description = guestBits.length > 0
+                    ? `Venta producto: ${product.name} (${guestBits.join(' | ')})`
+                    : `Venta producto: ${product.name}`;
+
+                return {
+                    accountId: existingAccount.id,
+                    total,
+                    description,
+                    payments: existingPayments
+                };
+            }
+        }
+
         const sale = await prisma.$transaction(async (tx) => {
             const sourceId = `product-sale-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -252,7 +285,8 @@ export class CashService {
                     sourceId,
                     status: 'OPEN',
                     totalAmount: new Prisma.Decimal(0),
-                    paidAmount: new Prisma.Decimal(0)
+                    paidAmount: new Prisma.Decimal(0),
+                    idempotencyKey: input.idempotencyKey ?? null
                 }
             });
 
@@ -296,18 +330,11 @@ export class CashService {
             });
 
             await tx.product.update({
-                    const account = await tx.account.create({
-                        data: {
-                            clubId: input.clubId,
-                            sourceType: 'BAR',
-                            sourceId,
-                            status: 'OPEN',
-                            totalAmount: new Prisma.Decimal(0),
-                            paidAmount: new Prisma.Decimal(0),
-                            idempotencyKey: input.idempotencyKey,
-                        }
-                    });
+                where: { id: product.id },
+                data: {
+                    stock: Number(product.stock) - quantity
                 }
+            });
 
             await this.projectionService.refreshAccountSummary(account.id, tx);
             return { accountId: account.id, total, description };

@@ -25,7 +25,7 @@ export class BookingRepository {
 
         const saved = await prisma.booking.create({
             data,
-            include: { user: true, client: true, court: { include: { club: true } }, activity: true }
+            include: { user: true, client: true, court: { include: { club: { include: { settings: true } } } }, activity: true }
         });
         return this.mapToEntity(saved);
     }
@@ -38,7 +38,7 @@ export class BookingRepository {
                 courtId: courtId,
                 startDateTime: { gte: startUtc, lte: endUtc }
             },
-            include: { user: true, client: true, court: { include: { club: true } }, activity: true }
+            include: { user: true, client: true, court: { include: { club: { include: { settings: true } } } }, activity: true }
         });
 
         return found.map((b: any) => this.mapToEntity(b));
@@ -60,7 +60,7 @@ export class BookingRepository {
     async findById(id: number): Promise<Booking | undefined> {
         const found = await prisma.booking.findUnique({
             where: { id },
-            include: { user: true, client: true, court: { include: { club: true } }, activity: true }
+            include: { user: true, client: true, court: { include: { club: { include: { settings: true } } } }, activity: true }
         });
         if (!found) return undefined;
         return this.mapToEntity(found);
@@ -69,14 +69,14 @@ export class BookingRepository {
     async findByUserId(userId: number): Promise<Booking[]> {
         const found = await prisma.booking.findMany({
             where: { userId },
-            include: { user: true, client: true, court: { include: { club: true } }, activity: true }
+            include: { user: true, client: true, court: { include: { club: { include: { settings: true } } } }, activity: true }
         });
         return found.map((b: any) => this.mapToEntity(b));
     }
 
     async findAll(): Promise<Booking[]> {
         const found = await prisma.booking.findMany({
-            include: { user: true, client: true, court: { include: { club: true } }, activity: true }
+            include: { user: true, client: true, court: { include: { club: { include: { settings: true } } } }, activity: true }
         });
         return found.map((b: any) => this.mapToEntity(b));
     }
@@ -105,7 +105,7 @@ export class BookingRepository {
             include: {
                 user: true,
                 client: true,
-                court: { include: { club: true } },
+                court: { include: { club: { include: { settings: true } } } },
                 activity: true
             },
             orderBy: {
@@ -128,7 +128,7 @@ export class BookingRepository {
             include: {
                 user: true,
                 client: true,
-                court: { include: { club: true } },
+                court: { include: { club: { include: { settings: true } } } },
                 activity: true
             },
             orderBy: {
@@ -152,32 +152,34 @@ export class BookingRepository {
                 (dbItem.user as any).isProfessor ?? false
             )
             : null;
+        const c = dbItem.court.club;
+        const s = c.settings ?? null;
         const club = new Club(
-            dbItem.court.club.id,
-            dbItem.court.club.slug,
-            dbItem.court.club.name,
-            dbItem.court.club.addressLine,
-            dbItem.court.club.city,
-            dbItem.court.club.province,
-            dbItem.court.club.country,
-            dbItem.court.club.contactInfo,
-            dbItem.court.club.phone || undefined,
-            dbItem.court.club.logoUrl || undefined,
-            dbItem.court.club.clubImageUrl || undefined,
-            dbItem.court.club.instagramUrl || undefined,
-            dbItem.court.club.facebookUrl || undefined,
-            dbItem.court.club.websiteUrl || undefined,
-            dbItem.court.club.description || undefined,
-            dbItem.court.club.timeZone ?? 'America/Argentina/Buenos_Aires',
-            dbItem.court.club.lightsEnabled ?? false,
-            dbItem.court.club.lightsExtraAmount != null ? Number(dbItem.court.club.lightsExtraAmount) : null,
-                dbItem.court.club.lightsFromHour ?? null,
-                dbItem.court.club.professorDiscountEnabled ?? false,
-                dbItem.court.club.professorDiscountPercent != null ? Number(dbItem.court.club.professorDiscountPercent) : null,
-                null,
-                null,
-            dbItem.court.club.createdAt,
-            dbItem.court.club.updatedAt
+            c.id,
+            c.slug,
+            c.name,
+            c.addressLine,
+            c.city,
+            c.province,
+            c.country,
+            c.contactInfo,
+            c.phone || undefined,
+            c.logoUrl || undefined,
+            c.clubImageUrl || undefined,
+            c.instagramUrl || undefined,
+            c.facebookUrl || undefined,
+            c.websiteUrl || undefined,
+            c.description || undefined,
+            s?.timeZone ?? 'America/Argentina/Buenos_Aires',
+            s?.lightsEnabled ?? false,
+            s?.lightsExtraAmount != null ? Number(s.lightsExtraAmount) : null,
+            s?.lightsFromHour != null ? String(s.lightsFromHour) : null,
+            s?.professorDiscountEnabled ?? false,
+            s?.professorDiscountPercent != null ? Number(s.professorDiscountPercent) : null,
+            (s?.fixedBookingSettingsByActivity ?? null) as any,
+            Array.isArray(s?.openingDays) ? s.openingDays : null,
+            c.createdAt,
+            c.updatedAt
         );
     const court = new Court(dbItem.court.id, dbItem.court.name, dbItem.court.isIndoor, dbItem.court.surface, club, dbItem.court.isUnderMaintenance, null);
         const activity = new ActivityType(
