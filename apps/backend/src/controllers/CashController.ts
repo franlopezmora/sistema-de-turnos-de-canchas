@@ -75,6 +75,8 @@ export class CashController {
           amount: z.preprocess((v) => Number(v), z.number().positive())
         })).optional(),
         guestName: z.string().trim().optional(),
+        guestPhone: z.string().trim().optional(),
+        guestDni: z.string().trim().optional(),
         userId: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().optional())
       });
 
@@ -90,7 +92,10 @@ export class CashController {
         quantity: parsed.data.quantity,
         method: parsed.data.method,
         payments: parsed.data.payments,
-        guestName: parsed.data.guestName ? sanitizeString(parsed.data.guestName, 200) : undefined
+        guestName: parsed.data.guestName ? sanitizeString(parsed.data.guestName, 200) : undefined,
+        guestPhone: parsed.data.guestPhone ? sanitizeString(parsed.data.guestPhone, 30) : undefined,
+        guestDni: parsed.data.guestDni ? sanitizeString(parsed.data.guestDni, 20) : undefined,
+        userId: parsed.data.userId
       }, actorUserId);
 
       return res.status(201).json(sale);

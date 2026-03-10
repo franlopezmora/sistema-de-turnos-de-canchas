@@ -203,6 +203,9 @@ export class CashService {
         method: 'CASH' | 'TRANSFER';
         payments?: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>;
         guestName?: string;
+        guestPhone?: string;
+        guestDni?: string;
+        userId?: number;
     }, actorUserId?: number) {
         const quantity = Math.floor(Number(input.quantity));
         if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -253,8 +256,11 @@ export class CashService {
                 }
             });
 
-            const description = input.guestName
-                ? `Venta producto: ${product.name} (${input.guestName})`
+            const guestBits = [input.guestName, input.guestPhone, input.guestDni]
+                .filter((value) => typeof value === 'string' && value.trim().length > 0)
+                .map((value) => String(value).trim());
+            const description = guestBits.length > 0
+                ? `Venta producto: ${product.name} (${guestBits.join(' | ')})`
                 : `Venta producto: ${product.name}`;
 
             const item = await tx.accountItem.create({
@@ -306,7 +312,7 @@ export class CashService {
                 amount: payment.amount,
                 method: payment.method as PaymentMethod,
                 source: 'POS',
-                createdByUserId: actorUserId
+                createdByUserId: actorUserId ?? input.userId
             });
             payments.push(created);
         }

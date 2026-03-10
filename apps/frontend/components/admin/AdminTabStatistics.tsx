@@ -6,6 +6,9 @@ import {
 } from 'recharts';
 import { DollarSign, Calendar, TrendingUp, CreditCard, Activity, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchWithAuth } from '../../utils/apiClient';
+import { getApiUrl } from '../../utils/apiUrl';
+
+const apiBase = () => `${getApiUrl()}/api`;
 
 // Colores del gráfico de torta
 const COLORS = ['#347048', '#926699', '#B9CF32', '#FF8042'];
@@ -92,7 +95,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
       setLoading(true); // Prendemos el loader al buscar datos nuevos
       const { startDate, endDate } = getDateRange(activePeriod, periodOffset);
       
-      const url = `/api/clubs/${finalSlug}/admin/stats/dashboard?startDate=${startDate}&endDate=${endDate}`;
+      const url = `${apiBase()}/clubs/${finalSlug}/admin/stats/dashboard?startDate=${startDate}&endDate=${endDate}`;
       
       const response = await fetchWithAuth(url);
       

@@ -320,3 +320,36 @@ CREATE TRIGGER trg_ensure_ledger_entry_same_club
 BEFORE INSERT OR UPDATE ON "LedgerEntry"
 FOR EACH ROW
 EXECUTE FUNCTION ensure_ledger_entry_same_club();
+
+CREATE INDEX IF NOT EXISTS "Booking_active_court_time_idx"
+ON "Booking"("courtId", "startDateTime")
+WHERE "status" <> 'CANCELLED';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'account_amounts_non_negative'
+  ) THEN
+    ALTER TABLE "Account"
+    ADD CONSTRAINT account_amounts_non_negative
+    CHECK (
+      "totalAmount" >= 0
+      AND "paidAmount" >= 0
+    ) NOT VALID;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'account_remaining_non_negative'
+  ) THEN
+    ALTER TABLE "Account"
+    ADD CONSTRAINT account_remaining_non_negative
+    CHECK ("paidAmount" <= "totalAmount") NOT VALID;
+  END IF;
+END $$;

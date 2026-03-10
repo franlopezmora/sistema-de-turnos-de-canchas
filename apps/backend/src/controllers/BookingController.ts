@@ -159,6 +159,11 @@ export class BookingController {
 
         } catch (error: any) {
             console.error(error);
+            if (error?.message === 'SLOT_ALREADY_BOOKED') {
+                return res.status(409).json({
+                    error: 'El horario acaba de ser reservado por otro jugador'
+                });
+            }
             res.status(400).json({ error: error.message || "Error desconocido" });
         }
     }
@@ -307,6 +312,7 @@ export class BookingController {
             const querySchema = z.object({
                 date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Formato inválido. Use YYYY-MM-DD (ej: 2026-01-06)" }),
                 activityId: z.preprocess((v) => Number(v), z.number().int().positive()),
+                clubSlug: z.string().trim().min(1).optional(),
                 durationMinutes: z.preprocess(
                     (v) => (v === undefined ? undefined : Number(v)),
                     z.number().int().positive().optional()
@@ -319,13 +325,22 @@ export class BookingController {
                 return res.status(400).json({ error: parsed.error.format() });
             }
 
-            const { date, activityId, durationMinutes } = parsed.data;
+            const { date, activityId, clubSlug, durationMinutes } = parsed.data;
 
             const searchDate = new Date(date);
+
+            let clubId: number | undefined;
+            if (clubSlug) {
+                const club = await prisma.club.findUnique({ where: { slug: clubSlug } });
+                if (club) {
+                    clubId = club.id;
+                }
+            }
 
             const slots = await this.bookingService.getAllAvailableSlots(
                 searchDate,
                 Number(activityId),
+                clubId,
                 durationMinutes
             );
 

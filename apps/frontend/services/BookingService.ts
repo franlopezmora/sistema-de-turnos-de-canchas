@@ -62,16 +62,11 @@ export const createBooking = async (
       ...(guestInfo?.email ? { guestEmail: guestInfo.email } : {}),
       ...(guestInfo?.phone ? { guestPhone: guestInfo.phone } : {}),
       
-      // 👇 ENVÍO ROBUSTO DEL DNI (Lo mandamos con ambos nombres por seguridad)
-      ...(dniValue ? { guestDni: dniValue, dni: dniValue } : {}),
+      ...(dniValue ? { guestDni: dniValue } : {}),
 
       ...(options?.asGuest ? { asGuest: true } : {}),
         ...(options?.isProfessor ? { isProfessor: true } : {}),
-        ...(Number.isFinite(options?.durationMinutes) ? { durationMinutes: options?.durationMinutes } : {}),
-      ...(options?.openAccount ? { openAccount: true } : {}),
-      
-      // El ID del usuario si corresponde
-      ...(userId ? { userId } : {}) 
+        ...(Number.isFinite(options?.durationMinutes) ? { durationMinutes: options?.durationMinutes } : {})
     }),
   });
 
@@ -123,27 +118,6 @@ export const cancelBooking = async (bookingId: number) => {
         throw new Error(error.message || 'No se pudo cancelar el turno');
     }
     return res.json();
-};
-
-export const confirmBooking = async (
-  bookingId: number,
-  paymentMethod?: 'CASH' | 'TRANSFER'
-) => {
-    if (!getToken()) throw new Error("Debes iniciar sesión como administrador.");
-
-    const account = await getOrCreateBookingAccount(bookingId);
-    const summary = await getAccountSummary(account.id);
-    const remaining = Number(summary?.remaining || 0);
-
-    if (remaining <= 0.009) {
-      return { success: true, message: 'La cuenta ya está saldada' };
-    }
-
-    return registerPayment({
-      accountId: account.id,
-      amount: remaining,
-      method: (paymentMethod ?? 'CASH') as 'CASH' | 'TRANSFER'
-    });
 };
 
 export const splitBookingPayment = async (
@@ -213,18 +187,21 @@ export const getBookingFinancialSummary = async (bookingId: number) => {
 
 // --- 4. OBTENER SCHEDULE COMPLETO DEL DÍA (ADMIN) ---
 export const getAdminSchedule = async (date: string) => {
-    if (!getToken()) throw new Error("Debes iniciar sesión como administrador.");
+    if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
-    const res = await fetchWithAuth(`${apiBase()}/bookings/admin/schedule?date=${date}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-    });
-
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || 'Error al cargar el schedule');
+    const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+    if (!rawUser) {
+      throw new Error('No se pudo resolver el club activo del administrador.');
     }
-    return res.json();
+
+    const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
+    const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+    if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
+      throw new Error('No se pudo resolver el club activo del administrador.');
+    }
+
+    const club = await ClubService.getClubById(adminClubId);
+    return ClubAdminService.getAdminSchedule(club.slug, date);
 };
 
 // --- 5. CREAR TURNO FIJO ---
@@ -238,56 +215,49 @@ export const createFixedBooking = async (
   guestDni?: string, // <--- Recibimos el dato (Argumento #7)
   isProfessor?: boolean
 ) => {
-  const token = getToken();
-  // Validamos token si es necesario, o dejamos que el backend decida
-  if (!token) throw new Error("Debes iniciar sesión como administrador.");
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
-  const res = await fetchWithAuth(`${apiBase()}/bookings/fixed`, {
-    method: 'POST',
-    headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-        courtId,
-        activityId,
-        startDateTime: startDateTime.toISOString(),
-        
-        // Si hay ID de usuario (cliente registrado)
-        ...(userId ? { userId } : {}),
-        
-        // Si es invitado (cliente manual)
-        ...(guestName ? { guestName } : {}),
-        ...(guestPhone ? { guestPhone } : {}),
-        
-        // 👇👇👇 AQUÍ ESTABA EL PROBLEMA 👇👇👇
-        // Ahora lo enviamos con ambos nombres por seguridad
-        ...(guestDni ? { guestDni } : {}),
-        ...(isProfessor ? { isProfessor: true } : {})
-    })
-  });
-
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || error.message || 'Error al crear turno fijo');
+  const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  if (!rawUser) {
+    throw new Error('No se pudo resolver el club activo del administrador.');
   }
-  return res.json();
+
+  const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
+  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
+    throw new Error('No se pudo resolver el club activo del administrador.');
+  }
+
+  const club = await ClubService.getClubById(adminClubId);
+  return ClubAdminService.createFixedBooking(club.slug, {
+    courtId,
+    activityId,
+    startDateTime: startDateTime.toISOString(),
+    ...(userId ? { userId } : {}),
+    ...(guestName ? { guestName } : {}),
+    ...(guestPhone ? { guestPhone } : {}),
+    ...(guestDni ? { guestDni } : {}),
+    ...(isProfessor ? { isProfessor: true } : {})
+  });
 };
 
 // --- 6. CANCELAR TURNO FIJO (NUEVO - Corregido para usar fetch) ---
 export const cancelFixedBooking = async (fixedBookingId: number) => {
-  if (!getToken()) throw new Error("Debes iniciar sesión como administrador.");
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
-  const res = await fetchWithAuth(`${apiBase()}/bookings/fixed/${fixedBookingId}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' }
-  });
-
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.message || 'Error al cancelar turno fijo');
+  const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  if (!rawUser) {
+    throw new Error('No se pudo resolver el club activo del administrador.');
   }
-  return res.json();
+
+  const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
+  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
+    throw new Error('No se pudo resolver el club activo del administrador.');
+  }
+
+  const club = await ClubService.getClubById(adminClubId);
+  return ClubAdminService.cancelFixedBooking(club.slug, fixedBookingId);
 };
 
 export const searchClients = async (slug: string, query: string) => {

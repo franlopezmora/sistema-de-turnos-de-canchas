@@ -54,9 +54,4 @@ export class EventController {
     }
   };
 
-  processPending = async (req: Request, res: Response) => {
-    return res.status(410).json({
-      error: 'El procesamiento legacy de Event fue retirado. Use el worker de OutboxMessage.'
-    });
-  };
 }

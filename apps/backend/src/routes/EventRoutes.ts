@@ -9,6 +9,5 @@ const eventController = new EventController();
 
 router.get('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), eventController.list);
 router.post('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), eventController.create);
-router.post('/process-pending', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), eventController.processPending);
 
 export default router;

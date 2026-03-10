@@ -11,7 +11,7 @@ interface Props {
   courtPrice?: number;
   baseCourtPrice?: number | null;
   bookingStatus?: string;
-  paymentStatus: string;
+  paymentStatus?: string;
   onClose: () => void;
   onConfirm: () => void;
   onPaymentModalStateChange?: (open: boolean) => void;

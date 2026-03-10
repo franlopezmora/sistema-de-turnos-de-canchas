@@ -11,7 +11,7 @@ import { User } from '../entities/User';
 import { Club } from '../entities/Club';
 import { Court as CourtEntity } from '../entities/Court';
 import { ActivityType } from '../entities/ActivityType';
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, Prisma } from '@prisma/client';
 import { CashRepository } from '../repositories/CashRepository';
 import { ProductRepository } from '../repositories/ProductRepository';
 import { buildSlotsFromSchedule, normalizeSchedule } from '../utils/ActivityScheduleHelper';
@@ -201,13 +201,22 @@ export class BookingService {
         const dbMessage = String(knownError?.meta?.database_error || '');
 
         return (
-            knownError?.code === 'P2004' &&
-            (
-                message.includes('booking_no_overlap_per_court') ||
-                dbMessage.includes('booking_no_overlap_per_court') ||
-                message.toLowerCase().includes('exclusion constraint') ||
-                dbMessage.toLowerCase().includes('exclusion constraint')
-            )
+            (knownError?.code === 'P2004' &&
+                (
+                    message.includes('booking_no_overlap_per_court') ||
+                    dbMessage.includes('booking_no_overlap_per_court') ||
+                    message.toLowerCase().includes('exclusion constraint') ||
+                    dbMessage.toLowerCase().includes('exclusion constraint')
+                )) ||
+            message.includes('booking_no_overlap_per_court') ||
+            dbMessage.includes('booking_no_overlap_per_court')
+        );
+    }
+
+    private isUniqueSlotConstraintError(error: unknown) {
+        return (
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2002'
         );
     }
 
@@ -276,7 +285,9 @@ export class BookingService {
         return normalized.length >= 6 ? normalized : null;
     }
 
-    private async resolveOrCreateClient(input: {
+    private async resolveOrCreateClient(
+        tx: Prisma.TransactionClient,
+        input: {
         clubId: number;
         userId?: number | null;
         name?: string | null;
@@ -295,7 +306,7 @@ export class BookingService {
         const safeUserId = Number.isInteger(Number(input.userId)) && Number(input.userId) > 0 ? Number(input.userId) : null;
 
         if (safeUserId) {
-            const existingByUser = await prisma.client.findFirst({
+            const existingByUser = await tx.client.findFirst({
                 where: {
                     clubId: input.clubId,
                     userId: safeUserId
@@ -303,7 +314,7 @@ export class BookingService {
             });
 
             if (existingByUser) {
-                return prisma.client.update({
+                return tx.client.update({
                     where: { id: existingByUser.id },
                     data: {
                         name: safeName,
@@ -317,7 +328,7 @@ export class BookingService {
         }
 
         if (safeDni) {
-            const existingByDni = await prisma.client.findFirst({
+            const existingByDni = await tx.client.findFirst({
                 where: {
                     clubId: input.clubId,
                     dni: safeDni
@@ -325,7 +336,7 @@ export class BookingService {
             });
 
             if (existingByDni) {
-                return prisma.client.update({
+                return tx.client.update({
                     where: { id: existingByDni.id },
                     data: {
                         name: safeName,
@@ -339,7 +350,7 @@ export class BookingService {
         }
 
         if (safePhone) {
-            const existingByPhone = await prisma.client.findFirst({
+            const existingByPhone = await tx.client.findFirst({
                 where: {
                     clubId: input.clubId,
                     phone: safePhone
@@ -347,7 +358,7 @@ export class BookingService {
             });
 
             if (existingByPhone) {
-                return prisma.client.update({
+                return tx.client.update({
                     where: { id: existingByPhone.id },
                     data: {
                         name: safeName,
@@ -360,7 +371,7 @@ export class BookingService {
         }
 
         if (safeEmail) {
-            const existingByEmail = await prisma.client.findFirst({
+            const existingByEmail = await tx.client.findFirst({
                 where: {
                     clubId: input.clubId,
                     email: safeEmail
@@ -368,7 +379,7 @@ export class BookingService {
             });
 
             if (existingByEmail) {
-                return prisma.client.update({
+                return tx.client.update({
                     where: { id: existingByEmail.id },
                     data: {
                         name: safeName,
@@ -380,7 +391,7 @@ export class BookingService {
             }
         }
 
-        return prisma.client.create({
+        return tx.client.create({
             data: {
                 clubId: input.clubId,
                 name: safeName,
@@ -768,7 +779,7 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
 
             let saved;
             try {
-                const resolvedClient = await this.resolveOrCreateClient({
+                const resolvedClient = await this.resolveOrCreateClient(tx, {
                     clubId: bookingClubId,
                     userId: user?.id ?? null,
                     name: guestName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.firstName || 'Cliente',
@@ -869,8 +880,11 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
 
                 await this.outboxService.enqueueMany(outboxMessages, tx);
             } catch (error) {
+                if (this.isUniqueSlotConstraintError(error)) {
+                    throw new Error('SLOT_ALREADY_BOOKED');
+                }
                 if (this.isOverlapConstraintError(error)) {
-                    throw new Error('El turno seleccionado ya fue reservado por otro usuario');
+                    throw new Error('SLOT_ALREADY_BOOKED');
                 }
                 throw error;
             }
@@ -1234,10 +1248,12 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         return schedule;
     }
 
-    async getAllAvailableSlots(date: Date, activityId: number, durationMinutes?: number): Promise<string[]> {
-        const firstClub = await prisma.club.findFirst({ select: { timeZone: true } });
-        const timeZone = firstClub?.timeZone ?? 'America/Argentina/Buenos_Aires';
-        const allCourts = await this.courtRepo.findAll();
+    async getAllAvailableSlots(date: Date, activityId: number, clubId?: number, durationMinutes?: number): Promise<string[]> {
+        const selectedClub = clubId
+            ? await prisma.club.findUnique({ where: { id: clubId }, select: { timeZone: true } })
+            : null;
+        const timeZone = selectedClub?.timeZone ?? 'America/Argentina/Buenos_Aires';
+        const allCourts = await this.courtRepo.findAll(clubId);
         const activeCourts = allCourts.filter(court => {
             if (court.isUnderMaintenance) return false;
             const clubCfg = this.resolveClubConfig((court as any)?.club);
@@ -1703,6 +1719,13 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         const itemTotal = Number(product.price) * normalizedQty;
 
         const result = await prisma.$transaction(async (tx) => {
+            const txProduct = await tx.product.findFirst({
+                where: { id: productId, clubId },
+                select: { id: true, name: true, price: true, stock: true }
+            });
+            if (!txProduct) throw new Error('Producto no encontrado');
+            if (Number(txProduct.stock) < normalizedQty) throw new Error('Stock insuficiente');
+
             let account = await tx.account.findFirst({
                 where: { clubId, sourceType: 'BOOKING', sourceId: String(bookingId) }
             });
@@ -1722,10 +1745,10 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
                 data: {
                     accountId: account.id,
                     type: 'PRODUCT',
-                    productId: product.id,
-                    description: product.name,
+                    productId: txProduct.id,
+                    description: txProduct.name,
                     quantity: normalizedQty,
-                    unitPrice: Number(product.price),
+                    unitPrice: Number(txProduct.price),
                     total: itemTotal
                 }
             });
@@ -1746,13 +1769,14 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
                 accountItemId: createdItem.id,
                 amount: itemTotal,
                 revenueAccount: 'BAR_REVENUE',
-                description: product.name
+                description: txProduct.name
             });
 
-            await tx.product.update({
-                where: { id: productId },
+            const stockUpdate = await tx.product.updateMany({
+                where: { id: productId, clubId, stock: { gte: normalizedQty } },
                 data: { stock: { decrement: normalizedQty } }
             });
+            if (stockUpdate.count !== 1) throw new Error('Stock insuficiente');
 
             await this.projectionService.refreshAccountSummary(account.id, tx);
 
@@ -1825,10 +1849,6 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
             await this.projectionService.refreshAccountSummary(item.accountId, tx);
             return deleted;
         });
-    }
-
-    async getClientStats(_clubId: number, _userId: number) {
-        return { totalBookings: 0, totalDebt: 0 };
     }
 
 }

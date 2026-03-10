@@ -381,6 +381,7 @@ model Booking {
   fixedBooking   FixedBooking? @relation(fields: [fixedBookingId], references: [id])
 
   @@index([courtId, startDateTime], map: "booking_court_day")
+  @@unique([courtId, startDateTime], map: "booking_court_start_unique")
   @@index([courtId, endDateTime])
   @@index([clubId, startDateTime], map: "booking_club_day")
   @@index([activityId, startDateTime], map: "booking_activity_day")

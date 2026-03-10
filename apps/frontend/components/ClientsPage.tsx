@@ -497,7 +497,9 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                           <div className="text-xs font-black text-[#347048] uppercase tracking-tight">{isSale ? `Venta extra: ${formatSaleDescription(booking.description)}` : `Cancha: ${booking.courtName || booking.court?.name}`} <span className="opacity-40 ml-2 font-mono">${(isSale ? Number(booking.price || 0) : courtPrice).toLocaleString()}</span></div>
                           <div className="flex flex-wrap gap-2 mt-1">
                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${status === 'CANCELLED' ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{bookingStatusLabel[status] ?? status}</span>
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${['DEBT', 'PARTIAL'].includes(pStatus) ? 'bg-red-50 text-red-500 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{paymentStatusLabel[pStatus] ?? pStatus}</span>
+                            {pStatus && (
+                              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${['DEBT', 'PARTIAL'].includes(pStatus) ? 'bg-red-50 text-red-500 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{paymentStatusLabel[pStatus] ?? pStatus}</span>
+                            )}
                           </div>
                         </div>
                         <div className="text-right pl-6 border-l border-dashed border-[#347048]/10"><div className="text-xl font-black text-[#347048] italic tracking-tighter">${Number(booking.price).toLocaleString()}</div><div className="text-[9px] font-black text-[#347048]/40 uppercase">{booking.amount > 0 ? `DEBE $${Number(booking.amount).toLocaleString()}` : 'SALDADO'}</div></div>

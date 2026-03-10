@@ -636,19 +636,30 @@ export default function AdminTabBookings() {
       endDate = new Date(startDate.getTime() + Number(booking.durationMinutes) * 60000);
     } else if (booking?.activity?.defaultDurationMinutes) {
       endDate = new Date(startDate.getTime() + Number(booking.activity.defaultDurationMinutes) * 60000);
-    } else if (booking?.fixedBooking && booking.fixedBooking.startTime && booking.fixedBooking.endTime) {
-      // calcular duración a partir de startTime/endTime (formato HH:MM), considerar overnight
+    } else if (booking?.fixedBooking) {
+      // Soporta tanto payload legacy HH:MM como el esquema actual en minutos.
       try {
-        const s = booking.fixedBooking.startTime.split(':').map(Number);
-        const e = booking.fixedBooking.endTime.split(':').map(Number);
-        if (s.length === 2 && e.length === 2) {
-          const sM = s[0] * 60 + s[1];
-          let eM = e[0] * 60 + e[1];
+        let sM: number | null = null;
+        let eM: number | null = null;
+
+        if (Number.isFinite(Number(booking.fixedBooking.startTimeMinutes)) && Number.isFinite(Number(booking.fixedBooking.endTimeMinutes))) {
+          sM = Number(booking.fixedBooking.startTimeMinutes);
+          eM = Number(booking.fixedBooking.endTimeMinutes);
+        } else if (booking.fixedBooking.startTime && booking.fixedBooking.endTime) {
+          const s = String(booking.fixedBooking.startTime).split(':').map(Number);
+          const e = String(booking.fixedBooking.endTime).split(':').map(Number);
+          if (s.length === 2 && e.length === 2) {
+            sM = s[0] * 60 + s[1];
+            eM = e[0] * 60 + e[1];
+          }
+        }
+
+        if (sM !== null && eM !== null) {
           if (eM <= sM) eM += 24 * 60;
           const duration = eM - sM;
           endDate = new Date(startDate.getTime() + duration * 60000);
         }
-      } catch (e) {
+      } catch {
         endDate = null;
       }
     }

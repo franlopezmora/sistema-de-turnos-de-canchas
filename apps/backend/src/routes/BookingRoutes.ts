@@ -35,16 +35,10 @@ const bookingController = new BookingController(bookingService);
 
 // Disponibilidad
 router.get('/availability', (req, res) => bookingController.getAvailability(req, res));
-router.get('/all-availability', (req, res) => bookingController.getAllAvailableSlots(req, res));
 router.get('/availability-with-courts', (req, res) => bookingController.getAvailableSlotsWithCourts(req, res));
 
 // Cancelación: usuario puede cancelar la propia; admin con clubId valida que sea de su club
 router.post('/cancel', authMiddleware, (req, res) => bookingController.cancelBooking(req, res));
-
-// Rutas de Admin (Schedule, Fixed, Debtors)
-router.get('/admin/schedule', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.getAdminSchedule(req, res));
-router.post('/fixed', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.createFixed(req, res));
-router.delete('/fixed/:id', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.cancelFixed(req, res));
 
 // Crear Reserva (Base)
 router.post('/', bookingLimiter, optionalAuthMiddleware, (req, res) => bookingController.createBooking(req, res));
