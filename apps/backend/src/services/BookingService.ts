@@ -23,6 +23,17 @@ import { AccountingService } from './AccountingService';
 import { AccountService } from './AccountService';
 import { OUTBOX_TYPES, OutboxService } from './OutboxService';
 import { ProjectionService } from './ProjectionService';
+import { BookingDomainService } from './BookingDomainService';
+import { isBookingTransitionAllowed, resolveInitialBookingStatus } from '../domain/bookingDomain';
+import { RefundService } from './RefundService';
+
+type CancelBookingReason = 'MANUAL' | 'AUTO_CANCEL_UNCONFIRMED';
+type CancelBookingOptions = {
+    reason?: CancelBookingReason;
+    triggeredBy?: 'USER' | 'ADMIN' | 'SYSTEM';
+    skipAccessValidation?: boolean;
+    now?: Date;
+};
 
 export class BookingService {
     private readonly pricingService = new PricingService();
@@ -32,6 +43,8 @@ export class BookingService {
     private readonly accountingService = new AccountingService();
     private readonly accountService = new AccountService();
     private readonly projectionService = new ProjectionService();
+    private readonly bookingDomainService = new BookingDomainService();
+    private readonly refundService = new RefundService();
 
     constructor(
         private bookingRepo: BookingRepository,
@@ -121,7 +134,10 @@ export class BookingService {
             lightsFromHour: normalizedLightsFromHour,
             professorDiscountEnabled: settings?.professorDiscountEnabled ?? false,
             professorDiscountPercent: settings?.professorDiscountPercent ?? null,
-            fixedBookingSettingsByActivity: settings?.fixedBookingSettingsByActivity ?? null
+            fixedBookingSettingsByActivity: settings?.fixedBookingSettingsByActivity ?? null,
+            bookingConfirmationMode: settings?.bookingConfirmationMode ?? 'MANUAL',
+            bookingDepositPercent: settings?.bookingDepositPercent != null ? Number(settings.bookingDepositPercent) : null,
+            allowManualConfirmationOverride: settings?.allowManualConfirmationOverride ?? true
         };
     }
 
@@ -519,15 +535,17 @@ Ingresó un nuevo turno web en *${params.clubName}*.
         notificationUserId?: number | null;
         startDateTime: Date;
         timeZone: string;
+        reason?: CancelBookingReason;
     }) {
         const cleanClientPhone = this.normalizePhone(params.clientPhone);
         const cleanClubPhone = this.normalizePhone(params.clubPhone);
         const { date, time } = this.formatBookingDateTime(params.startDateTime, params.timeZone);
+        const isAutoCancel = params.reason === 'AUTO_CANCEL_UNCONFIRMED';
 
         const clientMessage = `
 ❌ *Reserva Cancelada en ${params.clubName}* ❌
 
-Hola *${params.clientName}*, te confirmamos que tu turno ha sido anulado a través del sistema.
+Hola *${params.clientName}*, te confirmamos que tu turno ha sido anulado${isAutoCancel ? ' automáticamente por falta de confirmación' : ' a través del sistema'}.
 
 📅 *Fecha:* ${date}
 ⏰ *Hora:* ${time}
@@ -540,9 +558,9 @@ Hola *${params.clientName}*, te confirmamos que tu turno ha sido anulado a trav�
         `.trim();
 
         const clubMessage = `
-⚠️ *¡Turno Cancelado por Usuario!* ⚠️
+⚠️ *¡Turno Cancelado!* ⚠️
 
-Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
+${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en' : 'Un cliente canceló su reserva en'} *${params.clubName}*.
 
 👤 *Cliente:* ${params.clientName}
 📞 *Tel:* ${cleanClientPhone ? `wa.me/${cleanClientPhone}` : 'No registrado'}
@@ -554,7 +572,9 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         `.trim();
 
         const notificationTitle = 'Reserva cancelada';
-        const notificationMessage = `La reserva #${params.bookingId} fue cancelada correctamente.`;
+        const notificationMessage = isAutoCancel
+            ? `La reserva #${params.bookingId} fue cancelada automáticamente por falta de confirmación.`
+            : `La reserva #${params.bookingId} fue cancelada correctamente.`;
 
         return [
             cleanClientPhone
@@ -596,34 +616,24 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
     }
 
     async getBookingFinancialSummary(bookingId: number, clubId: number) {
-        const account = await prisma.account.findFirst({
-            where: { clubId, sourceType: 'BOOKING', sourceId: String(bookingId) },
-            include: { items: true, payments: true }
-        });
-
-        if (!account) {
-            throw new Error('Cuenta de reserva no encontrada');
-        }
-
-        const courtTotal = account.items
+        const summary = await prisma.$transaction((tx) => this.bookingDomainService.getBookingFinancialSummaryTx(tx, bookingId, clubId));
+        const courtTotal = summary.account.items
             .filter((item) => item.type === 'BOOKING')
             .reduce((sum, item) => sum + Number(item.total || 0), 0);
-        const itemsTotal = account.items
+        const itemsTotal = summary.account.items
             .filter((item) => item.type !== 'BOOKING')
             .reduce((sum, item) => sum + Number(item.total || 0), 0);
-        const total = courtTotal + itemsTotal;
-
-        const paid = account.payments
-            .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-
-        const remaining = Math.max(0, total - paid);
 
         return {
             courtTotal,
             itemsTotal,
-            total,
-            paid,
-            remaining
+            total: summary.total,
+            paid: summary.paid,
+            remaining: summary.remaining,
+            depositRequiredAmount: summary.depositRequiredAmount,
+            depositCovered: summary.depositCovered,
+            paymentStatus: summary.paymentStatus,
+            confirmationMode: summary.confirmationSettings.bookingConfirmationMode
         };
     }
 
@@ -675,6 +685,12 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         }
         const clubConfig = this.resolveClubConfig((court as any)?.club);
         const activitySchedule = this.resolveActivitySchedule(activity);
+        if (
+            clubConfig?.bookingConfirmationMode === 'DEPOSIT_REQUIRED' &&
+            (!Number.isFinite(Number(clubConfig?.bookingDepositPercent)) || Number(clubConfig?.bookingDepositPercent) <= 0)
+        ) {
+            throw new Error('El club requiere una seña pero no tiene bookingDepositPercent válido');
+        }
         const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
         this.assertValidDuration(effectiveDuration);
@@ -794,7 +810,9 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
                         startDateTime,
                         endDateTime,
                         price: finalPrice,
-                        status: BookingStatus.PENDING,
+                        status: resolveInitialBookingStatus(
+                            (clubConfig?.bookingConfirmationMode ?? 'MANUAL') as 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED'
+                        ),
                         userId: user ? user.id : null,
                         clientId: resolvedClient.id,
                         guestIdentifier: guestIdentifier,
@@ -1003,47 +1021,160 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         return freeSlotsResult;
     }
 
-    async cancelBooking(bookingId: number, cancelledByUserId: number, clubId?: number) {
+    async cancelBooking(bookingId: number, cancelledByUserId: number | null, clubId?: number, options?: CancelBookingOptions) {
+        const reason = options?.reason ?? 'MANUAL';
+        const now = options?.now ?? new Date();
+        const skipAccessValidation = options?.skipAccessValidation ?? false;
+        const isAutoCancel = reason === 'AUTO_CANCEL_UNCONFIRMED';
+
         const booking = await this.bookingRepo.findById(bookingId);
         if (!booking) {
             throw new Error("La reserva no existe.");
         }
-        if (clubId != null) {
-            if (booking.court.club.id !== clubId) {
-                throw new Error("No tienes acceso a esta reserva");
-            }
-        } else {
-            if (!booking.user || booking.user.id !== cancelledByUserId) {
-                throw new Error("No tienes acceso a esta reserva");
+        if (!skipAccessValidation) {
+            if (clubId != null) {
+                if (booking.court.club.id !== clubId) {
+                    throw new Error("No tienes acceso a esta reserva");
+                }
+            } else {
+                if (!booking.user || booking.user.id !== cancelledByUserId) {
+                    throw new Error("No tienes acceso a esta reserva");
+                }
             }
         }
+        if (!isAutoCancel && !isBookingTransitionAllowed(booking.status as any, 'CANCELLED')) {
+            throw new Error('Solo se pueden cancelar reservas pendientes o confirmadas');
+        }
 
+        let wasCancelled = false;
         await prisma.$transaction(async (tx) => {
+            await tx.$queryRaw<Array<{ id: number }>>`
+              SELECT "id"
+              FROM "Booking"
+              WHERE "id" = ${bookingId}
+              FOR UPDATE
+            `;
+
+            const currentBooking = await tx.booking.findUnique({
+                where: { id: bookingId },
+                include: {
+                    user: true,
+                    client: true,
+                    court: { include: { club: { include: { settings: true } } } },
+                    activity: true
+                }
+            });
+            if (!currentBooking) {
+                throw new Error('La reserva no existe.');
+            }
+
+            if (isAutoCancel) {
+                if (currentBooking.status !== 'PENDING') return;
+
+                const settings = currentBooking.court.club.settings;
+                const autoCancelEnabled = settings?.autoCancelPendingBookingsEnabled ?? false;
+                const cancelMinutes = settings?.autoCancelPendingBookingsMinutesBefore == null
+                    ? null
+                    : Number(settings.autoCancelPendingBookingsMinutesBefore);
+                const onlyIfUnpaid = settings?.autoCancelPendingBookingsOnlyIfUnpaid ?? true;
+
+                if (!autoCancelEnabled || !Number.isFinite(cancelMinutes) || Number(cancelMinutes) <= 0) return;
+                const cancelAt = new Date(currentBooking.startDateTime.getTime() - Number(cancelMinutes) * 60_000);
+                if (now.getTime() < cancelAt.getTime()) return;
+
+                if (onlyIfUnpaid) {
+                    const account = await this.bookingDomainService.getBookingAccountTx(tx, bookingId, currentBooking.court.club.id);
+                    const netPaid = await this.accountService.calculateNetPaidAmountTx(tx, account.id);
+                    if (netPaid > 0.009) return;
+                }
+            } else if (!isBookingTransitionAllowed(currentBooking.status as any, 'CANCELLED')) {
+                throw new Error('Solo se pueden cancelar reservas pendientes o confirmadas');
+            }
+
+            const account = await this.bookingDomainService.getBookingAccountTx(tx, bookingId, booking.court.club.id);
+            const totalAmount = Number(account.totalAmount || 0);
+            const paidAmount = await this.accountService.calculateNetPaidAmountTx(tx, account.id);
+
             await tx.booking.update({
                 where: { id: bookingId },
                 data: {
                     status: 'CANCELLED',
-                    cancelledAt: new Date(),
+                    cancelledAt: now,
                     ...(cancelledByUserId ? { cancelledBy: cancelledByUserId } : {})
+                    ,
+                    ...(isAutoCancel ? {
+                        autoCancelledAt: now,
+                        autoCancelReason: reason
+                    } : {})
+                }
+            });
+
+            if (totalAmount > 0.009) {
+                const adjustmentItem = await tx.accountItem.create({
+                    data: {
+                        accountId: account.id,
+                        type: 'ADJUSTMENT',
+                        description: `Cancelación reserva #${booking.id}`,
+                        quantity: 1,
+                        unitPrice: new Prisma.Decimal(-totalAmount),
+                        total: new Prisma.Decimal(-totalAmount)
+                    }
+                });
+
+                await tx.account.update({
+                    where: { id: account.id },
+                    data: {
+                        totalAmount: new Prisma.Decimal(0)
+                    }
+                });
+
+                await this.accountingService.reverseAccountItemTransaction(tx, {
+                    clubId: booking.court.club.id,
+                    type: 'ADJUSTMENT',
+                    referenceType: 'ACCOUNT_ITEM',
+                    referenceId: adjustmentItem.id,
+                    accountId: account.id,
+                    accountItemId: adjustmentItem.id,
+                    amount: totalAmount,
+                    revenueAccount: 'ADJUSTMENTS',
+                    description: `Anulación obligación reserva #${booking.id}`,
+                    createdByUserId: cancelledByUserId ?? null
+                });
+            }
+
+            if (paidAmount > 0.009) {
+                await this.refundService.refundBookingPaymentsTx(tx, {
+                    bookingId: booking.id,
+                    clubId: booking.court.club.id,
+                    reason: `Cancelación reserva #${booking.id}`,
+                    createdByUserId: cancelledByUserId ?? undefined
+                });
+            }
+
+            await tx.account.update({
+                where: { id: account.id },
+                data: {
+                    status: 'CLOSED',
+                    closedAt: new Date()
                 }
             });
 
             await this.eventService.bookingCancelled(booking.court.club.id, {
                 bookingId,
-                userId: booking.user?.id ?? null,
-                cancelledByUserId,
+                userId: currentBooking.user?.id ?? null,
+                cancelledByUserId: cancelledByUserId ?? null,
                 clubId: booking.court.club.id
             }, tx);
 
             const clubPhone = (booking.court.club as any)?.phone ?? null;
             const clientPhone =
-                booking.user?.phoneNumber ||
-                booking.client?.phone ||
+                currentBooking.user?.phoneNumber ||
+                currentBooking.client?.phone ||
                 null;
 
             const clientName =
-                booking.user?.firstName ||
-                booking.client?.name ||
+                currentBooking.user?.firstName ||
+                currentBooking.client?.name ||
                 'Jugador';
             const timeZone = (booking.court.club as any)?.timeZone || 'America/Argentina/Buenos_Aires';
             const outboxMessages = this.buildBookingCancelledOutboxMessages({
@@ -1054,40 +1185,99 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
                 courtName: booking.court.name,
                 clientName,
                 clientPhone,
-                notificationUserId: booking.user?.id ?? null,
-                startDateTime: booking.startDateTime,
-                timeZone
+                notificationUserId: currentBooking.user?.id ?? null,
+                startDateTime: currentBooking.startDateTime,
+                timeZone,
+                reason
             });
 
             await this.outboxService.enqueueMany(outboxMessages, tx);
-
-            await this.accountService.cancelItemsForSourceTx(tx, {
-                sourceType: 'BOOKING',
-                sourceId: booking.id
-            });
+            await this.projectionService.refreshAccountSummary(account.id, tx);
+            wasCancelled = true;
         });
+
+        if (!wasCancelled && isAutoCancel) {
+            return this.bookingRepo.findById(bookingId);
+        }
 
         console.info('[BOOKING] Reserva cancelada', {
             bookingId,
             cancelledByUserId,
-            clubId: booking.court.club.id
+            clubId: booking.court.club.id,
+            reason
         });
 
         await this.auditLogService.create({
             clubId: booking.court.club.id,
-            userId: cancelledByUserId,
+            userId: cancelledByUserId ?? null,
             entity: 'Booking',
             entityId: String(bookingId),
-            action: 'BOOKING_CANCEL',
+            action: isAutoCancel ? 'BOOKING_AUTO_CANCEL' : 'BOOKING_CANCEL',
             payload: {
                 cancelledByUserId,
                 courtId: booking.court.id,
-                activityId: booking.activity.id
+                activityId: booking.activity.id,
+                reason
             }
         });
         
         const updated = await this.bookingRepo.findById(bookingId);
         return updated;
+    }
+
+    async confirmBooking(bookingId: number, actorUserId: number, clubId: number) {
+        const updatedStatus = await prisma.$transaction(async (tx) => {
+            return this.bookingDomainService.confirmBookingManuallyTx(tx, { bookingId, clubId });
+        });
+
+        await this.auditLogService.create({
+            clubId,
+            userId: actorUserId,
+            entity: 'Booking',
+            entityId: String(bookingId),
+            action: 'BOOKING_CONFIRM',
+            payload: { status: updatedStatus }
+        });
+
+        return this.getBookingById(bookingId, clubId);
+    }
+
+    async completeBooking(bookingId: number, actorUserId: number, clubId: number) {
+        const completed = await prisma.$transaction(async (tx) => {
+            const booking = await tx.booking.findFirst({
+                where: { id: bookingId, clubId },
+                include: { court: true, activity: true }
+            });
+            if (!booking) throw new Error('Reserva no encontrada');
+            if (!isBookingTransitionAllowed(booking.status as any, 'COMPLETED')) {
+                throw new Error('Solo se puede completar una reserva confirmada');
+            }
+            if (booking.endDateTime.getTime() > Date.now()) {
+                throw new Error('No se puede completar una reserva antes de su horario de finalización');
+            }
+
+            const updatedBooking = await tx.booking.update({
+                where: { id: bookingId },
+                data: { status: 'COMPLETED' }
+            });
+
+            const account = await this.bookingDomainService.getBookingAccountTx(tx, bookingId, clubId);
+            await this.bookingDomainService.closeAccountIfEligibleTx(tx, account.id);
+            await this.projectionService.refreshAccountSummary(account.id, tx);
+
+            return updatedBooking;
+        });
+
+        await this.auditLogService.create({
+            clubId,
+            userId: actorUserId,
+            entity: 'Booking',
+            entityId: String(bookingId),
+            action: 'BOOKING_COMPLETE',
+            payload: { status: completed.status }
+        });
+
+        return this.getBookingById(bookingId, clubId);
     }
     
     async getUserHistory(
@@ -1653,6 +1843,9 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         const booking = await prisma.booking.findFirst({ where: { id: bookingId, clubId } });
         const product = await prisma.product.findFirst({ where: { id: productId, clubId } });
         if (!booking || !product) throw new Error('Datos no encontrados');
+        if (booking.status === 'CANCELLED') throw new Error('No se pueden agregar consumos a una reserva cancelada');
+        if (booking.status === 'COMPLETED') throw new Error('No se pueden agregar consumos a una reserva completada');
+        if (booking.status !== 'CONFIRMED') throw new Error('Solo se pueden agregar consumos a reservas confirmadas');
 
         const normalizedQty = Math.floor(Number(quantity));
         if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) throw new Error('Cantidad inválida');
@@ -1672,15 +1865,9 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
             });
 
             if (!account) {
-                account = await tx.account.create({
-                    data: {
-                        clubId,
-                        sourceType: 'BOOKING',
-                        sourceId: String(bookingId),
-                        status: 'OPEN'
-                    }
-                });
+                throw new Error('La reserva no tiene cuenta asociada');
             }
+            if (account.status !== 'OPEN') throw new Error('No se pueden agregar consumos a una cuenta cerrada');
 
             const createdItem = await tx.accountItem.create({
                 data: {
@@ -1751,7 +1938,7 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
 
             const itemTotal = Number(item.total || 0);
             const currentTotal = Number(item.account.totalAmount || 0);
-            const paidAmount = Number(item.account.paidAmount || 0);
+            const paidAmount = await this.accountService.calculateNetPaidAmountTx(tx, item.accountId);
             const nextTotal = Number((currentTotal - itemTotal).toFixed(2));
 
             if (paidAmount > nextTotal + 0.009) {

@@ -3,8 +3,10 @@ import { prisma, prismaRead } from '../prisma';
 import { AccountingService } from './AccountingService';
 import { acquireTransactionAdvisoryLock } from '../utils/advisoryLock';
 import { ProjectionService } from './ProjectionService';
+import { getDerivedPaymentStatus } from '../domain/bookingDomain';
 
 const USE_PROJECTION_READ_MODELS = String(process.env.READ_MODEL_SOURCE || '').toLowerCase() === 'projection';
+const EPSILON = 0.009;
 
 type OpenAccountInput = {
   clubId: number;
@@ -15,6 +17,84 @@ type OpenAccountInput = {
 export class AccountService {
   private readonly accountingService = new AccountingService();
   private readonly projectionService = new ProjectionService();
+
+  async calculateNetPaidAmountTx(tx: Prisma.TransactionClient, accountId: string): Promise<number> {
+    const [paymentsAgg, refundsAgg] = await Promise.all([
+      tx.payment.aggregate({
+        where: { accountId },
+        _sum: { amount: true }
+      }),
+      tx.refund.aggregate({
+        where: { accountId },
+        _sum: { amount: true }
+      })
+    ]);
+
+    const totalPayments = Number(paymentsAgg._sum.amount || 0);
+    const totalRefunds = Number(refundsAgg._sum.amount || 0);
+    return Number(Math.max(0, totalPayments - totalRefunds).toFixed(2));
+  }
+
+  async calculateNetPaidAmount(accountId: string): Promise<number> {
+    const [paymentsAgg, refundsAgg] = await Promise.all([
+      prismaRead.payment.aggregate({
+        where: { accountId },
+        _sum: { amount: true }
+      }),
+      prismaRead.refund.aggregate({
+        where: { accountId },
+        _sum: { amount: true }
+      })
+    ]);
+
+    const totalPayments = Number(paymentsAgg._sum.amount || 0);
+    const totalRefunds = Number(refundsAgg._sum.amount || 0);
+    return Number(Math.max(0, totalPayments - totalRefunds).toFixed(2));
+  }
+
+  async reconcilePaidAmountTx(tx: Prisma.TransactionClient, accountId: string, options?: {
+    updateStatus?: boolean;
+    reopenIfRemaining?: boolean;
+  }) {
+    const account = await tx.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new Error('Cuenta no encontrada');
+
+    const netPaid = await this.calculateNetPaidAmountTx(tx, accountId);
+    const currentPaid = Number(account.paidAmount || 0);
+    const total = Number(account.totalAmount || 0);
+    const remaining = Number((total - netPaid).toFixed(2));
+
+    const mustUpdatePaid = Math.abs(currentPaid - netPaid) > EPSILON;
+
+    const updateData: Prisma.AccountUpdateInput = {};
+    if (mustUpdatePaid) {
+      updateData.paidAmount = new Prisma.Decimal(netPaid);
+    }
+
+    if (options?.updateStatus) {
+      if (account.status === 'OPEN' && remaining <= EPSILON) {
+        updateData.status = 'CLOSED';
+        updateData.closedAt = new Date();
+      }
+      if (options.reopenIfRemaining && account.status === 'CLOSED' && remaining > EPSILON) {
+        updateData.status = 'OPEN';
+        updateData.closedAt = null;
+      }
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await tx.account.update({
+        where: { id: accountId },
+        data: updateData
+      });
+    }
+
+    return {
+      netPaid,
+      total,
+      remaining
+    };
+  }
 
   async cancelItemsForSourceTx(tx: Prisma.TransactionClient, input: {
     sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
@@ -37,7 +117,7 @@ export class AccountService {
     }
 
     const total = Number(account.totalAmount || 0);
-    const paid = Number(account.paidAmount || 0);
+    const paid = await this.calculateNetPaidAmountTx(tx, account.id);
     const remaining = Number((total - paid).toFixed(2));
 
     if (remaining <= 0.009) {
@@ -123,6 +203,17 @@ export class AccountService {
         return existing;
       }
 
+      if (input.sourceType === 'BOOKING') {
+        const booking = await tx.booking.findFirst({
+          where: { id: Number(input.sourceId), clubId: input.clubId },
+          select: { id: true, status: true }
+        });
+        if (!booking) throw new Error('No se puede abrir cuenta: la reserva no existe');
+        if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') {
+          throw new Error('No se puede abrir cuenta para una reserva terminal');
+        }
+      }
+
       const account = await tx.account.create({
         data: {
           clubId: input.clubId,
@@ -164,7 +255,7 @@ export class AccountService {
     if (!account) throw new Error('Cuenta no encontrada');
 
     const total = Number(account.totalAmount || 0);
-    const paid = Number(account.paidAmount || 0);
+    const paid = await this.calculateNetPaidAmount(account.id);
     const remaining = Number((total - paid).toFixed(2));
 
     return {
@@ -188,7 +279,8 @@ export class AccountService {
           itemsTotal: Number(projection.totalAmount || 0),
           paymentsTotal: Number(projection.paidAmount || 0),
           remaining: Number(projection.remaining || 0),
-          isBalanced: Math.abs(Number(projection.remaining || 0)) <= 0.009,
+          paymentStatus: getDerivedPaymentStatus(Number(projection.totalAmount || 0), Number(projection.paidAmount || 0)),
+          isBalanced: Math.abs(Number(projection.remaining || 0)) <= EPSILON,
           status: projection.status
         };
       }
@@ -208,7 +300,8 @@ export class AccountService {
       itemsTotal: balance.total,
       paymentsTotal: balance.paid,
       remaining: balance.remaining,
-      isBalanced: Math.abs(balance.remaining) <= 0.009,
+      paymentStatus: getDerivedPaymentStatus(balance.total, balance.paid),
+      isBalanced: Math.abs(balance.remaining) <= EPSILON,
       status: account.status
     };
   }
@@ -232,7 +325,7 @@ export class AccountService {
     if (!account) throw new Error('Cuenta no encontrada');
 
     const total = Number(account.totalAmount || 0);
-    const paid = Number(account.paidAmount || 0);
+    const paid = await this.calculateNetPaidAmount(account.id);
 
     return {
       accountId,
@@ -262,9 +355,10 @@ export class AccountService {
       if (!account) throw new Error('Cuenta no encontrada');
       if (account.status !== 'OPEN') throw new Error('La cuenta no está abierta');
 
-      const remaining = Number((Number(account.totalAmount || 0) - Number(account.paidAmount || 0)).toFixed(2));
+      const netPaid = await this.calculateNetPaidAmountTx(tx, account.id);
+      const remaining = Number((Number(account.totalAmount || 0) - netPaid).toFixed(2));
 
-      if (remaining > 0.009) throw new Error('No se puede cerrar la cuenta: aún hay saldo pendiente');
+      if (remaining > EPSILON) throw new Error('No se puede cerrar la cuenta: aún hay saldo pendiente');
 
       const closed = await tx.account.update({
         where: { id: accountId },
@@ -289,6 +383,22 @@ export class AccountService {
       const account = await tx.account.findFirst({ where: { id: accountId, clubId } });
       if (!account) throw new Error('Cuenta no encontrada');
       if (account.status !== 'OPEN') throw new Error('Solo se pueden agregar consumos a cuentas abiertas');
+      if (account.sourceType === 'BOOKING') {
+        const booking = await tx.booking.findFirst({
+          where: { id: Number(account.sourceId), clubId },
+          select: { status: true }
+        });
+        if (!booking) throw new Error('Reserva asociada a la cuenta no encontrada');
+        if (booking.status === 'CANCELLED') {
+          throw new Error('No se pueden agregar consumos a una reserva cancelada');
+        }
+        if (booking.status === 'COMPLETED') {
+          throw new Error('No se pueden agregar consumos a una reserva completada');
+        }
+        if (booking.status !== 'CONFIRMED') {
+          throw new Error('Solo se pueden agregar consumos a reservas confirmadas');
+        }
+      }
 
       const quantity = Math.floor(Number(input.quantity));
       const unitPrice = Number(input.unitPrice);

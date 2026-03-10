@@ -32,6 +32,12 @@ enum BookingStatus {
   COMPLETED
 }
 
+enum BookingConfirmationMode {
+  AUTOMATIC
+  MANUAL
+  DEPOSIT_REQUIRED
+}
+
 enum ScheduleMode {
   FIXED
   RANGE
@@ -99,6 +105,7 @@ enum LedgerReferenceType {
   ACCOUNT
   ACCOUNT_ITEM
   PAYMENT
+  REFUND
   BOOKING
   MANUAL
 }
@@ -165,6 +172,7 @@ model User {
   ledgerEntries LedgerEntry[]
   ledgerTransactionsCreated LedgerTransaction[]
   cashMovementsCreated CashMovement[]
+  refundsCreated Refund[]
 }
 
 model Club {
@@ -213,6 +221,7 @@ model Club {
   cashShifts    CashShift[]
   ledgerEntries LedgerEntry[]
   ledgerTransactions LedgerTransaction[]
+  refunds       Refund[]
 }
 
 model Membership {
@@ -344,6 +353,9 @@ model Booking {
 
   cancelledBy     Int?
   cancelledAt     DateTime?     @db.Timestamptz(3)
+  autoCancelWarningSentAt DateTime? @db.Timestamptz(3)
+  autoCancelledAt         DateTime? @db.Timestamptz(3)
+  autoCancelReason        String?
 
   price           Decimal @db.Decimal(10, 2)
   createdAt       DateTime      @default(now()) @db.Timestamptz(3)
@@ -375,6 +387,7 @@ model Booking {
   @@index([clubId, startDateTime], map: "booking_club_day")
   @@index([activityId, startDateTime], map: "booking_activity_day")
   @@index([startDateTime])
+  @@index([status, startDateTime, autoCancelledAt], map: "booking_pending_autocancel_idx")
 }
 
 model FixedBooking {
@@ -426,6 +439,7 @@ model Account {
 
   items         AccountItem[]
   payments      Payment[]
+  refunds       Refund[]
   ledgerEntries LedgerEntry[]
 
   @@index([clubId])
@@ -471,6 +485,7 @@ model Payment {
   cashShift   CashShift? @relation(fields: [cashShiftId], references: [id], onDelete: SetNull)
 
   cashMovement CashMovement?
+  refunds      Refund[]
   ledgerEntries LedgerEntry[]
 
   @@index([accountId])
@@ -649,6 +664,18 @@ model ClubSettings {
   // Configuración avanzada (Agregado para centralizar)
   fixedBookingSettingsByActivity Json?
 
+  // Política de confirmación de reservas
+  bookingConfirmationMode       BookingConfirmationMode @default(MANUAL)
+  bookingDepositPercent         Decimal?                @db.Decimal(5, 2)
+  allowManualConfirmationOverride Boolean               @default(true)
+
+  // Política de auto-cancelación de reservas pendientes
+  autoCancelPendingBookingsEnabled      Boolean @default(false)
+  autoCancelPendingBookingsMinutesBefore Int?
+  autoCancelPendingBookingsOnlyIfUnpaid Boolean @default(true)
+  autoCancelPendingWarningEnabled       Boolean @default(false)
+  autoCancelPendingWarningMinutesBefore Int?
+
   createdAt                 DateTime @default(now()) @db.Timestamptz(3)
   updatedAt                 DateTime @updatedAt @db.Timestamptz(3)
 }
@@ -715,11 +742,15 @@ model CashMovement {
   paymentId   String?  @unique
   payment     Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
+  refundId    String?  @unique
+  refund      Refund?  @relation(fields: [refundId], references: [id], onDelete: SetNull)
+
   clubId Int
   club   Club @relation(fields: [clubId], references: [id])
 
   @@index([clubId, createdAt])
   @@index([paymentId])
+  @@index([refundId])
   @@index([cashShiftId])
 }
 
@@ -743,6 +774,9 @@ model LedgerEntry {
 
   paymentId       String?
   payment         Payment?          @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  refundId        String?
+  refund          Refund?           @relation(fields: [refundId], references: [id], onDelete: SetNull)
 
   amount          Decimal           @db.Decimal(10, 2)
   account         LedgerAccount
@@ -800,6 +834,7 @@ model CashShift {
   status CashShiftStatus @default(OPEN)
 
   payments  Payment[]
+  refunds   Refund[]
   movements CashMovement[]
 
   @@index([cashRegisterId])
@@ -807,4 +842,34 @@ model CashShift {
   @@index([clubId])
   @@index([openedAt])
   @@index([clubId, status])
+}
+
+model Refund {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  amount          Decimal  @db.Decimal(10, 2)
+  reason          String?
+
+  paymentId       String
+  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  accountId       String
+  account         Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  clubId          Int
+  club            Club     @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  cashShiftId     String?
+  cashShift       CashShift? @relation(fields: [cashShiftId], references: [id], onDelete: SetNull)
+
+  cashMovement    CashMovement?
+  ledgerEntries   LedgerEntry[]
+
+  createdByUserId Int?
+  createdByUser   User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([paymentId])
+  @@index([accountId])
+  @@index([clubId, createdAt])
+  @@index([cashShiftId])
 }

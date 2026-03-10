@@ -6,11 +6,14 @@ import { metricsService } from './services/MetricsService';
 import { OutboxWorker } from './services/OutboxWorker';
 import { acquireDistributedLock } from './utils/distributedLock';
 import { featureFlags } from './config/featureFlags';
+import { PendingBookingAutoCancelService } from './services/PendingBookingAutoCancelService';
 
 const PORT = Number(process.env.PORT) || 3000;
 const BOOKINGS_COMPLETION_INTERVAL_MS = Number(process.env.BOOKINGS_COMPLETION_INTERVAL_MS) || 60_000;
+const PENDING_BOOKINGS_AUTOCANCEL_INTERVAL_MS = Number(process.env.PENDING_BOOKINGS_AUTOCANCEL_INTERVAL_MS) || 60_000;
 const OUTBOX_PROCESSOR_INTERVAL_MS = Number(process.env.OUTBOX_PROCESSOR_INTERVAL_MS) || 5_000;
 const BOOKINGS_COMPLETION_LOCK_TTL_MS = Number(process.env.BOOKINGS_COMPLETION_LOCK_TTL_MS) || 55_000;
+const PENDING_BOOKINGS_AUTOCANCEL_LOCK_TTL_MS = Number(process.env.PENDING_BOOKINGS_AUTOCANCEL_LOCK_TTL_MS) || 55_000;
 const PROCESS_ROLE = String(process.env.PROCESS_ROLE || 'all').toLowerCase();
 const RUN_BOOKING_COMPLETION_JOB = process.env.RUN_BOOKING_COMPLETION_JOB;
 
@@ -76,6 +79,30 @@ const completePastBookings = async () => {
   }
 };
 
+const autoCancelPendingBookingsService = new PendingBookingAutoCancelService();
+const processPendingBookingPolicies = async () => {
+  const lock = await acquireDistributedLock(
+    'scheduler:pending-bookings-auto-cancel',
+    PENDING_BOOKINGS_AUTOCANCEL_LOCK_TTL_MS
+  );
+
+  if (process.env.REDIS_URL && !lock) {
+    metricsService.recordSchedulerRun('pending_bookings_auto_cancel', 'skipped');
+    return;
+  }
+
+  try {
+    await autoCancelPendingBookingsService.processPendingBookingWarnings();
+    await autoCancelPendingBookingsService.processPendingBookingAutoCancellations();
+    metricsService.recordSchedulerRun('pending_bookings_auto_cancel', 'success');
+  } catch (error) {
+    console.error('❌ Error procesando políticas de auto-cancelación de pendientes:', error);
+    metricsService.recordSchedulerRun('pending_bookings_auto_cancel', 'error');
+  } finally {
+    await lock?.release();
+  }
+};
+
 const startApi = () => {
   const app = createApp();
   app.listen(PORT, '0.0.0.0', () => {
@@ -104,10 +131,15 @@ const startWorker = () => {
 
 const startScheduler = async () => {
   await completePastBookings();
+  await processPendingBookingPolicies();
 
-  const interval = setInterval(async () => {
+  setInterval(async () => {
     await completePastBookings();
   }, BOOKINGS_COMPLETION_INTERVAL_MS);
+
+  setInterval(async () => {
+    await processPendingBookingPolicies();
+  }, PENDING_BOOKINGS_AUTOCANCEL_INTERVAL_MS);
 
   console.log('⏰ Scheduler de reservas iniciado');
 };

@@ -6,6 +6,7 @@ export type FixedBookingActivityConfig = {
 };
 
 export type FixedBookingSettingsByActivity = Record<string, FixedBookingActivityConfig>;
+export type BookingConfirmationMode = 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
 
 export class Club {
     public courts: Court[] = [];
@@ -33,9 +34,16 @@ export class Club {
         public professorDiscountEnabled: boolean = false,
         public professorDiscountPercent?: number | null,
         public fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null,
+        public bookingConfirmationMode: BookingConfirmationMode = 'MANUAL',
+        public bookingDepositPercent?: number | null,
+        public allowManualConfirmationOverride: boolean = true,
+        public autoCancelPendingBookingsEnabled: boolean = false,
+        public autoCancelPendingBookingsMinutesBefore?: number | null,
+        public autoCancelPendingBookingsOnlyIfUnpaid: boolean = true,
+        public autoCancelPendingWarningEnabled: boolean = false,
+        public autoCancelPendingWarningMinutesBefore?: number | null,
         public openingDays?: number[] | null,
         public createdAt?: Date,
         public updatedAt?: Date
     ) {}
 }
-

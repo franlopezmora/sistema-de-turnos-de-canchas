@@ -29,6 +29,14 @@ export class ClubRepository {
         professorDiscountEnabled: boolean = false,
         professorDiscountPercent?: number | null,
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null,
+        bookingConfirmationMode: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED' = 'MANUAL',
+        bookingDepositPercent?: number | null,
+        allowManualConfirmationOverride: boolean = true,
+        autoCancelPendingBookingsEnabled: boolean = false,
+        autoCancelPendingBookingsMinutesBefore?: number | null,
+        autoCancelPendingBookingsOnlyIfUnpaid: boolean = true,
+        autoCancelPendingWarningEnabled: boolean = false,
+        autoCancelPendingWarningMinutesBefore?: number | null,
         openingDays?: number[] | null
     ): Promise<Club> {
         const location = await this.ensureLocation(city, province, country);
@@ -62,7 +70,15 @@ export class ClubRepository {
                         lightsFromHour: lightsFromHour ?? null,
                         professorDiscountEnabled,
                         professorDiscountPercent,
-                        fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined
+                        fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
+                        bookingConfirmationMode,
+                        bookingDepositPercent,
+                        allowManualConfirmationOverride,
+                        autoCancelPendingBookingsEnabled,
+                        autoCancelPendingBookingsMinutesBefore: autoCancelPendingBookingsMinutesBefore ?? null,
+                        autoCancelPendingBookingsOnlyIfUnpaid,
+                        autoCancelPendingWarningEnabled,
+                        autoCancelPendingWarningMinutesBefore: autoCancelPendingWarningMinutesBefore ?? null
                     }
                 }
             },
@@ -149,6 +165,14 @@ export class ClubRepository {
             club.professorDiscountEnabled ?? false,
             club.professorDiscountPercent != null ? Number(club.professorDiscountPercent) : null,
             club.fixedBookingSettingsByActivity ?? null,
+            club.bookingConfirmationMode ?? 'MANUAL',
+            club.bookingDepositPercent != null ? Number(club.bookingDepositPercent) : null,
+            club.allowManualConfirmationOverride ?? true,
+            club.autoCancelPendingBookingsEnabled ?? false,
+            club.autoCancelPendingBookingsMinutesBefore != null ? Number(club.autoCancelPendingBookingsMinutesBefore) : null,
+            club.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
+            club.autoCancelPendingWarningEnabled ?? false,
+            club.autoCancelPendingWarningMinutesBefore != null ? Number(club.autoCancelPendingWarningMinutesBefore) : null,
             club.openingDays ?? null
         );
     }
@@ -199,6 +223,14 @@ export class ClubRepository {
         professorDiscountEnabled?: boolean;
         professorDiscountPercent?: number | null;
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
+        bookingConfirmationMode?: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
+        bookingDepositPercent?: number | null;
+        allowManualConfirmationOverride?: boolean;
+        autoCancelPendingBookingsEnabled?: boolean;
+        autoCancelPendingBookingsMinutesBefore?: number | null;
+        autoCancelPendingBookingsOnlyIfUnpaid?: boolean;
+        autoCancelPendingWarningEnabled?: boolean;
+        autoCancelPendingWarningMinutesBefore?: number | null;
         openingDays?: number[] | null;
     }): Promise<Club> {
         const clubFields = {
@@ -242,7 +274,15 @@ export class ClubRepository {
                             lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : (data.lightsFromHour ?? null),
                             professorDiscountEnabled: data.professorDiscountEnabled ?? false,
                             professorDiscountPercent: data.professorDiscountPercent ?? null,
-                            fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : (data.fixedBookingSettingsByActivity ?? undefined)
+                            fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : (data.fixedBookingSettingsByActivity ?? undefined),
+                            bookingConfirmationMode: data.bookingConfirmationMode ?? 'MANUAL',
+                            bookingDepositPercent: data.bookingDepositPercent ?? null,
+                            allowManualConfirmationOverride: data.allowManualConfirmationOverride ?? true,
+                            autoCancelPendingBookingsEnabled: data.autoCancelPendingBookingsEnabled ?? false,
+                            autoCancelPendingBookingsMinutesBefore: data.autoCancelPendingBookingsMinutesBefore ?? null,
+                            autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
+                            autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled ?? false,
+                            autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore ?? null
                         },
                         update: {
                             ...(data.timeZone !== undefined ? { timeZone: data.timeZone } : {}),
@@ -260,6 +300,30 @@ export class ClubRepository {
                                 : {}),
                             ...(data.fixedBookingSettingsByActivity !== undefined
                                 ? { fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : data.fixedBookingSettingsByActivity }
+                                : {}),
+                            ...(data.bookingConfirmationMode !== undefined
+                                ? { bookingConfirmationMode: data.bookingConfirmationMode }
+                                : {}),
+                            ...(data.bookingDepositPercent !== undefined
+                                ? { bookingDepositPercent: data.bookingDepositPercent }
+                                : {}),
+                            ...(data.allowManualConfirmationOverride !== undefined
+                                ? { allowManualConfirmationOverride: data.allowManualConfirmationOverride }
+                                : {}),
+                            ...(data.autoCancelPendingBookingsEnabled !== undefined
+                                ? { autoCancelPendingBookingsEnabled: data.autoCancelPendingBookingsEnabled }
+                                : {}),
+                            ...(data.autoCancelPendingBookingsMinutesBefore !== undefined
+                                ? { autoCancelPendingBookingsMinutesBefore: data.autoCancelPendingBookingsMinutesBefore }
+                                : {}),
+                            ...(data.autoCancelPendingBookingsOnlyIfUnpaid !== undefined
+                                ? { autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid }
+                                : {}),
+                            ...(data.autoCancelPendingWarningEnabled !== undefined
+                                ? { autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled }
+                                : {}),
+                            ...(data.autoCancelPendingWarningMinutesBefore !== undefined
+                                ? { autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore }
                                 : {})
                         }
                     }
@@ -279,8 +343,19 @@ export class ClubRepository {
         const resolvedLightsFromHour = this.formatLightsFromHour(settings?.lightsFromHour) ?? null;
         const resolvedProfessorDiscountEnabled = settings?.professorDiscountEnabled ?? false;
         const resolvedProfessorDiscountPercentRaw = settings?.professorDiscountPercent ?? null;
+        const bookingConfirmationMode = settings?.bookingConfirmationMode ?? 'MANUAL';
+        const bookingDepositPercentRaw = settings?.bookingDepositPercent ?? null;
+        const allowManualConfirmationOverride = settings?.allowManualConfirmationOverride ?? true;
+        const autoCancelPendingBookingsEnabled = settings?.autoCancelPendingBookingsEnabled ?? false;
+        const autoCancelPendingBookingsMinutesBeforeRaw = settings?.autoCancelPendingBookingsMinutesBefore ?? null;
+        const autoCancelPendingBookingsOnlyIfUnpaid = settings?.autoCancelPendingBookingsOnlyIfUnpaid ?? true;
+        const autoCancelPendingWarningEnabled = settings?.autoCancelPendingWarningEnabled ?? false;
+        const autoCancelPendingWarningMinutesBeforeRaw = settings?.autoCancelPendingWarningMinutesBefore ?? null;
         const resolvedLightsExtraAmount = resolvedLightsExtraAmountRaw == null ? null : Number(resolvedLightsExtraAmountRaw);
         const resolvedProfessorDiscountPercent = resolvedProfessorDiscountPercentRaw == null ? null : Number(resolvedProfessorDiscountPercentRaw);
+        const bookingDepositPercent = bookingDepositPercentRaw == null ? null : Number(bookingDepositPercentRaw);
+        const autoCancelPendingBookingsMinutesBefore = autoCancelPendingBookingsMinutesBeforeRaw == null ? null : Number(autoCancelPendingBookingsMinutesBeforeRaw);
+        const autoCancelPendingWarningMinutesBefore = autoCancelPendingWarningMinutesBeforeRaw == null ? null : Number(autoCancelPendingWarningMinutesBeforeRaw);
         const resolvedFixedBooking = (settings?.fixedBookingSettingsByActivity ?? null) as FixedBookingSettingsByActivity | null;
 
         return new Club(
@@ -306,6 +381,14 @@ export class ClubRepository {
             resolvedProfessorDiscountEnabled,
             resolvedProfessorDiscountPercent,
             resolvedFixedBooking,
+            bookingConfirmationMode,
+            bookingDepositPercent,
+            allowManualConfirmationOverride,
+            autoCancelPendingBookingsEnabled,
+            autoCancelPendingBookingsMinutesBefore,
+            autoCancelPendingBookingsOnlyIfUnpaid,
+            autoCancelPendingWarningEnabled,
+            autoCancelPendingWarningMinutesBefore,
             resolvedOpeningDays,
             dbClub.createdAt,
             dbClub.updatedAt
@@ -347,4 +430,3 @@ export class ClubRepository {
         });
     }
 }
-

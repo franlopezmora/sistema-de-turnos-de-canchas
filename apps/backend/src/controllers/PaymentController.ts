@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { PaymentService } from '../services/PaymentService';
-import { mapPaymentDto } from '../dto/financialDto';
+import { mapPaymentDto, mapRefundDto } from '../dto/financialDto';
+import { RefundService } from '../services/RefundService';
 
 export class PaymentController {
   private readonly paymentService = new PaymentService();
+  private readonly refundService = new RefundService();
   private resolveActorUserId(req: Request) {
     const userId = Number((req as Request & { user?: { userId?: number } }).user?.userId || 0);
     return Number.isFinite(userId) && userId > 0 ? userId : undefined;
@@ -70,6 +72,38 @@ export class PaymentController {
       return res.status(201).json(mapPaymentDto(payment));
     } catch (error: any) {
       return res.status(400).json({ error: error.message || 'Error al crear pago' });
+    }
+  };
+
+  refund = async (req: Request, res: Response) => {
+    try {
+      const paramsSchema = z.object({
+        id: z.string().trim().min(1)
+      });
+      const bodySchema = z.object({
+        amount: z.preprocess((v) => Number(v), z.number().positive()),
+        reason: z.string().trim().max(300).optional(),
+        cashShiftId: z.string().trim().min(1).optional()
+      });
+
+      const paramsParsed = paramsSchema.safeParse(req.params);
+      const bodyParsed = bodySchema.safeParse(req.body);
+      if (!paramsParsed.success) return res.status(400).json({ error: paramsParsed.error.format() });
+      if (!bodyParsed.success) return res.status(400).json({ error: bodyParsed.error.format() });
+
+      const clubId = Number((req as any).clubId);
+      const refund = await this.refundService.refundPayment({
+        clubId,
+        paymentId: paramsParsed.data.id,
+        amount: bodyParsed.data.amount,
+        reason: bodyParsed.data.reason,
+        cashShiftId: bodyParsed.data.cashShiftId,
+        createdByUserId: this.resolveActorUserId(req)
+      });
+
+      return res.status(201).json(mapRefundDto(refund));
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Error al registrar devolución' });
     }
   };
 

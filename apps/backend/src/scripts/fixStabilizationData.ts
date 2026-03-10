@@ -87,14 +87,17 @@ const mergeDuplicateAccounts = async () => {
         where: { id: canonical.id },
         include: {
           items: true,
-          payments: true
+          payments: true,
+          refunds: true
         }
       });
 
       if (!totals) return;
 
       const totalAmount = totals.items.reduce((sum, item) => sum + Number(item.total || 0), 0);
-      const paidAmount = totals.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const paymentAmount = totals.payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const refundedAmount = totals.refunds.reduce((sum, refund) => sum + Number(refund.amount || 0), 0);
+      const paidAmount = Math.max(0, Number((paymentAmount - refundedAmount).toFixed(2)));
       const status = paidAmount + 0.009 >= totalAmount ? 'CLOSED' : 'OPEN';
 
       await tx.account.update({

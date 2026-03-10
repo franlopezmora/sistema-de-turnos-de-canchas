@@ -227,6 +227,44 @@ export class BookingController {
         }
     }
 
+    confirmBooking = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id ?? req.body?.bookingId);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return res.status(400).json({ error: 'bookingId inválido' });
+            }
+            const actorUserId = Number((req as any).user?.userId);
+            const clubId = Number((req as any).clubId);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: 'Club inválido' });
+            }
+
+            const booking = await this.bookingService.confirmBooking(bookingId, actorUserId, clubId);
+            return res.json({ message: 'Reserva confirmada', booking });
+        } catch (error: any) {
+            return res.status(400).json({ error: error.message || 'No se pudo confirmar la reserva' });
+        }
+    }
+
+    completeBooking = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id ?? req.body?.bookingId);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return res.status(400).json({ error: 'bookingId inválido' });
+            }
+            const actorUserId = Number((req as any).user?.userId);
+            const clubId = Number((req as any).clubId);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: 'Club inválido' });
+            }
+
+            const booking = await this.bookingService.completeBooking(bookingId, actorUserId, clubId);
+            return res.json({ message: 'Reserva completada', booking });
+        } catch (error: any) {
+            return res.status(400).json({ error: error.message || 'No se pudo completar la reserva' });
+        }
+    }
+
     getHistory = async (req: Request, res: Response) => {
         try {
             const userId = Number(req.params.userId);
@@ -610,4 +648,3 @@ export class BookingController {
     }
 }
 }
-

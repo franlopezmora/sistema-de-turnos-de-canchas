@@ -26,6 +26,18 @@ import { getOrCreateBookingAccount, getAccountSummary, getAccountById, registerP
 
 const apiBase = () => `${getApiUrl()}/api`;
 
+export type BookingFinancialSummary = {
+  courtTotal: number;
+  itemsTotal: number;
+  total: number;
+  paid: number;
+  remaining: number;
+  depositRequiredAmount: number;
+  depositCovered: boolean;
+  paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+  confirmationMode: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
+};
+
 // --- 1. CREAR UNA RESERVA ---
 export const createBooking = async (
   courtId: number,
@@ -120,6 +132,34 @@ export const cancelBooking = async (bookingId: number) => {
     return res.json();
 };
 
+export const confirmBooking = async (bookingId: number) => {
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
+  const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
+  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
+    throw new Error('No se pudo resolver el club activo del administrador.');
+  }
+
+  const club = await ClubService.getClubById(adminClubId);
+  return ClubAdminService.confirmBooking(club.slug, bookingId);
+};
+
+export const completeBooking = async (bookingId: number) => {
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
+  const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
+  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
+    throw new Error('No se pudo resolver el club activo del administrador.');
+  }
+
+  const club = await ClubService.getClubById(adminClubId);
+  return ClubAdminService.completeBooking(club.slug, bookingId);
+};
+
 export const splitBookingPayment = async (
   bookingId: number,
   payments: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>
@@ -181,8 +221,12 @@ export const getBookingFinancialSummary = async (bookingId: number) => {
     itemsTotal: Number(summary.itemsTotal || 0),
     total: Number(summary.total || 0),
     paid: Number(summary.paid || 0),
-    remaining: Number(summary.remaining || 0)
-  };
+    remaining: Number(summary.remaining || 0),
+    depositRequiredAmount: Number(summary.depositRequiredAmount || 0),
+    depositCovered: Boolean(summary.depositCovered),
+    paymentStatus: String(summary.paymentStatus || 'UNPAID') as BookingFinancialSummary['paymentStatus'],
+    confirmationMode: String(summary.confirmationMode || 'MANUAL') as BookingFinancialSummary['confirmationMode']
+  } satisfies BookingFinancialSummary;
 };
 
 // --- 4. OBTENER SCHEDULE COMPLETO DEL DÍA (ADMIN) ---
@@ -274,4 +318,3 @@ export const searchClients = async (slug: string, query: string) => {
 
     return res.json();
 };
-

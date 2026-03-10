@@ -215,6 +215,20 @@ router.post('/:slug/admin/bookings/cancel',
     bookingController.cancelBooking
 );
 
+router.post('/:slug/admin/bookings/:id/confirm',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    bookingController.confirmBooking
+);
+
+router.post('/:slug/admin/bookings/:id/complete',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    bookingController.completeBooking
+);
+
 // 1. Obtener todos los productos del club
 router.get('/:slug/admin/products',
     authMiddleware,

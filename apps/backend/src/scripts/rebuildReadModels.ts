@@ -3,6 +3,26 @@ import { prisma } from '../prisma';
 
 const rebuildAccountSummaries = async () => {
   const accounts = await prisma.account.findMany();
+  const accountIds = accounts.map((account) => account.id);
+  const [paymentAgg, refundAgg] = await Promise.all([
+    accountIds.length > 0
+      ? prisma.payment.groupBy({
+          by: ['accountId'],
+          where: { accountId: { in: accountIds } },
+          _sum: { amount: true }
+        })
+      : Promise.resolve([] as Array<{ accountId: string; _sum: { amount: Prisma.Decimal | null } }>),
+    accountIds.length > 0
+      ? prisma.refund.groupBy({
+          by: ['accountId'],
+          where: { accountId: { in: accountIds } },
+          _sum: { amount: true }
+        })
+      : Promise.resolve([] as Array<{ accountId: string; _sum: { amount: Prisma.Decimal | null } }>)
+  ]);
+
+  const paymentByAccount = new Map(paymentAgg.map((row) => [row.accountId, Number(row._sum.amount || 0)]));
+  const refundByAccount = new Map(refundAgg.map((row) => [row.accountId, Number(row._sum.amount || 0)]));
 
   await prisma.accountSummaryProjection.deleteMany();
   if (accounts.length === 0) return 0;
@@ -10,7 +30,7 @@ const rebuildAccountSummaries = async () => {
   await prisma.accountSummaryProjection.createMany({
     data: accounts.map((account) => {
       const totalAmount = Number(account.totalAmount || 0);
-      const paidAmount = Number(account.paidAmount || 0);
+      const paidAmount = Math.max(0, (paymentByAccount.get(account.id) || 0) - (refundByAccount.get(account.id) || 0));
       return {
         accountId: account.id,
         clubId: account.clubId,

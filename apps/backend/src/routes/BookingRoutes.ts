@@ -39,6 +39,8 @@ router.get('/availability-with-courts', (req, res) => bookingController.getAvail
 
 // Cancelación: usuario puede cancelar la propia; admin con clubId valida que sea de su club
 router.post('/cancel', authMiddleware, (req, res) => bookingController.cancelBooking(req, res));
+router.post('/:id/confirm', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.confirmBooking(req, res));
+router.post('/:id/complete', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.completeBooking(req, res));
 
 // Crear Reserva (Base)
 router.post('/', bookingLimiter, optionalAuthMiddleware, (req, res) => bookingController.createBooking(req, res));

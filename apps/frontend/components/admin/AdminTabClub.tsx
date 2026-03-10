@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { ClubService, Club } from '../../services/ClubService';
+import { ClubService, Club, type BookingConfirmationMode } from '../../services/ClubService';
 import { getCourts } from '../../services/CourtService';
 import { ClubAdminService, ClubActivityType } from '../../services/ClubAdminService';
 import AppModal from '../AppModal';
@@ -19,6 +19,23 @@ type FixedBookingSettingsForm = Record<string, {
 
 const DEFAULT_FIXED_BOOKING_DAYS_AHEAD = '90';
 const DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS = '7';
+const BOOKING_CONFIRMATION_MODES: Array<{ value: BookingConfirmationMode; label: string; helper: string }> = [
+  {
+    value: 'AUTOMATIC',
+    label: 'Automática',
+    helper: 'Toda reserva nueva queda confirmada al crearse.'
+  },
+  {
+    value: 'MANUAL',
+    label: 'Manual',
+    helper: 'Las reservas nacen pendientes y un admin las confirma manualmente.'
+  },
+  {
+    value: 'DEPOSIT_REQUIRED',
+    label: 'Con seña',
+    helper: 'Las reservas nacen pendientes y se confirman cuando cubren la seña mínima.'
+  }
+];
 
 type ActivityScheduleFormValue = {
   scheduleMode: 'FIXED' | 'RANGE';
@@ -181,6 +198,14 @@ export default function AdminTabClub() {
     lightsFromHour: '',
     professorDiscountEnabled: false,
     professorDiscountPercent: '',
+    bookingConfirmationMode: 'MANUAL' as BookingConfirmationMode,
+    bookingDepositPercent: '',
+    allowManualConfirmationOverride: true,
+    autoCancelPendingBookingsEnabled: false,
+    autoCancelPendingBookingsMinutesBefore: '',
+    autoCancelPendingBookingsOnlyIfUnpaid: true,
+    autoCancelPendingWarningEnabled: false,
+    autoCancelPendingWarningMinutesBefore: '',
        openingDays: '',
         fixedBookingSettingsByActivity: {} as FixedBookingSettingsForm
   });
@@ -240,6 +265,14 @@ export default function AdminTabClub() {
           lightsFromHour: clubData.lightsFromHour || '',
           professorDiscountEnabled: clubData.professorDiscountEnabled ?? false,
           professorDiscountPercent: clubData.professorDiscountPercent != null ? String(clubData.professorDiscountPercent) : '',
+          bookingConfirmationMode: (clubData.bookingConfirmationMode ?? 'MANUAL') as BookingConfirmationMode,
+          bookingDepositPercent: clubData.bookingDepositPercent != null ? String(clubData.bookingDepositPercent) : '',
+          allowManualConfirmationOverride: clubData.allowManualConfirmationOverride ?? true,
+          autoCancelPendingBookingsEnabled: clubData.autoCancelPendingBookingsEnabled ?? false,
+          autoCancelPendingBookingsMinutesBefore: clubData.autoCancelPendingBookingsMinutesBefore != null ? String(clubData.autoCancelPendingBookingsMinutesBefore) : '',
+          autoCancelPendingBookingsOnlyIfUnpaid: clubData.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
+          autoCancelPendingWarningEnabled: clubData.autoCancelPendingWarningEnabled ?? false,
+          autoCancelPendingWarningMinutesBefore: clubData.autoCancelPendingWarningMinutesBefore != null ? String(clubData.autoCancelPendingWarningMinutesBefore) : '',
           openingDays: Array.isArray(clubData.openingDays) ? clubData.openingDays.join(',') : '',
           fixedBookingSettingsByActivity: buildFixedBookingSettingsForm(nextActivitySettings, clubData.fixedBookingSettingsByActivity)
           });
@@ -276,6 +309,37 @@ export default function AdminTabClub() {
         return acc;
       }, {} as Record<string, { fixedBookingDaysAhead: number; fixedBookingGenerationFrequencyDays: number }>);
 
+      const rawDepositPercent = Number(clubForm.bookingDepositPercent);
+      const normalizedDepositPercent = Number.isFinite(rawDepositPercent) ? rawDepositPercent : NaN;
+      if (clubForm.bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
+        if (!Number.isFinite(normalizedDepositPercent) || normalizedDepositPercent <= 0 || normalizedDepositPercent > 100) {
+          showError('En modo "Con seña", el porcentaje de seña es obligatorio y debe ser mayor a 0 y menor o igual a 100.');
+          return;
+        }
+      }
+
+      const bookingDepositPercentPayload = clubForm.bookingConfirmationMode === 'DEPOSIT_REQUIRED'
+        ? Number(normalizedDepositPercent.toFixed(2))
+        : null;
+      const cancelMinutesRaw = Number(clubForm.autoCancelPendingBookingsMinutesBefore);
+      const warningMinutesRaw = Number(clubForm.autoCancelPendingWarningMinutesBefore);
+      if (clubForm.autoCancelPendingBookingsEnabled) {
+        if (!Number.isFinite(cancelMinutesRaw) || cancelMinutesRaw <= 0) {
+          showError('Si activás auto-cancelación, los minutos antes del turno deben ser mayores a 0.');
+          return;
+        }
+      }
+      if (clubForm.autoCancelPendingBookingsEnabled && clubForm.autoCancelPendingWarningEnabled) {
+        if (!Number.isFinite(warningMinutesRaw) || warningMinutesRaw <= 0) {
+          showError('Si activás aviso previo, los minutos de aviso deben ser mayores a 0.');
+          return;
+        }
+        if (warningMinutesRaw <= cancelMinutesRaw) {
+          showError('El aviso previo debe configurarse con más minutos que la cancelación automática.');
+          return;
+        }
+      }
+
         const payload: any = {
         ...clubForm,
         lightsEnabled: !!clubForm.lightsEnabled,
@@ -283,6 +347,17 @@ export default function AdminTabClub() {
         lightsFromHour: clubForm.lightsFromHour || null,
         professorDiscountEnabled: !!clubForm.professorDiscountEnabled,
         professorDiscountPercent: clubForm.professorDiscountPercent === '' ? null : Number(clubForm.professorDiscountPercent),
+        bookingConfirmationMode: clubForm.bookingConfirmationMode,
+        bookingDepositPercent: bookingDepositPercentPayload,
+        allowManualConfirmationOverride: !!clubForm.allowManualConfirmationOverride,
+        autoCancelPendingBookingsEnabled: !!clubForm.autoCancelPendingBookingsEnabled,
+        autoCancelPendingBookingsMinutesBefore: clubForm.autoCancelPendingBookingsEnabled ? Number(cancelMinutesRaw) : null,
+        autoCancelPendingBookingsOnlyIfUnpaid: !!clubForm.autoCancelPendingBookingsOnlyIfUnpaid,
+        autoCancelPendingWarningEnabled: !!clubForm.autoCancelPendingBookingsEnabled && !!clubForm.autoCancelPendingWarningEnabled,
+        autoCancelPendingWarningMinutesBefore:
+          clubForm.autoCancelPendingBookingsEnabled && clubForm.autoCancelPendingWarningEnabled
+            ? Number(warningMinutesRaw)
+            : null,
         openingDays: openingDaysSet,
         fixedBookingSettingsByActivity
       };
@@ -377,6 +452,7 @@ export default function AdminTabClub() {
     });
   };
 
+  const isDepositMode = clubForm.bookingConfirmationMode === 'DEPOSIT_REQUIRED';
 
   const inputClass = "w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/20 focus:outline-none shadow-sm transition-all";
   const labelClass = "block text-[10px] font-black text-[#347048]/60 mb-1.5 uppercase tracking-widest ml-1";
@@ -621,6 +697,169 @@ export default function AdminTabClub() {
                     placeholder="10"
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <div className="flex items-center gap-2 mb-4 text-[#347048]">
+                <Settings size={18} strokeWidth={3} />
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Confirmación de reservas</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Modo de confirmación</label>
+                  <select
+                    value={clubForm.bookingConfirmationMode}
+                    onChange={(e) => {
+                      const nextMode = e.target.value as BookingConfirmationMode;
+                      setClubForm((prev) => ({
+                        ...prev,
+                        bookingConfirmationMode: nextMode,
+                        bookingDepositPercent: nextMode === 'DEPOSIT_REQUIRED' ? prev.bookingDepositPercent : ''
+                      }));
+                    }}
+                    className="w-full md:w-[360px] h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                  >
+                    {BOOKING_CONFIRMATION_MODES.map((mode) => (
+                      <option key={mode.value} value={mode.value}>{mode.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] font-bold text-[#347048]/60 mt-2">
+                    {BOOKING_CONFIRMATION_MODES.find((mode) => mode.value === clubForm.bookingConfirmationMode)?.helper}
+                  </p>
+                </div>
+
+                {isDepositMode ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Seña mínima (%)</label>
+                      <input
+                        type="number"
+                        min={0.01}
+                        max={100}
+                        step={0.01}
+                        value={clubForm.bookingDepositPercent}
+                        onChange={(e) => setClubForm((prev) => ({ ...prev, bookingDepositPercent: e.target.value }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                        placeholder="Ej: 30"
+                        required={isDepositMode}
+                      />
+                      <p className="text-[10px] font-bold text-[#347048]/50 mt-1">
+                        Obligatorio para confirmar automáticamente por pago en modo seña.
+                      </p>
+                    </div>
+
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
+                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.allowManualConfirmationOverride ? 'bg-[#B9CF32] border-[#B9CF32]' : 'border-[#347048]/20 bg-white'}`}>
+                          {clubForm.allowManualConfirmationOverride && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={clubForm.allowManualConfirmationOverride}
+                          onChange={(e) => setClubForm((prev) => ({ ...prev, allowManualConfirmationOverride: e.target.checked }))}
+                          className="hidden"
+                        />
+                        <span className="text-sm tracking-wide">Permitir confirmación manual de override</span>
+                      </label>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="bg-[#926699]/10 p-6 rounded-[1.5rem] border-2 border-[#926699]/20">
+              <div className="flex items-center gap-2 mb-4 text-[#347048]">
+                <AlertTriangle size={18} strokeWidth={3} />
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Cancelación automática de pendientes</h3>
+              </div>
+
+              <div className="space-y-4">
+                <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
+                  <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingBookingsEnabled ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
+                    {clubForm.autoCancelPendingBookingsEnabled && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={clubForm.autoCancelPendingBookingsEnabled}
+                    onChange={(e) => setClubForm((prev) => ({
+                      ...prev,
+                      autoCancelPendingBookingsEnabled: e.target.checked,
+                      autoCancelPendingWarningEnabled: e.target.checked ? prev.autoCancelPendingWarningEnabled : false
+                    }))}
+                    className="hidden"
+                  />
+                  <span className="text-sm tracking-wide">Activar cancelación automática de reservas pendientes</span>
+                </label>
+                <p className="text-[11px] text-[#347048]/70 font-bold">
+                  Solo aplica a reservas <span className="font-black">PENDING</span>. Las confirmadas nunca se cancelan automáticamente.
+                </p>
+
+                {clubForm.autoCancelPendingBookingsEnabled ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Cancelar si faltan (min)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={clubForm.autoCancelPendingBookingsMinutesBefore}
+                        onChange={(e) => setClubForm((prev) => ({ ...prev, autoCancelPendingBookingsMinutesBefore: e.target.value }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                        placeholder="Ej: 60"
+                      />
+                    </div>
+
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
+                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingBookingsOnlyIfUnpaid ? 'bg-[#B9CF32] border-[#B9CF32]' : 'border-[#347048]/20 bg-white'}`}>
+                          {clubForm.autoCancelPendingBookingsOnlyIfUnpaid && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={clubForm.autoCancelPendingBookingsOnlyIfUnpaid}
+                          onChange={(e) => setClubForm((prev) => ({ ...prev, autoCancelPendingBookingsOnlyIfUnpaid: e.target.checked }))}
+                          className="hidden"
+                        />
+                        <span className="text-sm tracking-wide">Solo cancelar si está impaga (neto 0)</span>
+                      </label>
+                    </div>
+
+                    <div className="md:col-span-2 pt-1 border-t border-[#347048]/10">
+                      <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
+                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingWarningEnabled ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
+                          {clubForm.autoCancelPendingWarningEnabled && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={clubForm.autoCancelPendingWarningEnabled}
+                          onChange={(e) => setClubForm((prev) => ({ ...prev, autoCancelPendingWarningEnabled: e.target.checked }))}
+                          className="hidden"
+                        />
+                        <span className="text-sm tracking-wide">Enviar aviso previo al cliente</span>
+                      </label>
+                    </div>
+
+                    {clubForm.autoCancelPendingWarningEnabled ? (
+                      <div>
+                        <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Avisar si faltan (min)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={clubForm.autoCancelPendingWarningMinutesBefore}
+                          onChange={(e) => setClubForm((prev) => ({ ...prev, autoCancelPendingWarningMinutesBefore: e.target.value }))}
+                          className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                          placeholder="Ej: 180"
+                        />
+                        <p className="text-[10px] text-[#347048]/60 font-bold mt-1">
+                          El aviso debe dispararse antes que la cancelación automática.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
 

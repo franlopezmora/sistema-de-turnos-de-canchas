@@ -5,6 +5,8 @@ import { EventService } from './EventService';
 import { OUTBOX_TYPES, OutboxService } from './OutboxService';
 import { ProjectionService } from './ProjectionService';
 import { metricsService } from './MetricsService';
+import { BookingDomainService } from './BookingDomainService';
+import { AccountService } from './AccountService';
 
 type ListPaymentsFilters = {
   clubId?: number;
@@ -31,6 +33,8 @@ export class PaymentService {
   private readonly eventService = new EventService();
   private readonly outboxService = new OutboxService();
   private readonly projectionService = new ProjectionService();
+  private readonly bookingDomainService = new BookingDomainService();
+  private readonly accountService = new AccountService();
 
   async list(filters: ListPaymentsFilters) {
     const where: Prisma.PaymentWhereInput = {
@@ -112,8 +116,17 @@ export class PaymentService {
       }
       if (account.status !== 'OPEN') throw new Error('Solo se pueden registrar pagos en cuentas abiertas');
 
+      if (account.sourceType === 'BOOKING') {
+        const booking = await tx.booking.findUnique({
+          where: { id: Number(account.sourceId) },
+          select: { id: true, status: true }
+        });
+        if (!booking) throw new Error('La reserva asociada a la cuenta no existe');
+        if (booking.status === 'CANCELLED') throw new Error('No se pueden registrar pagos sobre una reserva cancelada');
+      }
+
       const accountTotal = Number(account.totalAmount || 0);
-      const paidTotal = Number(account.paidAmount || 0);
+      const { netPaid: paidTotal } = await this.accountService.reconcilePaidAmountTx(tx, account.id);
       const remaining = Math.max(0, accountTotal - paidTotal);
 
       if (input.amount > remaining + 0.009) {
@@ -175,18 +188,7 @@ export class PaymentService {
         createdByUserId: input.createdByUserId ?? null
       });
 
-      const newPaidAmount = Number((paidTotal + input.amount).toFixed(2));
-      const shouldClose = newPaidAmount + 0.009 >= accountTotal;
-
-      await tx.account.update({
-        where: { id: account.id },
-        data: {
-          paidAmount: { increment: new Prisma.Decimal(input.amount) },
-          ...(shouldClose
-            ? { status: 'CLOSED', closedAt: new Date() }
-            : {})
-        }
-      });
+      await this.accountService.reconcilePaidAmountTx(tx, account.id, { updateStatus: true });
 
       if (source === 'POS' && resolvedCashShiftId) {
         const movementMethod: CashMovementMethod =
@@ -206,6 +208,10 @@ export class PaymentService {
             createdByUserId: input.createdByUserId ?? null
           }
         });
+      }
+
+      if (account.sourceType === 'BOOKING') {
+        await this.bookingDomainService.reevaluateBookingConfirmationTx(tx, Number(account.sourceId));
       }
 
       await this.eventService.paymentReceived(account.clubId, {

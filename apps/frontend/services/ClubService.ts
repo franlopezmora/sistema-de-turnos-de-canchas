@@ -10,6 +10,7 @@ export type FixedBookingActivityConfig = {
 };
 
 export type FixedBookingSettingsByActivity = Record<string, FixedBookingActivityConfig>;
+export type BookingConfirmationMode = 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
 
 export interface Club {
   id: number;
@@ -34,6 +35,14 @@ export interface Club {
   professorDiscountEnabled?: boolean;
   professorDiscountPercent?: number | null;
   fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
+  bookingConfirmationMode?: BookingConfirmationMode;
+  bookingDepositPercent?: number | null;
+  allowManualConfirmationOverride?: boolean;
+  autoCancelPendingBookingsEnabled?: boolean;
+  autoCancelPendingBookingsMinutesBefore?: number | null;
+  autoCancelPendingBookingsOnlyIfUnpaid?: boolean;
+  autoCancelPendingWarningEnabled?: boolean;
+  autoCancelPendingWarningMinutesBefore?: number | null;
   openingDays?: number[] | null;
   createdAt?: string;
   updatedAt?: string;

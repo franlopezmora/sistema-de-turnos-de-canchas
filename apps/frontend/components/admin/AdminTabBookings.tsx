@@ -12,10 +12,10 @@ import {
 import { getAccountSummary, getOrCreateBookingAccount, registerPayment } from '../../services/AccountService';
 import { ClubAdminService } from '../../services/ClubAdminService';
 import AppModal from '../AppModal';
-import BookingConsumption from '../BookingConsumption';
+import BookingManagerModal from './BookingManagerModal';
 import { useParams } from 'react-router-dom';
 import DatePickerDark from '../../components/ui/DatePickerDark';
-import { Trash2, Check, ShoppingCart, Calendar as CalendarIcon, RefreshCw, ChevronDown, CalendarPlus, Repeat, Banknote, CreditCard, X, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'; 
+import { Trash2, Check, Calendar as CalendarIcon, RefreshCw, ChevronDown, CalendarPlus, Repeat, Banknote, CreditCard, X, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'; 
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 
 const CLUB_TIME_SLOTS = [
@@ -115,7 +115,15 @@ const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
 
 
 // --- COMPONENTE PORTAL ---
-const ModalPortal = ({ children, onClose }: { children: ReactNode, onClose: () => void }) => {
+const ModalPortal = ({
+  children,
+  onClose,
+  maxWidthClass = 'max-w-xl'
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  maxWidthClass?: string;
+}) => {
   const backdropMouseDownRef = useRef(false);
   if (typeof document === 'undefined') return null;
   
@@ -137,7 +145,7 @@ const ModalPortal = ({ children, onClose }: { children: ReactNode, onClose: () =
     }}
   >
       <div
-        className="relative z-10 w-full max-w-xl bg-[#EBE1D8] border-4 border-white rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden text-[#347048]"
+        className={`relative z-10 w-full ${maxWidthClass} bg-[#EBE1D8] border-4 border-white rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden text-[#347048]`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="overflow-y-auto p-8 custom-scrollbar">
@@ -250,8 +258,6 @@ export default function AdminTabBookings() {
   const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
   const [selectedPaymentAccountId, setSelectedPaymentAccountId] = useState<string | null>(null);
   const [paymentRemainingTarget, setPaymentRemainingTarget] = useState(0);
-  const [selectedBooking, setSelectedBooking] = useState<any>(null);
-  const [isConsumptionPaymentOpen, setIsConsumptionPaymentOpen] = useState(false);
   const [selectedBookingDetail, setSelectedBookingDetail] = useState<{ booking: any; slotTime: string; courtName?: string } | null>(null);
   const params = useParams();
   const urlSlug = params.slug;
@@ -741,20 +747,20 @@ export default function AdminTabBookings() {
         title: 'Atención: Turno Fijo',
         message: <div><p>Este turno pertenece a una serie repetitiva.</p><p className="font-bold mt-2">¿Deseas eliminar TODA la serie futura?</p></div>,
         confirmText: 'Sí, borrar TODA la serie', cancelText: 'No, ver otras opciones',
-        onConfirm: async () => { try { await cancelFixedBooking(booking.fixedBookingId); showInfo('Serie completa eliminada.', 'Éxito'); setSelectedBookingDetail(null); setSelectedBooking(null); loadSchedule(); } catch (e: any) { showError('Error: ' + e.message); } },
+        onConfirm: async () => { try { await cancelFixedBooking(booking.fixedBookingId); showInfo('Serie completa eliminada.', 'Éxito'); setSelectedBookingDetail(null); loadSchedule(); } catch (e: any) { showError('Error: ' + e.message); } },
         onCancel: () => { 
           setTimeout(() => showConfirm({
             title: '¿Borrar solo hoy?',
             message: `¿Eliminar únicamente el turno de hoy y mantener los futuros?`,
             confirmText: 'Sí, borrar solo hoy', cancelText: 'Cancelar',
-            onConfirm: async () => { try { await cancelBooking(booking.id); showInfo('Turno del día eliminado.', 'Listo'); setSelectedBookingDetail(null); setSelectedBooking(null); loadSchedule(); } catch (e: any) { showError('Error: ' + e.message); } },
+            onConfirm: async () => { try { await cancelBooking(booking.id); showInfo('Turno del día eliminado.', 'Listo'); setSelectedBookingDetail(null); loadSchedule(); } catch (e: any) { showError('Error: ' + e.message); } },
           }), 200);
         }
       });
     } else {
       showConfirm({
         title: 'Cancelar turno', message: '¿Seguro que deseas cancelar esta reserva simple?',
-        confirmText: 'Sí, Cancelar', onConfirm: async () => { try { await cancelBooking(booking.id); showInfo('Turno cancelado', 'Listo'); setSelectedBookingDetail(null); setSelectedBooking(null); loadSchedule(); } catch (e: any) { showError('Error: ' + e.message); } }
+        confirmText: 'Sí, Cancelar', onConfirm: async () => { try { await cancelBooking(booking.id); showInfo('Turno cancelado', 'Listo'); setSelectedBookingDetail(null); loadSchedule(); } catch (e: any) { showError('Error: ' + e.message); } }
       });
     }
   };
@@ -845,12 +851,6 @@ export default function AdminTabBookings() {
       showError(error?.message || 'No se pudo registrar el pago dividido');
     }
   };
-
-  const handleCloseConsumption = useCallback(async () => {
-    if (isConsumptionPaymentOpen) return;
-    setSelectedBooking(null);
-    loadSchedule();
-  }, [isConsumptionPaymentOpen, loadSchedule]);
 
   return (
     <>
@@ -1258,28 +1258,6 @@ export default function AdminTabBookings() {
                         <button
                           onClick={(event) => {
                             event.stopPropagation();
-                            setSelectedBooking(slot.booking);
-                          }}
-                          className="p-2 rounded-xl bg-white border border-[#347048]/10 text-[#347048] hover:bg-[#347048] hover:text-[#EBE1D8] transition-all shadow-sm"
-                          title="Consumos"
-                        >
-                          <ShoppingCart size={14} strokeWidth={2.5} />
-                        </button>
-                        {slot.booking.status === 'PENDING' && (
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleOpenPaymentModal(slot.booking.id);
-                            }}
-                            className="p-2 rounded-xl bg-[#B9CF32] text-[#347048] border border-white hover:scale-110 transition-all shadow-md"
-                            title="Confirmar pago"
-                          >
-                            <Check size={14} strokeWidth={3} />
-                          </button>
-                        )}
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
                             handleCancelBooking(slot.booking);
                           }}
                           className="p-2 rounded-xl bg-red-50 border border-red-100 text-red-500 hover:bg-red-500 hover:text-white transition-all"
@@ -1299,137 +1277,16 @@ export default function AdminTabBookings() {
         )}
       </div>
 
-      {selectedBooking && (
-        <ModalPortal onClose={handleCloseConsumption}>
-          <BookingConsumption 
-            bookingId={selectedBooking.id}
-            slug={getClubSlug() || ''}
-            courtPrice={selectedBooking.price}
-            baseCourtPrice={selectedBooking.court?.price}
-            bookingStatus={selectedBooking.status}
-            paymentStatus={selectedBooking.paymentStatus}
-            onClose={handleCloseConsumption}
-            onConfirm={() => { loadSchedule(); }}
-            onPaymentModalStateChange={setIsConsumptionPaymentOpen}
-          />
-        </ModalPortal>
-      )}
-
       {selectedBookingDetail && (
-        <ModalPortal onClose={() => setSelectedBookingDetail(null)}>
-          <div className="relative space-y-6 text-[#347048]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-2xl font-black uppercase italic tracking-tight">Detalle de Reserva</h3>
-                <p className="text-xs font-bold uppercase tracking-widest text-[#347048]/50 mt-1">
-                  {selectedBookingDetail.courtName || selectedBookingDetail.booking.court?.name || 'Cancha'}
-                </p>
-              </div>
-              <div className="flex items-start gap-3">
-                {selectedBookingDetail.booking.fixedBookingId && (
-                  <span className="bg-[#347048] text-[#B9CF32] text-[10px] font-black px-3 py-1 rounded-md uppercase tracking-widest">
-                    Fijo
-                  </span>
-                )}
-                <button
-                  onClick={() => setSelectedBookingDetail(null)}
-                  className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
-                  title="Cerrar ventana"
-                >
-                  <X size={20} strokeWidth={3} />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-2xl border border-[#347048]/10 bg-white p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Reservante</p>
-              
-              <p className="text-lg font-black mt-1 text-[#347048]">
-                {selectedBookingDetail.booking.client?.name ?? 'Sin cliente vinculado'}
-              </p>
-
-              {selectedBookingDetail.booking.client?.phone && (
-                <p className="text-xs font-bold text-[#347048]/60 mt-1">
-                  {selectedBookingDetail.booking.client.phone}
-                </p>
-              )}
-
-              {(selectedBookingDetail.booking.client?.dni) && (
-                <p className="text-xs font-bold text-[#347048]/60 mt-1">
-                  DNI: {selectedBookingDetail.booking.client.dni}
-                </p>
-              )}
-            </div>
-              <div className="rounded-2xl border border-[#347048]/10 bg-white p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Horario</p>
-                <p className="text-lg font-black mt-1">{getBookingTimeRange(selectedBookingDetail.booking)}</p>
-                {(() => {
-                  let dateObj: Date | null = null;
-                  if (selectedBookingDetail.booking?.startDateTime) {
-                    dateObj = new Date(selectedBookingDetail.booking.startDateTime);
-                  } else if (scheduleDate && selectedBookingDetail.slotTime) {
-                    try {
-                      const [y, m, d] = scheduleDate.split('-').map(Number);
-                      const [hh, mm] = selectedBookingDetail.slotTime.split(':').map(Number);
-                      dateObj = new Date(y, m - 1, d, hh, mm, 0, 0);
-                    } catch { dateObj = null; }
-                  }
-                  return dateObj ? (
-                    <p className="text-xs font-bold text-[#347048]/60 mt-1">Fecha: {formatLocalDate(dateObj)}</p>
-                  ) : null;
-                })()}
-                <p className="text-xs font-bold text-[#347048]/60 mt-1">Estado: {formatBookingStatus(selectedBookingDetail.booking.status)}</p>
-                {selectedBookingDetail.booking.paymentStatus && (
-                  <p className="text-xs font-bold text-[#347048]/60 mt-1">Pago: {formatPaymentStatus(selectedBookingDetail.booking.paymentStatus)}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-[#347048]/10 bg-white p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Precio</p>
-                <p className="text-xl font-black">${Number(selectedBookingDetail.booking.price || 0).toLocaleString()}</p>
-              </div>
-              {Array.isArray(selectedBookingDetail.booking.items) && selectedBookingDetail.booking.items.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {selectedBookingDetail.booking.items.map((item: any, i: number) => (
-                    <span key={i} className="text-[10px] font-black px-2 py-1 rounded-md bg-[#926699]/10 text-[#926699] border border-[#926699]/20 uppercase">
-                      {item.quantity}x {item.product?.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-3">
-              {selectedBookingDetail.booking.status === 'PENDING' && (
-                <button
-                  type="button"
-                  onClick={() => handleOpenPaymentModal(selectedBookingDetail.booking.id)}
-                  className="px-5 py-3 rounded-xl bg-[#B9CF32] text-[#347048] font-black uppercase tracking-widest text-xs"
-                >
-                  Cobrar
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedBooking(selectedBookingDetail.booking);
-                }}
-                className="px-5 py-3 rounded-xl bg-[#347048] text-[#EBE1D8] font-black uppercase tracking-widest text-xs"
-              >
-                Ver consumos
-              </button>
-              <button
-                type="button"
-                onClick={() => handleCancelBooking(selectedBookingDetail.booking)}
-                className="px-5 py-3 rounded-xl bg-red-50 text-red-600 border border-red-100 font-black uppercase tracking-widest text-xs"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
+        <ModalPortal onClose={() => setSelectedBookingDetail(null)} maxWidthClass="max-w-5xl">
+          <BookingManagerModal
+            booking={selectedBookingDetail.booking}
+            clubSlug={getClubSlug() || ''}
+            courtName={selectedBookingDetail.courtName}
+            onClose={() => setSelectedBookingDetail(null)}
+            onCancelBooking={handleCancelBooking}
+            onUpdated={() => loadSchedule()}
+          />
         </ModalPortal>
       )}
 

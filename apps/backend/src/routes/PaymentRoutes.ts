@@ -10,5 +10,6 @@ const paymentController = new PaymentController();
 
 router.get('/', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), paymentController.list);
 router.post('/', paymentLimiter, authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), paymentController.create);
+router.post('/:id/refunds', paymentLimiter, authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), paymentController.refund);
 
 export default router;

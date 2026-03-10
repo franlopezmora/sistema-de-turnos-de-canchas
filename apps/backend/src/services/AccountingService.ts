@@ -25,6 +25,13 @@ type PaymentPostingInput = BaseTransactionInput & {
   paymentMethod: PaymentMethod;
 };
 
+type RefundPostingInput = BaseTransactionInput & {
+  accountId: string;
+  refundId: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+};
+
 export class AccountingService {
   mapPaymentDebitAccount(method: PaymentMethod): LedgerAccount {
     if (method === 'CASH') return 'CASH';
@@ -177,6 +184,56 @@ export class AccountingService {
           paymentId: input.paymentId,
           amount,
           account: 'ACCOUNTS_RECEIVABLE',
+          direction: 'CREDIT',
+          description: input.description,
+          createdByUserId: input.createdByUserId ?? null
+        }
+      ]
+    });
+
+    return transaction;
+  }
+
+  async createRefundTransaction(tx: TxClient, input: RefundPostingInput) {
+    const transaction = await tx.ledgerTransaction.create({
+      data: {
+        clubId: input.clubId,
+        type: 'REFUND',
+        referenceType: 'REFUND',
+        referenceId: input.refundId,
+        createdByUserId: input.createdByUserId ?? null
+      }
+    });
+
+    const amount = new Prisma.Decimal(Math.abs(input.amount));
+    const creditAccount = this.mapPaymentDebitAccount(input.paymentMethod);
+
+    await tx.ledgerEntry.createMany({
+      data: [
+        {
+          transactionId: transaction.id,
+          clubId: input.clubId,
+          type: 'REFUND',
+          referenceType: 'REFUND',
+          referenceId: input.refundId,
+          accountId: input.accountId,
+          refundId: input.refundId,
+          amount,
+          account: 'ACCOUNTS_RECEIVABLE',
+          direction: 'DEBIT',
+          description: input.description,
+          createdByUserId: input.createdByUserId ?? null
+        },
+        {
+          transactionId: transaction.id,
+          clubId: input.clubId,
+          type: 'REFUND',
+          referenceType: 'REFUND',
+          referenceId: input.refundId,
+          accountId: input.accountId,
+          refundId: input.refundId,
+          amount,
+          account: creditAccount,
           direction: 'CREDIT',
           description: input.description,
           createdByUserId: input.createdByUserId ?? null

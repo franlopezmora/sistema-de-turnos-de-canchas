@@ -34,8 +34,15 @@ export class ClubService {
         lightsFromHour?: string | null,
         professorDiscountEnabled: boolean = false,
         professorDiscountPercent?: number | null,
-        fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null
-        ,
+        fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null,
+        bookingConfirmationMode: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED' = 'MANUAL',
+        bookingDepositPercent?: number | null,
+        allowManualConfirmationOverride: boolean = true,
+        autoCancelPendingBookingsEnabled: boolean = false,
+        autoCancelPendingBookingsMinutesBefore?: number | null,
+        autoCancelPendingBookingsOnlyIfUnpaid: boolean = true,
+        autoCancelPendingWarningEnabled: boolean = false,
+        autoCancelPendingWarningMinutesBefore?: number | null,
         openingDays?: number[] | null
     ) {
         return await this.clubRepo.createClub(
@@ -59,8 +66,15 @@ export class ClubService {
             lightsFromHour,
             professorDiscountEnabled,
             professorDiscountPercent,
-            fixedBookingSettingsByActivity
-            ,
+            fixedBookingSettingsByActivity,
+            bookingConfirmationMode,
+            bookingDepositPercent,
+            allowManualConfirmationOverride,
+            autoCancelPendingBookingsEnabled,
+            autoCancelPendingBookingsMinutesBefore,
+            autoCancelPendingBookingsOnlyIfUnpaid,
+            autoCancelPendingWarningEnabled,
+            autoCancelPendingWarningMinutesBefore,
             openingDays
         );
     }
@@ -105,6 +119,14 @@ export class ClubService {
             professorDiscountEnabled?: boolean;
             professorDiscountPercent?: number | null;
             fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
+            bookingConfirmationMode?: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
+            bookingDepositPercent?: number | null;
+            allowManualConfirmationOverride?: boolean;
+            autoCancelPendingBookingsEnabled?: boolean;
+            autoCancelPendingBookingsMinutesBefore?: number | null;
+            autoCancelPendingBookingsOnlyIfUnpaid?: boolean;
+            autoCancelPendingWarningEnabled?: boolean;
+            autoCancelPendingWarningMinutesBefore?: number | null;
             openingDays?: number[] | null;
         }
     ): Promise<Club> {

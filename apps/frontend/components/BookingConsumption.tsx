@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ClubAdminService } from '../services/ClubAdminService';
-import { getBookingFinancialSummary, registerBookingPartialPayment } from '../services/BookingService';
-import { Trash2, Plus, ShoppingCart, Receipt, Lock, ChevronDown, Check, X, Banknote, Star } from 'lucide-react';
+import { getBookingFinancialSummary, registerBookingPartialPayment, type BookingFinancialSummary } from '../services/BookingService';
+import { Trash2, Plus, ShoppingCart, Receipt, Lock, X, Banknote, Star } from 'lucide-react';
 import PaymentCalculator, { type PaymentCalculatorResult } from './PaymentCalculator';
+import ProductSearch, { type ProductSearchItem } from './ui/ProductSearch';
 // import { BookingTicket } from './BookingTicket'; // Si no lo usás, podés borrar esta línea
 
 interface Props {
@@ -28,80 +29,6 @@ interface CartItem {
   isNew: boolean;
 }
 
-interface BookingFinancialSummary {
-  courtTotal: number;
-  itemsTotal: number;
-  total: number;
-  paid: number;
-  remaining: number;
-}
-
-// --- COMPONENTE DROPDOWN CUSTOM (ESTILO WIMBLEDON LANDING) ---
-const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const selectedOption = options.find((o: any) => o.value === value);
-
-  return (
-    <div className="relative flex-1 z-[60]" ref={wrapperRef}>
-      <div 
-        className={`w-full h-full min-h-[48px] bg-white border-2 transition-all rounded-xl px-4 flex items-center justify-between shadow-sm cursor-pointer ${
-          isOpen ? 'border-[#B9CF32] ring-2 ring-[#B9CF32]/20' : 'border-transparent hover:border-[#B9CF32]/50'
-        }`}
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <span className={`font-bold text-sm ${!selectedOption ? 'text-[#347048]/40' : 'text-[#347048]'}`}>
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
-        <ChevronDown size={18} className={`transition-transform duration-300 ${isOpen ? 'rotate-180 text-[#B9CF32]' : 'text-[#347048]/40'}`} strokeWidth={3} />
-      </div>
-
-      {isOpen && (
-        <div className="absolute z-[70] w-full mt-2 bg-white border-2 border-[#347048]/10 rounded-2xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <ul className="flex flex-col py-2">
-            {options.length === 0 ? (
-                <li className="px-4 py-3 text-[#347048]/40 text-xs font-bold text-center">Cargando productos...</li>
-            ) : (
-                options.map((option: any) => (
-                <li 
-                    key={option.value}
-                    onClick={() => {
-                    if (!option.disabled) {
-                        onChange(option.value);
-                        setIsOpen(false);
-                    }
-                    }}
-                    className={`px-4 py-3 flex items-center justify-between transition-colors ${
-                    option.disabled 
-                        ? 'opacity-40 cursor-not-allowed bg-gray-50' 
-                        : 'cursor-pointer hover:bg-[#B9CF32]/20'
-                    } ${value === option.value ? 'bg-[#347048]/5 text-[#347048]' : 'text-[#347048]'}`}
-                >
-                    <span className="font-black text-xs">{option.label}</span>
-                    {option.disabled && <span className="text-[9px] font-black text-red-500 uppercase tracking-widest border border-red-500/20 bg-red-50 px-2 py-0.5 rounded-md">Sin Stock</span>}
-                    {!option.disabled && value === option.value && <Check size={14} className="text-[#347048]" strokeWidth={4} />}
-                </li>
-                ))
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-};
-
-
 export default function BookingConsumption(
   { bookingId, slug, courtPrice = 0, baseCourtPrice, bookingStatus, paymentStatus, onClose, onConfirm, onPaymentModalStateChange }: Props
 ) {
@@ -116,7 +43,6 @@ export default function BookingConsumption(
   const paymentInFlightRef = useRef(false);
 
   // Formulario
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
 
   const loadData = useCallback(async () => {
@@ -162,23 +88,22 @@ export default function BookingConsumption(
     onPaymentModalStateChange?.(showPaymentModal);
   }, [onPaymentModalStateChange, showPaymentModal]);
 
-  const handleAddToDraft = () => {
-    if (!selectedProductId) return;
-    const product = products.find(p => p.id === Number(selectedProductId));
-    if (!product) return;
+  const handleAddProductToDraft = (product: ProductSearchItem) => {
+    if (!product?.id) return;
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return;
 
     const newItem: CartItem = {
       tempId: `new-${Date.now()}`,
       productId: product.id,
       productName: product.name,
-      quantity: quantity,
-      price: product.price,
+      quantity: qty,
+      price: Number(product.price || 0),
       isNew: true
     };
 
-    setCartItems([...cartItems, newItem]);
+    setCartItems((prev) => [...prev, newItem]);
     setQuantity(1);
-    setSelectedProductId('');
   };
 
   const handleRemoveFromDraft = (item: CartItem) => {
@@ -301,13 +226,6 @@ export default function BookingConsumption(
     }
   };
 
-  // Convertimos los productos cargados en opciones para el CustomSelect
-  const productOptions = products.map(p => ({
-      value: p.id.toString(),
-      label: `${p.name} ($${p.price.toLocaleString()})`,
-      disabled: p.stock <= 0
-  }));
-
   return (
     <div className="space-y-6 text-[#347048]">
       <div className="flex justify-between items-start mb-2">
@@ -334,26 +252,28 @@ export default function BookingConsumption(
           <ShoppingCart size={16} strokeWidth={3} /> Agregar Consumo / Extra
         </h3>
         <div className="flex gap-3 relative">
-            
-            {/* 👇 ACÁ VA EL NUEVO DROPDOWN 👇 */}
-            <CustomSelect 
-                value={selectedProductId}
-                onChange={(val: string) => setSelectedProductId(val)}
-                placeholder="Seleccionar producto..."
-                options={productOptions}
-            />
+            <div className="flex-1">
+              <ProductSearch
+                products={products || []}
+                autoFocus
+                placeholder={loading ? 'Cargando productos...' : 'Agregar producto (ej: Gatorade)...'}
+                disabled={loading || isCancelled}
+                onSelect={(product) => {
+                  const outOfStock = Number((product as any)?.stock ?? 1) <= 0;
+                  if (outOfStock) return;
+                  handleAddProductToDraft(product);
+                }}
+              />
+            </div>
 
             <input 
                 type="number" min="1" 
                 className="w-20 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-2 text-center text-[#347048] font-black shadow-sm outline-none"
                 value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}
             />
-            <button 
-                onClick={handleAddToDraft} disabled={!selectedProductId}
-                className="bg-[#926699] hover:bg-[#7a5580] disabled:opacity-30 text-[#EBE1D8] p-3 rounded-xl transition-all shadow-md active:scale-95 z-0"
-            >
-                <Plus size={24} strokeWidth={3} />
-            </button>
+            <div className="bg-[#926699] text-[#EBE1D8] p-3 rounded-xl opacity-40 select-none">
+              <Plus size={24} strokeWidth={3} />
+            </div>
         </div>
       </div>
 

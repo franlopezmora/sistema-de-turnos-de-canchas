@@ -177,6 +177,14 @@ export class BookingRepository {
             s?.professorDiscountEnabled ?? false,
             s?.professorDiscountPercent != null ? Number(s.professorDiscountPercent) : null,
             (s?.fixedBookingSettingsByActivity ?? null) as any,
+            s?.bookingConfirmationMode ?? 'MANUAL',
+            s?.bookingDepositPercent != null ? Number(s.bookingDepositPercent) : null,
+            s?.allowManualConfirmationOverride ?? true,
+            s?.autoCancelPendingBookingsEnabled ?? false,
+            s?.autoCancelPendingBookingsMinutesBefore != null ? Number(s.autoCancelPendingBookingsMinutesBefore) : null,
+            s?.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
+            s?.autoCancelPendingWarningEnabled ?? false,
+            s?.autoCancelPendingWarningMinutesBefore != null ? Number(s.autoCancelPendingWarningMinutesBefore) : null,
             Array.isArray(s?.openingDays) ? s.openingDays : null,
             c.createdAt,
             c.updatedAt
@@ -227,4 +235,3 @@ export class BookingRepository {
         return booking;
     }
 }
-

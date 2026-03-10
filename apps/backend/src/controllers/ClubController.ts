@@ -38,7 +38,15 @@ export class ClubController {
                 openingDays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
                 professorDiscountEnabled: z.boolean().optional(),
                 professorDiscountPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
-                fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable()
+                fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
+                bookingConfirmationMode: z.enum(['AUTOMATIC', 'MANUAL', 'DEPOSIT_REQUIRED']).optional(),
+                bookingDepositPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
+                allowManualConfirmationOverride: z.boolean().optional(),
+                autoCancelPendingBookingsEnabled: z.boolean().optional(),
+                autoCancelPendingBookingsMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
+                autoCancelPendingBookingsOnlyIfUnpaid: z.boolean().optional(),
+                autoCancelPendingWarningEnabled: z.boolean().optional(),
+                autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v)))
             });
             const parsed = createClubSchema.safeParse(req.body);
             if (!parsed.success) {
@@ -46,11 +54,33 @@ export class ClubController {
             }
             const { slug, name, addressLine, city, province, country, contact, phone, logoUrl, clubImageUrl, instagramUrl, facebookUrl, websiteUrl, description, timeZone,
                 lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays, professorDiscountEnabled, professorDiscountPercent,
-                fixedBookingSettingsByActivity } = parsed.data;
+                fixedBookingSettingsByActivity, bookingConfirmationMode, bookingDepositPercent, allowManualConfirmationOverride,
+                autoCancelPendingBookingsEnabled, autoCancelPendingBookingsMinutesBefore, autoCancelPendingBookingsOnlyIfUnpaid,
+                autoCancelPendingWarningEnabled, autoCancelPendingWarningMinutesBefore } = parsed.data;
 
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
+            if (bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
+                if (!Number.isFinite(Number(bookingDepositPercent)) || Number(bookingDepositPercent) <= 0 || Number(bookingDepositPercent) > 100) {
+                    return res.status(400).json({ error: 'bookingDepositPercent debe estar entre 0 y 100 cuando el modo es DEPOSIT_REQUIRED' });
+                }
+            }
+            if (autoCancelPendingBookingsEnabled) {
+                if (!Number.isFinite(Number(autoCancelPendingBookingsMinutesBefore)) || Number(autoCancelPendingBookingsMinutesBefore) <= 0) {
+                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel está habilitado' });
+                }
+            }
+            if (autoCancelPendingWarningEnabled) {
+                if (!Number.isFinite(Number(autoCancelPendingWarningMinutesBefore)) || Number(autoCancelPendingWarningMinutesBefore) <= 0) {
+                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning está habilitado' });
+                }
+            }
+            if (autoCancelPendingBookingsEnabled && autoCancelPendingWarningEnabled) {
+                if (Number(autoCancelPendingWarningMinutesBefore) <= Number(autoCancelPendingBookingsMinutesBefore)) {
+                    return res.status(400).json({ error: 'El warning debe configurarse antes de la cancelación automática' });
+                }
             }
 
             const safeDescription = description != null ? sanitizeString(description) : null;
@@ -79,6 +109,14 @@ export class ClubController {
                 Boolean(professorDiscountEnabled),
                 professorDiscountPercent ?? null,
                 fixedBookingSettingsByActivity ?? null,
+                bookingConfirmationMode ?? 'MANUAL',
+                bookingDepositPercent ?? null,
+                allowManualConfirmationOverride ?? true,
+                autoCancelPendingBookingsEnabled ?? false,
+                autoCancelPendingBookingsMinutesBefore ?? null,
+                autoCancelPendingBookingsOnlyIfUnpaid ?? true,
+                autoCancelPendingWarningEnabled ?? false,
+                autoCancelPendingWarningMinutesBefore ?? null,
                 Array.isArray(openingDays) ? openingDays : null
             );
             res.status(201).json(club);
@@ -152,7 +190,15 @@ export class ClubController {
                 professorDiscountEnabled: z.boolean().optional(),
                 professorDiscountPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
-                openingDays: z.array(z.number().int().min(0).max(6)).optional()
+                openingDays: z.array(z.number().int().min(0).max(6)).optional(),
+                bookingConfirmationMode: z.enum(['AUTOMATIC', 'MANUAL', 'DEPOSIT_REQUIRED']).optional(),
+                bookingDepositPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
+                allowManualConfirmationOverride: z.boolean().optional(),
+                autoCancelPendingBookingsEnabled: z.boolean().optional(),
+                autoCancelPendingBookingsMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
+                autoCancelPendingBookingsOnlyIfUnpaid: z.boolean().optional(),
+                autoCancelPendingWarningEnabled: z.boolean().optional(),
+                autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v)))
             });
             const parsed = updateClubSchema.safeParse(req.body);
             if (!parsed.success) {
@@ -180,7 +226,15 @@ export class ClubController {
                 professorDiscountEnabled,
                 professorDiscountPercent,
                 fixedBookingSettingsByActivity,
-                openingDays
+                openingDays,
+                bookingConfirmationMode,
+                bookingDepositPercent,
+                allowManualConfirmationOverride,
+                autoCancelPendingBookingsEnabled,
+                autoCancelPendingBookingsMinutesBefore,
+                autoCancelPendingBookingsOnlyIfUnpaid,
+                autoCancelPendingWarningEnabled,
+                autoCancelPendingWarningMinutesBefore
             } = parsed.data;
 
             const normalizedLogoUrl = await this.mediaStorageService.normalizeAsset(logoUrl ?? null, 'logoUrl');
@@ -189,6 +243,28 @@ export class ClubController {
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
+            if (bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
+                if (!Number.isFinite(Number(bookingDepositPercent)) || Number(bookingDepositPercent) <= 0 || Number(bookingDepositPercent) > 100) {
+                    return res.status(400).json({ error: 'bookingDepositPercent debe estar entre 0 y 100 cuando el modo es DEPOSIT_REQUIRED' });
+                }
+            }
+            const resolvedAutoCancelEnabled = autoCancelPendingBookingsEnabled ?? false;
+            const resolvedWarningEnabled = autoCancelPendingWarningEnabled ?? false;
+            if (resolvedAutoCancelEnabled) {
+                if (!Number.isFinite(Number(autoCancelPendingBookingsMinutesBefore)) || Number(autoCancelPendingBookingsMinutesBefore) <= 0) {
+                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel está habilitado' });
+                }
+            }
+            if (resolvedWarningEnabled) {
+                if (!Number.isFinite(Number(autoCancelPendingWarningMinutesBefore)) || Number(autoCancelPendingWarningMinutesBefore) <= 0) {
+                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning está habilitado' });
+                }
+            }
+            if (resolvedAutoCancelEnabled && resolvedWarningEnabled) {
+                if (Number(autoCancelPendingWarningMinutesBefore) <= Number(autoCancelPendingBookingsMinutesBefore)) {
+                    return res.status(400).json({ error: 'El warning debe configurarse antes de la cancelación automática' });
+                }
             }
 
             const safeDescription = description != null ? sanitizeString(description) : null;
@@ -214,7 +290,15 @@ export class ClubController {
                 professorDiscountEnabled: typeof professorDiscountEnabled === 'boolean' ? professorDiscountEnabled : undefined,
                 professorDiscountPercent: professorDiscountPercent ?? null,
                 fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
-                openingDays: Array.isArray(openingDays) ? openingDays : undefined
+                openingDays: Array.isArray(openingDays) ? openingDays : undefined,
+                bookingConfirmationMode,
+                bookingDepositPercent,
+                allowManualConfirmationOverride,
+                autoCancelPendingBookingsEnabled,
+                autoCancelPendingBookingsMinutesBefore,
+                autoCancelPendingBookingsOnlyIfUnpaid,
+                autoCancelPendingWarningEnabled,
+                autoCancelPendingWarningMinutesBefore
             });
             res.json(club);
         } catch (error: any) {
@@ -244,4 +328,3 @@ export class ClubController {
     }
 };
 }
-

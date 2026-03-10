@@ -216,6 +216,36 @@ export class ClubAdminService {
     return res.json();
   }
 
+  static async confirmBooking(clubSlug: string, bookingId: number) {
+    if (!getToken()) throw new Error('No autenticado');
+
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${clubSlug}/admin/bookings/${bookingId}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || error.message || 'Error al confirmar reserva');
+    }
+    return res.json();
+  }
+
+  static async completeBooking(clubSlug: string, bookingId: number) {
+    if (!getToken()) throw new Error('No autenticado');
+
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${clubSlug}/admin/bookings/${bookingId}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || error.message || 'Error al completar reserva');
+    }
+    return res.json();
+  }
+
   /**
    * Crear reserva fija
    */
@@ -364,4 +394,3 @@ export class ClubAdminService {
     return res.json();
   }
 }
-

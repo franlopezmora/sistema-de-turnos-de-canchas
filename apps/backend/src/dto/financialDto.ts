@@ -10,6 +10,18 @@ export const mapPaymentDto = (payment: any) => ({
   cashShiftId: payment.cashShiftId ?? null
 });
 
+export const mapRefundDto = (refund: any) => ({
+  id: refund.id,
+  createdAt: refund.createdAt,
+  amount: toNumber(refund.amount),
+  reason: refund.reason ?? null,
+  paymentId: refund.paymentId,
+  accountId: refund.accountId,
+  clubId: refund.clubId,
+  cashShiftId: refund.cashShiftId ?? null,
+  createdByUserId: refund.createdByUserId ?? null
+});
+
 export const mapAccountItemDto = (item: any) => ({
   id: item.id,
   accountId: item.accountId,

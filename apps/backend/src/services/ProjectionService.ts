@@ -16,7 +16,17 @@ export class ProjectionService {
     }
 
     const totalAmount = Number(account.totalAmount || 0);
-    const paidAmount = Number(account.paidAmount || 0);
+    const [paymentsAgg, refundsAgg] = await Promise.all([
+      client.payment.aggregate({
+        where: { accountId: account.id },
+        _sum: { amount: true }
+      }),
+      client.refund.aggregate({
+        where: { accountId: account.id },
+        _sum: { amount: true }
+      })
+    ]);
+    const paidAmount = Number(Math.max(0, Number(paymentsAgg._sum.amount || 0) - Number(refundsAgg._sum.amount || 0)));
     const remaining = Number((totalAmount - paidAmount).toFixed(2));
 
     return client.accountSummaryProjection.upsert({
