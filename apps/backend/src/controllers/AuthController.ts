@@ -126,7 +126,7 @@ export class AuthController {
 
             const token = jwt.sign(
                 { userId: user.id, role: user.role },
-                process.env.JWT_SECRET || 'fallback-secret', // Cambiá esto por tu variable de entorno
+                JWT_SECRET,
                 { expiresIn: '6h' }
             );
 

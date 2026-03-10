@@ -135,10 +135,23 @@ export class ClubService {
         return await this.clubRepo.saveCourt(court);
     }
 
-    async getClients(clubId: number) {
+    async getClients(clubId: number, query?: string) {
+        const search = (query || '').trim();
         const prismaAny = prisma as any;
         const clients: any[] = await prismaAny.client.findMany({
-            where: { clubId },
+            where: {
+                clubId,
+                ...(search
+                    ? {
+                        OR: [
+                            { name: { contains: search, mode: 'insensitive' } },
+                            { phone: { contains: search, mode: 'insensitive' } },
+                            { dni: { contains: search, mode: 'insensitive' } },
+                            { email: { contains: search, mode: 'insensitive' } }
+                        ]
+                    }
+                    : {})
+            },
             orderBy: { createdAt: 'desc' }
         });
 

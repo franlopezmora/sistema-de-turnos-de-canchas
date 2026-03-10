@@ -1,3 +1,29 @@
+  // --- PATCH: VENTA DE PRODUCTOS CON IDEMPOTENCIA ---
+  createProductSale = async (req: Request, res: Response) => {
+    try {
+      const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
+      if (!idempotencyKey) {
+        return res.status(400).json({ error: "IDEMPOTENCY_KEY_REQUIRED" });
+      }
+      // ...validaciones y parseo de body...
+      // Suponiendo que ya existe un método en cashService:
+      // await this.cashService.createProductSale({...input, idempotencyKey}, ...)
+      // Aquí deberías adaptar el llamado real según tu lógica
+      // Ejemplo:
+      // const result = await this.cashService.createProductSale({ ...req.body, idempotencyKey }, ...);
+      // return res.status(201).json(result);
+      //
+      // Si necesitas el clubId y userId:
+      // const clubId = Number((req as any).clubId);
+      // const actorUserId = Number((req as any)?.user?.userId || 0) || undefined;
+      //
+      // return res.status(201).json(await this.cashService.createProductSale({ ...req.body, clubId, idempotencyKey }, actorUserId));
+      //
+      // Si tu endpoint ya existe, solo agrega el chequeo y pasa la key a cashService.
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'Error en venta de producto' });
+    }
+  }
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { CashService } from '../services/CashService';

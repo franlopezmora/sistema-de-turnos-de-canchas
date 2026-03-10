@@ -500,15 +500,15 @@ export default function Home() {
       return;
     }
 
-    const filtered: { club: Club; distance: number }[] = [];
-    for (const club of clubs) {
-      const coords = await resolveClubCoords(club);
-      if (!coords) continue;
-      const distance = calculateDistanceKm({ lat: locationCoords.lat, lon: locationCoords.lon }, coords);
-      if (distance <= DEFAULT_RADIUS_KM) {
-        filtered.push({ club, distance });
-      }
-    }
+    const filtered: { club: Club; distance: number }[] = (await Promise.all(
+      clubs.map(async (club) => {
+        const coords = await resolveClubCoords(club);
+        if (!coords) return null;
+        const distance = calculateDistanceKm({ lat: locationCoords.lat, lon: locationCoords.lon }, coords);
+        if (distance > DEFAULT_RADIUS_KM) return null;
+        return { club, distance };
+      })
+    )).filter((row): row is { club: Club; distance: number } => Boolean(row));
 
     filtered.sort((a, b) => a.distance - b.distance);
     let finalClubs = filtered.map(item => item.club);
@@ -546,25 +546,26 @@ export default function Home() {
 
               if (activityIds.length === 0) return { hasSlots: false, times: [] };
 
-              let hasSlots = false;
               const times: string[] = [];
-              for (const activityId of activityIds) {
-                const res = await fetch(
-                  `${apiBase}/bookings/availability-with-courts?activityId=${activityId}&date=${searchDate}&clubSlug=${encodeURIComponent(club.slug)}&t=${Date.now()}`,
-                  { cache: 'no-store' }
-                );
-                if (!res.ok) continue;
-                const data = await res.json();
-                const slots = Array.isArray(data?.slotsWithCourts)
-                  ? data.slotsWithCourts.filter((slot: any) => Array.isArray(slot.availableCourts) && slot.availableCourts.length > 0)
-                  : [];
-                if (slots.length > 0) {
-                  hasSlots = true;
-                  slots.forEach((slot: any) => {
-                    if (slot?.slotTime) times.push(String(slot.slotTime));
-                  });
-                }
-              }
+              const results = await Promise.all(
+                activityIds.map(async (activityId) => {
+                  const res = await fetch(
+                    `${apiBase}/bookings/availability-with-courts?activityId=${activityId}&date=${searchDate}&clubSlug=${encodeURIComponent(club.slug)}&t=${Date.now()}`,
+                    { cache: 'no-store' }
+                  );
+                  if (!res.ok) return [];
+                  const data = await res.json();
+                  const slots = Array.isArray(data?.slotsWithCourts)
+                    ? data.slotsWithCourts.filter((slot: any) => Array.isArray(slot.availableCourts) && slot.availableCourts.length > 0)
+                    : [];
+                  return slots
+                    .map((slot: any) => (slot?.slotTime ? String(slot.slotTime) : null))
+                    .filter((slotTime: string | null): slotTime is string => Boolean(slotTime));
+                })
+              );
+
+              results.forEach((slotTimes) => times.push(...slotTimes));
+              const hasSlots = times.length > 0;
               if (!hasSlots) return { hasSlots: false, times: [] };
               const uniqueTimes = Array.from(new Set(times)).sort();
               return { hasSlots: true, times: uniqueTimes };

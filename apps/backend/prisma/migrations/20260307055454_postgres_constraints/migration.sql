@@ -1,3 +1,43 @@
+-- INICIO: migración 20260309193000_payment_idempotency_scoped
+DROP INDEX IF EXISTS "Payment_idempotencyKey_key";
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Payment_accountId_idempotencyKey_key"
+ON "Payment"("accountId", "idempotencyKey")
+WHERE "idempotencyKey" IS NOT NULL;
+-- FIN: migración 20260309193000_payment_idempotency_scoped
+
+-- INICIO: migración 20260309193500_validate_account_constraints
+ALTER TABLE "Account" VALIDATE CONSTRAINT account_amounts_non_negative;
+ALTER TABLE "Account" VALIDATE CONSTRAINT account_remaining_non_negative;
+-- FIN: migración 20260309193500_validate_account_constraints
+
+-- INICIO: migración 20260310010000_booking_client_unique_fixes
+-- Remove strict unique start-time constraint so cancelled bookings can be recreated.
+DROP INDEX IF EXISTS "booking_court_start_unique";
+
+-- Enforce client uniqueness by club on email/phone.
+CREATE UNIQUE INDEX IF NOT EXISTS "Client_clubId_email_key"
+ON "Client"("clubId", "email");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Client_clubId_phone_key"
+ON "Client"("clubId", "phone");
+-- FIN: migración 20260310010000_booking_client_unique_fixes
+
+-- INICIO: migración 20260310190000_product_stock_idempotency
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'product_stock_non_negative'
+  ) THEN
+    ALTER TABLE "Product"
+      ADD CONSTRAINT product_stock_non_negative CHECK (stock >= 0);
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Account_clubId_idempotencyKey_key"
+  ON "Account"("clubId", "idempotencyKey")
+  WHERE "idempotencyKey" IS NOT NULL;
+-- FIN: migración 20260310190000_product_stock_idempotency
 -- This is an empty migration.
 
 

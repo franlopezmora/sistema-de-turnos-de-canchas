@@ -300,57 +300,19 @@ export class BookingController {
             }
 
             const bookingId = parsed.data.id;
+            const clubId = Number((req as any).clubId);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: 'Club inválido' });
+            }
+
             const [booking, financialSummary] = await Promise.all([
-                this.bookingService.getBookingById(bookingId),
-                this.bookingService.getBookingFinancialSummary(bookingId)
+                this.bookingService.getBookingById(bookingId, clubId),
+                this.bookingService.getBookingFinancialSummary(bookingId, clubId)
             ]);
 
             return res.json({ booking, financialSummary });
         } catch (error: any) {
             return res.status(404).json({ error: error.message || 'Reserva no encontrada' });
-        }
-    }
-
-    getAllAvailableSlots = async (req: Request, res: Response) => {
-        try {
-            const querySchema = z.object({
-                date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Formato inválido. Use YYYY-MM-DD (ej: 2026-01-06)" }),
-                activityId: z.preprocess((v) => Number(v), z.number().int().positive()),
-                clubSlug: z.string().trim().min(1).optional(),
-                durationMinutes: z.preprocess(
-                    (v) => (v === undefined ? undefined : Number(v)),
-                    z.number().int().positive().optional()
-                )
-            });
-
-            const parsed = querySchema.safeParse(req.query);
-
-            if (!parsed.success) {
-                return res.status(400).json({ error: parsed.error.format() });
-            }
-
-            const { date, activityId, clubSlug, durationMinutes } = parsed.data;
-
-            const searchDate = new Date(date);
-
-            let clubId: number | undefined;
-            if (clubSlug) {
-                const club = await prisma.club.findUnique({ where: { slug: clubSlug } });
-                if (club) {
-                    clubId = club.id;
-                }
-            }
-
-            const slots = await this.bookingService.getAllAvailableSlots(
-                searchDate,
-                Number(activityId),
-                clubId,
-                durationMinutes
-            );
-
-            res.json({ date: date, availableSlots: slots });
-        } catch (error: any) {
-            res.status(400).json({ error: error.message });
         }
     }
 
@@ -573,8 +535,6 @@ export class BookingController {
     getDashboardStats = async (req: Request, res: Response) => {
     try {
         const clubId = Number((req as any).clubId);
-        
-        // 1. LEER FECHAS DE LA URL O USAR POR DEFECTO EL MES ACTUAL
         const { startDate, endDate } = req.query;
         
         let start = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -586,16 +546,31 @@ export class BookingController {
             end.setHours(23, 59, 59, 999); // Aseguramos que tome hasta el último segundo de ese día
         }
 
-        // 2. CONSULTAS A PRISMA (Usando 'start' y 'end')
-        const [movements, playedBookings] = await Promise.all([
-            prisma.cashMovement.findMany({
-                where: {
-                    clubId: clubId,
-                    type: 'PAYMENT_IN',
-                    createdAt: { gte: start, lte: end }
-                },
-                select: { createdAt: true, amount: true, concept: true, method: true }
-            }),
+        const [dailyRows, methodRows, playedBookings] = await Promise.all([
+            prisma.$queryRaw<Array<{ day: Date; turnos: number; bar: number }>>`
+                SELECT
+                  DATE("createdAt") AS day,
+                  COALESCE(SUM(CASE WHEN LOWER("concept") LIKE '%producto%' THEN 0 ELSE "amount" END), 0)::float8 AS turnos,
+                  COALESCE(SUM(CASE WHEN LOWER("concept") LIKE '%producto%' THEN "amount" ELSE 0 END), 0)::float8 AS bar
+                FROM "CashMovement"
+                WHERE "clubId" = ${clubId}
+                  AND "type" = 'PAYMENT_IN'::"CashMovementPosType"
+                  AND "createdAt" >= ${start}
+                  AND "createdAt" <= ${end}
+                GROUP BY DATE("createdAt")
+                ORDER BY DATE("createdAt") ASC
+            `,
+            prisma.$queryRaw<Array<{ method: string; value: number }>>`
+                SELECT
+                  "method"::text AS method,
+                  COALESCE(SUM("amount"), 0)::float8 AS value
+                FROM "CashMovement"
+                WHERE "clubId" = ${clubId}
+                  AND "type" = 'PAYMENT_IN'::"CashMovementPosType"
+                  AND "createdAt" >= ${start}
+                  AND "createdAt" <= ${end}
+                GROUP BY "method"
+            `,
             prisma.booking.count({
                 where: {
                     clubId,
@@ -605,47 +580,28 @@ export class BookingController {
             })
         ]);
 
-        // 3. PROCESAMIENTO
-        const dailyMap = new Map();
-        const methodMap: Record<string, number> = {};
-        let totalTurnos = 0;
-        let totalBar = 0;
-
-        movements.forEach(m => {
-            // 🔥 CAMBIO CLAVE: Formateamos como "DD/MM" para evitar mezclar meses
-            const dayStr = m.createdAt.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
-            const amount = Number(m.amount);
-            const isProduct = String(m.concept || '').toLowerCase().includes('producto');
-
-            const current = dailyMap.get(dayStr) || { turnos: 0, bar: 0 };
-            
-            if (isProduct) {
-                current.bar += amount;
-                totalBar += amount;
-            } else {
-                current.turnos += amount;
-                totalTurnos += amount;
-            }
-            dailyMap.set(dayStr, current);
-
-            methodMap[m.method] = (methodMap[m.method] || 0) + amount;
+        const dailyEvolution = dailyRows.map((row) => {
+            const dt = new Date(row.day);
+            const dd = String(dt.getDate()).padStart(2, '0');
+            const mm = String(dt.getMonth() + 1).padStart(2, '0');
+            return {
+                day: `${dd}/${mm}`,
+                turnos: Number(row.turnos || 0),
+                bar: Number(row.bar || 0)
+            };
         });
 
-        // 4. ORDENAR Y FORMATEAR PARA EL GRÁFICO
-        const dailyEvolution = Array.from(dailyMap, ([day, values]) => {
-            // Convertimos "DD/MM" de vuelta a fecha para ordenar correctamente
-            const [d, m] = day.split('/');
-            const sortDate = new Date(new Date().getFullYear(), Number(m) - 1, Number(d)).getTime();
-            return { day, sortDate, ...values };
-        })
-        .sort((a, b) => a.sortDate - b.sortDate)
-        .map(({ sortDate, ...rest }) => rest); // Limpiamos el campo de ordenamiento
+        const totalTurnos = dailyEvolution.reduce((sum, row) => sum + Number(row.turnos || 0), 0);
+        const totalBar = dailyEvolution.reduce((sum, row) => sum + Number(row.bar || 0), 0);
 
         res.json({
             totalRevenue: totalTurnos + totalBar,
             totalBookings: playedBookings,
             dailyEvolution: dailyEvolution,
-            paymentMethods: Object.entries(methodMap).map(([name, value]) => ({ name, value }))
+            paymentMethods: methodRows.map((row) => ({
+                name: row.method,
+                value: Number(row.value || 0)
+            }))
         });
 
     } catch (error) {

@@ -296,9 +296,18 @@ export class CashService {
             });
 
             await tx.product.update({
-                where: { id: product.id },
-                data: { stock: { decrement: quantity } }
-            });
+                    const account = await tx.account.create({
+                        data: {
+                            clubId: input.clubId,
+                            sourceType: 'BAR',
+                            sourceId,
+                            status: 'OPEN',
+                            totalAmount: new Prisma.Decimal(0),
+                            paidAmount: new Prisma.Decimal(0),
+                            idempotencyKey: input.idempotencyKey,
+                        }
+                    });
+                }
 
             await this.projectionService.refreshAccountSummary(account.id, tx);
             return { accountId: account.id, total, description };

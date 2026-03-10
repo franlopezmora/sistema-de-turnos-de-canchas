@@ -22,6 +22,7 @@ import NotificationRoutes from './routes/NotificationRoutes';
 import EventRoutes from './routes/EventRoutes';
 import AuditLogRoutes from './routes/AuditLogRoutes';
 import CourtPriceRuleRoutes from './routes/CourtPriceRuleRoutes';
+import PaymentRoutes from './routes/PaymentRoutes';
 
 import { errorHandler } from './middleware/ErrorHandler';
 import { authMiddleware } from './middleware/AuthMiddleware';
@@ -111,6 +112,7 @@ export const createApp = () => {
   app.use('/api/events', EventRoutes);
   app.use('/api/audit-logs', AuditLogRoutes);
   app.use('/api/court-price-rules', CourtPriceRuleRoutes);
+  app.use('/api/payments', PaymentRoutes);
   app.use('/api/clients', ClientRoutes);
 
   app.get('/', (_req: Request, res: Response) => {
@@ -143,11 +145,13 @@ export const createApp = () => {
 
   app.get('/metrics', async (req: Request, res: Response) => {
     const expectedToken = process.env.METRICS_TOKEN?.trim();
-    if (expectedToken) {
-      const authHeader = req.header('Authorization');
-      if (authHeader !== `Bearer ${expectedToken}`) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
+    if (!expectedToken) {
+      return res.status(503).json({ error: 'Metrics endpoint disabled: METRICS_TOKEN is required' });
+    }
+
+    const authHeader = req.header('Authorization');
+    if (authHeader !== `Bearer ${expectedToken}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     res.setHeader('Content-Type', metricsService.getContentType());
@@ -200,7 +204,7 @@ export const createApp = () => {
     }
   );
 
-  app.get('/whatsapp/status', async (_req: Request, res: Response) => {
+  app.get('/whatsapp/status', authMiddleware, requireRole('ADMIN'), async (_req: Request, res: Response) => {
     res.json(await whatsappDelivery.getStatus());
   });
 

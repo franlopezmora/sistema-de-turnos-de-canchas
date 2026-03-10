@@ -222,49 +222,20 @@ export class ClubController {
         }
     }
 
-    createCourt = async (req: Request, res: Response) => {
-        try {
-            const { clubId, name, surface, activityTypeId, activityIds } = req.body;
-            const resolvedActivityTypeId = activityTypeId ?? (Array.isArray(activityIds) ? activityIds[0] : undefined);
-            const court = await this.clubService.registerCourt(clubId, name, surface, resolvedActivityTypeId);
-            res.status(201).json(court);
-        } catch (error: any) {
-            res.status(400).json({ error: error.message });
-        }
-    }
-
     getClubClientsList = async (req: Request, res: Response) => {
     try {
-        // 1. Obtenemos el ID del club (gracias al middleware verifyClubAccess)
-        // Si TypeScript se queja de req.club, podés usar (req as any).club
         const club = (req as any).club;
         
         if (!club) {
             return res.status(404).json({ message: 'Club no encontrado' });
         }
 
-        // 2. Obtenemos lo que escribiste en el buscador
-        const query = (req.query.q as string || '').toLowerCase();
-
-        // 3. Pedimos TODOS los clientes al servicio
-        // Usamos clubService, que es lo que tenés disponible en el controller
-        const allClients = await this.clubService.getClients(club.id);
-
-        // 4. FILTRAMOS NOSOTROS (Acá arreglamos que no traiga todo)
+        const query = String(req.query.q || '').trim();
         if (!query) {
-            // Si no escribió nada, devolvemos vacío o los primeros 10
             return res.json([]); 
         }
 
-        const filtered = allClients.filter((c: any) => {
-            const fullName = `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase();
-            const phone = c.phoneNumber || c.phone || '';
-            const dni = c.dni || '';
-            
-            // Si el nombre, telefono o dni contiene lo que escribiste... ¡Adentro!
-            return fullName.includes(query) || phone.includes(query) || dni.includes(query);
-        });
-
+        const filtered = await this.clubService.getClients(club.id, query);
         res.json(filtered);
 
     } catch (error: any) {

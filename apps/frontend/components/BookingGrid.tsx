@@ -922,33 +922,14 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
 
               const handleSelectCourt = async () => {
                 if (!selectedDate || !selectedSlot) return;
-                try {
-                  const currentActivityId = Number((court as any).activityType?.id || selectedActivityId || 0);
-                  if (!Number.isFinite(currentActivityId) || currentActivityId <= 0) {
-                    showError('No se pudo identificar la actividad de la cancha.');
-                    return;
-                  }
-
-                  const res = await fetch(
-                    `${apiBase()}/bookings/availability?courtId=${court.id}&date=${dateString}&activityId=${currentActivityId}&durationMinutes=${selectedDuration}`
-                  );
-                  if (!res.ok) {
-                    setDisabledSlots((prev) => ({ ...prev, [slotKey]: true }));
-                    showError('No se pudo verificar disponibilidad.');
-                    return;
-                  }
-                  const data = await res.json();
-                  const availableSlotsList: string[] = data.availableSlots || [];
-                  if (!availableSlotsList.includes(selectedSlot)) {
-                    setDisabledSlots((prev) => ({ ...prev, [slotKey]: true }));
-                    showError('Cancha ya no disponible.');
-                    return;
-                  }
-                  setSelectedCourt(court);
-                } catch (err: any) {
+                const currentSlot = availableSlots.find((slot) => slot.slotTime === selectedSlot);
+                const availableCourtIds = new Set((currentSlot?.availableCourts || []).map((c) => c.id));
+                if (!availableCourtIds.has(court.id)) {
                   setDisabledSlots((prev) => ({ ...prev, [slotKey]: true }));
-                  showError('Error verificando disponibilidad.');
+                  showError('Cancha ya no disponible.');
+                  return;
                 }
+                setSelectedCourt(court);
               };
 
               const isSelected = selectedCourt?.id === court.id;

@@ -161,6 +161,7 @@ model User {
   notifications Notification[]
   auditLogs     AuditLog[]
   cashShiftsOpened CashShift[] @relation("CashShiftOpenedBy")
+  cashShiftsClosed CashShift[] @relation("CashShiftClosedBy")
   ledgerEntries LedgerEntry[]
   ledgerTransactionsCreated LedgerTransaction[]
   cashMovementsCreated CashMovement[]
@@ -221,6 +222,7 @@ model Club {
   outboxMessages OutboxMessage[]
   settings      ClubSettings?
   cashRegisters CashRegister[]
+  cashShifts    CashShift[]
   ledgerEntries LedgerEntry[]
   ledgerTransactions LedgerTransaction[]
 }
@@ -339,8 +341,8 @@ model Client {
 
   @@index([clubId])
   @@index([userId])
-  @@index([clubId, email])
-  @@index([clubId, phone])
+  @@unique([clubId, email])
+  @@unique([clubId, phone])
   @@index([clubId, dni])
   @@unique([clubId, dni])
   @@unique([clubId, userId])
@@ -381,7 +383,6 @@ model Booking {
   fixedBooking   FixedBooking? @relation(fields: [fixedBookingId], references: [id])
 
   @@index([courtId, startDateTime], map: "booking_court_day")
-  @@unique([courtId, startDateTime], map: "booking_court_start_unique")
   @@index([courtId, endDateTime])
   @@index([clubId, startDateTime], map: "booking_club_day")
   @@index([activityId, startDateTime], map: "booking_activity_day")
@@ -676,7 +677,12 @@ model Product {
   accountItems AccountItem[]
 
   @@index([clubId])
+  @@map("Product")
 }
+
+// Constraint: stock >= 0
+// Agregar en migración SQL:
+// ALTER TABLE "Product" ADD CONSTRAINT product_stock_non_negative CHECK (stock >= 0);
 
 model ProductComponent {
   id Int @id @default(autoincrement())
@@ -759,39 +765,49 @@ model LedgerEntry {
 }
 
 model CashRegister {
-  id        String      @id @default(cuid())
-  clubId    Int
-  club      Club        @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  name      String
-  location  String?
-  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+  id     String @id @default(cuid())
 
-  shifts    CashShift[]
+  clubId Int
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  name   String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  shifts CashShift[]
 
   @@index([clubId])
   @@unique([clubId, name])
 }
 
 model CashShift {
-  id              String          @id @default(cuid())
-  cashRegisterId  String
-  cashRegister    CashRegister    @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
+  cashRegisterId String
+  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
 
-  openedByUserId  Int
-  openedByUser    User            @relation("CashShiftOpenedBy", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  clubId         Int
+  club           Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
-  openedAt        DateTime        @default(now()) @db.Timestamptz(3)
-  closedAt        DateTime?       @db.Timestamptz(3)
+  openedByUserId Int?
+  openedByUser   User? @relation("CashShiftOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+  closedByUserId Int?
+  closedByUser   User? @relation("CashShiftClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
 
-  openingAmount   Decimal         @db.Decimal(10, 2)
-  expectedCash    Decimal?        @db.Decimal(10, 2)
-  countedCash     Decimal?        @db.Decimal(10, 2)
-  difference      Decimal?        @db.Decimal(10, 2)
-  status          CashShiftStatus @default(OPEN)
+  openedAt DateTime @default(now()) @db.Timestamptz(3)
+  closedAt DateTime? @db.Timestamptz(3)
 
-  payments        Payment[]
-  movements       CashMovement[]
+  openingAmount Decimal @db.Decimal(10,2)
+  expectedCash Decimal? @db.Decimal(10,2)
+  countedCash  Decimal? @db.Decimal(10,2)
+  difference   Decimal? @db.Decimal(10,2)
+  status CashShiftStatus @default(OPEN)
 
-  @@index([cashRegisterId, status])
+  payments  Payment[]
+  movements CashMovement[]
+
+  @@index([cashRegisterId])
+  @@index([status])
+  @@index([clubId])
   @@index([openedAt])
+  @@index([clubId, status])
 }

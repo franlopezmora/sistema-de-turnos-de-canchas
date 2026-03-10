@@ -15,9 +15,8 @@ import { verifyClubAccess } from '../middleware/ClubMiddleware';
 import { ProductController } from '../controllers/ProductController';
 import { ProductRepository } from '../repositories/ProductRepository';
 import { CashRepository } from '../repositories/CashRepository';
-import { prisma } from '../prisma';
 import { z } from 'zod';
-import { assertValidScheduleMode, normalizeSchedule } from '../utils/ActivityScheduleHelper';
+import { ActivityTypeAdminService } from '../services/ActivityTypeAdminService';
 
 const router = Router();
 
@@ -45,6 +44,7 @@ const clubService = new ClubService(clubRepository, activityRepository);
 const bookingController = new BookingController(bookingService);
 const courtController = new CourtController();
 const clubController = new ClubController(clubService);
+const activityTypeAdminService = new ActivityTypeAdminService();
 
 // Todas las rutas requieren autenticación, rol ADMIN y verificación de acceso al club
 // El middleware verifyClubAccess agrega req.clubId al request
@@ -133,10 +133,7 @@ router.get('/:slug/admin/activity-types',
                 return res.status(400).json({ error: 'No se pudo determinar el club activo' });
             }
 
-            const activities = await prisma.activityType.findMany({
-                where: { clubId },
-                orderBy: { name: 'asc' }
-            });
+            const activities = await activityTypeAdminService.listByClub(clubId);
 
             res.json(activities);
         } catch (error: any) {
@@ -182,46 +179,14 @@ router.put('/:slug/admin/activity-types/:id/schedule',
                 return res.status(400).json({ error: 'No se pudo determinar el club activo' });
             }
 
-            const activity = await prisma.activityType.findUnique({ where: { id: idParsed.data } });
-            if (!activity) {
-                return res.status(404).json({ error: 'Actividad no encontrada' });
-            }
-            if (Number(activity.clubId) !== clubId) {
-                return res.status(403).json({ error: 'La actividad no pertenece a este club' });
-            }
-
-            const parsed = bodyParsed.data;
-            const fallbackDuration = Number(activity.defaultDurationMinutes) > 0 ? Number(activity.defaultDurationMinutes) : 60;
-
-            const normalized = normalizeSchedule(
-                {
-                    scheduleMode: parsed.scheduleMode,
-                    scheduleOpenTime: parsed.scheduleOpenTime ?? null,
-                    scheduleCloseTime: parsed.scheduleCloseTime ?? null,
-                    scheduleIntervalMinutes: parsed.scheduleIntervalMinutes ?? null,
-                    scheduleDurations: parsed.scheduleDurations,
-                    scheduleFixedSlots: parsed.scheduleFixedSlots
-                },
-                fallbackDuration
-            );
-
-            assertValidScheduleMode(normalized);
-
-            const updated = await prisma.activityType.update({
-                where: { id: activity.id },
-                data: {
-                    scheduleMode: normalized.mode,
-                    scheduleOpenTime: normalized.openTime,
-                    scheduleCloseTime: normalized.closeTime,
-                    scheduleIntervalMinutes: normalized.intervalMinutes,
-                    scheduleDurations: normalized.durations as any,
-                    scheduleFixedSlots: normalized.fixedSlots as any
-                }
-            });
+            const updated = await activityTypeAdminService.updateSchedule(clubId, idParsed.data, bodyParsed.data as any);
 
             res.json(updated);
         } catch (error: any) {
-            res.status(400).json({ error: error.message || 'No se pudo actualizar la configuración de actividad' });
+            const status = error?.message === 'Actividad no encontrada'
+                ? 404
+                : (error?.message === 'La actividad no pertenece a este club' ? 403 : 400);
+            res.status(status).json({ error: error.message || 'No se pudo actualizar la configuración de actividad' });
         }
     }
 );

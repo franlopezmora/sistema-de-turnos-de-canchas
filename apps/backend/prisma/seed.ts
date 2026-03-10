@@ -387,8 +387,7 @@ async function main() {
       update: {},
       create: {
         clubId,
-        name: 'Caja Principal',
-        location: 'Recepción'
+        name: 'Caja Principal'
       }
     });
   };
@@ -397,7 +396,7 @@ async function main() {
   const register2 = await upsertCashRegister(club2.id);
   const register3 = await upsertCashRegister(club3.id);
 
-  const ensureOpenShift = async (cashRegisterId: string, openedByUserId: number) => {
+  const ensureOpenShift = async (cashRegisterId: string, openedByUserId: number, clubId: number) => {
     const openShift = await prisma.cashShift.findFirst({
       where: { cashRegisterId, status: 'OPEN' }
     });
@@ -407,6 +406,7 @@ async function main() {
     return prisma.cashShift.create({
       data: {
         cashRegisterId,
+        clubId,
         openedByUserId,
         openingAmount: 50000,
         status: 'OPEN'
@@ -414,9 +414,9 @@ async function main() {
     });
   };
 
-  await ensureOpenShift(register1.id, adminTejas.id);
-  await ensureOpenShift(register2.id, adminCentral.id);
-  await ensureOpenShift(register3.id, adminMadrid.id);
+  await ensureOpenShift(register1.id, adminTejas.id, register1.clubId);
+  await ensureOpenShift(register2.id, adminCentral.id, register2.clubId);
+  await ensureOpenShift(register3.id, adminMadrid.id, register3.clubId);
   console.log('✅ Caja principal y turnos de caja abiertos');
 }
 

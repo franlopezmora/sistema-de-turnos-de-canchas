@@ -594,9 +594,9 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         ].filter((item): item is NonNullable<typeof item> => Boolean(item));
     }
 
-    async getBookingFinancialSummary(bookingId: number) {
+    async getBookingFinancialSummary(bookingId: number, clubId: number) {
         const account = await prisma.account.findFirst({
-            where: { sourceType: 'BOOKING', sourceId: String(bookingId) },
+            where: { clubId, sourceType: 'BOOKING', sourceId: String(bookingId) },
             include: { items: true, payments: true }
         });
 
@@ -939,10 +939,8 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         const existingBookings = await prisma.booking.findMany({
             where: {
                 courtId: courtId,
-                startDateTime: {
-                    gte: startUtc,
-                    lte: endUtc
-                },
+                startDateTime: { lt: endUtc },
+                endDateTime: { gt: startUtc },
                 status: { not: 'CANCELLED' }
             }
         });
@@ -1061,11 +1059,11 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
             });
 
             await this.outboxService.enqueueMany(outboxMessages, tx);
-        });
 
-        await this.accountService.cancelItemsForSource({
-            sourceType: 'BOOKING',
-            sourceId: booking.id
+            await this.accountService.cancelItemsForSourceTx(tx, {
+                sourceType: 'BOOKING',
+                sourceId: booking.id
+            });
         });
 
         console.info('[BOOKING] Reserva cancelada', {
@@ -1129,12 +1127,20 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         return bookings;
     }
 
-    async getBookingById(bookingId: number) {
-        const booking = await this.bookingRepo.findById(bookingId);
+    async getBookingById(bookingId: number, clubId: number) {
+        const booking = await prisma.booking.findFirst({
+            where: { id: bookingId, clubId },
+            include: {
+                court: { include: { club: true } },
+                activity: true,
+                user: true,
+                client: true
+            }
+        });
         if (!booking) {
             throw new Error('Reserva no encontrada');
         }
-        return booking;
+        return this.bookingRepo.mapToEntity(booking as any);
     }
 
     async getDaySchedule(date: Date, clubId?: number) {
@@ -1156,10 +1162,8 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
 
         const bookings = await prisma.booking.findMany({
     where: {
-        startDateTime: {
-            gte: startUtc,
-            lte: endUtc
-        },
+        startDateTime: { lt: endUtc },
+        endDateTime: { gt: startUtc },
         ...(clubId ? { clubId } : {}),
         status: { not: 'CANCELLED' }
     },
@@ -1253,72 +1257,6 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         return schedule;
     }
 
-    async getAllAvailableSlots(date: Date, activityId: number, clubId?: number, durationMinutes?: number): Promise<string[]> {
-        const selectedClub = clubId
-            ? await prisma.club.findUnique({ where: { id: clubId }, select: { timeZone: true } })
-            : null;
-        const timeZone = selectedClub?.timeZone ?? 'America/Argentina/Buenos_Aires';
-        const allCourts = await this.courtRepo.findAll(clubId);
-        const activeCourts = allCourts.filter(court => {
-            if (court.isUnderMaintenance) return false;
-            const clubCfg = this.resolveClubConfig((court as any)?.club);
-            const clubTZ = clubCfg.timeZone ?? timeZone;
-            return this.isClubOpenOnLocalDate(clubCfg, date, clubTZ);
-        });
-        const bookings = await this.bookingRepo.findAllByDate(date, timeZone, clubId);
-
-        const activity = await this.activityRepo.findById(activityId);
-        if (!activity) throw new Error("Actividad no encontrada");
-        const activitySchedule = this.resolveActivitySchedule(activity);
-
-        const activeActivityCourts = activeCourts.filter((court: any) => Number(court.activityTypeId) === Number(activityId));
-
-        const allowedDurations = activitySchedule.durations;
-        const effectiveDuration = durationMinutes ?? activity.defaultDurationMinutes;
-        if (!allowedDurations.includes(effectiveDuration)) {
-            throw new Error("Duración no permitida por el club");
-        }
-
-        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
-
-        const anchors = [
-            (() => { const d = new Date(date); d.setDate(d.getDate() - 1); return d; })(),
-            new Date(date)
-        ];
-
-        const seen = new Set<string>();
-        const result: string[] = [];
-
-        const occupiedSlotsByCourt = new Set<string>();
-        for (const booking of bookings) {
-            occupiedSlotsByCourt.add(`${booking.court.id}:${booking.startDateTime.getTime()}`);
-        }
-
-        for (const anchor of anchors) {
-            for (const slotObj of possibleSlots) {
-                const slotDateCandidate = new Date(anchor);
-                slotDateCandidate.setDate(slotDateCandidate.getDate() + (slotObj.dayOffset || 0));
-                if (
-                    slotDateCandidate.getFullYear() !== date.getFullYear() ||
-                    slotDateCandidate.getMonth() !== date.getMonth() ||
-                    slotDateCandidate.getDate() !== date.getDate()
-                ) continue;
-
-                const slotDateTime = TimeHelper.localSlotToUtc(slotDateCandidate, slotObj.slotTime, timeZone);
-
-                const slotMillis = slotDateTime.getTime();
-                const hasAvailableCourt = activeActivityCourts.some((court) => !occupiedSlotsByCourt.has(`${court.id}:${slotMillis}`));
-
-                if (hasAvailableCourt && !seen.has(slotObj.slotTime)) {
-                    seen.add(slotObj.slotTime);
-                    result.push(slotObj.slotTime);
-                }
-            }
-        }
-
-        return result;
-    }
-
     async getAvailableSlotsWithCourts(date: Date, activityId: number, clubId?: number, durationMinutes?: number): Promise<Array<{
         slotTime: string;
         availableCourts: Array<{
@@ -1338,10 +1276,8 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
 
         const bookings = await prisma.booking.findMany({
             where: {
-                startDateTime: {
-                    gte: startUtc,
-                    lte: endUtc
-                },
+                startDateTime: { lt: endUtc },
+                endDateTime: { gt: startUtc },
                 status: { not: 'CANCELLED' },
                 ...(clubId ? { clubId } : {})
             },
@@ -1478,6 +1414,11 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
         }
 
         const activity = await this.activityRepo.findById(activityId);
+        if (!activity) throw new Error("Actividad no encontrada");
+        // Validar que la actividad pertenezca al mismo club que la cancha
+        if ((activity.clubId ?? null) !== (court.club?.id ?? null)) {
+            throw new Error("ACTIVITY_CLUB_MISMATCH");
+        }
         const duration = isProfessorOverride ? 60 : (activity ? activity.defaultDurationMinutes : 60);
         this.assertValidDuration(duration);
         const clubConfigForFixed = this.resolveClubConfig((court as any)?.club);
@@ -1541,82 +1482,85 @@ Un cliente acaba de cancelar su reserva desde la web en *${params.clubName}*.
             totalOccurrences,
             generationFrequencyDays
         });
-        // A. Crear el "Padre" (Turno Fijo)
-        const fixedBooking = await prisma.fixedBooking.create({
-            data: {
-                ...(userId ? { userId } : {}),
-                ...(guestName ? { guestName } : {}),
-                ...(safePhone ? { guestPhone: safePhone } : {}),
-                ...(guestDni ? { guestDni } : {}),
-
-                courtId,
-                activityId,
-                clubId: (court as any).club.id,
-                startDate: firstStart,
-                dayOfWeek,
-                startTimeMinutes,
-                endTimeMinutes,
-                status: 'ACTIVE'
-            }
-        });
-
-        // B. Conflictos existentes
-        const existingBookings = await prisma.booking.findMany({
-            where: {
-                courtId,
-                status: { not: 'CANCELLED' },
-                startDateTime: { gte: firstStart },
-                endDateTime: { lte: lastEnd }
-            }
-        });
-
+        // ATÓMICO: crear FixedBooking y bookings hijas en una sola transacción
         let generatedCount = 0;
+        await prisma.$transaction(async (tx) => {
+            // A. Crear el "Padre" (Turno Fijo)
+            const fixedBooking = await tx.fixedBooking.create({
+                data: {
+                    ...(userId ? { userId } : {}),
+                    ...(guestName ? { guestName } : {}),
+                    ...(safePhone ? { guestPhone: safePhone } : {}),
+                    ...(guestDni ? { guestDni } : {}),
 
-        // C. Generar hijas usando la misma lógica central de createBooking
-        for (let i = 0; i < totalOccurrences; i++) {
-            const currentStart = new Date(startDateTime);
-            currentStart.setDate(startDateTime.getDate() + (i * generationFrequencyDays));
-
-            const currentEnd = new Date(currentStart.getTime() + duration * 60000);
-            this.assertValidRange(currentStart, currentEnd);
-
-            const hasConflict = existingBookings.some((existing: any) => {
-                return existing.startDateTime < currentEnd && existing.endDateTime > currentStart;
+                    courtId,
+                    activityId,
+                    clubId: (court as any).club.id,
+                    startDate: firstStart,
+                    dayOfWeek,
+                    startTimeMinutes,
+                    endTimeMinutes,
+                    status: 'ACTIVE'
+                }
             });
 
-            if (hasConflict) {
-                continue;
-            }
-
-            try {
-                const createdBooking = await this.createBooking(
-                    userId,
-                    guestDni,
-                    guestName,
-                    undefined,
-                    safePhone,
-                    guestDni,
+            // B. Conflictos existentes
+            const existingBookings = await tx.booking.findMany({
+                where: {
                     courtId,
-                    currentStart,
-                    activityId,
-                    isProfessorOverride,
-                    duration,
-                    true
-                );
+                    status: { not: 'CANCELLED' },
+                    startDateTime: { gte: firstStart },
+                    endDateTime: { lte: lastEnd }
+                }
+            });
 
-                await prisma.booking.update({
-                    where: { id: createdBooking.id },
-                    data: { fixedBookingId: fixedBooking.id }
+            // C. Generar hijas usando la misma lógica central de createBooking
+            for (let i = 0; i < totalOccurrences; i++) {
+                const currentStart = new Date(startDateTime);
+                currentStart.setDate(startDateTime.getDate() + (i * generationFrequencyDays));
+
+                const currentEnd = new Date(currentStart.getTime() + duration * 60000);
+                this.assertValidRange(currentStart, currentEnd);
+
+                const hasConflict = existingBookings.some((existing: any) => {
+                    return existing.startDateTime < currentEnd && existing.endDateTime > currentStart;
                 });
 
-                generatedCount += 1;
-            } catch (error) {
-                if (this.isOverlapConstraintError(error) || String((error as Error)?.message || '').includes('ya fue reservado')) {
+                if (hasConflict) {
                     continue;
                 }
-                throw error;
+
+                try {
+                    const createdBooking = await this.createBooking(
+                        userId,
+                        guestDni,
+                        guestName,
+                        undefined,
+                        safePhone,
+                        guestDni,
+                        courtId,
+                        currentStart,
+                        activityId,
+                        isProfessorOverride,
+                        duration,
+                        true,
+                        tx // Pasar el tx para que sea parte de la transacción
+                    );
+
+                    await tx.booking.update({
+                        where: { id: createdBooking.id },
+                        data: { fixedBookingId: fixedBooking.id }
+                    });
+
+                    generatedCount += 1;
+                } catch (error) {
+                    if (this.isOverlapConstraintError(error) || String((error as Error)?.message || '').includes('ya fue reservado')) {
+                        continue;
+                    }
+                    throw error;
+                }
             }
-        }
+        });
 
         console.info('[FIXED_BOOKING] Generación completada', {
             fixedBookingId: fixedBooking.id,

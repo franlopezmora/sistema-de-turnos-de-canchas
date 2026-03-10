@@ -104,6 +104,11 @@ export class ProjectionService {
 
   async refreshDailyCashSummary(clubId: number, day: Date, tx?: DbClient) {
     const client = tx ?? prisma;
+    const dayStart = new Date(day);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
     const rows = await client.$queryRaw<Array<{
       cashIn: Prisma.Decimal;
       cashOut: Prisma.Decimal;
@@ -113,7 +118,8 @@ export class ProjectionService {
         COALESCE(SUM(CASE WHEN "method" = 'CASH'::"CashMovementMethod" AND "type" IN ('WITHDRAW'::"CashMovementPosType", 'REFUND'::"CashMovementPosType") THEN "amount" ELSE 0 END), 0) AS "cashOut"
       FROM "CashMovement"
       WHERE "clubId" = ${clubId}
-        AND DATE("createdAt") = DATE(${day})
+        AND "createdAt" >= ${dayStart}
+        AND "createdAt" < ${dayEnd}
     `;
 
     const row = rows[0];
@@ -125,7 +131,7 @@ export class ProjectionService {
       where: {
         clubId_day: {
           clubId,
-          day
+          day: dayStart
         }
       },
       update: {
@@ -135,7 +141,7 @@ export class ProjectionService {
       },
       create: {
         clubId,
-        day,
+          day: dayStart,
         cashIn: new Prisma.Decimal(cashIn),
         cashOut: new Prisma.Decimal(cashOut),
         netCash: new Prisma.Decimal(netCash)
