@@ -267,6 +267,18 @@ CREATE TABLE "Payment" (
 );
 
 -- CreateTable
+CREATE TABLE "PaymentAllocation" (
+    "id" TEXT NOT NULL,
+    "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "amount" DECIMAL(10,2) NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "paymentId" TEXT NOT NULL,
+    "accountItemId" TEXT NOT NULL,
+
+    CONSTRAINT "PaymentAllocation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "LedgerTransaction" (
     "id" TEXT NOT NULL,
     "clubId" INTEGER NOT NULL,
@@ -409,6 +421,7 @@ CREATE TABLE "ClubSettings" (
     "autoCancelPendingBookingsOnlyIfUnpaid" BOOLEAN NOT NULL DEFAULT true,
     "autoCancelPendingWarningEnabled" BOOLEAN NOT NULL DEFAULT false,
     "autoCancelPendingWarningMinutesBefore" INTEGER,
+    "enforceCashShiftCloseWithOpenAccounts" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMPTZ(3) NOT NULL,
 
@@ -639,6 +652,18 @@ CREATE INDEX "Payment_idempotencyKey_idx" ON "Payment"("idempotencyKey");
 CREATE UNIQUE INDEX "Payment_accountId_idempotencyKey_key" ON "Payment"("accountId", "idempotencyKey");
 
 -- CreateIndex
+CREATE INDEX "PaymentAllocation_accountId_createdAt_idx" ON "PaymentAllocation"("accountId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "PaymentAllocation_accountItemId_createdAt_idx" ON "PaymentAllocation"("accountItemId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "PaymentAllocation_paymentId_createdAt_idx" ON "PaymentAllocation"("paymentId", "createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PaymentAllocation_paymentId_accountItemId_key" ON "PaymentAllocation"("paymentId", "accountItemId");
+
+-- CreateIndex
 CREATE INDEX "LedgerTransaction_clubId_createdAt_idx" ON "LedgerTransaction"("clubId", "createdAt");
 
 -- CreateIndex
@@ -844,6 +869,15 @@ ALTER TABLE "AccountItem" ADD CONSTRAINT "AccountItem_productId_fkey" FOREIGN KE
 
 -- AddForeignKey
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PaymentAllocation" ADD CONSTRAINT "PaymentAllocation_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PaymentAllocation" ADD CONSTRAINT "PaymentAllocation_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PaymentAllocation" ADD CONSTRAINT "PaymentAllocation_accountItemId_fkey" FOREIGN KEY ("accountItemId") REFERENCES "AccountItem"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_cashShiftId_fkey" FOREIGN KEY ("cashShiftId") REFERENCES "CashShift"("id") ON DELETE SET NULL ON UPDATE CASCADE;
