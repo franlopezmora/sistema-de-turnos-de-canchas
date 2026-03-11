@@ -38,7 +38,7 @@ services:
       - SERVER_RESET_QUERY=DISCARD ALL
       - ADMIN_USERS=${POSTGRES_USER:-postgres}
       - AUTH_TYPE=scram-sha-256
-      - IGNORE_STARTUP_PARAMETERS=extra_float_digits
+      - IGNORE_STARTUP_PARAMETERS=extra_float_digits,search_path
     depends_on:
       - postgres
     ports:
