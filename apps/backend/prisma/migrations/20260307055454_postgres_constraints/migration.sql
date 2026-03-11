@@ -428,3 +428,167 @@ BEGIN
     CHECK ("paidAmount" <= "totalAmount") NOT VALID;
   END IF;
 END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'refund_amount_positive'
+  ) THEN
+    ALTER TABLE "Refund"
+      ADD CONSTRAINT refund_amount_positive
+      CHECK ("amount" > 0) NOT VALID;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'refund_amount_positive'
+  ) THEN
+    ALTER TABLE "Refund" VALIDATE CONSTRAINT refund_amount_positive;
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION ensure_refund_payment_account_club_consistency()
+RETURNS trigger AS $$
+DECLARE
+  payment_account_id TEXT;
+  payment_club_id INT;
+  shift_club_id INT;
+BEGIN
+  SELECT p."accountId", a."clubId"
+    INTO payment_account_id, payment_club_id
+  FROM "Payment" p
+  JOIN "Account" a ON a."id" = p."accountId"
+  WHERE p."id" = NEW."paymentId";
+
+  IF payment_account_id IS NULL THEN
+    RAISE EXCEPTION 'Refund references unknown payment %', NEW."paymentId";
+  END IF;
+
+  IF NEW."accountId" <> payment_account_id THEN
+    RAISE EXCEPTION 'Refund accountId % must match payment accountId %', NEW."accountId", payment_account_id;
+  END IF;
+
+  IF NEW."clubId" <> payment_club_id THEN
+    RAISE EXCEPTION 'Refund clubId % must match payment/account clubId %', NEW."clubId", payment_club_id;
+  END IF;
+
+  IF NEW."cashShiftId" IS NOT NULL THEN
+    SELECT cs."clubId"
+      INTO shift_club_id
+    FROM "CashShift" cs
+    WHERE cs."id" = NEW."cashShiftId";
+
+    IF shift_club_id IS NULL THEN
+      RAISE EXCEPTION 'Refund references unknown cashShift %', NEW."cashShiftId";
+    END IF;
+
+    IF shift_club_id <> NEW."clubId" THEN
+      RAISE EXCEPTION 'Refund cashShift club mismatch: % <> %', shift_club_id, NEW."clubId";
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_ensure_refund_payment_account_club_consistency ON "Refund";
+CREATE TRIGGER trg_ensure_refund_payment_account_club_consistency
+BEFORE INSERT OR UPDATE ON "Refund"
+FOR EACH ROW
+EXECUTE FUNCTION ensure_refund_payment_account_club_consistency();
+
+CREATE OR REPLACE FUNCTION ensure_refund_not_exceed_payment_amount()
+RETURNS trigger AS $$
+DECLARE
+  payment_amount NUMERIC;
+  refunded_amount NUMERIC;
+BEGIN
+  SELECT "amount"
+    INTO payment_amount
+  FROM "Payment"
+  WHERE "id" = NEW."paymentId"
+  FOR UPDATE;
+
+  IF payment_amount IS NULL THEN
+    RAISE EXCEPTION 'Refund references unknown payment %', NEW."paymentId";
+  END IF;
+
+  SELECT COALESCE(SUM(r."amount"), 0)
+    INTO refunded_amount
+  FROM "Refund" r
+  WHERE r."paymentId" = NEW."paymentId"
+    AND r."id" <> COALESCE(NEW."id", '');
+
+  IF (refunded_amount + NEW."amount") > payment_amount THEN
+    RAISE EXCEPTION 'Refund exceeds payment amount: payment %, existing %, new %', payment_amount, refunded_amount, NEW."amount";
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_ensure_refund_not_exceed_payment_amount ON "Refund";
+CREATE TRIGGER trg_ensure_refund_not_exceed_payment_amount
+BEFORE INSERT OR UPDATE ON "Refund"
+FOR EACH ROW
+EXECUTE FUNCTION ensure_refund_not_exceed_payment_amount();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'club_settings_autocancel_minutes_valid'
+  ) THEN
+    ALTER TABLE "ClubSettings"
+      ADD CONSTRAINT "club_settings_autocancel_minutes_valid"
+      CHECK (
+        (NOT "autoCancelPendingBookingsEnabled")
+        OR (
+          "autoCancelPendingBookingsMinutesBefore" IS NOT NULL
+          AND "autoCancelPendingBookingsMinutesBefore" > 0
+        )
+      );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'club_settings_autowarning_minutes_valid'
+  ) THEN
+    ALTER TABLE "ClubSettings"
+      ADD CONSTRAINT "club_settings_autowarning_minutes_valid"
+      CHECK (
+        (NOT "autoCancelPendingWarningEnabled")
+        OR (
+          "autoCancelPendingWarningMinutesBefore" IS NOT NULL
+          AND "autoCancelPendingWarningMinutesBefore" > 0
+        )
+      );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'club_settings_warning_before_cancel'
+  ) THEN
+    ALTER TABLE "ClubSettings"
+      ADD CONSTRAINT "club_settings_warning_before_cancel"
+      CHECK (
+        NOT (
+          "autoCancelPendingBookingsEnabled"
+          AND "autoCancelPendingWarningEnabled"
+          AND "autoCancelPendingBookingsMinutesBefore" IS NOT NULL
+          AND "autoCancelPendingWarningMinutesBefore" IS NOT NULL
+          AND "autoCancelPendingWarningMinutesBefore" <= "autoCancelPendingBookingsMinutesBefore"
+        )
+      );
+  END IF;
+END $$;
