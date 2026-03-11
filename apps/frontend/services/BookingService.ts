@@ -1,6 +1,6 @@
 // ARCHIVO: services/BookingService.ts
 
-// Si tienes el AuthService en otra carpeta, ajusta esta línea "../services/AuthService"
+// Si tienes el AuthService en otra carpeta, ajusta esta lÃ­nea "../services/AuthService"
 // Si no lo encuentras, puedes borrar el import y usar localStorage.getItem('token') directo.
 import { getToken } from './AuthService';
 import { fetchWithAuth } from '../utils/apiClient';
@@ -36,6 +36,18 @@ export type BookingFinancialSummary = {
   depositCovered: boolean;
   paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
   confirmationMode: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
+  requiredToConfirm: number;
+  remainingToConfirm: number;
+  isPendingByInsufficientPayment: boolean;
+  autoCancelStatus: {
+    enabled: boolean;
+    minutesBefore: number | null;
+    onlyIfUnpaid: boolean;
+    blockedByPayment: boolean;
+    eligibleNow: boolean;
+    autoCancelAt: string | null;
+    label: string;
+  };
 };
 
 // --- 1. CREAR UNA RESERVA ---
@@ -45,7 +57,7 @@ export const createBooking = async (
   date: Date,
   slotTime?: string,
   userId?: number,
-  // 👇 Aceptamos 'dni' también en el tipo para evitar errores de TS
+  // ðŸ‘‡ Aceptamos 'dni' tambiÃ©n en el tipo para evitar errores de TS
   guestInfo?: { name?: string; email?: string; phone?: string; guestDni?: string; dni?: string },
   options?: { asGuest?: boolean; guestIdentifier?: string; isProfessor?: boolean; durationMinutes?: number; openAccount?: boolean }
 ) => {
@@ -53,7 +65,7 @@ export const createBooking = async (
   const guestId = token ? undefined : getOrCreateGuestId();
   const guestIdentifier = options?.guestIdentifier ?? guestId;
 
-  // 👇 Truco: Unificamos el valor del DNI venga como venga
+  // ðŸ‘‡ Truco: Unificamos el valor del DNI venga como venga
   const dniValue = guestInfo?.guestDni || guestInfo?.dni;
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -92,7 +104,7 @@ export const createBooking = async (
 
 // --- 2. OBTENER MIS RESERVAS (HISTORIAL) ---
 export const getMyBookings = async (userId: number) => {
-    if (!getToken()) throw new Error("Debes iniciar sesión.");
+    if (!getToken()) throw new Error("Debes iniciar sesiÃ³n.");
 
     const res = await fetchWithAuth(`${apiBase()}/bookings/history/${userId}`, {
         method: 'GET',
@@ -107,7 +119,7 @@ export const getMyBookings = async (userId: number) => {
 
 // --- 3. CANCELAR UNA RESERVA ---
 export const cancelBooking = async (bookingId: number) => {
-    if (!getToken()) throw new Error("Debes iniciar sesión.");
+    if (!getToken()) throw new Error("Debes iniciar sesiÃ³n.");
 
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (rawUser) {
@@ -133,7 +145,7 @@ export const cancelBooking = async (bookingId: number) => {
 };
 
 export const confirmBooking = async (bookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
@@ -147,7 +159,7 @@ export const confirmBooking = async (bookingId: number) => {
 };
 
 export const completeBooking = async (bookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
@@ -164,7 +176,7 @@ export const splitBookingPayment = async (
   bookingId: number,
   payments: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>
 ) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
 
   const account = await getOrCreateBookingAccount(bookingId);
   const summary = await getAccountSummary(account.id);
@@ -192,7 +204,7 @@ export const registerBookingPartialPayment = async (
   amount: number,
   method: 'CASH' | 'TRANSFER'
 ) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
   const account = await getOrCreateBookingAccount(bookingId);
   return registerPayment({
     accountId: account.id,
@@ -202,7 +214,7 @@ export const registerBookingPartialPayment = async (
 };
 
 export const getBookingFinancialSummary = async (bookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
   const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -225,13 +237,28 @@ export const getBookingFinancialSummary = async (bookingId: number) => {
     depositRequiredAmount: Number(summary.depositRequiredAmount || 0),
     depositCovered: Boolean(summary.depositCovered),
     paymentStatus: String(summary.paymentStatus || 'UNPAID') as BookingFinancialSummary['paymentStatus'],
-    confirmationMode: String(summary.confirmationMode || 'MANUAL') as BookingFinancialSummary['confirmationMode']
+    confirmationMode: String(summary.confirmationMode || 'MANUAL') as BookingFinancialSummary['confirmationMode'],
+    requiredToConfirm: Number(summary.requiredToConfirm || 0),
+    remainingToConfirm: Number(summary.remainingToConfirm || 0),
+    isPendingByInsufficientPayment: Boolean(summary.isPendingByInsufficientPayment),
+    autoCancelStatus: {
+      enabled: Boolean(summary.autoCancelStatus?.enabled),
+      minutesBefore:
+        summary.autoCancelStatus?.minutesBefore == null
+          ? null
+          : Number(summary.autoCancelStatus.minutesBefore),
+      onlyIfUnpaid: Boolean(summary.autoCancelStatus?.onlyIfUnpaid),
+      blockedByPayment: Boolean(summary.autoCancelStatus?.blockedByPayment),
+      eligibleNow: Boolean(summary.autoCancelStatus?.eligibleNow),
+      autoCancelAt: summary.autoCancelStatus?.autoCancelAt || null,
+      label: String(summary.autoCancelStatus?.label || 'No aplica')
+    }
   } satisfies BookingFinancialSummary;
 };
 
-// --- 4. OBTENER SCHEDULE COMPLETO DEL DÍA (ADMIN) ---
+// --- 4. OBTENER SCHEDULE COMPLETO DEL DÃA (ADMIN) ---
 export const getAdminSchedule = async (date: string) => {
-    if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+    if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
 
     const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
     if (!rawUser) {
@@ -259,7 +286,7 @@ export const createFixedBooking = async (
   guestDni?: string, // <--- Recibimos el dato (Argumento #7)
   isProfessor?: boolean
 ) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
 
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) {
@@ -287,7 +314,7 @@ export const createFixedBooking = async (
 
 // --- 6. CANCELAR TURNO FIJO (NUEVO - Corregido para usar fetch) ---
 export const cancelFixedBooking = async (fixedBookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
 
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) {
@@ -305,7 +332,7 @@ export const cancelFixedBooking = async (fixedBookingId: number) => {
 };
 
 export const searchClients = async (slug: string, query: string) => {
-    if (!getToken()) throw new Error("Debes iniciar sesión.");
+    if (!getToken()) throw new Error("Debes iniciar sesiÃ³n.");
 
     const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/clients-list?q=${encodeURIComponent(query)}`, {
         method: 'GET',
