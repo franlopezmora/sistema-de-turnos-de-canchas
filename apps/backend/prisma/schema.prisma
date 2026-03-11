@@ -82,11 +82,6 @@ enum PaymentSource {
   BACKOFFICE
 }
 
-enum CashMovementType {
-  IN
-  OUT
-}
-
 enum CashMovementMethod {
   CASH
   TRANSFER
