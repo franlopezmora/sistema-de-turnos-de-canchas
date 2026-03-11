@@ -46,7 +46,8 @@ export class ClubController {
                 autoCancelPendingBookingsMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
                 autoCancelPendingBookingsOnlyIfUnpaid: z.boolean().optional(),
                 autoCancelPendingWarningEnabled: z.boolean().optional(),
-                autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v)))
+                autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
+                enforceCashShiftCloseWithOpenAccounts: z.boolean().optional()
             });
             const parsed = createClubSchema.safeParse(req.body);
             if (!parsed.success) {
@@ -56,7 +57,8 @@ export class ClubController {
                 lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays, professorDiscountEnabled, professorDiscountPercent,
                 fixedBookingSettingsByActivity, bookingConfirmationMode, bookingDepositPercent, allowManualConfirmationOverride,
                 autoCancelPendingBookingsEnabled, autoCancelPendingBookingsMinutesBefore, autoCancelPendingBookingsOnlyIfUnpaid,
-                autoCancelPendingWarningEnabled, autoCancelPendingWarningMinutesBefore } = parsed.data;
+                autoCancelPendingWarningEnabled, autoCancelPendingWarningMinutesBefore,
+                enforceCashShiftCloseWithOpenAccounts } = parsed.data;
 
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
@@ -117,6 +119,7 @@ export class ClubController {
                 autoCancelPendingBookingsOnlyIfUnpaid ?? true,
                 autoCancelPendingWarningEnabled ?? false,
                 autoCancelPendingWarningMinutesBefore ?? null,
+                enforceCashShiftCloseWithOpenAccounts ?? false,
                 Array.isArray(openingDays) ? openingDays : null
             );
             res.status(201).json(club);
@@ -198,7 +201,8 @@ export class ClubController {
                 autoCancelPendingBookingsMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
                 autoCancelPendingBookingsOnlyIfUnpaid: z.boolean().optional(),
                 autoCancelPendingWarningEnabled: z.boolean().optional(),
-                autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v)))
+                autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
+                enforceCashShiftCloseWithOpenAccounts: z.boolean().optional()
             });
             const parsed = updateClubSchema.safeParse(req.body);
             if (!parsed.success) {
@@ -234,7 +238,8 @@ export class ClubController {
                 autoCancelPendingBookingsMinutesBefore,
                 autoCancelPendingBookingsOnlyIfUnpaid,
                 autoCancelPendingWarningEnabled,
-                autoCancelPendingWarningMinutesBefore
+                autoCancelPendingWarningMinutesBefore,
+                enforceCashShiftCloseWithOpenAccounts
             } = parsed.data;
 
             const normalizedLogoUrl = await this.mediaStorageService.normalizeAsset(logoUrl ?? null, 'logoUrl');
@@ -298,7 +303,8 @@ export class ClubController {
                 autoCancelPendingBookingsMinutesBefore,
                 autoCancelPendingBookingsOnlyIfUnpaid,
                 autoCancelPendingWarningEnabled,
-                autoCancelPendingWarningMinutesBefore
+                autoCancelPendingWarningMinutesBefore,
+                enforceCashShiftCloseWithOpenAccounts
             });
             res.json(club);
         } catch (error: any) {

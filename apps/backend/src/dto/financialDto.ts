@@ -7,7 +7,14 @@ export const mapPaymentDto = (payment: any) => ({
   method: payment.method,
   source: payment.source,
   accountId: payment.accountId,
-  cashShiftId: payment.cashShiftId ?? null
+  cashShiftId: payment.cashShiftId ?? null,
+  allocations: Array.isArray(payment.allocations)
+    ? payment.allocations.map((allocation: any) => ({
+        id: allocation.id,
+        accountItemId: allocation.accountItemId,
+        amount: toNumber(allocation.amount)
+      }))
+    : []
 });
 
 export const mapRefundDto = (refund: any) => ({
@@ -92,6 +99,18 @@ export const mapCashShiftDto = (shift: any) => ({
         name: shift.cashRegister.name,
         location: shift.cashRegister.location ?? null,
         createdAt: shift.cashRegister.createdAt
+      }
+    : undefined,
+  openAccountsSummary: shift.openAccountsSummary
+    ? {
+        openAccounts: Number(shift.openAccountsSummary.openAccounts || 0),
+        openAccountsWithPending: Number(shift.openAccountsSummary.openAccountsWithPending || 0),
+        pendingAmount: toNumber(shift.openAccountsSummary.pendingAmount)
+      }
+    : undefined,
+  closePolicy: shift.closePolicy
+    ? {
+        strict: Boolean(shift.closePolicy.strict)
       }
     : undefined,
   movements: Array.isArray(shift.movements) ? shift.movements.map(mapCashMovementDto) : undefined,

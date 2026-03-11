@@ -21,12 +21,15 @@ type Props = {
 };
 
 type CartItem = {
-  id?: number;
+  id?: string;
   tempId?: string;
   productId: number;
   productName: string;
   quantity: number;
   price: number;
+  paidAmount?: number;
+  remainingAmount?: number;
+  type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
   paymentMethod?: 'CASH' | 'TRANSFER' | null;
   isNew: boolean;
 };
@@ -59,7 +62,6 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const bookingId = Number(booking?.id);
   const [products, setProducts] = useState<ProductSearchItem[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [itemsToDelete, setItemsToDelete] = useState<number[]>([]);
   const [summary, setSummary] = useState<BookingFinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,6 +70,8 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const [actionError, setActionError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [showPaymentCalculator, setShowPaymentCalculator] = useState(false);
+  const [bookingChargeItemId, setBookingChargeItemId] = useState<string | null>(null);
+  const [bookingChargeRemaining, setBookingChargeRemaining] = useState(0);
   const paymentInFlightRef = useRef(false);
 
   const isCancelled = booking?.status === 'CANCELLED';
@@ -83,17 +87,31 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       ]);
 
       setProducts(Array.isArray(productsData) ? productsData : []);
-      const formattedItems = (currentItems || []).map((item: any) => ({
+      const bookingChargeItem = (currentItems || []).find((item: any) => String(item?.type || '') === 'BOOKING');
+      setBookingChargeItemId(bookingChargeItem?.id ? String(bookingChargeItem.id) : null);
+      setBookingChargeRemaining(
+        Number(
+          bookingChargeItem?.remainingAmount == null
+            ? bookingChargeItem?.totalPrice || bookingChargeItem?.total || 0
+            : bookingChargeItem.remainingAmount
+        )
+      );
+
+      const formattedItems = (currentItems || [])
+        .filter((item: any) => String(item?.type || '') !== 'BOOKING')
+        .map((item: any) => ({
         id: item.id,
         productId: item.productId,
-        productName: item.product?.name ?? item.productName ?? 'Producto',
+        productName: item.product?.name ?? item.productName ?? item.description ?? 'Producto',
         quantity: Number(item.quantity || 1),
         price: Number(item.price || 0),
+        paidAmount: Number(item.paidAmount || 0),
+        remainingAmount: Number(item.remainingAmount == null ? item.totalPrice || 0 : item.remainingAmount),
+        type: item.type,
         paymentMethod: item.paymentMethod ?? null,
         isNew: false
       }));
       setCartItems(formattedItems);
-      setItemsToDelete([]);
       setSummary(financial || null);
       setActionError(null);
     } catch (e) {
@@ -113,11 +131,22 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       .reduce((sum, i) => sum + Number(i.price || 0) * Number(i.quantity || 0), 0);
   }, [cartItems]);
 
+  const registeredItemsPendingTotal = useMemo(() => {
+    return cartItems
+      .filter((i) => !i.isNew)
+      .reduce((sum, i) => sum + Math.max(0, Number(i.remainingAmount || 0)), 0);
+  }, [cartItems]);
+
+  const payableItems = useMemo(() => {
+    return cartItems.filter((item) => item.isNew || Number(item.remainingAmount || 0) > 0.009);
+  }, [cartItems]);
+
   const courtTotal = Number(summary?.courtTotal || booking?.price || 0);
   const itemsRegisteredTotal = Number(summary?.itemsTotal || 0);
   const paidTotal = Number(summary?.paid || 0);
-  const remainingCourt = Math.max(0, Number(summary?.remaining || 0));
-  const grandTotalToRegister = remainingCourt + draftTotal;
+  const remainingCourt = Math.max(0, Number(bookingChargeRemaining || 0));
+  const courtPaidNow = Math.max(0, Number((courtTotal - remainingCourt).toFixed(2)));
+  const grandTotalToRegister = remainingCourt + registeredItemsPendingTotal + draftTotal;
 
   const handleAddProductToDraft = (product: ProductSearchItem) => {
     if (!product?.id) return;
@@ -138,12 +167,27 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
     setQuantity(1);
   };
 
-  const handleRemove = (item: CartItem) => {
+  const handleRemove = async (item: CartItem) => {
     if (!item) return;
-    if (!item.isNew && item.id) {
-      setItemsToDelete((prev) => [...prev, item.id!]);
+    if (saving || isCancelled) return;
+
+    if (item.isNew) {
+      setCartItems((prev) => prev.filter((i) => i.tempId !== item.tempId));
+      return;
     }
-    setCartItems((prev) => prev.filter((i) => (item.isNew ? i.tempId !== item.tempId : i.id !== item.id)));
+
+    if (!item.id) return;
+
+    try {
+      setSaving(true);
+      await ClubAdminService.removeItemFromBooking(String(item.id));
+      await loadData();
+      onUpdated();
+    } catch (error: any) {
+      alert(error?.message || 'No se pudo eliminar el consumo');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePaymentConfirm = async (result: PaymentCalculatorResult) => {
@@ -153,47 +197,73 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
     try {
       setSaving(true);
 
-      const deletePromises = itemsToDelete.map((id) => ClubAdminService.removeItemFromBooking(id));
-      await Promise.all(deletePromises);
-      setItemsToDelete([]);
-
       const newItems = cartItems.filter((i) => i.isNew);
-      const selectedKeys = new Set((result.selectedItemKeys || []).map((k) => String(k)));
-      const selectedItems = newItems.filter((i) => selectedKeys.has(String(i.tempId || i.id || '')));
+      const existingItems = cartItems.filter((i) => !i.isNew);
+      const allocationByKey = new Map(
+        (result.itemAllocations || [])
+          .map((entry) => [String(entry.key), Number(entry.amount || 0)] as const)
+          .filter(([, amount]) => amount > 0.009)
+      );
+      const selectedItems = newItems.filter((i) => allocationByKey.has(String(i.tempId || i.id || '')));
 
-      const persistedSelected: CartItem[] = [];
-      for (const item of selectedItems) {
-        const created = await ClubAdminService.addItemToBooking(bookingId, item.productId, item.quantity, result.method);
-        persistedSelected.push({
-          id: created?.id,
-          productId: item.productId,
-          productName: item.productName,
-          quantity: item.quantity,
-          price: item.price,
-          paymentMethod: result.method,
-          isNew: false
-        });
+      const itemAllocations: Array<{ accountItemId: string; amount: number }> = [];
+
+      for (const item of existingItems) {
+        const key = String(item.tempId || item.id || '');
+        const allocated = Number(allocationByKey.get(key) || 0);
+        if (item.id && allocated > 0.009) {
+          itemAllocations.push({
+            accountItemId: String(item.id),
+            amount: Number(allocated.toFixed(2))
+          });
+        }
       }
 
-      const paidItemsAmount = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      for (const item of selectedItems) {
+        const created = await ClubAdminService.addItemToBooking(bookingId, item.productId, item.quantity, result.method);
+        const createdId = created?.id ? String(created.id) : '';
+        const itemAllocatedAmount = Number(
+          allocationByKey.get(String(item.tempId || item.id || '')) || 0
+        );
+        if (createdId && itemAllocatedAmount > 0) {
+          itemAllocations.push({
+            accountItemId: createdId,
+            amount: Number(itemAllocatedAmount.toFixed(2))
+          });
+        }
+      }
+
+      const paidItemsAmount = Number(
+        (result.itemAllocations || []).reduce((sum, entry) => sum + Number(entry.amount || 0), 0).toFixed(2)
+      );
       const courtPortion = Math.max(0, Number((result as any).courtAmount || 0));
       const expectedAmount = paidItemsAmount + courtPortion;
       if (Math.abs(expectedAmount - Number(result.amount || 0)) > 0.01) {
         throw new Error('El monto registrado no coincide con los conceptos seleccionados. Reintentá.');
       }
 
-      if (courtPortion > 0.01) {
-        await registerBookingPartialPayment(bookingId, courtPortion, result.method);
-      }
+      const paymentAmount = Math.max(0, Number(result.amount || 0));
+      if (paymentAmount > 0.01) {
+        const courtPortion = Math.max(0, Number((result as any).courtAmount || 0));
+        const hasBookingItemForCourt = courtPortion <= 0.01 || Boolean(bookingChargeItemId);
+        const allocations = [
+          ...itemAllocations,
+          ...(courtPortion > 0.01 && bookingChargeItemId
+            ? [{ accountItemId: bookingChargeItemId, amount: Number(courtPortion.toFixed(2)) }]
+            : [])
+        ];
 
-      const selectedTempKeys = new Set(selectedItems.map((i) => String(i.tempId || i.id || '')));
-      setCartItems((prev) => {
-        const remaining = prev.filter((i) => !i.isNew || !selectedTempKeys.has(String(i.tempId || i.id || '')));
-        return [...remaining, ...persistedSelected];
-      });
+        await registerBookingPartialPayment(
+          bookingId,
+          paymentAmount,
+          result.method,
+          hasBookingItemForCourt ? allocations : undefined
+        );
+      }
 
       const updated = await getBookingFinancialSummary(bookingId);
       setSummary(updated || null);
+      await loadData();
       setShowPaymentCalculator(false);
       onUpdated();
     } catch (e: any) {
@@ -202,6 +272,30 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
     } finally {
       setSaving(false);
       paymentInFlightRef.current = false;
+    }
+  };
+
+  const handleSaveDraftItems = async () => {
+    if (saving || isCancelled) return;
+    const draftItems = cartItems.filter((item) => item.isNew);
+    if (draftItems.length === 0) return;
+
+    try {
+      setSaving(true);
+      setActionError(null);
+      setActionMessage(null);
+
+      for (const item of draftItems) {
+        await ClubAdminService.addItemToBooking(bookingId, item.productId, item.quantity, 'CASH');
+      }
+
+      await loadData();
+      onUpdated();
+      setActionMessage('Consumos guardados correctamente. Quedaron pendientes de cobro.');
+    } catch (error: any) {
+      setActionError(error?.message || 'No se pudieron guardar los consumos');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -280,47 +374,87 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
 
           <div className="bg-white rounded-2xl border border-[#347048]/10 overflow-hidden">
             <div className="p-4 flex items-center justify-between bg-[#347048]/5">
-              <span className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Alquiler de cancha</span>
-              <span className="font-black">{formatMoney(courtTotal)}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Conceptos cobrables</span>
+              <span className="font-black">{formatMoney(courtTotal + itemsRegisteredTotal + draftTotal)}</span>
             </div>
 
-            {cartItems.length === 0 ? (
-              <div className="p-10 text-center opacity-40">
-                <Receipt size={32} className="mx-auto mb-2" />
-                <p className="text-xs font-black uppercase tracking-widest">Sin consumos cargados</p>
+            <div className="divide-y divide-[#347048]/5">
+              <div className="p-4 flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-black truncate">Alquiler de cancha</p>
+                  {remainingCourt <= 0.009 ? (
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#347048]/50 mt-1">
+                      Pagado
+                    </p>
+                  ) : courtPaidNow > 0.009 ? (
+                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mt-1">
+                      Parcial (resta {formatMoney(remainingCourt)})
+                    </p>
+                  ) : (
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#347048]/50 mt-1">
+                      Pendiente de cobro
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="font-black text-sm">{formatMoney(courtTotal)}</span>
+                </div>
               </div>
-            ) : (
-              <div className="divide-y divide-[#347048]/5">
-                {cartItems.map((item) => (
-                  <div key={item.isNew ? item.tempId : item.id} className={`p-4 flex items-center justify-between ${item.isNew ? '' : 'opacity-70'}`}>
+
+              {cartItems.length === 0 ? (
+                <div className="p-6 text-center opacity-40">
+                  <Receipt size={24} className="mx-auto mb-2" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">Sin consumos cargados</p>
+                </div>
+              ) : (
+                cartItems.map((item) => {
+                  const isPaid = !item.isNew && Number(item.remainingAmount || 0) <= 0.009;
+                  const isPartial = !item.isNew && Number(item.paidAmount || 0) > 0.009 && Number(item.remainingAmount || 0) > 0.009;
+                  const hasPayments = !item.isNew && Number(item.paidAmount || 0) > 0.009;
+                  const rowClass = isPaid ? 'bg-gray-50 text-gray-500' : isPartial ? 'bg-amber-50/40 text-[#7a5d1f]' : 'text-[#347048]';
+                  return (
+                  <div key={item.isNew ? item.tempId : item.id} className={`p-4 flex items-center justify-between ${rowClass}`}>
                     <div className="min-w-0">
                       <p className="text-sm font-black truncate">
                         {item.quantity}x {item.productName}
                       </p>
-                      {!item.isNew && item.paymentMethod ? (
+                      {!item.isNew && Number(item.remainingAmount || 0) <= 0.009 ? (
                         <p className="text-[9px] font-black uppercase tracking-widest text-[#347048]/50 mt-1">
-                          Pagado ({item.paymentMethod === 'CASH' ? 'Efectivo' : 'Digital'})
+                          Pagado
+                        </p>
+                      ) : !item.isNew && Number(item.paidAmount || 0) > 0.009 ? (
+                        <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mt-1">
+                          Parcial (resta {formatMoney(Number(item.remainingAmount || 0))})
                         </p>
                       ) : item.isNew ? (
                         <p className="text-[9px] font-black uppercase tracking-widest text-[#B9CF32] mt-1">Pendiente de cobro</p>
-                      ) : null}
+                      ) : (
+                        <p className="text-[9px] font-black uppercase tracking-widest text-[#347048]/50 mt-1">Pendiente de cobro</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="font-black text-sm">{formatMoney(item.price * item.quantity)}</span>
                       <button
                         type="button"
                         onClick={() => handleRemove(item)}
-                        className="p-2 rounded-xl text-red-500 hover:bg-red-50 transition"
-                        title="Quitar"
-                        disabled={saving || (!item.isNew && !item.id) || isCancelled}
+                        className={`p-2 rounded-xl transition ${
+                          hasPayments
+                            ? 'text-gray-400 bg-transparent cursor-not-allowed opacity-60'
+                            : isPaid
+                              ? 'text-gray-400 hover:bg-gray-100'
+                              : 'text-red-500 hover:bg-red-50'
+                        }`}
+                        title={hasPayments ? 'No se puede eliminar: tiene pagos asociados' : 'Quitar'}
+                        disabled={saving || (!item.isNew && !item.id) || isCancelled || hasPayments}
                       >
                         <Trash2 size={18} strokeWidth={2.5} />
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+                })
+              )}
+            </div>
           </div>
         </div>
 
@@ -432,6 +566,10 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                 <span>{formatMoney(remainingCourt)}</span>
               </div>
               <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#926699]">
+                <span>Extras pendientes</span>
+                <span>{formatMoney(registeredItemsPendingTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#926699]">
                 <span>Extras nuevos</span>
                 <span>{formatMoney(draftTotal)}</span>
               </div>
@@ -454,6 +592,15 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                   {confirming ? 'Confirmando...' : 'Confirmar reserva'}
                 </button>
               ) : null}
+
+              <button
+                type="button"
+                onClick={handleSaveDraftItems}
+                disabled={saving || isCancelled || draftTotal <= 0.009}
+                className="w-full flex items-center justify-center gap-2 bg-white border border-[#347048]/20 hover:border-[#347048]/35 text-[#347048] py-3 rounded-2xl font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Guardar consumos
+              </button>
 
               <button
                 type="button"
@@ -491,15 +638,27 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
         <PaymentCalculator
           courtPending={remainingCourt}
           courtBaseTotal={courtTotal}
-          cartItems={cartItems
-            .filter((item) => item.isNew)
-            .map((item) => ({
+          cartItems={payableItems
+            .filter((item) => {
+              if (item.isNew) return true;
+              return Number(item.remainingAmount || 0) > 0.009;
+            })
+            .map((item) => {
+              const pendingAmount = item.isNew
+                ? Number(item.price || 0) * Number(item.quantity || 0)
+                : Number(item.remainingAmount || 0);
+              const qty = item.isNew ? Math.max(1, Number(item.quantity || 1)) : 1;
+              const label = item.isNew
+                ? item.productName
+                : `${Math.max(1, Number(item.quantity || 1))}x ${item.productName}`;
+              return {
               id: item.id,
               tempId: item.tempId,
-              productName: item.productName,
-              quantity: item.quantity,
-              price: item.price
-            }))}
+              productName: label,
+              quantity: qty,
+              price: pendingAmount / qty
+            };
+            })}
           alreadyPaid={0}
           grandTotal={grandTotalToRegister}
           onClose={() => setShowPaymentCalculator(false)}

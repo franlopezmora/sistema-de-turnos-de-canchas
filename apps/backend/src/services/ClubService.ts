@@ -43,6 +43,7 @@ export class ClubService {
         autoCancelPendingBookingsOnlyIfUnpaid: boolean = true,
         autoCancelPendingWarningEnabled: boolean = false,
         autoCancelPendingWarningMinutesBefore?: number | null,
+        enforceCashShiftCloseWithOpenAccounts: boolean = false,
         openingDays?: number[] | null
     ) {
         return await this.clubRepo.createClub(
@@ -75,6 +76,7 @@ export class ClubService {
             autoCancelPendingBookingsOnlyIfUnpaid,
             autoCancelPendingWarningEnabled,
             autoCancelPendingWarningMinutesBefore,
+            enforceCashShiftCloseWithOpenAccounts,
             openingDays
         );
     }
@@ -127,6 +129,7 @@ export class ClubService {
             autoCancelPendingBookingsOnlyIfUnpaid?: boolean;
             autoCancelPendingWarningEnabled?: boolean;
             autoCancelPendingWarningMinutesBefore?: number | null;
+            enforceCashShiftCloseWithOpenAccounts?: boolean;
             openingDays?: number[] | null;
         }
     ): Promise<Club> {

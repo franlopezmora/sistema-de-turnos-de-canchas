@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/AdminLayout';
 import { addAccountItem, closeAccount, getAccountById, listAccounts, openAccount, registerPayment, type PaymentMethod, type PaymentSource } from '../../services/AccountService';
@@ -24,6 +24,7 @@ export default function AdminAccountsPage() {
   const [payment, setPayment] = useState<{ amount: number; method: PaymentMethod; source: PaymentSource }>({ amount: 0, method: 'CASH', source: 'POS' });
   const [splitPayments, setSplitPayments] = useState<Array<{ amount: number; method: PaymentMethod; source: PaymentSource }>>([{ amount: 0, method: 'CASH', source: 'POS' }]);
   const [newAccount, setNewAccount] = useState({ sourceType: 'MANUAL' as const, sourceId: '' });
+  const [itemAllocationDraft, setItemAllocationDraft] = useState<Record<string, number>>({});
 
   const refreshLists = useCallback(async () => {
     setLoading(true);
@@ -51,6 +52,7 @@ export default function AdminAccountsPage() {
       const data = await getAccountById(id);
       setDetail(data);
       setPayment((prev) => ({ ...prev, amount: Number(data.remaining || 0) }));
+      setItemAllocationDraft({});
     } catch (err: any) {
       setError(err.message || 'Error al cargar detalle');
     }
@@ -68,6 +70,31 @@ export default function AdminAccountsPage() {
     open: openAccounts.length,
     closed: closedAccounts.length
   }), [openAccounts.length, closedAccounts.length]);
+
+  const itemOutstandingMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!detail?.items) return map;
+
+    const allocatedByItem = new Map<string, number>();
+    for (const paymentEntry of detail?.payments || []) {
+      for (const allocation of paymentEntry?.allocations || []) {
+        const itemId = String(allocation?.accountItemId || '');
+        if (!itemId) continue;
+        const prev = Number(allocatedByItem.get(itemId) || 0);
+        allocatedByItem.set(itemId, Number((prev + Number(allocation?.amount || 0)).toFixed(2)));
+      }
+    }
+
+    for (const item of detail.items || []) {
+      const itemId = String(item.id || '');
+      if (!itemId) continue;
+      const total = Number(item.total || 0);
+      const allocated = Number(allocatedByItem.get(itemId) || 0);
+      map.set(itemId, Math.max(0, Number((total - allocated).toFixed(2))));
+    }
+
+    return map;
+  }, [detail]);
 
   return (
     <AdminLayout>
@@ -173,7 +200,24 @@ export default function AdminAccountsPage() {
                 {(detail.items || []).map((item: any) => (
                   <div key={item.id} className="flex items-center justify-between border border-[#347048]/10 rounded-lg px-2 py-1">
                     <span className="font-bold">{item.description} · {item.type}</span>
-                    <span>${Number(item.total || 0).toLocaleString()}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#347048]/70">Pendiente: ${Number(itemOutstandingMap.get(String(item.id)) || 0).toLocaleString()}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        max={Number(itemOutstandingMap.get(String(item.id)) || 0)}
+                        value={itemAllocationDraft[String(item.id)] > 0 ? itemAllocationDraft[String(item.id)] : ''}
+                        onChange={(e) => {
+                          const raw = Number(e.target.value || 0);
+                          const max = Number(itemOutstandingMap.get(String(item.id)) || 0);
+                          const next = Number.isFinite(raw) ? Math.max(0, Math.min(max, raw)) : 0;
+                          setItemAllocationDraft((prev) => ({ ...prev, [String(item.id)]: next }));
+                        }}
+                        className="h-8 w-24 border rounded px-2 text-right"
+                        placeholder="0"
+                      />
+                    </div>
                   </div>
                 ))}
                 {(!detail.items || detail.items.length === 0) && <div className="text-[#347048]/50">Sin items.</div>}
@@ -196,7 +240,24 @@ export default function AdminAccountsPage() {
               </select>
               <button
                 onClick={async () => {
-                  await registerPayment({ accountId: selectedId, amount: payment.amount, method: payment.method, source: payment.source });
+                  const allocations = Object.entries(itemAllocationDraft)
+                    .map(([accountItemId, amount]) => ({ accountItemId, amount: Number(amount || 0) }))
+                    .filter((entry) => Number.isFinite(entry.amount) && entry.amount > 0.009);
+                  const allocationTotal = Number(allocations.reduce((sum, entry) => sum + entry.amount, 0).toFixed(2));
+                  const amountToPay = Number(payment.amount || 0);
+
+                  if (allocations.length > 0 && Math.abs(allocationTotal - amountToPay) > 0.009) {
+                    throw new Error('El monto debe coincidir con la suma asignada a items.');
+                  }
+
+                  await registerPayment({
+                    accountId: selectedId,
+                    amount: amountToPay,
+                    method: payment.method,
+                    source: payment.source,
+                    allocations: allocations.length > 0 ? allocations : undefined
+                  });
+                  setItemAllocationDraft({});
                   await loadDetail(selectedId);
                   await refreshLists();
                 }}
@@ -275,3 +336,4 @@ export default function AdminAccountsPage() {
     </AdminLayout>
   );
 }
+

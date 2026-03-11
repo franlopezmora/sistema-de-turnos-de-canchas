@@ -43,6 +43,7 @@ export interface Club {
   autoCancelPendingBookingsOnlyIfUnpaid?: boolean;
   autoCancelPendingWarningEnabled?: boolean;
   autoCancelPendingWarningMinutesBefore?: number | null;
+  enforceCashShiftCloseWithOpenAccounts?: boolean;
   openingDays?: number[] | null;
   createdAt?: string;
   updatedAt?: string;

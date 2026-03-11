@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ClientService } from '../services/ClientService';
+import { registerBookingPartialPayment } from '../services/BookingService';
 import { Phone, DollarSign, Calendar, Users, Trophy, Search, X, CheckCircle, Receipt, Banknote, CreditCard } from 'lucide-react';
 import AppModal from './AppModal';
 import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
@@ -131,13 +132,31 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const processDebtPayment = async (method: 'CASH' | 'TRANSFER') => {
     if (!debtTarget) return;
     try {
-      void method;
+      const bookingInfo = selectedDebtorPendingEntries.find(
+        (entry: any) => (debtTarget.type === 'SALE' ? entry.movementId : entry.id) === debtTarget.id
+      );
+
+      if (!bookingInfo || Number(bookingInfo.amount || 0) <= 0.01) {
+        showInfo('Este registro ya no tiene deuda pendiente.', 'Sin deuda');
+        setShowPayMethodModal(false);
+        setDebtTarget(null);
+        return;
+      }
+
+      if (debtTarget.type !== 'BOOKING') {
+        showInfo('Este tipo de deuda todavia no soporta cobro directo desde Clientes.', 'Flujo no disponible');
+        return;
+      }
+
+      await registerBookingPartialPayment(Number(debtTarget.id), Number(bookingInfo.amount), method);
+
+      await loadClients();
       setShowPayMethodModal(false);
       setDebtTarget(null);
-      showInfo('La cobranza de deuda directa fue retirada. Gestioná el saldo desde Cuentas/Account.', 'Flujo migrado');
-    } catch (error) { 
-        // REEMPLAZO DE ALERT
-        showError("No se pudo procesar el cobro. Intentá nuevamente."); 
+      setSelectedDebtor(null);
+      showInfo('Cobro registrado correctamente.', 'Pago aplicado');
+    } catch (error) {
+      showError("No se pudo procesar el cobro. Intenta nuevamente.");
     }
   };
 
@@ -213,7 +232,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                             </td>
                             
                             <td className="px-6 py-4">
-                                {/* 👉 2. Y ACÁ LO MOSTRAMOS SÚPER FÁCIL */}
+                                {/* 2. Y ACÁ LO MOSTRAMOS SÚPER FÁCIL */}
                                 {dniFinal ? (
                                     <span className="bg-[#347048]/5 border border-[#347048]/10 px-2 py-1 rounded-lg text-[#347048] font-bold text-xs">
                                         {dniFinal}
@@ -531,3 +550,5 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     </div>
   );
 }
+
+

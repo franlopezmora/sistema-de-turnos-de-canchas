@@ -5,10 +5,54 @@ import { acquireTransactionAdvisoryLock } from '../utils/advisoryLock';
 import { ProjectionService } from './ProjectionService';
 
 const USE_PROJECTION_READ_MODELS = String(process.env.READ_MODEL_SOURCE || '').toLowerCase() === 'projection';
+const EPSILON = 0.009;
+
+type OpenAccountsSummary = {
+  openAccounts: number;
+  pendingAmount: number;
+  openAccountsWithPending: number;
+};
 
 export class CashShiftService {
   private readonly accountingService = new AccountingService();
   private readonly projectionService = new ProjectionService();
+
+  private roundMoney(value: number) {
+    return Number(Number(value || 0).toFixed(2));
+  }
+
+  private async getOpenAccountsSummaryTx(tx: Prisma.TransactionClient | typeof prismaRead, clubId: number): Promise<OpenAccountsSummary> {
+    const accounts = await tx.account.findMany({
+      where: { clubId, status: 'OPEN' },
+      select: { totalAmount: true, paidAmount: true }
+    });
+
+    let pendingAmount = 0;
+    let openAccountsWithPending = 0;
+    for (const account of accounts) {
+      const total = Number(account.totalAmount || 0);
+      const paid = Number(account.paidAmount || 0);
+      const remaining = Math.max(0, this.roundMoney(total - paid));
+      pendingAmount += remaining;
+      if (remaining > EPSILON) openAccountsWithPending += 1;
+    }
+
+    return {
+      openAccounts: accounts.length,
+      pendingAmount: this.roundMoney(pendingAmount),
+      openAccountsWithPending
+    };
+  }
+
+  private async getClosePolicyTx(tx: Prisma.TransactionClient | typeof prismaRead, clubId: number) {
+    const settings = await tx.clubSettings.findUnique({
+      where: { clubId },
+      select: { enforceCashShiftCloseWithOpenAccounts: true }
+    });
+    return {
+      strict: Boolean(settings?.enforceCashShiftCloseWithOpenAccounts)
+    };
+  }
 
   async open(clubId: number, openedByUserId: number, input: { cashRegisterId: string; openingAmount: number }) {
     if (!Number.isFinite(input.openingAmount) || input.openingAmount < 0) {
@@ -42,7 +86,7 @@ export class CashShiftService {
   }
 
   async current(clubId: number) {
-    return prismaRead.cashShift.findFirst({
+    const shift = await prismaRead.cashShift.findFirst({
       where: {
         status: 'OPEN',
         cashRegister: { clubId }
@@ -53,6 +97,18 @@ export class CashShiftService {
       },
       orderBy: { openedAt: 'desc' }
     });
+    if (!shift) return null;
+
+    const [summary, policy] = await Promise.all([
+      this.getOpenAccountsSummaryTx(prismaRead, clubId),
+      this.getClosePolicyTx(prismaRead, clubId)
+    ]);
+
+    return {
+      ...shift,
+      openAccountsSummary: summary,
+      closePolicy: policy
+    };
   }
 
   async close(clubId: number, shiftId: string, countedCash: number, actorUserId?: number) {
@@ -71,6 +127,17 @@ export class CashShiftService {
       });
 
       if (!shift) throw new Error('Turno de caja abierto no encontrado');
+
+      const [openAccountsSummary, closePolicy] = await Promise.all([
+        this.getOpenAccountsSummaryTx(tx, clubId),
+        this.getClosePolicyTx(tx, clubId)
+      ]);
+
+      if (closePolicy.strict && openAccountsSummary.openAccounts > 0) {
+        throw new Error(
+          `No se puede cerrar caja en modo estricto: ${openAccountsSummary.openAccounts} cuentas abiertas / $${openAccountsSummary.pendingAmount.toLocaleString('es-AR')} pendiente`
+        );
+      }
 
       const movementDelta = shift.movements.reduce((sum, movement) => {
         const amount = Number(movement.amount || 0);
@@ -117,7 +184,11 @@ export class CashShiftService {
       }
 
       await this.projectionService.refreshCashShiftSummary(closedShift.id, tx);
-      return closedShift;
+      return {
+        ...closedShift,
+        openAccountsSummary,
+        closePolicy
+      };
     });
   }
 

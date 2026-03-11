@@ -72,7 +72,10 @@ export class AccountService {
     }
 
     if (options?.updateStatus) {
-      if (account.status === 'OPEN' && remaining <= EPSILON) {
+      // Para BOOKING no cerramos automáticamente por saldo 0:
+      // puede haber nuevos consumos durante la gestión de la reserva.
+      const canAutoCloseByBalance = account.sourceType !== 'BOOKING';
+      if (canAutoCloseByBalance && account.status === 'OPEN' && remaining <= EPSILON) {
         updateData.status = 'CLOSED';
         updateData.closedAt = new Date();
       }
@@ -237,7 +240,7 @@ export class AccountService {
       },
       include: {
         items: true,
-        payments: true
+        payments: { include: { allocations: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -248,7 +251,7 @@ export class AccountService {
       where: { id: accountId, clubId },
       include: {
         items: { orderBy: { createdAt: 'asc' } },
-        payments: { orderBy: { createdAt: 'asc' } }
+        payments: { orderBy: { createdAt: 'asc' }, include: { allocations: true } }
       }
     });
 

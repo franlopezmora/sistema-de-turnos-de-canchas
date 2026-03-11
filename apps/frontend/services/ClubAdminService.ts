@@ -357,12 +357,15 @@ export class ClubAdminService {
     return res.json();
   }
 
-  static async removeItemFromBooking(itemId: number) {
+  static async removeItemFromBooking(itemId: number | string) {
     if (!getToken()) throw new Error('No autenticado');
     const res = await fetchWithAuth(`${apiBase()}/bookings/items/${itemId}`, {
       method: 'DELETE'
     });
-    if (!res.ok) throw new Error('Error al eliminar consumo');
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || 'Error al eliminar consumo');
+    }
     return res.json();
   }
 

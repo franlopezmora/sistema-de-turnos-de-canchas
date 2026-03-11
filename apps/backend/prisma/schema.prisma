@@ -434,6 +434,7 @@ model Account {
 
   items         AccountItem[]
   payments      Payment[]
+  paymentAllocations PaymentAllocation[]
   refunds       Refund[]
   ledgerEntries LedgerEntry[]
 
@@ -460,6 +461,7 @@ model AccountItem {
   createdAt   DateTime  @default(now()) @db.Timestamptz(3)
 
   ledgerEntries LedgerEntry[]
+  paymentAllocations PaymentAllocation[]
 
   @@index([accountId])
   @@index([productId])
@@ -480,6 +482,7 @@ model Payment {
   cashShift   CashShift? @relation(fields: [cashShiftId], references: [id], onDelete: SetNull)
 
   cashMovement CashMovement?
+  allocations  PaymentAllocation[]
   refunds      Refund[]
   ledgerEntries LedgerEntry[]
 
@@ -488,6 +491,26 @@ model Payment {
   @@index([cashShiftId])
   @@index([idempotencyKey])
   @@unique([accountId, idempotencyKey])
+}
+
+model PaymentAllocation {
+  id           String    @id @default(cuid())
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  amount       Decimal   @db.Decimal(10, 2)
+
+  accountId    String
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  paymentId    String
+  payment      Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  accountItemId String
+  accountItem   AccountItem @relation(fields: [accountItemId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt])
+  @@index([accountItemId, createdAt])
+  @@index([paymentId, createdAt])
+  @@unique([paymentId, accountItemId])
 }
 
 model LedgerTransaction {
@@ -670,6 +693,7 @@ model ClubSettings {
   autoCancelPendingBookingsOnlyIfUnpaid Boolean @default(true)
   autoCancelPendingWarningEnabled       Boolean @default(false)
   autoCancelPendingWarningMinutesBefore Int?
+  enforceCashShiftCloseWithOpenAccounts Boolean @default(false)
 
   createdAt                 DateTime @default(now()) @db.Timestamptz(3)
   updatedAt                 DateTime @updatedAt @db.Timestamptz(3)

@@ -184,7 +184,11 @@ export class AccountController {
         amount: z.preprocess((v) => Number(v), z.number().positive()),
         method: z.enum(['CASH', 'CARD', 'TRANSFER', 'MERCADO_PAGO', 'OTHER']),
         source: z.enum(['POS', 'ONLINE', 'BACKOFFICE']).optional(),
-        cashShiftId: z.string().trim().min(1).optional()
+        cashShiftId: z.string().trim().min(1).optional(),
+        allocations: z.array(z.object({
+          accountItemId: z.string().trim().min(1),
+          amount: z.preprocess((v) => Number(v), z.number().positive())
+        })).optional()
       });
 
       const paramsParsed = paramsSchema.safeParse(req.params);
@@ -207,7 +211,8 @@ export class AccountController {
         source: bodyParsed.data.source,
         cashShiftId: bodyParsed.data.cashShiftId,
         createdByUserId: actorUserId,
-        idempotencyKey: idempotencyKey.trim()
+        idempotencyKey: idempotencyKey.trim(),
+        allocations: bodyParsed.data.allocations
       });
 
       return res.status(201).json(mapPaymentDto(payment));

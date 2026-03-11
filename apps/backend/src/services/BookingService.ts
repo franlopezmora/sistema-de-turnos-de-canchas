@@ -2016,13 +2016,31 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         if (!account) return [];
 
+        const itemIds = account.items.map((item) => item.id);
+        const paidByItem = new Map<string, number>();
+        if (itemIds.length > 0) {
+            const allocations = await prisma.paymentAllocation.groupBy({
+                by: ['accountItemId'],
+                where: {
+                    accountId: account.id,
+                    accountItemId: { in: itemIds }
+                },
+                _sum: { amount: true }
+            });
+            for (const row of allocations) {
+                paidByItem.set(row.accountItemId, Number(row._sum.amount || 0));
+            }
+        }
+
         return account.items.map((item) => ({
             id: item.id,
             quantity: item.quantity,
             price: Number(item.unitPrice || 0),
             totalPrice: Number(item.total || 0),
             description: item.description,
-            type: item.type
+            type: item.type,
+            paidAmount: Number((paidByItem.get(item.id) || 0).toFixed(2)),
+            remainingAmount: Number(Math.max(0, Number(item.total || 0) - (paidByItem.get(item.id) || 0)).toFixed(2))
         }));
     }
 
@@ -2121,6 +2139,18 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
             if (item.account.status !== 'OPEN') {
                 throw new Error('Solo se pueden eliminar consumos de cuentas abiertas');
+            }
+            if (item.type === 'BOOKING') {
+                throw new Error('El concepto de cancha no se puede eliminar desde consumos');
+            }
+
+            const allocated = await tx.paymentAllocation.aggregate({
+                where: { accountItemId: item.id },
+                _sum: { amount: true }
+            });
+            const allocatedAmount = Number(allocated._sum.amount || 0);
+            if (allocatedAmount > 0.009) {
+                throw new Error('No se puede eliminar el consumo porque tiene pagos asociados');
             }
 
             const itemTotal = Number(item.total || 0);

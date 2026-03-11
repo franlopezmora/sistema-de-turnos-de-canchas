@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, CreditCard, X } from 'lucide-react';
 
 export interface PaymentCalculatorItem {
-  id?: number;
+  id?: string | number;
   tempId?: string;
   productName: string;
   quantity: number;
@@ -15,6 +15,7 @@ export type PaymentCalculatorResult = {
   courtAmount: number;
   paidItemIds: number[];
   selectedItemKeys: Array<string | number>;
+  itemAllocations: Array<{ key: string | number; amount: number }>;
 };
 
 export interface PaymentCalculatorProps {
@@ -38,10 +39,11 @@ export default function PaymentCalculator({
   onConfirm,
   submitting = false
 }: PaymentCalculatorProps) {
+  const isApprox = (a: number, b: number) => Math.abs(Number(a || 0) - Number(b || 0)) <= 0.01;
   const backdropRef = useRef<boolean>(false);
   const initializedSelectionRef = useRef<boolean>(false);
   const [paymentAmount, setPaymentAmount] = useState<number | string>('');
-  const [selectedProductKeys, setSelectedProductKeys] = useState<Array<string | number>>([]);
+  const [itemAllocations, setItemAllocations] = useState<Record<string, number>>({});
   const [courtPortion, setCourtPortion] = useState<number>(0);
 
   const safeCourtPending = Math.max(0, Number(courtPending || 0));
@@ -52,12 +54,14 @@ export default function PaymentCalculator({
   const canSelectHalf = halfBase <= safeCourtPending + 0.01;
   const finalPending = Math.max(0, Number(grandTotal || 0) - Number(alreadyPaid || 0));
 
-  const selectedProductsTotal = useMemo(
-    () => cartItems
-      .filter((item) => selectedProductKeys.includes(item.tempId || item.id || ''))
-      .reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0),
-    [cartItems, selectedProductKeys]
-  );
+  const selectedProductsTotal = useMemo(() => {
+    return cartItems.reduce((sum, item) => {
+      const itemKey = String(item.tempId || item.id || '');
+      const itemTotal = Number(item.price || 0) * Number(item.quantity || 0);
+      const allocated = Number(itemAllocations[itemKey] || 0);
+      return sum + Math.max(0, Math.min(itemTotal, allocated));
+    }, 0);
+  }, [cartItems, itemAllocations]);
 
   const selectedTotal = (Number(courtPortion) || 0) + selectedProductsTotal;
   const amountEntered = Number(paymentAmount) || 0;
@@ -91,20 +95,20 @@ export default function PaymentCalculator({
     for (const item of cartItems) {
       const itemKey = item.tempId || item.id || `${item.productName}-${item.quantity}`;
       const itemTotal = Number(item.price || 0) * Number(item.quantity || 0);
-      const isSelected = selectedProductKeys.includes(itemKey);
-      const paidNow = isSelected ? itemTotal : 0;
+      const allocated = Number(itemAllocations[String(itemKey)] || 0);
+      const paidNow = Math.max(0, Math.min(itemTotal, allocated));
       rows.push({
         key: String(itemKey),
-        label: `${item.quantity}x ${item.productName}`,
+        label: Number(item.quantity || 0) > 1 ? `${item.quantity}x ${item.productName}` : item.productName,
         total: itemTotal,
         paidNow,
         debtAfter: Math.max(0, itemTotal - paidNow),
-        isSelected
+        isSelected: paidNow > 0
       });
     }
 
     return rows;
-  }, [cartItems, courtPortion, safeCourtPending, selectedProductKeys]);
+  }, [cartItems, courtPortion, safeCourtPending, itemAllocations]);
 
   const summaryPaidNow = conceptBreakdown.reduce((sum, row) => sum + row.paidNow, 0);
   const summaryDebtAfter = conceptBreakdown.reduce((sum, row) => sum + row.debtAfter, 0);
@@ -113,12 +117,18 @@ export default function PaymentCalculator({
   useEffect(() => {
     if (initializedSelectionRef.current) return;
 
-    const allProductKeys = cartItems.map((item) => item.tempId || item.id || '');
-    const productsTotal = cartItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+    const productAllocations: Record<string, number> = {};
+    let productsTotal = 0;
+    for (const item of cartItems) {
+      const itemKey = String(item.tempId || item.id || '');
+      const itemTotal = Number(item.price || 0) * Number(item.quantity || 0);
+      productAllocations[itemKey] = itemTotal;
+      productsTotal += itemTotal;
+    }
     const defaultTotal = safeCourtPending + productsTotal;
 
     setCourtPortion(safeCourtPending);
-    setSelectedProductKeys(allProductKeys);
+    setItemAllocations(productAllocations);
     setPaymentAmount(defaultTotal > 0 ? defaultTotal.toString() : '');
 
     initializedSelectionRef.current = true;
@@ -127,24 +137,34 @@ export default function PaymentCalculator({
   useEffect(() => {
     if (selectedTotal > 0) {
       setPaymentAmount(selectedTotal.toString());
+    } else {
+      setPaymentAmount('');
     }
   }, [selectedTotal]);
 
   useEffect(() => {
     setPaymentAmount('');
-    setSelectedProductKeys([]);
+    setItemAllocations({});
     setCourtPortion(0);
   }, [finalPending]);
 
   const handleSelectAll = () => {
+    const nextAllocations: Record<string, number> = {};
+    let productsTotal = 0;
+    for (const item of cartItems) {
+      const key = String(item.tempId || item.id || '');
+      const total = Number(item.price || 0) * Number(item.quantity || 0);
+      nextAllocations[key] = total;
+      productsTotal += total;
+    }
     setCourtPortion(safeCourtPending);
-    setSelectedProductKeys(cartItems.map((item) => item.tempId || item.id || ''));
-    setPaymentAmount((safeCourtPending + cartItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0)).toString());
+    setItemAllocations(nextAllocations);
+    setPaymentAmount((safeCourtPending + productsTotal).toString());
   };
 
   const handleClearSelection = () => {
     setCourtPortion(0);
-    setSelectedProductKeys([]);
+    setItemAllocations({});
     setPaymentAmount('');
   };
 
@@ -152,9 +172,20 @@ export default function PaymentCalculator({
     if (submitting) return;
     if (!amountEntered || amountEntered <= 0) return;
 
+    const selectedAllocations = cartItems
+      .map((item) => {
+        const key = item.tempId || item.id || '';
+        const total = Number(item.price || 0) * Number(item.quantity || 0);
+        const rawAllocated = Number(itemAllocations[String(key)] || 0);
+        const amount = Math.max(0, Math.min(total, rawAllocated));
+        return { key, amount };
+      })
+      .filter((entry) => Number(entry.amount) > 0.009);
+
+    const selectedKeys = selectedAllocations.map((entry) => entry.key);
     const numericItemIds = Array.from(
       new Set(
-        selectedProductKeys
+        selectedKeys
           .map((key) => (typeof key === 'number' ? key : null))
           .filter((value): value is number => value !== null)
       )
@@ -175,7 +206,8 @@ export default function PaymentCalculator({
       amount: amountEntered,
       courtAmount: Number(courtPortion) || 0,
       paidItemIds: numericItemIds,
-      selectedItemKeys: selectedProductKeys
+      selectedItemKeys: selectedKeys,
+      itemAllocations: selectedAllocations
     });
   };
 
@@ -234,31 +266,78 @@ export default function PaymentCalculator({
             {safeCourtPending > 0 && (
               <div className="p-3 bg-[#347048]/5 rounded-xl border border-[#347048]/10">
                 <div className="text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2">Alquiler de cancha</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setCourtPortion(quarterBase)}
+                    disabled={!canSelectQuarter || submitting}
+                    className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
                     !canSelectQuarter
                       ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                      : courtPortion === quarterBase
+                      : isApprox(courtPortion, quarterBase)
                         ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048] cursor-pointer'
                         : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50 cursor-pointer'
                   }`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === quarterBase} onChange={() => setCourtPortion(quarterBase)} disabled={!canSelectQuarter || submitting} />
                     <span className="text-xs font-bold">1/4 (${quarterBase.toLocaleString()})</span>
-                  </label>
-                  <label className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCourtPortion(halfBase)}
+                    disabled={!canSelectHalf || submitting}
+                    className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
                     !canSelectHalf
                       ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                      : courtPortion === halfBase
+                      : isApprox(courtPortion, halfBase)
                         ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048] cursor-pointer'
                         : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50 cursor-pointer'
                   }`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === halfBase} onChange={() => setCourtPortion(halfBase)} disabled={!canSelectHalf || submitting} />
                     <span className="text-xs font-bold">1/2 (${halfBase.toLocaleString()})</span>
-                  </label>
-                  <label className={`flex justify-center items-center p-2 rounded-lg border cursor-pointer transition-all col-span-2 ${courtPortion === safeCourtPending ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048]' : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50'}`}>
-                    <input type="radio" name="court-portion" className="hidden" checked={courtPortion === safeCourtPending} onChange={() => setCourtPortion(safeCourtPending)} disabled={submitting} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCourtPortion(safeCourtPending)}
+                    disabled={submitting}
+                    className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
+                      isApprox(courtPortion, safeCourtPending)
+                        ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048]'
+                        : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50'
+                    }`}
+                  >
                     <span className="text-xs font-bold">Saldo (${safeCourtPending.toLocaleString()})</span>
-                  </label>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCourtPortion(0)}
+                    disabled={submitting}
+                    className={`flex justify-center items-center p-2 rounded-lg border transition-all ${
+                      isApprox(courtPortion, 0)
+                        ? 'bg-[#B9CF32]/25 border-[#B9CF32] text-[#347048]'
+                        : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#B9CF32]/50'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Nada</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Monto libre</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={safeCourtPending}
+                    step="0.01"
+                    value={courtPortion > 0 ? courtPortion : ''}
+                    disabled={submitting}
+                    onChange={(event) => {
+                      const parsed = Number(event.target.value || 0);
+                      const clamped = Number.isFinite(parsed)
+                        ? Math.max(0, Math.min(safeCourtPending, parsed))
+                        : 0;
+                      setCourtPortion(clamped);
+                    }}
+                    className="w-28 bg-white border border-[#347048]/20 rounded-md px-2 py-1 text-xs font-black text-right"
+                    placeholder="0"
+                  />
+                  <span className="text-[10px] font-black text-[#347048]/60">de ${safeCourtPending.toLocaleString()}</span>
                 </div>
               </div>
             )}
@@ -269,7 +348,8 @@ export default function PaymentCalculator({
                 <div className="space-y-2">
                   {cartItems.map((item) => {
                     const itemKey = item.tempId || item.id || `${item.productName}-${item.quantity}`;
-                    const isSelected = selectedProductKeys.includes(itemKey);
+                    const allocatedAmount = Number(itemAllocations[String(itemKey)] || 0);
+                    const isSelected = allocatedAmount > 0.009;
                     const itemTotal = Number(item.price || 0) * Number(item.quantity || 0);
                     return (
                       <label key={itemKey} className={`flex justify-between items-center p-2 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-[#926699]/10 border-[#926699]/30 text-[#926699]' : 'bg-white border-[#347048]/15 text-[#347048]/60 hover:border-[#926699]/30'}`}>
@@ -280,13 +360,40 @@ export default function PaymentCalculator({
                             checked={isSelected}
                             disabled={submitting}
                             onChange={(event) => {
-                              if (event.target.checked) setSelectedProductKeys((prev) => [...prev, itemKey]);
-                              else setSelectedProductKeys((prev) => prev.filter((value) => value !== itemKey));
+                              setItemAllocations((prev) => ({
+                                ...prev,
+                                [String(itemKey)]: event.target.checked ? itemTotal : 0
+                              }));
                             }}
                           />
-                          <span className="text-sm font-bold leading-tight">{item.quantity}x {item.productName}</span>
+                          <span className="text-sm font-bold leading-tight">
+                            {Number(item.quantity || 0) > 1 ? `${item.quantity}x ${item.productName}` : item.productName}
+                          </span>
                         </div>
-                        <span className="text-sm font-black">${itemTotal.toLocaleString()}</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={itemTotal}
+                            step="0.01"
+                            value={allocatedAmount > 0 ? allocatedAmount : ''}
+                            disabled={submitting}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => {
+                              const parsed = Number(event.target.value || 0);
+                              const clamped = Number.isFinite(parsed)
+                                ? Math.max(0, Math.min(itemTotal, parsed))
+                                : 0;
+                              setItemAllocations((prev) => ({
+                                ...prev,
+                                [String(itemKey)]: clamped
+                              }));
+                            }}
+                            className="w-24 bg-white border border-[#926699]/30 rounded-md px-2 py-1 text-xs font-black text-right"
+                            placeholder="0"
+                          />
+                          <span className="text-[11px] font-black min-w-[72px] text-right">${itemTotal.toLocaleString()}</span>
+                        </div>
                       </label>
                     );
                   })}

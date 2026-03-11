@@ -564,9 +564,17 @@ export class BookingController {
             await this.bookingService.removeItemFromBooking(String(itemId), clubId);
             
             res.json({ message: 'Consumo eliminado y stock devuelto' });
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            res.status(500).json({ error: 'Error al eliminar el consumo' });
+            const message = String(error?.message || '');
+            const known =
+                message.includes('Item no encontrado') ||
+                message.includes('No tienes acceso') ||
+                message.includes('cuentas abiertas') ||
+                message.includes('cancha no se puede eliminar') ||
+                message.includes('pagos asociados') ||
+                message.includes('sobrepagada');
+            res.status(known ? 400 : 500).json({ error: message || 'Error al eliminar el consumo' });
         }
     }
 

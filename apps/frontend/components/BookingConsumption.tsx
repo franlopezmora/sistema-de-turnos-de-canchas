@@ -20,12 +20,13 @@ interface Props {
 }
 
 interface CartItem {
-  id?: number;
+  id?: string;
   tempId?: string;
   productId: number;
   productName: string;
   quantity: number;
   price: number;
+  type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
   paymentMethod?: 'CASH' | 'TRANSFER' | null;
   isNew: boolean;
 }
@@ -34,12 +35,13 @@ export default function BookingConsumption(
   { bookingId, slug, courtPrice = 0, baseCourtPrice, bookingStatus, paymentStatus, onClose, onConfirm, onPaymentModalStateChange }: Props
 ) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [itemsToDelete, setItemsToDelete] = useState<number[]>([]);
+  const [itemsToDelete, setItemsToDelete] = useState<string[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [financialSummary, setFinancialSummary] = useState<BookingFinancialSummary | null>(null);
+  const [bookingChargeItemId, setBookingChargeItemId] = useState<string | null>(null);
   const [bookingIsPendingLocal, setBookingIsPendingLocal] = useState(bookingStatus === 'PENDING');
   const paymentInFlightRef = useRef(false);
 
@@ -57,12 +59,18 @@ export default function BookingConsumption(
 
       setProducts(productsData || []);
 
-      const formattedItems = (currentItems || []).map((item: any) => ({
+      const bookingChargeItem = (currentItems || []).find((item: any) => String(item?.type || '') === 'BOOKING');
+      setBookingChargeItemId(bookingChargeItem?.id ? String(bookingChargeItem.id) : null);
+
+      const formattedItems = (currentItems || [])
+        .filter((item: any) => String(item?.type || '') !== 'BOOKING')
+        .map((item: any) => ({
         id: item.id,
         productId: item.productId,
-        productName: item.product.name,
-        quantity: item.quantity,
-        price: item.price,
+        productName: item.product?.name ?? item.productName ?? item.description ?? 'Producto',
+        quantity: Number(item.quantity || 1),
+        price: Number(item.price || 0),
+        type: item.type,
         paymentMethod: item.paymentMethod ?? null,
         isNew: false
       }));
@@ -109,7 +117,7 @@ export default function BookingConsumption(
 
   const handleRemoveFromDraft = (item: CartItem) => {
     if (!item.isNew && item.id) {
-      setItemsToDelete([...itemsToDelete, item.id]);
+      setItemsToDelete([...itemsToDelete, String(item.id)]);
     }
     setCartItems(cartItems.filter(i => item.isNew ? i.tempId !== item.tempId : i.id !== item.id));
   };
@@ -161,35 +169,68 @@ export default function BookingConsumption(
 
       const deletePromises = itemsToDelete.map((id) => ClubAdminService.removeItemFromBooking(id));
       const newItems = cartItems.filter((item) => item.isNew);
-      const selectedKeys = new Set(result.selectedItemKeys.map((key) => String(key)));
-      const selectedItems = newItems.filter((item) => selectedKeys.has(String(item.tempId || item.id || '')));
+      const allocationByKey = new Map(
+        (result.itemAllocations || [])
+          .map((entry) => [String(entry.key), Number(entry.amount || 0)] as const)
+          .filter(([, amount]) => amount > 0.009)
+      );
+      const selectedItems = newItems.filter((item) =>
+        allocationByKey.has(String(item.tempId || item.id || ''))
+      );
 
       await Promise.all(deletePromises);
       setItemsToDelete([]);
 
       const persistedSelectedItems: CartItem[] = [];
+      const itemAllocations: Array<{ accountItemId: string; amount: number }> = [];
 
       for (const item of selectedItems) {
         const created = await ClubAdminService.addItemToBooking(bookingId, item.productId, item.quantity, result.method);
+        const createdId = created?.id ? String(created.id) : '';
+        const itemAllocatedAmount = Number(
+          allocationByKey.get(String(item.tempId || item.id || '')) || 0
+        );
+        if (createdId && itemAllocatedAmount > 0) {
+          itemAllocations.push({
+            accountItemId: createdId,
+            amount: Number(itemAllocatedAmount.toFixed(2))
+          });
+        }
         persistedSelectedItems.push({
-          id: created?.id,
+          id: createdId || undefined,
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
           price: item.price,
+          type: 'PRODUCT',
           paymentMethod: result.method,
           isNew: false
         });
       }
 
-      const paidItemsAmount = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const paidItemsAmount = Number(
+        (result.itemAllocations || []).reduce((sum, entry) => sum + Number(entry.amount || 0), 0).toFixed(2)
+      );
       const courtPortion = Math.max(0, Number(result.courtAmount || 0));
       const expectedAmount = paidItemsAmount + courtPortion;
       if (Math.abs(expectedAmount - result.amount) > 0.01) {
         throw new Error('El monto registrado no coincide con los conceptos seleccionados. Reintentá.');
       }
-      if (courtPortion > 0.01) {
-        await registerBookingPartialPayment(bookingId, courtPortion, result.method);
+      const paymentAmount = Math.max(0, Number(result.amount || 0));
+      if (paymentAmount > 0.01) {
+        const hasBookingItemForCourt = courtPortion <= 0.01 || Boolean(bookingChargeItemId);
+        const allocations = [
+          ...itemAllocations,
+          ...(courtPortion > 0.01 && bookingChargeItemId
+            ? [{ accountItemId: bookingChargeItemId, amount: Number(courtPortion.toFixed(2)) }]
+            : [])
+        ];
+        await registerBookingPartialPayment(
+          bookingId,
+          paymentAmount,
+          result.method,
+          hasBookingItemForCourt ? allocations : undefined
+        );
         setBookingIsPendingLocal(false);
       }
 

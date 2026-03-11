@@ -185,6 +185,7 @@ export class BookingRepository {
             s?.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
             s?.autoCancelPendingWarningEnabled ?? false,
             s?.autoCancelPendingWarningMinutesBefore != null ? Number(s.autoCancelPendingWarningMinutesBefore) : null,
+            s?.enforceCashShiftCloseWithOpenAccounts ?? false,
             Array.isArray(s?.openingDays) ? s.openingDays : null,
             c.createdAt,
             c.updatedAt

@@ -37,6 +37,7 @@ export class ClubRepository {
         autoCancelPendingBookingsOnlyIfUnpaid: boolean = true,
         autoCancelPendingWarningEnabled: boolean = false,
         autoCancelPendingWarningMinutesBefore?: number | null,
+        enforceCashShiftCloseWithOpenAccounts: boolean = false,
         openingDays?: number[] | null
     ): Promise<Club> {
         const location = await this.ensureLocation(city, province, country);
@@ -78,7 +79,8 @@ export class ClubRepository {
                         autoCancelPendingBookingsMinutesBefore: autoCancelPendingBookingsMinutesBefore ?? null,
                         autoCancelPendingBookingsOnlyIfUnpaid,
                         autoCancelPendingWarningEnabled,
-                        autoCancelPendingWarningMinutesBefore: autoCancelPendingWarningMinutesBefore ?? null
+                        autoCancelPendingWarningMinutesBefore: autoCancelPendingWarningMinutesBefore ?? null,
+                        enforceCashShiftCloseWithOpenAccounts
                     }
                 }
             },
@@ -173,6 +175,7 @@ export class ClubRepository {
             club.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
             club.autoCancelPendingWarningEnabled ?? false,
             club.autoCancelPendingWarningMinutesBefore != null ? Number(club.autoCancelPendingWarningMinutesBefore) : null,
+            club.enforceCashShiftCloseWithOpenAccounts ?? false,
             club.openingDays ?? null
         );
     }
@@ -231,6 +234,7 @@ export class ClubRepository {
         autoCancelPendingBookingsOnlyIfUnpaid?: boolean;
         autoCancelPendingWarningEnabled?: boolean;
         autoCancelPendingWarningMinutesBefore?: number | null;
+        enforceCashShiftCloseWithOpenAccounts?: boolean;
         openingDays?: number[] | null;
     }): Promise<Club> {
         const clubFields = {
@@ -282,7 +286,8 @@ export class ClubRepository {
                             autoCancelPendingBookingsMinutesBefore: data.autoCancelPendingBookingsMinutesBefore ?? null,
                             autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
                             autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled ?? false,
-                            autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore ?? null
+                            autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore ?? null,
+                            enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts ?? false
                         },
                         update: {
                             ...(data.timeZone !== undefined ? { timeZone: data.timeZone } : {}),
@@ -325,6 +330,10 @@ export class ClubRepository {
                             ...(data.autoCancelPendingWarningMinutesBefore !== undefined
                                 ? { autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore }
                                 : {})
+                            ,
+                            ...(data.enforceCashShiftCloseWithOpenAccounts !== undefined
+                                ? { enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts }
+                                : {})
                         }
                     }
                 }
@@ -351,6 +360,7 @@ export class ClubRepository {
         const autoCancelPendingBookingsOnlyIfUnpaid = settings?.autoCancelPendingBookingsOnlyIfUnpaid ?? true;
         const autoCancelPendingWarningEnabled = settings?.autoCancelPendingWarningEnabled ?? false;
         const autoCancelPendingWarningMinutesBeforeRaw = settings?.autoCancelPendingWarningMinutesBefore ?? null;
+        const enforceCashShiftCloseWithOpenAccounts = settings?.enforceCashShiftCloseWithOpenAccounts ?? false;
         const resolvedLightsExtraAmount = resolvedLightsExtraAmountRaw == null ? null : Number(resolvedLightsExtraAmountRaw);
         const resolvedProfessorDiscountPercent = resolvedProfessorDiscountPercentRaw == null ? null : Number(resolvedProfessorDiscountPercentRaw);
         const bookingDepositPercent = bookingDepositPercentRaw == null ? null : Number(bookingDepositPercentRaw);
@@ -389,6 +399,7 @@ export class ClubRepository {
             autoCancelPendingBookingsOnlyIfUnpaid,
             autoCancelPendingWarningEnabled,
             autoCancelPendingWarningMinutesBefore,
+            enforceCashShiftCloseWithOpenAccounts,
             resolvedOpeningDays,
             dbClub.createdAt,
             dbClub.updatedAt

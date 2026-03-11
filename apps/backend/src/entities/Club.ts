@@ -42,6 +42,7 @@ export class Club {
         public autoCancelPendingBookingsOnlyIfUnpaid: boolean = true,
         public autoCancelPendingWarningEnabled: boolean = false,
         public autoCancelPendingWarningMinutesBefore?: number | null,
+        public enforceCashShiftCloseWithOpenAccounts: boolean = false,
         public openingDays?: number[] | null,
         public createdAt?: Date,
         public updatedAt?: Date

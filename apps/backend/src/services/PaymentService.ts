@@ -26,6 +26,10 @@ type CreatePaymentInput = {
   cashShiftId?: string;
   createdByUserId?: number;
   idempotencyKey?: string;
+  allocations?: Array<{
+    accountItemId: string;
+    amount: number;
+  }>;
 };
 
 export class PaymentService {
@@ -35,6 +39,146 @@ export class PaymentService {
   private readonly projectionService = new ProjectionService();
   private readonly bookingDomainService = new BookingDomainService();
   private readonly accountService = new AccountService();
+
+  private roundMoney(value: number) {
+    return Number((Number(value || 0)).toFixed(2));
+  }
+
+  private async getAllocatedByItemTx(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    itemIds: string[]
+  ) {
+    if (itemIds.length === 0) return new Map<string, number>();
+
+    const rows = await tx.paymentAllocation.groupBy({
+      by: ['accountItemId'],
+      where: {
+        accountId,
+        accountItemId: { in: itemIds }
+      },
+      _sum: { amount: true }
+    });
+
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      map.set(row.accountItemId, this.roundMoney(Number(row._sum.amount || 0)));
+    }
+    return map;
+  }
+
+  private async resolvePaymentAllocationsTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      accountId: string;
+      paymentAmount: number;
+      requested?: Array<{ accountItemId: string; amount: number }>;
+    }
+  ) {
+    const paymentAmount = this.roundMoney(params.paymentAmount);
+    if (paymentAmount <= 0) return [] as Array<{ accountItemId: string; amount: number }>;
+
+    if (Array.isArray(params.requested) && params.requested.length > 0) {
+      const merged = new Map<string, number>();
+      for (const allocation of params.requested) {
+        const accountItemId = String(allocation.accountItemId || '').trim();
+        const amount = this.roundMoney(Number(allocation.amount || 0));
+        if (!accountItemId || amount <= 0) continue;
+        merged.set(accountItemId, this.roundMoney((merged.get(accountItemId) || 0) + amount));
+      }
+
+      const resolved = Array.from(merged.entries()).map(([accountItemId, amount]) => ({ accountItemId, amount }));
+      if (resolved.length === 0) {
+        throw new Error('Asignaciones de pago inválidas');
+      }
+
+      const totalRequested = this.roundMoney(resolved.reduce((sum, allocation) => sum + allocation.amount, 0));
+      if (Math.abs(totalRequested - paymentAmount) > 0.009) {
+        throw new Error('La suma de asignaciones debe coincidir con el monto del pago');
+      }
+
+      const requestedIds = resolved.map((allocation) => allocation.accountItemId);
+      const items = await tx.accountItem.findMany({
+        where: {
+          accountId: params.accountId,
+          id: { in: requestedIds }
+        },
+        select: {
+          id: true,
+          total: true
+        }
+      });
+
+      if (items.length !== requestedIds.length) {
+        throw new Error('Hay asignaciones a items que no pertenecen a la cuenta');
+      }
+
+      const allocatedByItem = await this.getAllocatedByItemTx(tx, params.accountId, requestedIds);
+      const itemTotals = new Map(items.map((item) => [item.id, this.roundMoney(Number(item.total || 0))]));
+
+      for (const allocation of resolved) {
+        const currentAllocated = allocatedByItem.get(allocation.accountItemId) || 0;
+        const itemTotal = itemTotals.get(allocation.accountItemId) || 0;
+        const remaining = this.roundMoney(Math.max(0, itemTotal - currentAllocated));
+        if (allocation.amount > remaining + 0.009) {
+          throw new Error('Una asignación supera el saldo pendiente del item');
+        }
+      }
+
+      return resolved;
+    }
+
+    const items = await tx.accountItem.findMany({
+      where: { accountId: params.accountId },
+      select: { id: true, total: true, createdAt: true },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    if (items.length === 0) {
+      throw new Error('No se puede registrar pago: la cuenta no tiene items para asignar');
+    }
+
+    const itemIds = items.map((item) => item.id);
+    const allocatedByItem = await this.getAllocatedByItemTx(tx, params.accountId, itemIds);
+
+    let remainingToAssign = paymentAmount;
+    const generated: Array<{ accountItemId: string; amount: number }> = [];
+
+    for (const item of items) {
+      if (remainingToAssign <= 0.009) break;
+      const total = this.roundMoney(Number(item.total || 0));
+      const allocated = allocatedByItem.get(item.id) || 0;
+      const outstanding = this.roundMoney(Math.max(0, total - allocated));
+      if (outstanding <= 0.009) continue;
+
+      const chunk = this.roundMoney(Math.min(outstanding, remainingToAssign));
+      if (chunk <= 0) continue;
+      generated.push({ accountItemId: item.id, amount: chunk });
+      remainingToAssign = this.roundMoney(remainingToAssign - chunk);
+    }
+
+    if (remainingToAssign > 0.009) {
+      // Fallback defensivo para casos legacy (p.ej. refunds sin deasignación por item).
+      const targetItemId = generated[0]?.accountItemId || items[0].id;
+      const target = generated.find((entry) => entry.accountItemId === targetItemId);
+      if (target) {
+        target.amount = this.roundMoney(target.amount + remainingToAssign);
+      } else {
+        generated.push({
+          accountItemId: targetItemId,
+          amount: this.roundMoney(remainingToAssign)
+        });
+      }
+      remainingToAssign = 0;
+    }
+
+    const generatedTotal = this.roundMoney(generated.reduce((sum, entry) => sum + entry.amount, 0));
+    if (Math.abs(generatedTotal - paymentAmount) > 0.009) {
+      throw new Error('No se pudo asignar correctamente el pago a los items');
+    }
+
+    return generated;
+  }
 
   async list(filters: ListPaymentsFilters) {
     const where: Prisma.PaymentWhereInput = {
@@ -175,6 +319,23 @@ export class PaymentService {
         }
       });
 
+      const allocations = await this.resolvePaymentAllocationsTx(tx, {
+        accountId: account.id,
+        paymentAmount: input.amount,
+        requested: input.allocations
+      });
+
+      if (allocations.length > 0) {
+        await tx.paymentAllocation.createMany({
+          data: allocations.map((allocation) => ({
+            accountId: account.id,
+            paymentId: payment.id,
+            accountItemId: allocation.accountItemId,
+            amount: new Prisma.Decimal(allocation.amount)
+          }))
+        });
+      }
+
       await this.accountingService.createPaymentTransaction(tx, {
         clubId: account.clubId,
         type: 'PAYMENT',
@@ -256,7 +417,12 @@ export class PaymentService {
 
       metricsService.recordPayment(source, input.method);
 
-      return payment;
+      const createdPayment = await tx.payment.findUnique({
+        where: { id: payment.id },
+        include: { allocations: true }
+      });
+
+      return createdPayment || payment;
     });
   }
 }

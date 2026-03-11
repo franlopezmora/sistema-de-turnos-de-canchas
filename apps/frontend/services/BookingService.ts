@@ -1,6 +1,6 @@
-// ARCHIVO: services/BookingService.ts
+﻿// ARCHIVO: services/BookingService.ts
 
-// Si tienes el AuthService en otra carpeta, ajusta esta lÃ­nea "../services/AuthService"
+// Si tienes el AuthService en otra carpeta, ajusta esta línea "../services/AuthService"
 // Si no lo encuentras, puedes borrar el import y usar localStorage.getItem('token') directo.
 import { getToken } from './AuthService';
 import { fetchWithAuth } from '../utils/apiClient';
@@ -57,7 +57,7 @@ export const createBooking = async (
   date: Date,
   slotTime?: string,
   userId?: number,
-  // ðŸ‘‡ Aceptamos 'dni' tambiÃ©n en el tipo para evitar errores de TS
+  // Aceptamos 'dni' también en el tipo para evitar errores de TS
   guestInfo?: { name?: string; email?: string; phone?: string; guestDni?: string; dni?: string },
   options?: { asGuest?: boolean; guestIdentifier?: string; isProfessor?: boolean; durationMinutes?: number; openAccount?: boolean }
 ) => {
@@ -65,7 +65,7 @@ export const createBooking = async (
   const guestId = token ? undefined : getOrCreateGuestId();
   const guestIdentifier = options?.guestIdentifier ?? guestId;
 
-  // ðŸ‘‡ Truco: Unificamos el valor del DNI venga como venga
+  // Truco: unificamos el valor del DNI venga como venga
   const dniValue = guestInfo?.guestDni || guestInfo?.dni;
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -104,7 +104,7 @@ export const createBooking = async (
 
 // --- 2. OBTENER MIS RESERVAS (HISTORIAL) ---
 export const getMyBookings = async (userId: number) => {
-    if (!getToken()) throw new Error("Debes iniciar sesiÃ³n.");
+    if (!getToken()) throw new Error("Debes iniciar sesión.");
 
     const res = await fetchWithAuth(`${apiBase()}/bookings/history/${userId}`, {
         method: 'GET',
@@ -119,7 +119,7 @@ export const getMyBookings = async (userId: number) => {
 
 // --- 3. CANCELAR UNA RESERVA ---
 export const cancelBooking = async (bookingId: number) => {
-    if (!getToken()) throw new Error("Debes iniciar sesiÃ³n.");
+    if (!getToken()) throw new Error("Debes iniciar sesión.");
 
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (rawUser) {
@@ -145,7 +145,7 @@ export const cancelBooking = async (bookingId: number) => {
 };
 
 export const confirmBooking = async (bookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
@@ -159,7 +159,7 @@ export const confirmBooking = async (bookingId: number) => {
 };
 
 export const completeBooking = async (bookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
@@ -176,7 +176,7 @@ export const splitBookingPayment = async (
   bookingId: number,
   payments: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>
 ) => {
-  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
   const account = await getOrCreateBookingAccount(bookingId);
   const summary = await getAccountSummary(account.id);
@@ -202,19 +202,21 @@ export const splitBookingPayment = async (
 export const registerBookingPartialPayment = async (
   bookingId: number,
   amount: number,
-  method: 'CASH' | 'TRANSFER'
+  method: 'CASH' | 'TRANSFER',
+  allocations?: Array<{ accountItemId: string; amount: number }>
 ) => {
-  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
   const account = await getOrCreateBookingAccount(bookingId);
   return registerPayment({
     accountId: account.id,
     amount,
-    method
+    method,
+    allocations
   });
 };
 
 export const getBookingFinancialSummary = async (bookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
   const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -256,9 +258,9 @@ export const getBookingFinancialSummary = async (bookingId: number) => {
   } satisfies BookingFinancialSummary;
 };
 
-// --- 4. OBTENER SCHEDULE COMPLETO DEL DÃA (ADMIN) ---
+// --- 4. OBTENER SCHEDULE COMPLETO DEL DÍA (ADMIN) ---
 export const getAdminSchedule = async (date: string) => {
-    if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+    if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
     const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
     if (!rawUser) {
@@ -286,7 +288,7 @@ export const createFixedBooking = async (
   guestDni?: string, // <--- Recibimos el dato (Argumento #7)
   isProfessor?: boolean
 ) => {
-  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) {
@@ -314,7 +316,7 @@ export const createFixedBooking = async (
 
 // --- 6. CANCELAR TURNO FIJO (NUEVO - Corregido para usar fetch) ---
 export const cancelFixedBooking = async (fixedBookingId: number) => {
-  if (!getToken()) throw new Error('Debes iniciar sesiÃ³n como administrador.');
+  if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) {
@@ -332,7 +334,7 @@ export const cancelFixedBooking = async (fixedBookingId: number) => {
 };
 
 export const searchClients = async (slug: string, query: string) => {
-    if (!getToken()) throw new Error("Debes iniciar sesiÃ³n.");
+    if (!getToken()) throw new Error("Debes iniciar sesión.");
 
     const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/clients-list?q=${encodeURIComponent(query)}`, {
         method: 'GET',
@@ -345,3 +347,4 @@ export const searchClients = async (slug: string, query: string) => {
 
     return res.json();
 };
+

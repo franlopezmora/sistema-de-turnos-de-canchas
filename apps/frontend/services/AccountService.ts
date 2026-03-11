@@ -90,13 +90,21 @@ export const addAccountItem = async (accountId: string, body: { description: str
   return res.json();
 };
 
-export const registerPayment = async (body: { accountId: string; amount: number; method: PaymentMethod; source?: PaymentSource; cashShiftId?: string }) => {
+export const registerPayment = async (body: {
+  accountId: string;
+  amount: number;
+  method: PaymentMethod;
+  source?: PaymentSource;
+  cashShiftId?: string;
+  allocations?: Array<{ accountItemId: string; amount: number }>;
+}) => {
   const idempotencyKey = getPaymentIdempotencyKey({
     accountId: body.accountId,
     amount: body.amount,
     method: body.method,
     source: body.source,
-    cashShiftId: body.cashShiftId
+    cashShiftId: body.cashShiftId,
+    allocations: body.allocations
   });
   const res = await fetchWithAuth(`${apiBase()}/accounts/${body.accountId}/payments`, {
     method: 'POST',
@@ -104,7 +112,13 @@ export const registerPayment = async (body: { accountId: string; amount: number;
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey
     },
-    body: JSON.stringify({ amount: body.amount, method: body.method, source: body.source ?? 'POS', cashShiftId: body.cashShiftId })
+    body: JSON.stringify({
+      amount: body.amount,
+      method: body.method,
+      source: body.source ?? 'POS',
+      cashShiftId: body.cashShiftId,
+      allocations: body.allocations
+    })
   });
   if (!res.ok) {
     const error = await res.json();

@@ -4,18 +4,33 @@ type PaymentFingerprintInput = {
   method: string;
   source?: string;
   cashShiftId?: string;
+  allocations?: Array<{
+    accountItemId: string;
+    amount: number;
+  }>;
 };
 
 const TTL_MS = 15_000;
 const fingerprintCache = new Map<string, { key: string; expiresAt: number }>();
 
 const buildFingerprint = (input: PaymentFingerprintInput) => {
+  const normalizedAllocations = Array.isArray(input.allocations)
+    ? input.allocations
+        .map((allocation) => ({
+          accountItemId: String(allocation.accountItemId || ''),
+          amount: Number(allocation.amount || 0).toFixed(2)
+        }))
+        .filter((allocation) => allocation.accountItemId && Number(allocation.amount) > 0)
+        .sort((a, b) => a.accountItemId.localeCompare(b.accountItemId))
+    : [];
+
   return JSON.stringify({
     accountId: input.accountId,
     amount: Number(input.amount || 0).toFixed(2),
     method: input.method,
     source: input.source || 'POS',
-    cashShiftId: input.cashShiftId || null
+    cashShiftId: input.cashShiftId || null,
+    allocations: normalizedAllocations
   });
 };
 
