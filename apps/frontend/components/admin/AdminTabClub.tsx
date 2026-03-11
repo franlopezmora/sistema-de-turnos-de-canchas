@@ -1,10 +1,10 @@
-﻿import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ClubService, Club, type BookingConfirmationMode } from '../../services/ClubService';
 import { getCourts } from '../../services/CourtService';
 import { ClubAdminService, ClubActivityType } from '../../services/ClubAdminService';
 import AppModal from '../AppModal';
-import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle } from 'lucide-react';
+import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle, Check } from 'lucide-react';
 import { normalizeSessionUser } from '../../utils/session';
 
 type FixedBookingActivitySetting = {
@@ -22,7 +22,7 @@ const DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS = '7';
 const BOOKING_CONFIRMATION_MODES: Array<{ value: BookingConfirmationMode; label: string; helper: string }> = [
   {
     value: 'AUTOMATIC',
-    label: 'AutomÃ¡tica',
+    label: 'Automática',
     helper: 'Toda reserva nueva queda confirmada al crearse.'
   },
   {
@@ -32,8 +32,8 @@ const BOOKING_CONFIRMATION_MODES: Array<{ value: BookingConfirmationMode; label:
   },
   {
     value: 'DEPOSIT_REQUIRED',
-    label: 'Con seÃ±a',
-    helper: 'Las reservas nacen pendientes y se confirman cuando cubren la seÃ±a mÃ­nima.'
+    label: 'Con seña',
+    helper: 'Las reservas nacen pendientes y se confirman cuando cubren la seña mínima.'
   }
 ];
 
@@ -77,14 +77,14 @@ const parseFixedSlotsInput = (raw: string): Array<{ start: string; duration: num
     const normalized = line.replace(' - ', '-').replace('|', '-').replace(',', '-');
     const [startRaw, durationRaw] = normalized.split('-').map((part) => part.trim());
     if (!startRaw || !durationRaw) {
-      throw new Error(`Formato de turno fijo invÃ¡lido: "${line}". UsÃ¡ HH:mm-60`);
+      throw new Error(`Formato de turno fijo inválido: "${line}". Usá HH:mm-60`);
     }
     if (!/^\d{2}:\d{2}$/.test(startRaw)) {
-      throw new Error(`Hora invÃ¡lida en turno fijo: "${line}"`);
+      throw new Error(`Hora inválida en turno fijo: "${line}"`);
     }
     const duration = Number(durationRaw);
     if (!Number.isFinite(duration) || duration <= 0) {
-      throw new Error(`DuraciÃ³n invÃ¡lida en turno fijo: "${line}"`);
+      throw new Error(`Duración inválida en turno fijo: "${line}"`);
     }
     slots.push({ start: startRaw, duration: Math.floor(duration) });
   }
@@ -227,7 +227,7 @@ export default function AdminTabClub() {
   const [activityScheduleForm, setActivityScheduleForm] = useState<Record<number, ActivityScheduleFormValue>>({});
 
   const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
-  const showInfo = (message: ReactNode, title = 'InformaciÃ³n') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
+  const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
   const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
 
   const loadClub = useCallback(async () => {
@@ -283,7 +283,7 @@ export default function AdminTabClub() {
           setClubImagePreview(clubData.clubImageUrl || null);
       }
     } catch (error: any) {
-      showError('Error al cargar informaciÃ³n del club: ' + error.message);
+      showError('Error al cargar información del club: ' + error.message);
     } finally {
       setLoadingClub(false);
     }
@@ -315,7 +315,7 @@ export default function AdminTabClub() {
       const normalizedDepositPercent = Number.isFinite(rawDepositPercent) ? rawDepositPercent : NaN;
       if (clubForm.bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
         if (!Number.isFinite(normalizedDepositPercent) || normalizedDepositPercent <= 0 || normalizedDepositPercent > 100) {
-          showError('En modo "Con seÃ±a", el porcentaje de seÃ±a es obligatorio y debe ser mayor a 0 y menor o igual a 100.');
+          showError('En modo "Con seña", el porcentaje de seña es obligatorio y debe ser mayor a 0 y menor o igual a 100.');
           return;
         }
       }
@@ -327,17 +327,17 @@ export default function AdminTabClub() {
       const warningMinutesRaw = Number(clubForm.autoCancelPendingWarningMinutesBefore);
       if (clubForm.autoCancelPendingBookingsEnabled) {
         if (!Number.isFinite(cancelMinutesRaw) || cancelMinutesRaw <= 0) {
-          showError('Si activÃ¡s auto-cancelaciÃ³n, los minutos antes del turno deben ser mayores a 0.');
+          showError('Si activás auto-cancelación, los minutos antes del turno deben ser mayores a 0.');
           return;
         }
       }
       if (clubForm.autoCancelPendingBookingsEnabled && clubForm.autoCancelPendingWarningEnabled) {
         if (!Number.isFinite(warningMinutesRaw) || warningMinutesRaw <= 0) {
-          showError('Si activÃ¡s aviso previo, los minutos de aviso deben ser mayores a 0.');
+          showError('Si activás aviso previo, los minutos de aviso deben ser mayores a 0.');
           return;
         }
         if (warningMinutesRaw <= cancelMinutesRaw) {
-          showError('El aviso previo debe configurarse con mÃ¡s minutos que la cancelaciÃ³n automÃ¡tica.');
+          showError('El aviso previo debe configurarse con más minutos que la cancelación automática.');
           return;
         }
       }
@@ -386,7 +386,7 @@ export default function AdminTabClub() {
       }
 
       setClub(updatedClub);
-      showInfo('InformaciÃ³n del club actualizada correctamente', 'Ã‰xito');
+      showInfo('Información del club actualizada correctamente', 'Éxito');
     } catch (error: any) {
       showError('Error al actualizar el club: ' + error.message);
     }
@@ -400,7 +400,7 @@ export default function AdminTabClub() {
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      setLogoError('El logo no puede pesar mÃ¡s de 2MB.');
+      setLogoError('El logo no puede pesar más de 2MB.');
       return;
     }
     const reader = new FileReader();
@@ -421,7 +421,7 @@ export default function AdminTabClub() {
       return;
     }
     if (file.size > 4 * 1024 * 1024) {
-      setClubImageError('La imagen no puede pesar mÃ¡s de 4MB.');
+      setClubImageError('La imagen no puede pesar más de 4MB.');
       return;
     }
     const reader = new FileReader();
@@ -482,7 +482,7 @@ export default function AdminTabClub() {
             <div className="bg-[#926699] text-[#EBE1D8] p-2 rounded-xl text-xl shadow-lg shadow-[#926699]/20">
               <Settings size={24} strokeWidth={3} />
             </div>
-            ConfiguraciÃ³n del Club
+            Configuración del Club
           </h2>
           <p className="text-[#347048] text-sm font-bold opacity-70 mt-2 ml-1">Personaliza la identidad y reglas de tu establecimiento.</p>
         </div>
@@ -495,13 +495,13 @@ export default function AdminTabClub() {
           </div>
         ) : club ? (
           <form onSubmit={handleUpdateClub} className="space-y-8 relative z-10">
-            {/* GRID DE DATOS BÃSICOS */}
+            {/* GRID DE DATOS BÁSICOS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className={labelClass}>Slug (Identificador URL)</label>
                 <input type="text" value={clubForm.slug} onChange={(e) => setClubForm({ ...clubForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
                   className={inputClass} placeholder="ej: las-tejas-padel" required />
-                <p className="text-[10px] font-bold text-[#347048]/40 mt-1.5 ml-1">Tu link serÃ¡: <span className="text-[#347048]">tucancha.com/club/{clubForm.slug || '...'}</span></p>
+                <p className="text-[10px] font-bold text-[#347048]/40 mt-1.5 ml-1">Tu link será: <span className="text-[#347048]">tucancha.com/club/{clubForm.slug || '...'}</span></p>
               </div>
               <div>
                 <label className={labelClass}>Nombre Comercial</label>
@@ -510,8 +510,8 @@ export default function AdminTabClub() {
               
               <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
-                  <label className={labelClass}>DirecciÃ³n</label>
-                  <input type="text" value={clubForm.addressLine} onChange={(e) => setClubForm({ ...clubForm, addressLine: e.target.value })} className={inputClass} placeholder="Calle y nÃºmero" required />
+                  <label className={labelClass}>Dirección</label>
+                  <input type="text" value={clubForm.addressLine} onChange={(e) => setClubForm({ ...clubForm, addressLine: e.target.value })} className={inputClass} placeholder="Calle y número" required />
                 </div>
                 <div>
                   <label className={labelClass}>Ciudad</label>
@@ -525,10 +525,10 @@ export default function AdminTabClub() {
 
                 {/* DIAS DE APERTURA */}
                 <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">DÃ­as de apertura</h3>
-                  <p className="text-[12px] text-[#347048]/70 mb-3">SeleccionÃ¡ los dÃ­as en los que el club estÃ¡ abierto (si no se selecciona ninguno, se entiende &quot;abre todos los dÃ­as&quot;).</p>
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Días de apertura</h3>
+                  <p className="text-[12px] text-[#347048]/70 mb-3">Seleccioná los días en los que el club está abierto (si no se selecciona ninguno, se entiende &quot;abre todos los días&quot;).</p>
                   <div className="flex gap-2 flex-wrap">
-                    {['Dom','Lun','Mar','MiÃ©','Jue','Vie','SÃ¡b'].map((label, idx) => {
+                    {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map((label, idx) => {
                       const day = idx % 7; // 0..6
                       const active = openingDaysSet.includes(day);
                       return (
@@ -548,7 +548,7 @@ export default function AdminTabClub() {
                 </div>
               </div>
               <div>
-                <label className={labelClass}>TelÃ©fono PÃºblico</label>
+                <label className={labelClass}>Teléfono Público</label>
                 <div className="relative">
                   <input
                     type="text"
@@ -563,7 +563,7 @@ export default function AdminTabClub() {
               </div>
             </div>
 
-            {/* SECCIÃ“N DE LOGO */}
+            {/* SECCIÓN DE LOGO */}
             <div className="bg-white/40 p-6 rounded-[1.5rem] border-2 border-white shadow-sm">
               <label className={labelClass}>Identidad Visual (Logo)</label>
               <div className="flex flex-col sm:flex-row items-center gap-6 mt-2">
@@ -586,7 +586,7 @@ export default function AdminTabClub() {
                       </button>
                     )}
                   </div>
-                  <p className="text-[10px] font-bold text-[#347048]/40 uppercase tracking-wider italic">Recomendado: 512x512px, mÃ¡x 2MB (PNG/JPG).</p>
+                  <p className="text-[10px] font-bold text-[#347048]/40 uppercase tracking-wider italic">Recomendado: 512x512px, máx 2MB (PNG/JPG).</p>
                   {logoError && (
                     <p className="text-xs text-red-500 font-bold italic flex items-center gap-1">
                       <AlertTriangle size={12} /> {logoError}
@@ -597,7 +597,7 @@ export default function AdminTabClub() {
               </div>
             </div>
 
-            {/* SECCIÃ“N DE IMAGEN DEL CLUB */}
+            {/* SECCIÓN DE IMAGEN DEL CLUB */}
             <div className="bg-white/40 p-6 rounded-[1.5rem] border-2 border-white shadow-sm">
               <label className={labelClass}>Imagen del Club (Portada)</label>
               <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6 mt-2">
@@ -623,7 +623,7 @@ export default function AdminTabClub() {
                       </button>
                     )}
                   </div>
-                  <p className="text-[10px] font-bold text-[#347048]/40 uppercase tracking-wider italic">Recomendado: 1600x900px, mÃ¡x 4MB (PNG/JPG).</p>
+                  <p className="text-[10px] font-bold text-[#347048]/40 uppercase tracking-wider italic">Recomendado: 1600x900px, máx 4MB (PNG/JPG).</p>
                   {clubImageError && (
                     <p className="text-xs text-red-500 font-bold italic flex items-center gap-1">
                       <AlertTriangle size={12} /> {clubImageError}
@@ -638,12 +638,12 @@ export default function AdminTabClub() {
             <div className="bg-[#B9CF32]/10 p-6 rounded-[1.5rem] border-2 border-[#B9CF32]/20">
               <div className="flex items-center gap-2 mb-4 text-[#347048]">
                 <Lightbulb size={18} strokeWidth={3} />
-                <h3 className="text-xs font-black uppercase tracking-[0.2em]">ConfiguraciÃ³n de IluminaciÃ³n</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Configuración de Iluminación</h3>
               </div>
               <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
                 <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                  <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.lightsEnabled ? 'bg-[#B9CF32] border-[#B9CF32]' : 'border-[#347048]/20 bg-white'}`}>
-                    {clubForm.lightsEnabled && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                  <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.lightsEnabled ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                    {clubForm.lightsEnabled && <Check size={15} strokeWidth={4} />}
                   </div>
                   <input type="checkbox" checked={clubForm.lightsEnabled} onChange={(e) => setClubForm({ ...clubForm, lightsEnabled: e.target.checked })} className="hidden" />
                   <span className="text-sm uppercase tracking-wide italic">Activar recargo nocturno</span>
@@ -675,8 +675,8 @@ export default function AdminTabClub() {
               </div>
               <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
                 <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                  <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.professorDiscountEnabled ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
-                    {clubForm.professorDiscountEnabled && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                  <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.professorDiscountEnabled ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                    {clubForm.professorDiscountEnabled && <Check size={15} strokeWidth={4} />}
                   </div>
                   <input
                     type="checkbox"
@@ -706,12 +706,12 @@ export default function AdminTabClub() {
             <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
               <div className="flex items-center gap-2 mb-4 text-[#347048]">
                 <Settings size={18} strokeWidth={3} />
-                <h3 className="text-xs font-black uppercase tracking-[0.2em]">ConfirmaciÃ³n de reservas</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Confirmación de reservas</h3>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Modo de confirmaciÃ³n</label>
+                  <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Modo de confirmación</label>
                   <select
                     value={clubForm.bookingConfirmationMode}
                     onChange={(e) => {
@@ -736,7 +736,7 @@ export default function AdminTabClub() {
                 {isDepositMode ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">SeÃ±a mÃ­nima (%)</label>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Seña mínima (%)</label>
                       <input
                         type="number"
                         min={0.01}
@@ -749,14 +749,14 @@ export default function AdminTabClub() {
                         required={isDepositMode}
                       />
                       <p className="text-[10px] font-bold text-[#347048]/50 mt-1">
-                        Obligatorio para confirmar automÃ¡ticamente por pago en modo seÃ±a.
+                        Obligatorio para confirmar automáticamente por pago en modo seña.
                       </p>
                     </div>
 
                     <div className="flex items-end">
                       <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.allowManualConfirmationOverride ? 'bg-[#B9CF32] border-[#B9CF32]' : 'border-[#347048]/20 bg-white'}`}>
-                          {clubForm.allowManualConfirmationOverride && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                        <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.allowManualConfirmationOverride ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                          {clubForm.allowManualConfirmationOverride && <Check size={15} strokeWidth={4} />}
                         </div>
                         <input
                           type="checkbox"
@@ -764,7 +764,7 @@ export default function AdminTabClub() {
                           onChange={(e) => setClubForm((prev) => ({ ...prev, allowManualConfirmationOverride: e.target.checked }))}
                           className="hidden"
                         />
-                        <span className="text-sm tracking-wide">Permitir confirmaciÃ³n manual de override</span>
+                        <span className="text-sm tracking-wide">Permitir confirmación manual de override</span>
                       </label>
                     </div>
                   </div>
@@ -775,13 +775,13 @@ export default function AdminTabClub() {
             <div className="bg-[#926699]/10 p-6 rounded-[1.5rem] border-2 border-[#926699]/20">
               <div className="flex items-center gap-2 mb-4 text-[#347048]">
                 <AlertTriangle size={18} strokeWidth={3} />
-                <h3 className="text-xs font-black uppercase tracking-[0.2em]">CancelaciÃ³n automÃ¡tica de pendientes</h3>
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Cancelación automática de pendientes</h3>
               </div>
 
               <div className="space-y-4">
                 <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                  <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingBookingsEnabled ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
-                    {clubForm.autoCancelPendingBookingsEnabled && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                  <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingBookingsEnabled ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                    {clubForm.autoCancelPendingBookingsEnabled && <Check size={15} strokeWidth={4} />}
                   </div>
                   <input
                     type="checkbox"
@@ -793,10 +793,10 @@ export default function AdminTabClub() {
                     }))}
                     className="hidden"
                   />
-                  <span className="text-sm tracking-wide">Activar cancelaciÃ³n automÃ¡tica de reservas pendientes</span>
+                  <span className="text-sm tracking-wide">Activar cancelación automática de reservas pendientes</span>
                 </label>
                 <p className="text-[11px] text-[#347048]/70 font-bold">
-                  Solo aplica a reservas <span className="font-black">PENDING</span>. Las confirmadas nunca se cancelan automÃ¡ticamente.
+                  Solo aplica a reservas <span className="font-black">PENDING</span>. Las confirmadas nunca se cancelan automáticamente.
                 </p>
 
                 {clubForm.autoCancelPendingBookingsEnabled ? (
@@ -816,8 +816,8 @@ export default function AdminTabClub() {
 
                     <div className="flex items-end">
                       <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingBookingsOnlyIfUnpaid ? 'bg-[#B9CF32] border-[#B9CF32]' : 'border-[#347048]/20 bg-white'}`}>
-                          {clubForm.autoCancelPendingBookingsOnlyIfUnpaid && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                        <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingBookingsOnlyIfUnpaid ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                          {clubForm.autoCancelPendingBookingsOnlyIfUnpaid && <Check size={15} strokeWidth={4} />}
                         </div>
                         <input
                           type="checkbox"
@@ -825,14 +825,14 @@ export default function AdminTabClub() {
                           onChange={(e) => setClubForm((prev) => ({ ...prev, autoCancelPendingBookingsOnlyIfUnpaid: e.target.checked }))}
                           className="hidden"
                         />
-                        <span className="text-sm tracking-wide">Solo cancelar si estÃ¡ impaga (neto 0)</span>
+                        <span className="text-sm tracking-wide">Solo cancelar si está impaga (neto 0)</span>
                       </label>
                     </div>
 
                     <div className="md:col-span-2 pt-1 border-t border-[#347048]/10">
                       <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingWarningEnabled ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
-                          {clubForm.autoCancelPendingWarningEnabled && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                        <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.autoCancelPendingWarningEnabled ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                          {clubForm.autoCancelPendingWarningEnabled && <Check size={15} strokeWidth={4} />}
                         </div>
                         <input
                           type="checkbox"
@@ -857,7 +857,7 @@ export default function AdminTabClub() {
                           placeholder="Ej: 180"
                         />
                         <p className="text-[10px] text-[#347048]/60 font-bold mt-1">
-                          El aviso debe dispararse antes que la cancelaciÃ³n automÃ¡tica.
+                          El aviso debe dispararse antes que la cancelación automática.
                         </p>
                       </div>
                     ) : null}
@@ -867,15 +867,14 @@ export default function AdminTabClub() {
             </div>
 
             <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
-                          <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
               <div className="flex items-center gap-2 mb-4 text-[#347048]">
                 <AlertTriangle size={18} strokeWidth={3} />
                 <h3 className="text-xs font-black uppercase tracking-[0.2em]">Cierre de caja</h3>
               </div>
               <div className="space-y-3">
                 <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                  <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${clubForm.enforceCashShiftCloseWithOpenAccounts ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
-                    {clubForm.enforceCashShiftCloseWithOpenAccounts && <Save size={16} className="text-[#347048]" strokeWidth={4} />}
+                  <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.enforceCashShiftCloseWithOpenAccounts ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                    {clubForm.enforceCashShiftCloseWithOpenAccounts && <Check size={15} strokeWidth={4} />}
                   </div>
                   <input
                     type="checkbox"
@@ -886,13 +885,15 @@ export default function AdminTabClub() {
                   <span className="text-sm tracking-wide">Modo estricto: bloquear cierre de caja si hay cuentas abiertas</span>
                 </label>
                 <p className="text-[11px] text-[#347048]/70 font-bold">
-                  Recomendado desactivado. Si estÃ¡ activo, no se podrÃ¡ cerrar la caja mientras exista al menos una cuenta abierta.
+                  Recomendado desactivado. Si está activo, no se podrá cerrar la caja mientras exista al menos una cuenta abierta.
                 </p>
               </div>
             </div>
-<h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-2">ConfiguraciÃ³n de horarios por actividad</h4>
+
+            <div className="mt-3 bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-2">Configuración de horarios por actividad</h4>
               <p className="text-[11px] font-bold text-[#347048]/60 mb-4">
-                DefinÃ­ acÃ¡ horario de entrada/salida, duraciÃ³n de turnos y turnos fijos por cada actividad.
+                Definí acá horario de entrada/salida, duración de turnos y turnos fijos por cada actividad.
               </p>
 
               {activityTypes.length === 0 ? (
@@ -907,7 +908,7 @@ export default function AdminTabClub() {
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
                           <p className="text-sm font-black text-[#347048] uppercase tracking-wide">{activity.name}</p>
                           <p className="text-[10px] font-black text-[#347048]/50 uppercase tracking-widest">
-                            DuraciÃ³n por defecto: {activity.defaultDurationMinutes} min
+                            Duración por defecto: {activity.defaultDurationMinutes} min
                           </p>
                         </div>
 
@@ -984,7 +985,7 @@ export default function AdminTabClub() {
                             </>
                           ) : (
                             <div className="md:col-span-4">
-                              <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Turnos fijos (uno por lÃ­nea: HH:mm-60)</label>
+                              <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Turnos fijos (uno por línea: HH:mm-60)</label>
                               <textarea
                                 rows={4}
                                 value={cfg.scheduleFixedSlots}
@@ -1011,7 +1012,7 @@ export default function AdminTabClub() {
                   <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Turnos fijos por actividad</h4>
                   {activitySettings.length === 0 ? (
                     <p className="text-[11px] font-bold text-[#347048]/60">
-                      No hay actividades asociadas al club. AsignÃ¡ actividades a las canchas para configurar turnos fijos por actividad.
+                      No hay actividades asociadas al club. Asigná actividades a las canchas para configurar turnos fijos por actividad.
                     </p>
                   ) : (
                   <div className="space-y-3">
@@ -1027,7 +1028,7 @@ export default function AdminTabClub() {
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">DÃ­as hacia adelante</label>
+                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Días hacia adelante</label>
                           <input
                             type="number"
                             min={1}
@@ -1050,7 +1051,7 @@ export default function AdminTabClub() {
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Frecuencia generaciÃ³n (dÃ­as)</label>
+                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Frecuencia generación (días)</label>
                           <input
                             type="number"
                             min={1}
@@ -1105,29 +1106,29 @@ export default function AdminTabClub() {
               </div>
             </div>
 
-            {/* DESCRIPCIÃ“N */}
+            {/* DESCRIPCIÓN */}
             <div className="space-y-2">
-              <label className={labelClass}>DescripciÃ³n del Club / InformaciÃ³n Adicional</label>
+              <label className={labelClass}>Descripción del Club / Información Adicional</label>
               <textarea
                 value={clubForm.description}
                 onChange={(e) => setClubForm({ ...clubForm, description: e.target.value.slice(0, 100) })}
                 maxLength={50}
                 className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-[1.5rem] p-5 text-[#347048] font-bold placeholder-[#347048]/20 focus:outline-none shadow-sm transition-all resize-none"
                 rows={4}
-                placeholder="Escribe aquÃ­ las reglas del club, servicios (duchas, buffet, etc) o historia..."
+                placeholder="Escribe aquí las reglas del club, servicios (duchas, buffet, etc) o historia..."
               />
             </div>
 
-            {/* BOTÃ“N FINAL */}
+            {/* BOTÓN FINAL */}
             <div className="flex justify-end pt-6 border-t border-[#347048]/10">
               <button type="submit" className="w-full md:w-auto px-10 py-4 bg-[#347048] hover:bg-[#B9CF32] text-[#EBE1D8] hover:text-[#347048] font-black rounded-2xl shadow-xl shadow-[#347048]/20 transition-all uppercase tracking-[0.2em] text-sm italic flex items-center justify-center gap-3">
                 <Save size={20} strokeWidth={3} />
-                Guardar ConfiguraciÃ³n
+                Guardar Configuración
               </button>
             </div>
           </form>
         ) : (
-          <div className="py-20 text-center text-[#347048]/40 font-black uppercase italic tracking-widest">No se pudo cargar la informaciÃ³n</div>
+          <div className="py-20 text-center text-[#347048]/40 font-black uppercase italic tracking-widest">No se pudo cargar la información</div>
         )}
       </div>
 
@@ -1137,4 +1138,5 @@ export default function AdminTabClub() {
     </>
   );
 }
+
 
