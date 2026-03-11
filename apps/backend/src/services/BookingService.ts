@@ -1186,6 +1186,15 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 }
             });
 
+            if (paidAmount > 0.009) {
+                await this.refundService.refundBookingPaymentsTx(tx, {
+                    bookingId: booking.id,
+                    clubId: booking.court.club.id,
+                    reason: `Cancelación reserva #${booking.id}`,
+                    createdByUserId: cancelledByUserId ?? undefined
+                });
+            }
+
             if (totalAmount > 0.009) {
                 const adjustmentItem = await tx.accountItem.create({
                     data: {
@@ -1216,15 +1225,6 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     revenueAccount: 'ADJUSTMENTS',
                     description: `Anulación obligación reserva #${booking.id}`,
                     createdByUserId: cancelledByUserId ?? null
-                });
-            }
-
-            if (paidAmount > 0.009) {
-                await this.refundService.refundBookingPaymentsTx(tx, {
-                    bookingId: booking.id,
-                    clubId: booking.court.club.id,
-                    reason: `Cancelación reserva #${booking.id}`,
-                    createdByUserId: cancelledByUserId ?? undefined
                 });
             }
 
