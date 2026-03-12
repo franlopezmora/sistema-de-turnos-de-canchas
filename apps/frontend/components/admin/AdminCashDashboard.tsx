@@ -5,6 +5,7 @@ import { ClubService } from '../../services/ClubService';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 import { CashService } from '../../services/CashService';
 import { formatDateTime24, formatTime24 } from '../../utils/dateTime';
+import AppModal from '../AppModal';
 
 // Tipos
 interface Movement {
@@ -14,6 +15,27 @@ interface Movement {
   amount: number;
   description: string;
   method: 'CASH' | 'TRANSFER';
+  sourceType?: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | null;
+  sourceId?: string | null;
+  accountId?: string | null;
+  bookingAmount?: number;
+  barAmount?: number;
+  paymentId?: string | null;
+  booking?: {
+    id: number;
+    startDateTime: string;
+    courtName?: string | null;
+    clientName?: string | null;
+  } | null;
+  allocations?: Array<{
+    accountItemId: string;
+    amount: number;
+    type?: string | null;
+    description?: string | null;
+    quantity?: number | null;
+    unitPrice?: number | null;
+    total?: number | null;
+  }>;
 }
 
 interface Balance {
@@ -167,6 +189,8 @@ const AdminCashDashboard = () => {
   const [searchClubSlug, setSearchClubSlug] = useState('');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clientWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null);
+  const [showMovementModal, setShowMovementModal] = useState(false);
 
   // Formulario
   const [newMove, setNewMove] = useState({ description: '', amount: '', type: 'INCOME', method: 'CASH' });
@@ -214,6 +238,48 @@ const AdminCashDashboard = () => {
     }
   }, [getClubSlug]);
 
+  const buildMovementLabel = useCallback((movement: Movement) => {
+    const raw = String(movement?.description || '').trim();
+    const isAutoPay = raw.toLowerCase().startsWith('pago cuenta');
+    const isPaymentMovement = movement.type === 'INCOME' && Boolean(movement.paymentId);
+
+    if (!isAutoPay || !isPaymentMovement) {
+      return raw || 'Movimiento';
+    }
+
+    if (movement.sourceType === 'BOOKING') {
+      const booking = movement.booking;
+      const parts = [
+        booking?.clientName || null,
+        booking?.courtName || null
+      ].filter(Boolean);
+      return parts.length > 0 ? `Pago reserva · ${parts.join(' · ')}` : 'Pago reserva';
+    }
+
+    if (movement.sourceType === 'BAR') {
+      const items = (movement.allocations || [])
+        .filter((allocation) => allocation.type !== 'BOOKING')
+        .map((allocation) => {
+          const base = allocation.description || allocation.type || 'Item';
+          const qty = allocation.quantity && allocation.quantity > 1 ? ` x${allocation.quantity}` : '';
+          return `${base}${qty}`;
+        })
+        .filter((label) => label.trim().length > 0);
+
+      if (items.length > 0) {
+        const preview = items.slice(0, 2).join(', ');
+        const extra = items.length > 2 ? ` +${items.length - 2}` : '';
+        return `Pago bar · ${preview}${extra}`;
+      }
+      return 'Pago bar';
+    }
+
+    if (movement.sourceType === 'TABLE') return 'Pago mesa';
+    if (movement.sourceType === 'MANUAL') return 'Pago cuenta';
+
+    return 'Pago cuenta';
+  }, []);
+
   const fetchCash = async () => {
     try {
       const data = await CashService.getSummary();
@@ -225,7 +291,23 @@ const AdminCashDashboard = () => {
           type: movement?.type === 'PAYMENT_IN' || movement?.type === 'DEPOSIT' || movement?.type === 'INCOME' ? 'INCOME' : 'EXPENSE',
           amount: Number(movement?.amount || 0),
           description: String(movement?.concept || movement?.description || 'Movimiento'),
-          method: movement?.method === 'CASH' ? 'CASH' : 'TRANSFER'
+          method: movement?.method === 'CASH' ? 'CASH' : 'TRANSFER',
+          sourceType: movement?.sourceType ?? movement?.payment?.account?.sourceType ?? null,
+          sourceId: movement?.sourceId ?? movement?.payment?.account?.sourceId ?? null,
+          accountId: movement?.accountId ?? movement?.payment?.account?.id ?? null,
+          bookingAmount: Number(movement?.bookingAmount || 0),
+          barAmount: Number(movement?.barAmount || 0),
+          paymentId: movement?.paymentId ?? movement?.payment?.id ?? null,
+          booking: movement?.booking ?? null,
+          allocations: (movement?.payment?.allocations || []).map((allocation: any) => ({
+            accountItemId: String(allocation?.accountItemId || ''),
+            amount: Number(allocation?.amount || 0),
+            type: allocation?.accountItem?.type ?? null,
+            description: allocation?.accountItem?.description ?? null,
+            quantity: Number(allocation?.accountItem?.quantity || 0),
+            unitPrice: Number(allocation?.accountItem?.unitPrice || 0),
+            total: Number(allocation?.accountItem?.total || 0)
+          }))
         }));
 
         setMovements(normalizedMovements);
@@ -504,6 +586,7 @@ const AdminCashDashboard = () => {
   );
 
   return (
+    <>
     <div className="space-y-8 animate-in fade-in duration-500">
       
       {/* TÍTULO DE SECCIÓN */}
@@ -794,7 +877,15 @@ const AdminCashDashboard = () => {
             ) : (
               <div className="space-y-3">
                 {movements.map((m) => (
-                  <div key={m.id} className="bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-[#347048]/5 hover:scale-[1.01] transition-transform">
+                  <div
+                    key={m.id}
+                    role="button"
+                    onClick={() => {
+                      setSelectedMovement(m);
+                      setShowMovementModal(true);
+                    }}
+                    className="bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-[#347048]/5 hover:scale-[1.01] transition-transform cursor-pointer"
+                  >
                     <div className="flex items-center gap-4">
                         <div className="text-right pr-4 border-r border-[#347048]/10">
                             <span className="block text-xs font-black text-[#347048]">
@@ -808,7 +899,7 @@ const AdminCashDashboard = () => {
                         </div>
                         <div>
                             <span className="block text-sm font-black text-[#347048] uppercase tracking-tight leading-none mb-1">
-                                {m.description}
+                                {buildMovementLabel(m)}
                             </span>
                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest flex items-center gap-1 w-fit ${
                               m.method === 'CASH'
@@ -819,6 +910,28 @@ const AdminCashDashboard = () => {
                                 ? <><Banknote size={10} strokeWidth={3} /> Efectivo</>
                                 : <><CreditCard size={10} strokeWidth={3} /> Digital</>}
                             </span>
+                            {(Number(m.bookingAmount || 0) > 0 || Number(m.barAmount || 0) > 0) ? (
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest w-fit bg-white/60 text-[#347048]/70 border-[#347048]/20">
+                                {[
+                                  Number(m.bookingAmount || 0) > 0 ? `Reserva ${Number(m.bookingAmount || 0).toLocaleString()}` : null,
+                                  Number(m.barAmount || 0) > 0 ? `Bar ${Number(m.barAmount || 0).toLocaleString()}` : null
+                                ].filter(Boolean).join(' Â· ')}
+                              </span>
+                            ) : m.sourceType ? (
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest w-fit ${
+                                m.sourceType === 'BOOKING'
+                                  ? 'bg-[#B9CF32]/20 text-[#347048] border-[#B9CF32]/40'
+                                  : m.sourceType === 'BAR'
+                                    ? 'bg-[#926699]/15 text-[#926699] border-[#926699]/30'
+                                    : 'bg-white/60 text-[#347048]/60 border-[#347048]/20'
+                              }`}>
+                                {m.sourceType === 'BOOKING'
+                                  ? 'Reserva'
+                                  : m.sourceType === 'BAR'
+                                    ? 'Bar'
+                                    : m.sourceType}
+                              </span>
+                            ) : null}
                         </div>
                     </div>
                     <div className={`text-xl font-black italic tracking-tighter ${
@@ -1088,8 +1201,98 @@ const AdminCashDashboard = () => {
 
       </div>
     </div>
+      <AppModal
+        show={showMovementModal}
+        title="Detalle del ingreso"
+        onClose={() => setShowMovementModal(false)}
+        onConfirm={() => setShowMovementModal(false)}
+        confirmText="Cerrar"
+        cancelText=""
+        message={selectedMovement ? (
+          <div className="space-y-4 text-sm text-[#347048]">
+            <div className="space-y-1">
+              <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Concepto</div>
+              <div className="text-base font-black text-[#347048]">{buildMovementLabel(selectedMovement)}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Fecha y hora</div>
+                <div className="font-bold">
+                  {(() => {
+                    const parsed = new Date(selectedMovement.date);
+                    if (Number.isNaN(parsed.getTime())) return '--/--/---- --:--';
+                    return formatDateTime24(parsed);
+                  })()}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Medio</div>
+                <div className="font-bold">
+                  {selectedMovement.method === 'CASH' ? 'Efectivo' : 'Digital'}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Total</div>
+                <div className="font-black text-lg text-[#347048]">${selectedMovement.amount.toLocaleString()}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Origen</div>
+                <div className="font-bold">
+                  {selectedMovement.sourceType === 'BOOKING'
+                    ? 'Reserva'
+                    : selectedMovement.sourceType === 'BAR'
+                      ? 'Bar'
+                      : selectedMovement.sourceType || 'Manual'}
+                </div>
+              </div>
+            </div>
+
+            {(Number(selectedMovement.bookingAmount || 0) > 0 || Number(selectedMovement.barAmount || 0) > 0) && (
+              <div className="rounded-2xl border border-[#347048]/10 bg-white/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2">Desglose</div>
+                <div className="flex flex-wrap gap-2">
+                  {Number(selectedMovement.bookingAmount || 0) > 0 && (
+                    <span className="px-2 py-1 text-[10px] font-black uppercase tracking-widest rounded-md bg-[#B9CF32]/20 text-[#347048] border border-[#B9CF32]/30">
+                      Reserva ${Number(selectedMovement.bookingAmount || 0).toLocaleString()}
+                    </span>
+                  )}
+                  {Number(selectedMovement.barAmount || 0) > 0 && (
+                    <span className="px-2 py-1 text-[10px] font-black uppercase tracking-widest rounded-md bg-[#926699]/15 text-[#926699] border border-[#926699]/30">
+                      Bar ${Number(selectedMovement.barAmount || 0).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(selectedMovement.allocations) && selectedMovement.allocations.length > 0 && (
+              <div className="rounded-2xl border border-[#347048]/10 bg-white/60 p-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2">Detalle de items</div>
+                <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                  {selectedMovement.allocations.map((allocation) => (
+                    <div key={`${allocation.accountItemId}-${allocation.amount}`} className="flex items-center justify-between gap-3 text-xs">
+                      <div className="flex flex-col">
+                        <span className="font-black text-[#347048]">
+                          {allocation.description || allocation.type || 'Item'}
+                          {allocation.quantity ? ` x${allocation.quantity}` : ''}
+                        </span>
+                        {allocation.unitPrice ? (
+                          <span className="text-[10px] font-bold text-[#347048]/60">Unitario ${Number(allocation.unitPrice || 0).toLocaleString()}</span>
+                        ) : null}
+                      </div>
+                      <div className="font-black text-[#347048]">${Number(allocation.amount || 0).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+      />
+    </>
   );
 };
 
 export default AdminCashDashboard;
+
 

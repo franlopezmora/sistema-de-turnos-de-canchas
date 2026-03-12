@@ -11,6 +11,12 @@ type AccountRow = {
   status: 'OPEN' | 'CLOSED';
   createdAt: string;
   closedAt?: string | null;
+  booking?: {
+    id: number;
+    startDateTime: string;
+    courtName?: string | null;
+    clientName?: string | null;
+  } | null;
 };
 
 export default function AdminAccountsPage() {
@@ -101,6 +107,15 @@ export default function AdminAccountsPage() {
     open: openAccounts.length,
     closed: closedAccounts.length
   }), [openAccounts.length, closedAccounts.length]);
+
+  const formatBookingDateTime = (value?: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const day = date.toLocaleDateString('es-AR');
+    const time = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${day} ${time}`;
+  };
 
   const itemOutstandingMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -252,7 +267,11 @@ export default function AdminAccountsPage() {
                   onClick={() => setSelectedId(account.id)}
                   className={`w-full text-left px-3 py-2 rounded-lg border ${selectedId === account.id ? 'bg-[#347048] text-[#EBE1D8] border-[#347048]' : 'bg-white border-[#347048]/20 text-[#347048]'}`}
                 >
-                  <div className="text-xs font-black uppercase tracking-wider">{account.sourceType} · {account.sourceId}</div>
+                  <div className="text-xs font-black uppercase tracking-wider">
+                    {account.sourceType === 'BOOKING' && account.booking
+                      ? `${account.booking.clientName || 'Sin cliente'} · ${formatBookingDateTime(account.booking.startDateTime)} · ${account.booking.courtName || 'Sin cancha'}`
+                      : `${account.sourceType} · ${account.sourceId}`}
+                  </div>
                   <div className="text-xs">Estado: {account.status}</div>
                 </button>
               ))}
@@ -478,7 +497,11 @@ export default function AdminAccountsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {closedAccounts.slice(0, 12).map((account) => (
               <div key={account.id} className="border border-[#347048]/15 rounded-lg px-3 py-2 text-xs">
-                <div className="font-black uppercase">{account.sourceType} · {account.sourceId}</div>
+                <div className="font-black uppercase">
+                  {account.sourceType === 'BOOKING' && account.booking
+                    ? `${account.booking.clientName || 'Sin cliente'} · ${formatBookingDateTime(account.booking.startDateTime)} · ${account.booking.courtName || 'Sin cancha'}`
+                    : `${account.sourceType} · ${account.sourceId}`}
+                </div>
                 <div>Estado: {account.status}</div>
               </div>
             ))}
@@ -582,4 +605,5 @@ export default function AdminAccountsPage() {
     </AdminLayout>
   );
 }
+
 

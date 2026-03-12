@@ -597,30 +597,114 @@ export class BookingController {
     try {
         const clubId = Number((req as any).clubId);
         const { startDate, endDate } = req.query;
-        
-        let start = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-        let end = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
+
+        const club = await prisma.club.findUnique({ where: { id: clubId }, include: { settings: true } });
+        const timeZone = club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
+
+        const parseLocalDate = (value: string) => {
+            const [y, m, d] = String(value).split('-').map(Number);
+            if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+            return new Date(y, m - 1, d);
+        };
+
+        const nowLocal = TimeHelper.utcToLocal(new Date(), timeZone);
+        let startLocal = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), 1);
+        let endLocal = new Date(nowLocal.getFullYear(), nowLocal.getMonth() + 1, 0);
+
+        let start: Date;
+        let end: Date;
 
         if (startDate && endDate) {
-            start = new Date(startDate as string);
-            end = new Date(endDate as string);
-            end.setHours(23, 59, 59, 999); // Aseguramos que tome hasta el último segundo de ese día
+            const asDateStart = new Date(String(startDate));
+            const asDateEnd = new Date(String(endDate));
+            if (!Number.isNaN(asDateStart.getTime()) && !Number.isNaN(asDateEnd.getTime())) {
+                start = asDateStart;
+                end = asDateEnd;
+            } else {
+                const parsedStart = parseLocalDate(String(startDate));
+                const parsedEnd = parseLocalDate(String(endDate));
+                if (parsedStart && parsedEnd) {
+                    startLocal = parsedStart;
+                    endLocal = parsedEnd;
+                }
+                const rangeStart = TimeHelper.getUtcRangeForLocalDate(startLocal, timeZone);
+                const rangeEnd = TimeHelper.getUtcRangeForLocalDate(endLocal, timeZone);
+                start = rangeStart.startUtc;
+                end = rangeEnd.endUtc;
+            }
+        } else {
+            const rangeStart = TimeHelper.getUtcRangeForLocalDate(startLocal, timeZone);
+            const rangeEnd = TimeHelper.getUtcRangeForLocalDate(endLocal, timeZone);
+            start = rangeStart.startUtc;
+            end = rangeEnd.endUtc;
         }
 
-        const [dailyRows, methodRows, playedBookings] = await Promise.all([
-            prisma.$queryRaw<Array<{ day: Date; turnos: number; bar: number }>>`
+        let dailyRows: Array<{ day: string; turnos: number; bar: number }> = [];
+        try {
+            dailyRows = await prisma.$queryRaw<Array<{ day: string; turnos: number; bar: number }>>`
+                WITH payments AS (
+                    SELECT p."id",
+                           p."createdAt",
+                           p."amount",
+                           a."sourceType"::text AS "sourceType"
+                    FROM "Payment" p
+                    JOIN "Account" a ON a."id" = p."accountId"
+                    WHERE a."clubId" = ${clubId}
+                      AND p."createdAt" >= ${start}
+                      AND p."createdAt" <= ${end}
+                ),
+                alloc AS (
+                    SELECT pa."paymentId",
+                           COALESCE(SUM(CASE WHEN ai."type" = 'BOOKING' THEN pa."amount" ELSE 0 END), 0)::float8 AS booking_amount,
+                           COALESCE(SUM(CASE WHEN ai."type" = 'BOOKING' THEN 0 ELSE pa."amount" END), 0)::float8 AS bar_amount
+                    FROM "PaymentAllocation" pa
+                    JOIN "AccountItem" ai ON ai."id" = pa."accountItemId"
+                    GROUP BY pa."paymentId"
+                )
                 SELECT
-                  DATE("createdAt") AS day,
-                  COALESCE(SUM(CASE WHEN LOWER("concept") LIKE '%producto%' THEN 0 ELSE "amount" END), 0)::float8 AS turnos,
-                  COALESCE(SUM(CASE WHEN LOWER("concept") LIKE '%producto%' THEN "amount" ELSE 0 END), 0)::float8 AS bar
-                FROM "CashMovement"
-                WHERE "clubId" = ${clubId}
-                  AND "type" = 'PAYMENT_IN'::"CashMovementPosType"
-                  AND "createdAt" >= ${start}
-                  AND "createdAt" <= ${end}
-                GROUP BY DATE("createdAt")
-                ORDER BY DATE("createdAt") ASC
-            `,
+                  to_char(day, 'DD/MM') AS day,
+                  COALESCE(SUM(COALESCE(booking_amount, CASE WHEN "sourceType" = 'BOOKING' THEN amount ELSE 0 END)), 0)::float8 AS turnos,
+                  COALESCE(SUM(COALESCE(bar_amount, CASE WHEN "sourceType" = 'BAR' THEN amount ELSE 0 END)), 0)::float8 AS bar
+                FROM (
+                  SELECT
+                    DATE(timezone(${timeZone}::text, p."createdAt")) AS day,
+                    p."amount" AS amount,
+                    p."sourceType" AS "sourceType",
+                    a.booking_amount,
+                    a.bar_amount
+                  FROM payments p
+                  LEFT JOIN alloc a ON a."paymentId" = p."id"
+                ) t
+                GROUP BY day
+                ORDER BY day ASC
+            `;
+        } catch (error: any) {
+            const message = String(error?.message || '');
+            if (!message.includes('PaymentAllocation') && !message.includes('42P01')) {
+                throw error;
+            }
+            dailyRows = await prisma.$queryRaw<Array<{ day: string; turnos: number; bar: number }>>`
+                SELECT
+                  to_char(day, 'DD/MM') AS day,
+                  COALESCE(SUM(CASE WHEN LOWER(concept) LIKE '%producto%' THEN 0 ELSE amount END), 0)::float8 AS turnos,
+                  COALESCE(SUM(CASE WHEN LOWER(concept) LIKE '%producto%' THEN amount ELSE 0 END), 0)::float8 AS bar
+                FROM (
+                  SELECT
+                    DATE(timezone(${timeZone}::text, "createdAt")) AS day,
+                    "amount" AS amount,
+                    "concept" AS concept
+                  FROM "CashMovement"
+                  WHERE "clubId" = ${clubId}
+                    AND "type" = 'PAYMENT_IN'::"CashMovementPosType"
+                    AND "createdAt" >= ${start}
+                    AND "createdAt" <= ${end}
+                ) t
+                GROUP BY day
+                ORDER BY day ASC
+            `;
+        }
+
+        const [methodRows, playedBookings] = await Promise.all([
             prisma.$queryRaw<Array<{ method: string; value: number }>>`
                 SELECT
                   "method"::text AS method,
@@ -641,16 +725,11 @@ export class BookingController {
             })
         ]);
 
-        const dailyEvolution = dailyRows.map((row) => {
-            const dt = new Date(row.day);
-            const dd = String(dt.getDate()).padStart(2, '0');
-            const mm = String(dt.getMonth() + 1).padStart(2, '0');
-            return {
-                day: `${dd}/${mm}`,
-                turnos: Number(row.turnos || 0),
-                bar: Number(row.bar || 0)
-            };
-        });
+        const dailyEvolution = dailyRows.map((row) => ({
+            day: String(row.day || ''),
+            turnos: Number(row.turnos || 0),
+            bar: Number(row.bar || 0)
+        }));
 
         const totalTurnos = dailyEvolution.reduce((sum, row) => sum + Number(row.turnos || 0), 0);
         const totalBar = dailyEvolution.reduce((sum, row) => sum + Number(row.bar || 0), 0);
@@ -671,3 +750,8 @@ export class BookingController {
     }
 }
 }
+
+
+
+
+

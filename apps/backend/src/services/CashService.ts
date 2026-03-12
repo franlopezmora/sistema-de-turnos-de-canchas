@@ -48,7 +48,93 @@ export class CashService {
 
         const { startUtc: start, endUtc: end } = TimeHelper.getUtcRangeForLocalDate(localDate, timeZone);
 
-        const movements = await this.cashRepository.findAllByDateRange(start, end, resolvedClubId);
+        const movementsRaw = await this.cashRepository.findAllByDateRange(start, end, resolvedClubId);
+
+        const paymentIds = (movementsRaw || [])
+            .map((movement: any) => movement?.paymentId)
+            .filter((id: any) => typeof id === 'string' && id.trim().length > 0);
+
+        let allocations: Array<{ paymentId: string; accountItem: { type: string } | null; amount: any }> = [];
+        if (paymentIds.length > 0) {
+            try {
+                allocations = await prisma.paymentAllocation.findMany({
+                    where: { paymentId: { in: paymentIds } },
+                    include: { accountItem: { select: { type: true } } }
+                });
+            } catch (error: any) {
+                const message = String(error?.message || '');
+                if (!message.includes('PaymentAllocation') && !message.includes('42P01')) {
+                    throw error;
+                }
+            }
+        }
+
+        const allocationMap = new Map<string, Array<{ type: string | null; amount: number }>>();
+        for (const allocation of allocations) {
+            const paymentId = allocation.paymentId;
+            const type = allocation.accountItem?.type ?? null;
+            const amount = Number(allocation.amount || 0);
+            if (!allocationMap.has(paymentId)) allocationMap.set(paymentId, []);
+            allocationMap.get(paymentId)!.push({ type, amount });
+        }
+
+        const bookingIds = (movementsRaw || [])
+            .filter((movement: any) => movement?.payment?.account?.sourceType === 'BOOKING')
+            .map((movement: any) => Number(movement?.payment?.account?.sourceId))
+            .filter((id: number) => Number.isFinite(id) && id > 0);
+
+        let bookingMap = new Map<number, { id: number; startDateTime: any; courtName: string | null; clientName: string | null }>();
+        if (resolvedClubId && bookingIds.length > 0) {
+            const bookings = await prisma.booking.findMany({
+                where: { clubId: resolvedClubId, id: { in: bookingIds } },
+                include: {
+                    court: { select: { name: true } },
+                    client: { select: { name: true } }
+                }
+            });
+
+            for (const booking of bookings) {
+                bookingMap.set(booking.id, {
+                    id: booking.id,
+                    startDateTime: booking.startDateTime,
+                    courtName: booking.court?.name ?? null,
+                    clientName: booking.client?.name ?? null
+                });
+            }
+        }
+
+        const movements = (movementsRaw || []).map((movement: any) => {
+            const sourceType = movement?.payment?.account?.sourceType ?? null;
+            const sourceId = movement?.payment?.account?.sourceId ?? null;
+            const accountId = movement?.payment?.account?.id ?? null;
+            const paymentId = movement?.paymentId ?? null;
+            let bookingAmount = 0;
+            let barAmount = 0;
+            const bookingId = sourceType === 'BOOKING' ? Number(sourceId) : null;
+            const booking = bookingId && bookingMap.has(bookingId) ? bookingMap.get(bookingId) : null;
+
+            if (paymentId && allocationMap.has(paymentId)) {
+                const items = allocationMap.get(paymentId) || [];
+                for (const item of items) {
+                    if (item.type === 'BOOKING') bookingAmount += item.amount;
+                    else barAmount += item.amount;
+                }
+            } else if (movement?.type === 'PAYMENT_IN') {
+                const amount = Number(movement?.amount || 0);
+                if (sourceType === 'BOOKING') bookingAmount = amount;
+                else if (sourceType === 'BAR') barAmount = amount;
+            }
+
+            return {
+                ...movement,
+                sourceType,
+                sourceId,
+                accountId,
+                booking,
+                bookingAmount,
+                barAmount
+            };
+        });
 
         // 3. Calcular totales (Lógica de negocio)
         let totalCash = 0;
@@ -337,7 +423,7 @@ export class CashService {
             });
 
             await this.projectionService.refreshAccountSummary(account.id, tx);
-            return { accountId: account.id, total, description };
+            return { accountId: account.id, total, description, accountItemId: item.id };
         });
 
         const payments = [];
@@ -348,7 +434,10 @@ export class CashService {
                 amount: payment.amount,
                 method: payment.method as PaymentMethod,
                 source: 'POS',
-                createdByUserId: actorUserId ?? input.userId
+                createdByUserId: actorUserId ?? input.userId,
+                allocations: sale.accountItemId
+                    ? [{ accountItemId: String(sale.accountItemId), amount: Number(payment.amount) }]
+                    : undefined
             });
             payments.push(created);
         }

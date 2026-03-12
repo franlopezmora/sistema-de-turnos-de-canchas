@@ -37,6 +37,34 @@ export class CashRepository {
         },
         ...(clubId ? { clubId } : {})
       },
+      include: {
+        payment: {
+          include: {
+            account: {
+              select: {
+                id: true,
+                sourceType: true,
+                sourceId: true
+              }
+            },
+            allocations: {
+              select: {
+                accountItemId: true,
+                amount: true,
+                accountItem: {
+                  select: {
+                    type: true,
+                    description: true,
+                    quantity: true,
+                    unitPrice: true,
+                    total: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       orderBy: { createdAt: 'desc' }
     });
   }

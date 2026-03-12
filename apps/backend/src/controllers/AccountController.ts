@@ -5,6 +5,7 @@ import { AccountItemService } from '../services/AccountItemService';
 import { PaymentService } from '../services/PaymentService';
 import { mapAccountDto, mapAccountItemDto, mapLedgerEntryDto, mapPaymentDto } from '../dto/financialDto';
 import { sanitizeString } from '../utils/sanitize';
+import { prismaRead } from '../prisma';
 
 export class AccountController {
   private readonly accountService = new AccountService();
@@ -33,11 +34,44 @@ export class AccountController {
 
       const clubId = this.resolveClubId(req);
       const result = await this.accountService.listAccounts(clubId, parsed.data.status, parsed.data.bookingId);
-      return res.json(result.map((account: any) => ({
-        ...mapAccountDto(account),
-        items: Array.isArray(account.items) ? account.items.map(mapAccountItemDto) : [],
-        payments: Array.isArray(account.payments) ? account.payments.map(mapPaymentDto) : []
-      })));
+
+      const bookingIds = result
+        .filter((account: any) => account.sourceType === 'BOOKING')
+        .map((account: any) => Number(account.sourceId))
+        .filter((id: number) => Number.isFinite(id) && id > 0);
+
+      const bookings = bookingIds.length > 0
+        ? await prismaRead.booking.findMany({
+            where: { clubId, id: { in: bookingIds } },
+            include: {
+              court: { select: { name: true } },
+              client: { select: { name: true } }
+            }
+          })
+        : [];
+
+      const bookingMap = new Map<number, any>();
+      for (const booking of bookings) {
+        bookingMap.set(booking.id, booking);
+      }
+
+      return res.json(result.map((account: any) => {
+        const bookingId = account.sourceType === 'BOOKING' ? Number(account.sourceId) : null;
+        const booking = bookingId ? bookingMap.get(bookingId) : null;
+        return {
+          ...mapAccountDto(account),
+          items: Array.isArray(account.items) ? account.items.map(mapAccountItemDto) : [],
+          payments: Array.isArray(account.payments) ? account.payments.map(mapPaymentDto) : [],
+          booking: booking
+            ? {
+                id: booking.id,
+                startDateTime: booking.startDateTime,
+                courtName: booking.court?.name ?? null,
+                clientName: booking.client?.name ?? null
+              }
+            : null
+        };
+      }));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error al listar cuentas';
       return res.status(500).json({ error: message });
