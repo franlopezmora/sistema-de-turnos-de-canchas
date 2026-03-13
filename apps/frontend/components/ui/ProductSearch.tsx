@@ -17,6 +17,8 @@ type Props = {
   minQueryLength?: number;
   maxResults?: number;
   className?: string;
+  selectedName?: string;
+  onInputChange?: (value: string) => void;
 };
 
 export default function ProductSearch({
@@ -27,7 +29,9 @@ export default function ProductSearch({
   autoFocus = false,
   minQueryLength = 2,
   maxResults = 10,
-  className = ''
+  className = '',
+  selectedName,
+  onInputChange
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,9 +40,12 @@ export default function ProductSearch({
   const [activeIndex, setActiveIndex] = useState(0);
 
   const normalizedQuery = query.trim().toLowerCase();
+  const normalizedSelected = String(selectedName || '').trim().toLowerCase();
+  const hasSelection = Boolean(normalizedSelected);
 
   const results = useMemo(() => {
     if (disabled) return [];
+    if (hasSelection && normalizedQuery === normalizedSelected) return [];
     if (normalizedQuery.length < minQueryLength) return [];
 
     const filtered = (products || []).filter((p) => {
@@ -74,16 +81,23 @@ export default function ProductSearch({
 
   useEffect(() => {
     setActiveIndex(0);
-    if (normalizedQuery.length >= minQueryLength) {
+    if (normalizedQuery.length >= minQueryLength && !(hasSelection && normalizedQuery === normalizedSelected)) {
       setOpen(true);
     } else {
       setOpen(false);
     }
-  }, [minQueryLength, normalizedQuery.length]);
+  }, [hasSelection, minQueryLength, normalizedQuery.length, normalizedSelected]);
+
+  useEffect(() => {
+    if (!hasSelection) return;
+    if (normalizedQuery === normalizedSelected) return;
+    setQuery(selectedName || '');
+    setOpen(false);
+  }, [hasSelection, normalizedQuery, normalizedSelected, selectedName]);
 
   const commitSelect = (product: ProductSearchItem) => {
     onSelect(product);
-    setQuery('');
+    setQuery(product?.name || '');
     setOpen(false);
     setActiveIndex(0);
     inputRef.current?.focus();
@@ -101,9 +115,14 @@ export default function ProductSearch({
           value={query}
           disabled={disabled}
           onFocus={() => {
+            if (hasSelection && normalizedQuery === normalizedSelected) return;
             if (normalizedQuery.length >= minQueryLength) setOpen(true);
           }}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            setQuery(next);
+            if (onInputChange) onInputChange(next);
+          }}
           onKeyDown={(e) => {
             if (!open && e.key !== 'Escape') return;
             if (e.key === 'Escape') {

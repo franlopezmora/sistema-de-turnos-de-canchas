@@ -73,6 +73,8 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const [bookingChargeItemId, setBookingChargeItemId] = useState<string | null>(null);
   const [bookingChargeRemaining, setBookingChargeRemaining] = useState(0);
   const paymentInFlightRef = useRef(false);
+  const [selectedProduct, setSelectedProduct] = useState<ProductSearchItem | null>(null);
+  const [productSearchKey, setProductSearchKey] = useState(0);
 
   const isCancelled = booking?.status === 'CANCELLED';
 
@@ -114,6 +116,8 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       setCartItems(formattedItems);
       setSummary(financial || null);
       setActionError(null);
+      setSelectedProduct(null);
+      setProductSearchKey((prev) => prev + 1);
     } catch (e) {
       console.error(e);
     } finally {
@@ -148,23 +152,33 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const courtPaidNow = Math.max(0, Number((courtTotal - remainingCourt).toFixed(2)));
   const grandTotalToRegister = remainingCourt + registeredItemsPendingTotal + draftTotal;
 
-  const handleAddProductToDraft = (product: ProductSearchItem) => {
+  const handleSelectProduct = (product: ProductSearchItem) => {
     if (!product?.id) return;
-    const qty = Number(quantity);
-    if (!Number.isFinite(qty) || qty <= 0) return;
     const outOfStock = Number((product as any)?.stock ?? 1) <= 0;
     if (outOfStock) return;
+    setSelectedProduct(product);
+  };
 
+  const handleAddSelectedProduct = () => {
+    if (!selectedProduct?.id) return;
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+    const outOfStock = Number((selectedProduct as any)?.stock ?? 1) <= 0;
+    if (outOfStock) return;
+
+    const tempId = `new-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const newItem: CartItem = {
-      tempId: `new-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      productId: product.id,
-      productName: product.name,
+      tempId,
+      productId: selectedProduct.id,
+      productName: selectedProduct.name,
       quantity: qty,
-      price: Number(product.price || 0),
+      price: Number(selectedProduct.price || 0),
       isNew: true
     };
     setCartItems((prev) => [...prev, newItem]);
+    setSelectedProduct(null);
     setQuantity(1);
+    setProductSearchKey((prev) => prev + 1);
   };
 
   const handleRemove = async (item: CartItem) => {
@@ -354,11 +368,19 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
             <div className="flex gap-3 items-center">
               <div className="flex-1">
                 <ProductSearch
+                  key={`product-search-${productSearchKey}`}
                   products={products}
                   autoFocus
                   disabled={loading || saving || isCancelled}
                   placeholder={loading ? 'Cargando productos...' : 'Agregar producto (ej: Gatorade)...'}
-                  onSelect={handleAddProductToDraft}
+                  onSelect={handleSelectProduct}
+                  selectedName={selectedProduct?.name || ''}
+                  onInputChange={(value) => {
+                    if (!selectedProduct) return;
+                    if (value.trim().toLowerCase() !== selectedProduct.name.toLowerCase()) {
+                      setSelectedProduct(null);
+                    }
+                  }}
                 />
               </div>
               <input
@@ -369,6 +391,14 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                 className="w-20 h-12 bg-white border-2 border-[#347048]/10 focus:border-[#B9CF32] rounded-xl px-2 text-center text-[#347048] font-black shadow-sm outline-none"
                 disabled={saving || isCancelled}
               />
+              <button
+                type="button"
+                onClick={handleAddSelectedProduct}
+                disabled={saving || isCancelled || !selectedProduct}
+                className="h-12 px-4 rounded-xl bg-[#347048] text-white font-black uppercase tracking-widest text-[10px] shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#B9CF32] hover:text-[#347048]"
+              >
+                Agregar
+              </button>
             </div>
           </div>
 
@@ -669,4 +699,3 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
     </div>
   );
 }
-
