@@ -2,7 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ClubService, Club, type BookingConfirmationMode } from '../../services/ClubService';
 import { getCourts } from '../../services/CourtService';
-import { ClubAdminService, ClubActivityType } from '../../services/ClubAdminService';
+import { ClubAdminService, ClubActivityType, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope } from '../../services/ClubAdminService';
+import { searchClients } from '../../services/BookingService';
 import AppModal from '../AppModal';
 import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle, Check } from 'lucide-react';
 import { normalizeSessionUser } from '../../utils/session';
@@ -44,6 +45,27 @@ type ActivityScheduleFormValue = {
   scheduleIntervalMinutes: string;
   scheduleDurations: string;
   scheduleFixedSlots: string;
+};
+
+type DiscountPolicyView = {
+  id: string;
+  name: string;
+  scope: DiscountPolicyScope;
+  amountType: DiscountAmountType;
+  amountValue: number;
+  applyMode: DiscountApplyMode;
+  isStackable: boolean;
+  priority: number;
+  isActive: boolean;
+};
+
+type ClientSearchResult = {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  dni?: string;
 };
 
 const normalizeDurations = (value: unknown, fallback: number): number[] => {
@@ -230,10 +252,55 @@ export default function AdminTabClub() {
   }>({ show: false });
   const [activityTypes, setActivityTypes] = useState<ClubActivityType[]>([]);
   const [activityScheduleForm, setActivityScheduleForm] = useState<Record<number, ActivityScheduleFormValue>>({});
+  const [discountPolicies, setDiscountPolicies] = useState<DiscountPolicyView[]>([]);
+  const [loadingDiscountPolicies, setLoadingDiscountPolicies] = useState(false);
+  const [discountPolicyForm, setDiscountPolicyForm] = useState({
+    name: '',
+    scope: 'BOOKING' as DiscountPolicyScope,
+    amountType: 'PERCENT' as DiscountAmountType,
+    amountValue: '',
+    applyMode: 'INCLUDE_ONLY' as DiscountApplyMode,
+    isStackable: false,
+    priority: '100'
+  });
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientSearchResults, setClientSearchResults] = useState<ClientSearchResult[]>([]);
+  const [showClientSearchDropdown, setShowClientSearchDropdown] = useState(false);
+  const [selectedDiscountClient, setSelectedDiscountClient] = useState<ClientSearchResult | null>(null);
+  const [clientAssignments, setClientAssignments] = useState<any[]>([]);
+  const [loadingClientAssignments, setLoadingClientAssignments] = useState(false);
+  const [selectedPolicyIdForAssignment, setSelectedPolicyIdForAssignment] = useState('');
+  const [assignmentNotes, setAssignmentNotes] = useState('');
+  const clientSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clientSearchWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
   const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
   const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
+
+  const loadDiscountPolicies = useCallback(async (clubSlug: string) => {
+    try {
+      setLoadingDiscountPolicies(true);
+      const rows = await ClubAdminService.listDiscountPolicies(clubSlug);
+      setDiscountPolicies(Array.isArray(rows) ? rows : []);
+    } catch (error: any) {
+      showError(`Error al cargar políticas de descuento: ${error.message}`);
+    } finally {
+      setLoadingDiscountPolicies(false);
+    }
+  }, []);
+
+  const loadClientAssignments = useCallback(async (clubSlug: string, clientId: string) => {
+    try {
+      setLoadingClientAssignments(true);
+      const rows = await ClubAdminService.listClientDiscountAssignments(clubSlug, clientId);
+      setClientAssignments(Array.isArray(rows) ? rows : []);
+    } catch (error: any) {
+      showError(`Error al cargar asignaciones del cliente: ${error.message}`);
+    } finally {
+      setLoadingClientAssignments(false);
+    }
+  }, []);
 
   const loadClub = useCallback(async () => {
     try {
@@ -260,6 +327,13 @@ export default function AdminTabClub() {
         setActivitySettings(nextActivitySettings);
         setActivityTypes(Array.isArray(activityTypesData) ? activityTypesData : []);
         setActivityScheduleForm(buildScheduleFormFromActivities(Array.isArray(activityTypesData) ? activityTypesData : []));
+        await loadDiscountPolicies(clubData.slug);
+        setClientSearch('');
+        setClientSearchResults([]);
+        setSelectedDiscountClient(null);
+        setClientAssignments([]);
+        setSelectedPolicyIdForAssignment('');
+        setAssignmentNotes('');
         setClubForm({
           slug: clubData.slug || '', name: clubData.name || '',
           addressLine: clubData.addressLine || '', city: clubData.city || '', province: clubData.province || '', country: clubData.country || '',
@@ -297,7 +371,7 @@ export default function AdminTabClub() {
     } finally {
       setLoadingClub(false);
     }
-  }, []);
+  }, [loadDiscountPolicies]);
 
   useEffect(() => { loadClub(); }, [loadClub]);
 
@@ -417,6 +491,130 @@ export default function AdminTabClub() {
       showError('Error al actualizar el club: ' + error.message);
     }
   };
+
+  const handleCreateDiscountPolicy = async (e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault();
+    if (!club) return;
+
+    const amountValue = Number(discountPolicyForm.amountValue);
+    const priority = Number(discountPolicyForm.priority);
+    if (!discountPolicyForm.name.trim()) {
+      showError('El nombre de la política es obligatorio');
+      return;
+    }
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      showError('El valor del descuento debe ser mayor a 0');
+      return;
+    }
+    if (discountPolicyForm.amountType === 'PERCENT' && amountValue > 100) {
+      showError('El porcentaje no puede superar 100');
+      return;
+    }
+    if (!Number.isFinite(priority)) {
+      showError('La prioridad es inválida');
+      return;
+    }
+
+    try {
+      await ClubAdminService.createDiscountPolicy(club.slug, {
+        name: discountPolicyForm.name.trim(),
+        scope: discountPolicyForm.scope,
+        amountType: discountPolicyForm.amountType,
+        amountValue,
+        applyMode: discountPolicyForm.applyMode,
+        isStackable: discountPolicyForm.isStackable,
+        priority: Math.floor(priority)
+      });
+      setDiscountPolicyForm((prev) => ({
+        ...prev,
+        name: '',
+        amountValue: '',
+        priority: '100'
+      }));
+      await loadDiscountPolicies(club.slug);
+      showInfo('Política de descuento creada', 'Éxito');
+    } catch (error: any) {
+      showError(`No se pudo crear la política: ${error.message}`);
+    }
+  };
+
+  const handleAssignPolicyToClient = async () => {
+    if (!club || !selectedDiscountClient?.id) return;
+    if (!selectedPolicyIdForAssignment) {
+      showError('Seleccioná una política para asignar');
+      return;
+    }
+    try {
+      await ClubAdminService.assignDiscountToClient(club.slug, selectedDiscountClient.id, {
+        policyId: selectedPolicyIdForAssignment,
+        notes: assignmentNotes.trim() || undefined
+      });
+      setSelectedPolicyIdForAssignment('');
+      setAssignmentNotes('');
+      await loadClientAssignments(club.slug, selectedDiscountClient.id);
+      showInfo('Política asignada al cliente', 'Éxito');
+    } catch (error: any) {
+      showError(`No se pudo asignar: ${error.message}`);
+    }
+  };
+
+  const handleToggleAssignment = async (assignmentId: string, nextStatus: boolean) => {
+    if (!club || !selectedDiscountClient?.id) return;
+    try {
+      await ClubAdminService.updateDiscountAssignment(club.slug, assignmentId, nextStatus);
+      await loadClientAssignments(club.slug, selectedDiscountClient.id);
+    } catch (error: any) {
+      showError(`No se pudo actualizar la asignación: ${error.message}`);
+    }
+  };
+
+  const handleDiscountClientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setClientSearch(value);
+
+    if (clientSearchTimeoutRef.current) {
+      clearTimeout(clientSearchTimeoutRef.current);
+      clientSearchTimeoutRef.current = null;
+    }
+
+    const term = value.trim();
+    if (!club || term.length < 2) {
+      setClientSearchResults([]);
+      setShowClientSearchDropdown(false);
+      return;
+    }
+
+    clientSearchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await searchClients(club.slug, term);
+        const normalized = Array.isArray(results) ? results : [];
+        setClientSearchResults(normalized.slice(0, 20));
+        setShowClientSearchDropdown(true);
+      } catch (error: any) {
+        setClientSearchResults([]);
+        setShowClientSearchDropdown(false);
+        showError(`No se pudo buscar clientes: ${error?.message || 'Error de búsqueda'}`);
+      }
+    }, 300);
+  };
+
+  const handleSelectDiscountClient = async (client: ClientSearchResult) => {
+    if (!club) return;
+    setSelectedDiscountClient(client);
+    setClientSearch(`${String(client.firstName || '').trim()} ${String(client.lastName || '').trim()}`.trim() || String(client.id));
+    setShowClientSearchDropdown(false);
+    await loadClientAssignments(club.slug, client.id);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clientSearchWrapperRef.current && !clientSearchWrapperRef.current.contains(event.target as Node)) {
+        setShowClientSearchDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -972,6 +1170,230 @@ export default function AdminTabClub() {
                     ) : null}
                   </div>
                 ) : null}
+              </div>
+            </div>
+
+            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <div className="flex items-center gap-2 mb-4 text-[#347048]">
+                <Settings size={18} strokeWidth={3} />
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Descuentos por cliente</h3>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="bg-white/40 p-4 rounded-2xl border border-white">
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Nueva política</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="md:col-span-2">
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Nombre</label>
+                      <input
+                        type="text"
+                        value={discountPolicyForm.name}
+                        onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, name: e.target.value }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm"
+                        placeholder="Ej: Amigo 20% turnos"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Scope</label>
+                      <select
+                        value={discountPolicyForm.scope}
+                        onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, scope: e.target.value as DiscountPolicyScope }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                      >
+                        <option value="BOOKING">BOOKING</option>
+                        <option value="PRODUCT">PRODUCT</option>
+                        <option value="SERVICE">SERVICE</option>
+                        <option value="ALL">ALL</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Tipo</label>
+                      <select
+                        value={discountPolicyForm.amountType}
+                        onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, amountType: e.target.value as DiscountAmountType }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                      >
+                        <option value="PERCENT">PERCENT</option>
+                        <option value="FIXED">FIXED</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Valor</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={discountPolicyForm.amountValue}
+                        onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, amountValue: e.target.value }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                        placeholder={discountPolicyForm.amountType === 'PERCENT' ? '20' : '1000'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Prioridad</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={discountPolicyForm.priority}
+                        onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, priority: e.target.value }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Apply mode</label>
+                      <select
+                        value={discountPolicyForm.applyMode}
+                        onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, applyMode: e.target.value as DiscountApplyMode }))}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                      >
+                        <option value="INCLUDE_ONLY">INCLUDE_ONLY</option>
+                        <option value="EXCLUDE_LIST">EXCLUDE_LIST</option>
+                      </select>
+                    </div>
+                    <label className="md:col-span-2 flex items-center gap-3 text-[#347048] font-black cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={discountPolicyForm.isStackable}
+                        onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, isStackable: e.target.checked }))}
+                      />
+                      <span className="text-sm uppercase tracking-wide">Stackable</span>
+                    </label>
+                    <div className="md:col-span-2">
+                      <button
+                        type="button"
+                        onClick={handleCreateDiscountPolicy}
+                        className="w-full h-11 bg-[#347048] hover:bg-[#B9CF32] text-[#EBE1D8] hover:text-[#347048] rounded-xl font-black text-sm uppercase tracking-widest transition-all"
+                      >
+                        Crear Política
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <h5 className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2">Políticas actuales</h5>
+                    {loadingDiscountPolicies ? (
+                      <p className="text-[11px] font-bold text-[#347048]/60">Cargando...</p>
+                    ) : discountPolicies.length === 0 ? (
+                      <p className="text-[11px] font-bold text-[#347048]/60">Sin políticas cargadas.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-56 overflow-auto pr-1">
+                        {discountPolicies.map((policy) => (
+                          <div key={policy.id} className="bg-white rounded-xl border border-white/70 p-3 text-[#347048]">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-black text-sm">{policy.name}</p>
+                              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${policy.isActive ? 'bg-[#B9CF32]/50' : 'bg-[#926699]/20'}`}>
+                                {policy.isActive ? 'ACTIVA' : 'INACTIVA'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] font-bold opacity-80 mt-1">
+                              {policy.scope} · {policy.amountType} {Number(policy.amountValue)} · prio {policy.priority} · {policy.isStackable ? 'stack' : 'no stack'}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white/40 p-4 rounded-2xl border border-white">
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Asignación a cliente</h4>
+                  <div className="space-y-3">
+                    <div className="relative z-20" ref={clientSearchWrapperRef}>
+                      <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Buscar cliente</label>
+                      <input
+                        type="text"
+                        value={clientSearch}
+                        onChange={handleDiscountClientSearchChange}
+                        className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm"
+                        placeholder="Nombre, teléfono, DNI, email"
+                      />
+                      {showClientSearchDropdown && clientSearchResults.length > 0 ? (
+                        <div className="absolute z-[120] mt-2 w-full max-h-56 overflow-auto rounded-xl border border-white/70 bg-white shadow-xl">
+                          {clientSearchResults.map((client) => {
+                            const fullName = `${String(client.firstName || '').trim()} ${String(client.lastName || '').trim()}`.trim() || 'Sin nombre';
+                            return (
+                              <button
+                                type="button"
+                                key={client.id}
+                                onClick={() => handleSelectDiscountClient(client)}
+                                className="w-full text-left px-3 py-2 text-sm font-bold text-[#347048] hover:bg-[#B9CF32]/20 transition-all border-b last:border-b-0 border-white/60"
+                              >
+                                {fullName} {client.dni ? `· DNI ${client.dni}` : ''}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                    {showClientSearchDropdown && clientSearch.trim().length >= 2 && clientSearchResults.length === 0 ? (
+                      <p className="text-[11px] font-bold text-[#347048]/60">Sin resultados para esa búsqueda.</p>
+                    ) : null}
+
+                    {selectedDiscountClient ? (
+                      <div className="rounded-xl border border-white/70 bg-white p-3">
+                        <p className="text-sm font-black text-[#347048]">
+                          Cliente seleccionado: {`${selectedDiscountClient.firstName || ''} ${selectedDiscountClient.lastName || ''}`.trim() || selectedDiscountClient.id}
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                          <select
+                            value={selectedPolicyIdForAssignment}
+                            onChange={(e) => setSelectedPolicyIdForAssignment(e.target.value)}
+                            className="h-11 bg-white border-2 border-[#347048]/20 focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                          >
+                            <option value="">Seleccionar política...</option>
+                            {discountPolicies.filter((p) => p.isActive).map((policy) => (
+                              <option value={policy.id} key={policy.id}>
+                                {policy.name}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={assignmentNotes}
+                            onChange={(e) => setAssignmentNotes(e.target.value)}
+                            className="h-11 bg-white border-2 border-[#347048]/20 focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                            placeholder="Motivo / nota"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAssignPolicyToClient}
+                          className="w-full mt-2 h-11 bg-[#347048] hover:bg-[#B9CF32] text-[#EBE1D8] hover:text-[#347048] rounded-xl font-black text-sm uppercase tracking-widest transition-all"
+                        >
+                          Asignar Política
+                        </button>
+
+                        <div className="mt-3">
+                          <h5 className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2">Asignaciones del cliente</h5>
+                          {loadingClientAssignments ? (
+                            <p className="text-[11px] font-bold text-[#347048]/60">Cargando...</p>
+                          ) : clientAssignments.length === 0 ? (
+                            <p className="text-[11px] font-bold text-[#347048]/60">Sin asignaciones.</p>
+                          ) : (
+                            <div className="space-y-2 max-h-44 overflow-auto pr-1">
+                              {clientAssignments.map((assignment: any) => (
+                                <div key={assignment.id} className="bg-[#EBE1D8] rounded-xl p-2 border border-white">
+                                  <p className="text-sm font-black text-[#347048]">{assignment.policy?.name || assignment.policyId}</p>
+                                  <p className="text-[11px] font-bold text-[#347048]/70">{assignment.notes || 'Sin nota'}</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleAssignment(assignment.id, !assignment.isActive)}
+                                    className={`mt-1 px-2 py-1 rounded-lg text-[10px] font-black ${assignment.isActive ? 'bg-[#926699]/20 text-[#347048]' : 'bg-[#B9CF32]/40 text-[#347048]'}`}
+                                  >
+                                    {assignment.isActive ? 'Desactivar' : 'Activar'}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] font-bold text-[#347048]/60">Seleccioná un cliente para asignar descuentos.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 

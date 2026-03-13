@@ -1,4 +1,5 @@
-﻿import React from 'react';
+import React from 'react';
+import { createPortal } from 'react-dom';
 import type { RefundDraft, RefundReasonType } from '../../../modules/refunds/refund.types';
 import { REFUND_REASON_OPTIONS } from '../../../modules/refunds/refund.constants';
 
@@ -18,25 +19,26 @@ type RefundRequestModalProps = {
 
 export default function RefundRequestModal({
   show,
-  title = 'Gestion de devolucion',
+  title = 'Gestión de devolución',
   paymentId,
   maxAmount,
   draft,
   submitting = false,
   closeLabel = 'Cancelar',
-  submitLabel = 'Confirmar devolucion',
+  submitLabel = 'Confirmar devolución',
   onClose,
   onSubmit,
   onChangeDraft
 }: RefundRequestModalProps) {
   if (!show) return null;
+  if (typeof document === 'undefined') return null;
 
   const setDraft = (patch: Partial<RefundDraft>) => {
     onChangeDraft({ ...draft, ...patch });
   };
 
-  return (
-    <div className="fixed inset-0 z-[9999] bg-[#1f3f2b]/65 backdrop-blur-[2px] flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[10050] bg-[#1f3f2b]/65 backdrop-blur-[2px] flex items-center justify-center p-4">
       <div className="w-full max-w-lg bg-[#EBE1D8] border-4 border-white/70 rounded-[1.5rem] shadow-2xl shadow-[#183022]/35 p-6 text-[#347048] space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -66,7 +68,7 @@ export default function RefundRequestModal({
               onChange={(e) => setDraft({ amountInput: e.target.value })}
               className="w-full h-10 border border-[#347048]/20 rounded-lg px-3 bg-white text-sm font-semibold"
             />
-            <p className="text-[11px] text-[#347048]/60 mt-1">Maximo: ${Number(maxAmount || 0).toLocaleString()}</p>
+            <p className="text-[11px] text-[#347048]/60 mt-1">Máximo: ${Number(maxAmount || 0).toLocaleString()}</p>
           </div>
 
           <div>
@@ -125,6 +127,7 @@ export default function RefundRequestModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -99,7 +99,10 @@ async function main() {
         lightsExtraAmount: 5000,
         lightsFromHour: '20:00',
         professorDiscountEnabled: true,
-        professorDiscountPercent: 15
+        professorDiscountPercent: 15,
+        bookingSimpleAdvanceDaysUser: 30,
+        bookingSimpleAdvanceDaysAdmin: 30,
+        allowAdminSkipSimpleAdvanceLimit: false
       },
       create: {
         clubId: club.id,
@@ -109,7 +112,10 @@ async function main() {
         lightsExtraAmount: 5000,
         lightsFromHour: '20:00',
         professorDiscountEnabled: true,
-        professorDiscountPercent: 15
+        professorDiscountPercent: 15,
+        bookingSimpleAdvanceDaysUser: 30,
+        bookingSimpleAdvanceDaysAdmin: 30,
+        allowAdminSkipSimpleAdvanceLimit: false
       }
     });
   };

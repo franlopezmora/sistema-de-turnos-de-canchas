@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
@@ -14,7 +14,7 @@ import { ChevronDown, Check, Calendar, Clock, MapPin, Zap, MousePointerClick, Ho
 const apiBase = () => `${getApiUrl()}/api`;
 
 interface BookingGridProps {
-  /** Slug del club: cuando estÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ en /club/[slug], solo se muestran canchas y turnos de ese club */
+  /** Slug del club: cuando está en /club/[slug], solo se muestran canchas y turnos de ese club */
   clubSlug?: string;
 }
 
@@ -149,7 +149,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   const [pendingTime, setPendingTime] = useState<string | null>(null);
   const [queryApplied, setQueryApplied] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // Estado para el botÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n visual
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Estado para el botón visual
   const [guestFirstName, setGuestFirstName] = useState('');
   const [guestLastName, setGuestLastName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
@@ -172,7 +172,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     setModalState((prev) => ({ ...prev, show: false }));
   };
 
-  const showInfo = (message: ReactNode, title = 'InformaciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n') => {
+  const showInfo = (message: ReactNode, title = 'Información') => {
     setModalState({
       show: true,
       title,
@@ -295,7 +295,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     return isEmailValid(email) && isPhoneValid(phone);
   };
 
-  // --- Verificar AutenticaciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n al cargar ---
+  // --- Verificar autenticación al cargar ---
   useEffect(() => {
     const token = localStorage.getItem('token');
     setIsAuthenticated(!!token);
@@ -322,7 +322,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     setQueryApplied(true);
   }, [router.isReady, router.query, queryApplied]);
 
-  // --- Cargar configuraciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n del club (para saber si aplica extra por luces) ---
+  // --- Cargar configuración del club (para saber si aplica extra por luces) ---
   useEffect(() => {
     if (!clubSlug) {
       setClubConfig(null);
@@ -371,7 +371,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     setSelectedCourt(null);
   }, [durationOptions, selectedDuration]);
 
-  // --- LÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œGICA DE FILTRADO (Sin cambios) ---
+  // --- LÓGICA DE FILTRADO (Sin cambios) ---
   const filteredSlotsWithCourts = (() => {
     if (!selectedDate) return [];
     const now = new Date();
@@ -513,17 +513,17 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
         setSelectedSlot(null);
         setSelectedCourt(null);
         
-        // ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¹Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ 4. LIMPIEZA DE FORMULARIO
+        // 4. LIMPIEZA DE FORMULARIO
         if (!isAuthenticated) {
           setGuestFirstName('');
           setGuestLastName('');
           setGuestEmail('');
           setGuestPhone('');
-          setGuestDni(''); // ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¹Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â  ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡NO TE OLVIDES DE LIMPIAR EL DNI TAMBIÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°N!
+          setGuestDni(''); // No olvidar limpiar el DNI también
         }
       } catch (_) { /* noop */ }
 
-      showInfo(`ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡Reserva Confirmada! Te esperamos en la cancha ${selectedCourt.name}.`, 'Listo');
+      showInfo('¡Reserva confirmada! Te esperamos en la cancha.', 'Listo');
     } catch (error: any) {
       showError('Ups: ' + error.message);
     } finally {
@@ -537,28 +537,28 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
     const lastName = guestLastName.trim();
     const dni = guestDni.trim();
     if (!firstName || !lastName) {
-      setGuestError('IngresÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ tu nombre y apellido para reservar como invitado.');
+      setGuestError('Ingresá tu nombre y apellido para reservar como invitado.');
       return;
     }
     if (!dni) {
       setGuestError('El DNI es obligatorio para identificar la reserva.');
       return;
     }
-    // Opcional: Validar largo mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo (ej: que tenga al menos 7 nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºmeros)
+    // Opcional: validar largo mínimo (ej: al menos 7 números)
     if (dni.length < 7) {
-      setGuestError('IngresÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ un DNI vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡lido (mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nimo 7 nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºmeros).');
+      setGuestError('Ingresá un DNI válido (mínimo 7 números).');
        return;
     }
     if (info.email && !isEmailValid(info.email)) {
-      setGuestError('IngresÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ un email con formato vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡lido.');
+      setGuestError('Ingresá un email con formato válido.');
       return;
     }
     if (info.phone && !isPhoneValid(info.phone)) {
-      setGuestError('IngresÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ un telÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©fono con formato vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡lido.');
+      setGuestError('Ingresá un teléfono con formato válido.');
       return;
     }
     if (!info.phone) {
-      setGuestError('IngresÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ un telÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©fono para poder contactarte.');
+      setGuestError('Ingresá un teléfono para poder contactarte.');
       return;
     }
     setGuestError('');
@@ -690,7 +690,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
     }
   }, [pendingTime, availableSlots]);
 
-  // --- CORRECCIÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œN MEMORIA ZOMBIE (Sincronizar Backend con Frontend) ---
+  // --- CORRECCIÓN MEMORIA ZOMBIE (Sincronizar backend con frontend) ---
   useEffect(() => {
     if (!selectedDate || !slotsWithCourts) return;
     const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(
@@ -708,10 +708,10 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
           const key = `${dateString}-${slot.slotTime}-${court.id}`;
 
           if (!availableIds.has(court.id)) {
-            // El backend dice que NO estÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ disponible -> Lo bloqueamos
+            // El backend dice que NO está disponible -> lo bloqueamos
             nextState[key] = true;
           } else {
-            // ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥ SI EL BACKEND DICE QUE ESTÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â LIBRE, BORRAMOS EL BLOQUEO LOCAL
+            // Si el backend dice que está libre, borramos el bloqueo local
             delete nextState[key]; 
           }
         });
@@ -730,7 +730,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
     return current <= today;
   };
 
-  // 2. Retroceder un dÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­a
+  // 2. Retroceder un día
   const handlePrevDay = () => {
     if (isPrevDisabled()) return; // Por seguridad
     const prev = new Date(selectedDate);
@@ -738,7 +738,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
     setSelectedDate(prev);
   };
 
-  // 3. Avanzar un dÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­a
+  // 3. Avanzar un día
   const isNextDisabled = () => {
     if (!selectedDate) return true;
     const current = new Date(selectedDate);
@@ -756,9 +756,9 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
   };
 
   // 4. Formatear la fecha para que se vea como "18 FEB 2026"
-  // ReemplazÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ el formattedDate anterior por esto:
+  // Reemplazá el formattedDate anterior por esto:
   const getFormattedDate = (date: Date) => {
-  const weekDays = ['DOM', 'LUN', 'MAR', 'MIÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°', 'JUE', 'VIE', 'SÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂB'];
+  const weekDays = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
   const weekDayName = weekDays[date.getDay()];
   
   const day = date.getDate().toString().padStart(2, '0');
@@ -789,7 +789,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
     
       <div className="text-center mb-8">
         <h2 className="text-4xl font-black text-[#926699] mb-2 tracking-tighter uppercase italic">Reservar Cancha</h2>
-        <p className="text-[#347048] font-bold text-sm tracking-wide opacity-80">Elige tu dÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­a y horario ideal</p>
+        <p className="text-[#347048] font-bold text-sm tracking-wide opacity-80">Elige tu día y horario ideal</p>
       </div>
 
       <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -807,7 +807,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
                 setSelectedSlot(null);
                 setSelectedCourt(null);
               }}
-              placeholder="SeleccionÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ un deporte"
+              placeholder="Seleccioná un deporte"
               options={availableActivities.map((activityName) => ({
                 value: activityName,
                 label: activityName
@@ -827,7 +827,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
           {/* CAJA BLANCA (El "Input" interactivo) */}
           <div className="flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px]">
             
-            {/* BotÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n AtrÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡s */}
+            {/* Botón Atrás */}
             <button
               type="button"
               onClick={handlePrevDay}
@@ -842,7 +842,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
               {getFormattedDate(selectedDate)}
             </span>
 
-            {/* BotÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n Adelante */}
+            {/* Botón Adelante */}
             <button
               type="button"
               onClick={handleNextDay}
@@ -855,11 +855,11 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
           </div>
         </div>
 
-        {/* COLUMNA 3: DuraciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n */}
+        {/* COLUMNA 3: Duración */}
         <div className="relative focus-within:z-[80] z-10">
           <label className="block text-[10px] font-black text-[#926699] mb-2 ml-1 flex items-center gap-2 uppercase tracking-widest">
             <span className="text-[#B9CF32]"><Clock size={16} strokeWidth={3} /></span>
-            <span>DuraciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n</span>
+            <span>Duración</span>
           </label>
           <CustomSelect
             value={selectedDuration}
@@ -869,7 +869,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
               setSelectedSlot(null);
               setSelectedCourt(null);
             }}
-            placeholder="DuraciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n"
+            placeholder="Duración"
             options={durationOptions.map((duration) => ({
               value: duration,
               label: `${duration} min`
@@ -899,7 +899,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
 
           {!selectedActivityFilter ? (
             <div className="text-center py-10 bg-[#347048]/5 rounded-2xl border border-dashed border-[#347048]/20 text-[#347048]/60 font-bold">
-              ElegÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­ un deporte para ver los horarios disponibles.
+              Elegí un deporte para ver los horarios disponibles.
             </div>
           ) : (
             <>
@@ -927,7 +927,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
               </div>
 
               <div className="mt-5 text-[10px] font-black text-[#347048]/50 uppercase tracking-widest">
-                Solo estÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡s viendo horarios con turnos disponibles.
+                Solo estás viendo horarios con turnos disponibles.
               </div>
             </>
           )}
@@ -979,7 +979,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
                     <div>
                       <div className="text-sm font-black uppercase tracking-wide">{court.name}</div>
                       <div className="text-[11px] text-[#347048]/60 font-bold">
-                        {court.price ? `$${Number(court.price).toLocaleString()} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${selectedDuration} min` : 'Precio a confirmar'}
+                        {court.price ? `$${court.price} · ${selectedDuration} min` : 'Precio a confirmar'}
                       </div>
                     </div>
                     <div className={`h-3 w-3 rounded-full ${isSelected ? 'bg-[#B9CF32]' : 'bg-[#347048]/20'}`} />
@@ -1166,7 +1166,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
               </div>
             </div>
             
-            {/* ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¹Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ ACÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â SE REEMPLAZÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ EL EMOJI DE ERROR POR EL ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂCONO ALERTCIRCLE ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¹Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ */}
+            {/* Feedback de error con ícono de alerta */}
             {guestError && (
               <p className="text-xs text-red-500 font-bold bg-red-50 p-2 rounded-lg text-center flex items-center justify-center gap-1">
                  <AlertCircle size={14} strokeWidth={2.5}/> {guestError}

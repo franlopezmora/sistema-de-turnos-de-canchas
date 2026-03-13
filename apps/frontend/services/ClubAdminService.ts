@@ -387,9 +387,11 @@ export class ClubAdminService {
     return res.json();
   }
 
-  static async getClients(slug: string) {
+  static async getClients(slug: string, query?: string) {
     if (!getToken()) throw new Error('No autenticado');
-    const response = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/clients-list`, {
+    const q = String(query || '').trim();
+    const queryString = q ? `?q=${encodeURIComponent(q)}` : '';
+    const response = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/clients-list${queryString}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });

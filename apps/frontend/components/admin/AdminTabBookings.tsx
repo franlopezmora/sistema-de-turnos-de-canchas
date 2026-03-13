@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+﻿import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import {
@@ -441,7 +441,7 @@ export default function AdminTabBookings() {
 
       if (minutesSet.length === 0) return [];
 
-      // Generar filas horarias entre el mÃ­nimo y el mÃ¡ximo minuto, ordenadas ascendente (00:00 arriba)
+      // Generar filas horarias entre el mínimo y el máximo minuto, ordenadas ascendente (00:00 arriba)
       const minM = Math.min(...minutesSet);
       const maxM = Math.max(...minutesSet);
       const startHour = Math.floor(minM / 60) * 60;
@@ -459,7 +459,7 @@ export default function AdminTabBookings() {
 
   // Al abrir la pantalla, scrollear a la fila correspondiente a la hora actual (si la fecha es hoy)
   useEffect(() => {
-    // Ejecutar solo despuÃ©s de que se hayan cargado los bookings y la grilla tenga tamaÃ±o
+    // Ejecutar solo después de que se hayan cargado los bookings y la grilla tenga tamaño
     const run = () => {
       try {
         const container = gridScrollRef.current;
@@ -612,7 +612,7 @@ export default function AdminTabBookings() {
   }>({ show: false });
 
   const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
-  const showInfo = (message: ReactNode, title = 'InformaciÃ³n') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
+  const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
   const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
   const wrapAction = (action?: () => Promise<void> | void) => async () => { closeModal(); await action?.(); };
   
@@ -780,8 +780,8 @@ export default function AdminTabBookings() {
     const professorOverrideReason = String(manualBooking.professorOverrideReason || '').trim();
     const selectedActivityId = Number(selectedManualCourt?.activityTypeId || selectedManualCourt?.activityType?.id);
     if (!manualBooking.courtId || !manualBooking.time) { showError('Faltan datos de cancha u horario'); return; }
-    if (!Number.isInteger(selectedActivityId) || selectedActivityId <= 0) { showError('La cancha seleccionada no tiene actividad vÃ¡lida'); return; }
-    if (!firstName || !lastName || !dni || !phone) { showError('Nombre, Apellido, DNI y TelÃ©fono son obligatorios'); return; }
+    if (!Number.isInteger(selectedActivityId) || selectedActivityId <= 0) { showError('La cancha seleccionada no tiene actividad válida'); return; }
+    if (!firstName || !lastName || !dni || !phone) { showError('Nombre, Apellido, DNI y Teléfono son obligatorios'); return; }
     if (manualBooking.isProfessor && professorOverrideReason.length < 10) { showError('Para override de profesor, el motivo debe tener al menos 10 caracteres'); return; }
     if (!manualBooking.isFixed && adminSimpleMaxDate) {
       const selectedBase = parseLocalDate(manualBooking.startDateBase || getTodayLocalDate());
@@ -967,7 +967,7 @@ export default function AdminTabBookings() {
         const summary = await getAccountSummary(selectedPaymentAccountId);
         const remaining = Math.max(0, Number(summary?.remaining || 0));
         if (remaining <= 0.009) {
-          showInfo('La cuenta ya estÃ¡ saldada.', 'Listo');
+          showInfo('La cuenta ya está saldada.', 'Listo');
           setShowPaymentModal(false);
           return;
         }
@@ -1017,7 +1017,7 @@ export default function AdminTabBookings() {
       .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
 
     if (parsedPayments.length === 0) {
-      showError('IngresÃ¡ al menos un monto vÃ¡lido para registrar el pago dividido.');
+      showError('Ingresá al menos un monto válido para registrar el pago dividido.');
       return;
     }
 
@@ -1106,7 +1106,7 @@ export default function AdminTabBookings() {
           </div>
 
           <div className="relative z-10">
-            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">TelÃ©fono</label>
+            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Teléfono</label>
             <input type="tel" value={manualBooking.guestPhone} onChange={(e) => setManualBooking({ ...manualBooking, guestPhone: e.target.value })} 
             className="w-full h-12 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all" placeholder="Ej: 3511234567" required/>
           </div>
@@ -1114,7 +1114,7 @@ export default function AdminTabBookings() {
           <div className="relative z-10">
             <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">DNI</label>
             <input type="text" value={manualBooking.guestDni} onChange={(e) => setManualBooking({ ...manualBooking, guestDni: e.target.value })} 
-            className="w-full h-12 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all" placeholder="NÃºmero de documento" required />
+            className="w-full h-12 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all" placeholder="Número de documento" required />
           </div>
 
           {/* FECHA (Usa focus-within para tapar TODO al abrirse) */}
@@ -1122,7 +1122,7 @@ export default function AdminTabBookings() {
             <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Fecha</label>
             {manualBooking.isFixed ? (
               <div className="h-12 bg-white/50 border-2 border-dashed border-[#347048]/20 rounded-xl px-4 flex items-center">
-                <span className="text-[#347048]/40 font-bold text-sm">Selecciona dÃ­a abajo</span>
+                <span className="text-[#347048]/40 font-bold text-sm">Selecciona día abajo</span>
               </div>
             ) : (
               <div className="relative flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px]">
@@ -1184,11 +1184,11 @@ export default function AdminTabBookings() {
 
           {/* DURACION */}
           <div className="relative z-[110]">
-            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">DuraciÃ³n</label>
+            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Duración</label>
             <CustomSelect
               value={manualBooking.durationMinutes}
               onChange={(val: string) => setManualBooking({ ...manualBooking, durationMinutes: Number(val) })}
-              placeholder="DuraciÃ³n"
+              placeholder="Duración"
               options={manualDurationOptions.map((duration) => ({ value: duration, label: `${duration} min` }))}
             />
           </div>
@@ -1210,18 +1210,18 @@ export default function AdminTabBookings() {
           {/* DIA DE SEMANA */}
           {manualBooking.isFixed && (
             <div className="relative z-20">
-              <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">DÃ­a de la semana</label>
+              <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Día de la semana</label>
               <CustomSelect 
                 value={manualBooking.dayOfWeek}
                 onChange={(val: string) => setManualBooking({ ...manualBooking, dayOfWeek: val })}
-                placeholder="Selecciona dÃ­a"
+                placeholder="Selecciona día"
                 options={[
                   { value: '1', label: 'Lunes' },
                   { value: '2', label: 'Martes' },
-                  { value: '3', label: 'MiÃ©rcoles' },
+                  { value: '3', label: 'Miércoles' },
                   { value: '4', label: 'Jueves' },
                   { value: '5', label: 'Viernes' },
-                  { value: '6', label: 'SÃ¡bado' },
+                  { value: '6', label: 'Sábado' },
                   { value: '0', label: 'Domingo' }
                 ]}
               />
@@ -1236,14 +1236,14 @@ export default function AdminTabBookings() {
                     {manualBooking.isFixed && <Check size={16} className="text-[#347048]" strokeWidth={4} />}
                 </div>
                 <input type="checkbox" checked={manualBooking.isFixed} onChange={(e) => setManualBooking({ ...manualBooking, isFixed: e.target.checked })} className="hidden" />
-                <span className="text-sm uppercase tracking-wide">Â¿Es un turno fijo?</span>
+                <span className="text-sm uppercase tracking-wide">¿Es un turno fijo?</span>
               </label>
               <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
                 <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${manualBooking.isProfessor ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
                   {manualBooking.isProfessor && <Check size={16} className="text-[#347048]" strokeWidth={4} />}
                 </div>
                 <input type="checkbox" checked={manualBooking.isProfessor} onChange={(e) => setManualBooking({ ...manualBooking, isProfessor: e.target.checked })} className="hidden" />
-                <span className="text-sm uppercase tracking-wide">Profesor (override operativo de duraciÃ³n)</span>
+                <span className="text-sm uppercase tracking-wide">Profesor (override operativo de duración)</span>
               </label>
             </div>
 
@@ -1256,7 +1256,7 @@ export default function AdminTabBookings() {
                   value={manualBooking.professorOverrideReason}
                   onChange={(e) => setManualBooking({ ...manualBooking, professorOverrideReason: e.target.value })}
                   className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
-                  placeholder="Ej: Profesor del club, excepciÃ³n comercial"
+                  placeholder="Ej: Profesor del club, excepción comercial"
                 />
               </div>
             ) : null}
@@ -1274,7 +1274,7 @@ export default function AdminTabBookings() {
         <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6 mb-8">
           <h2 className="text-2xl font-black text-[#347048] uppercase italic tracking-tight flex items-center gap-3">
              <div className="w-2 h-8 bg-[#B9CF32] rounded-full"></div>
-             Agenda del DÃ­a
+              Agenda del Día
           </h2>
           <div className="flex flex-wrap items-center gap-4 bg-white/40 p-2 rounded-2xl border border-white/60">
             <div className="flex items-center gap-2 px-3">
@@ -1358,7 +1358,7 @@ export default function AdminTabBookings() {
                 </div>
                 {/* GRID HORARIA FIJA: por defecto 08:00 - 22:00, filas de 1 hora. */}
                 {/** Calculamos `gridSlots` localmente para render visual sin tocar `scheduleSlots` */}
-                {/* Horario calculado inline removido (no se renderiza directamente aquÃ­). */}
+                {/* Horario calculado inline removido (no se renderiza directamente aquí). */}
                 {/* COLUMNAS */}
                 <div className="absolute inset-0 flex">
                   {courts.map((court) => (
@@ -1369,7 +1369,7 @@ export default function AdminTabBookings() {
                   ))}
                 </div>
 
-                {/* LÃNEAS HORARIAS */}
+                {/* LÍNEAS HORARIAS */}
                 {gridSlots.map((time, index) => (
                   <div
                     key={time}
@@ -1390,8 +1390,8 @@ export default function AdminTabBookings() {
                     (c) => c.id === slot.courtId
                   );
 
-                  // calcular posiciÃ³n vertical relativa a gridSlots/openMinutes (puede ser horario con minutos)
-                  // Calcular posiciÃ³n vertical relativa a la primera fila de `gridSlots`
+                  // calcular posición vertical relativa a gridSlots/openMinutes (puede ser horario con minutos)
+                  // Calcular posición vertical relativa a la primera fila de `gridSlots`
                   const firstGridMinutes = (gridSlots.length > 0 ? toMinutes(gridSlots[0]) : null) ?? 8 * 60;
 
                   let startMinutes = toMinutes(slot.slotTime) ?? null;
@@ -1400,7 +1400,7 @@ export default function AdminTabBookings() {
                   if (startMinutes < firstGridMinutes && gridSlots.length > 0 && firstGridMinutes > startMinutes) {
                     // si el primer grid es mayor (por ejemplo 08:00) y el slot es temprano (00:00),
                     // asumimos que el slot pertenece a la misma fecha y no sumar 24h.
-                    // En la mayorÃ­a de casos, startMinutes >= firstGridMinutes.
+                    // En la mayoría de casos, startMinutes >= firstGridMinutes.
                   }
                   const slotIndexFloat = (startMinutes - firstGridMinutes) / 60;
                   if (slotIndexFloat < 0) return null; // fuera de rango
@@ -1411,7 +1411,7 @@ export default function AdminTabBookings() {
                   const left = `calc(${courtIndex * columnWidth}% + ${H_GAP_PX / 2}px)`;
                   const width = `calc(${columnWidth}% - ${H_GAP_PX}px)`;
 
-                  // Calcular duraciÃ³n real en minutos preferentemente desde start/end
+                  // Calcular duración real en minutos preferentemente desde start/end
                   let durationMinutes: number | null = null;
                   try {
                     const bStart = slot.booking?.startDateTime ? new Date(slot.booking.startDateTime) : slot.startDateTime ? new Date(slot.startDateTime) : null;
@@ -1528,7 +1528,7 @@ export default function AdminTabBookings() {
             <div className="text-center mb-6">
               <h3 className="text-2xl font-black mb-2 uppercase tracking-tight italic">Cobrar Reserva</h3>
               <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest">
-                {paymentMode === 'single' ? 'Selecciona el mÃ©todo de pago' : 'IngresÃ¡ mÃºltiples pagos (debe sumar el total pendiente)'}
+                {paymentMode === 'single' ? 'Selecciona el método de pago' : 'Ingresá múltiples pagos (debe sumar el total pendiente)'}
               </p>
               <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest mt-1">
                 Saldo pendiente: ${paymentRemainingTarget.toLocaleString()}
@@ -1638,4 +1638,5 @@ export default function AdminTabBookings() {
     </>
   );
 }
+
 

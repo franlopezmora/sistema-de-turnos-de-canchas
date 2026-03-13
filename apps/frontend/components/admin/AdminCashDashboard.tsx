@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wallet, ArrowUpCircle, ArrowDownCircle, Banknote, CreditCard, Plus, Receipt, History, ChevronDown, Check, Phone, IdCard } from 'lucide-react';
 import { searchClients } from '../../services/BookingService';
 import { ClubService } from '../../services/ClubService';
@@ -915,7 +915,7 @@ const AdminCashDashboard = () => {
                                 {[
                                   Number(m.bookingAmount || 0) > 0 ? `Reserva ${Number(m.bookingAmount || 0).toLocaleString()}` : null,
                                   Number(m.barAmount || 0) > 0 ? `Bar ${Number(m.barAmount || 0).toLocaleString()}` : null
-                                ].filter(Boolean).join(' Â· ')}
+                                ].filter(Boolean).join(' · ')}
                               </span>
                             ) : m.sourceType ? (
                               <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest w-fit ${
@@ -1296,5 +1296,6 @@ const AdminCashDashboard = () => {
 };
 
 export default AdminCashDashboard;
+
 
 
