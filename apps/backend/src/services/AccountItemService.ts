@@ -8,6 +8,9 @@ export class AccountItemService {
     quantity: number;
     unitPrice: number;
     type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
+    serviceCode?: string;
+    applyDiscount?: boolean;
+    actorUserId?: number | null;
   }) {
     return this.accountService.addItem(clubId, accountId, input);
   }

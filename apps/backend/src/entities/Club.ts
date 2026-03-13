@@ -31,8 +31,13 @@ export class Club {
         public lightsEnabled: boolean = false,
         public lightsExtraAmount?: number | null,
         public lightsFromHour?: string | null,
+        // DEPRECATED (económico): usar DiscountPolicy
         public professorDiscountEnabled: boolean = false,
+        // DEPRECATED (económico): usar DiscountPolicy
         public professorDiscountPercent?: number | null,
+        // Regla operativa explícita: duración especial para profesor
+        public professorDurationOverrideEnabled: boolean = true,
+        public professorDurationOverrideMinutes: number = 60,
         public fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null,
         public bookingConfirmationMode: BookingConfirmationMode = 'MANUAL',
         public bookingDepositPercent?: number | null,
@@ -45,6 +50,9 @@ export class Club {
         public enforceCashShiftCloseWithOpenAccounts: boolean = false,
         public openingDays?: number[] | null,
         public createdAt?: Date,
-        public updatedAt?: Date
+        public updatedAt?: Date,
+        public bookingSimpleAdvanceDaysUser: number = 30,
+        public bookingSimpleAdvanceDaysAdmin: number = 30,
+        public allowAdminSkipSimpleAdvanceLimit: boolean = false
     ) {}
 }

@@ -12,6 +12,7 @@ import {
 } from '../../services/BookingService';
 import { getAccountSummary, getOrCreateBookingAccount, registerPayment } from '../../services/AccountService';
 import { ClubAdminService } from '../../services/ClubAdminService';
+import { ClubService } from '../../services/ClubService';
 import AppModal from '../AppModal';
 import BookingManagerModal from './BookingManagerModal';
 import { useParams } from 'react-router-dom';
@@ -282,6 +283,13 @@ export default function AdminTabBookings() {
   const cancelRefundResolverRef = useRef<((value: CancelRefundDecision | null) => void) | null>(null);
   const params = useParams();
   const urlSlug = params.slug;
+  const [clubBookingConfig, setClubBookingConfig] = useState<{
+    bookingSimpleAdvanceDaysAdmin: number;
+    allowAdminSkipSimpleAdvanceLimit: boolean;
+  }>({
+    bookingSimpleAdvanceDaysAdmin: 30,
+    allowAdminSkipSimpleAdvanceLimit: false
+  });
 
   const handleOpenPaymentModal = async (bookingId: number) => {
     setSelectedBookingId(bookingId);
@@ -309,6 +317,7 @@ export default function AdminTabBookings() {
     durationMinutes: DEFAULT_DURATION_MINUTES,
     isFixed: false,
     isProfessor: false,
+    professorOverrideReason: '',
     dayOfWeek: '1',
     startDateBase: getTodayLocalDate()
   });
@@ -341,12 +350,41 @@ export default function AdminTabBookings() {
     return options;
   }, [manualBooking.isProfessor, selectedActivityDurations]);
 
+  const adminSimpleMaxDate = useMemo(() => {
+    if (clubBookingConfig.allowAdminSkipSimpleAdvanceLimit) return null;
+    const today = parseLocalDate(getTodayLocalDate());
+    today.setHours(0, 0, 0, 0);
+    const max = new Date(today);
+    max.setDate(max.getDate() + Math.max(0, Math.floor(Number(clubBookingConfig.bookingSimpleAdvanceDaysAdmin || 0))));
+    return max;
+  }, [clubBookingConfig]);
+
+  const clampSimpleBookingDate = useCallback((date: Date) => {
+    const next = new Date(date);
+    next.setHours(0, 0, 0, 0);
+    const today = parseLocalDate(getTodayLocalDate());
+    today.setHours(0, 0, 0, 0);
+    if (next < today) return today;
+    if (adminSimpleMaxDate && next > adminSimpleMaxDate) return new Date(adminSimpleMaxDate);
+    return next;
+  }, [adminSimpleMaxDate]);
+
   const isManualPrevDisabled = () => {
     const today = parseLocalDate(getTodayLocalDate());
     today.setHours(0, 0, 0, 0);
     const current = parseLocalDate(manualBooking.startDateBase || getTodayLocalDate());
     current.setHours(0, 0, 0, 0);
     return current <= today;
+  };
+
+  const isManualNextDisabled = () => {
+    if (manualBooking.isFixed) return false;
+    if (!adminSimpleMaxDate) return false;
+    const current = parseLocalDate(manualBooking.startDateBase || getTodayLocalDate());
+    current.setHours(0, 0, 0, 0);
+    const max = new Date(adminSimpleMaxDate);
+    max.setHours(0, 0, 0, 0);
+    return current >= max;
   };
 
   const handleManualPrevDay = () => {
@@ -357,9 +395,11 @@ export default function AdminTabBookings() {
   };
 
   const handleManualNextDay = () => {
+    if (isManualNextDisabled()) return;
     const next = parseLocalDate(manualBooking.startDateBase || getTodayLocalDate());
     next.setDate(next.getDate() + 1);
-    setManualBooking({ ...manualBooking, startDateBase: formatLocalDate(next) });
+    const normalized = manualBooking.isFixed ? next : clampSimpleBookingDate(next);
+    setManualBooking({ ...manualBooking, startDateBase: formatLocalDate(normalized) });
   };
 
   const handleSchedulePrevDay = () => {
@@ -401,7 +441,7 @@ export default function AdminTabBookings() {
 
       if (minutesSet.length === 0) return [];
 
-      // Generar filas horarias entre el mínimo y el máximo minuto, ordenadas ascendente (00:00 arriba)
+      // Generar filas horarias entre el mÃ­nimo y el mÃ¡ximo minuto, ordenadas ascendente (00:00 arriba)
       const minM = Math.min(...minutesSet);
       const maxM = Math.max(...minutesSet);
       const startHour = Math.floor(minM / 60) * 60;
@@ -419,7 +459,7 @@ export default function AdminTabBookings() {
 
   // Al abrir la pantalla, scrollear a la fila correspondiente a la hora actual (si la fecha es hoy)
   useEffect(() => {
-    // Ejecutar solo después de que se hayan cargado los bookings y la grilla tenga tamaño
+    // Ejecutar solo despuÃ©s de que se hayan cargado los bookings y la grilla tenga tamaÃ±o
     const run = () => {
       try {
         const container = gridScrollRef.current;
@@ -476,11 +516,45 @@ export default function AdminTabBookings() {
   }, [urlSlug]);
 
   useEffect(() => {
+    const loadClubConfig = async () => {
+      try {
+        const slug = getClubSlug();
+        if (!slug) return;
+        const club = await ClubService.getClubBySlug(slug);
+        const rawAdvance = Number(club?.bookingSimpleAdvanceDaysAdmin);
+        setClubBookingConfig({
+          bookingSimpleAdvanceDaysAdmin:
+            Number.isFinite(rawAdvance) && rawAdvance >= 0
+              ? Math.floor(rawAdvance)
+              : 30,
+          allowAdminSkipSimpleAdvanceLimit: Boolean(club?.allowAdminSkipSimpleAdvanceLimit)
+        });
+      } catch {
+        setClubBookingConfig({
+          bookingSimpleAdvanceDaysAdmin: 30,
+          allowAdminSkipSimpleAdvanceLimit: false
+        });
+      }
+    };
+
+    loadClubConfig();
+  }, [getClubSlug]);
+
+  useEffect(() => {
     setManualBooking((prev) => {
       if (manualDurationOptions.includes(prev.durationMinutes)) return prev;
       return { ...prev, durationMinutes: manualDurationOptions[0] };
     });
   }, [manualDurationOptions]);
+
+  useEffect(() => {
+    if (manualBooking.isFixed) return;
+    const current = parseLocalDate(manualBooking.startDateBase || getTodayLocalDate());
+    const clamped = clampSimpleBookingDate(current);
+    if (formatLocalDate(current) !== formatLocalDate(clamped)) {
+      setManualBooking((prev) => ({ ...prev, startDateBase: formatLocalDate(clamped) }));
+    }
+  }, [manualBooking.isFixed, manualBooking.startDateBase, clampSimpleBookingDate]);
 
   // --- HANDLER PARA CAMBIO DE NOMBRE DEL INVITADO Y BUSQUEDA DE CLIENTES ---
   const handleGuestFirstNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -538,7 +612,7 @@ export default function AdminTabBookings() {
   }>({ show: false });
 
   const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
-  const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
+  const showInfo = (message: ReactNode, title = 'InformaciÃ³n') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
   const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
   const wrapAction = (action?: () => Promise<void> | void) => async () => { closeModal(); await action?.(); };
   
@@ -703,10 +777,22 @@ export default function AdminTabBookings() {
     const lastName = manualBooking.guestLastName.trim();
     const dni = manualBooking.guestDni?.trim();
     const phone = manualBooking.guestPhone?.trim();
+    const professorOverrideReason = String(manualBooking.professorOverrideReason || '').trim();
     const selectedActivityId = Number(selectedManualCourt?.activityTypeId || selectedManualCourt?.activityType?.id);
     if (!manualBooking.courtId || !manualBooking.time) { showError('Faltan datos de cancha u horario'); return; }
-    if (!Number.isInteger(selectedActivityId) || selectedActivityId <= 0) { showError('La cancha seleccionada no tiene actividad válida'); return; }
-    if (!firstName || !lastName || !dni || !phone) { showError('Nombre, Apellido, DNI y Teléfono son obligatorios'); return; }
+    if (!Number.isInteger(selectedActivityId) || selectedActivityId <= 0) { showError('La cancha seleccionada no tiene actividad vÃ¡lida'); return; }
+    if (!firstName || !lastName || !dni || !phone) { showError('Nombre, Apellido, DNI y TelÃ©fono son obligatorios'); return; }
+    if (manualBooking.isProfessor && professorOverrideReason.length < 10) { showError('Para override de profesor, el motivo debe tener al menos 10 caracteres'); return; }
+    if (!manualBooking.isFixed && adminSimpleMaxDate) {
+      const selectedBase = parseLocalDate(manualBooking.startDateBase || getTodayLocalDate());
+      selectedBase.setHours(0, 0, 0, 0);
+      const maxDate = new Date(adminSimpleMaxDate);
+      maxDate.setHours(0, 0, 0, 0);
+      if (selectedBase > maxDate) {
+        showError(`La reserva simple excede la anticipación máxima (${clubBookingConfig.bookingSimpleAdvanceDaysAdmin} días).`);
+        return;
+      }
+    }
     let dateBase: Date;
     let guestName = `${firstName} ${lastName}`.trim();
     let phoneToSend = "";
@@ -731,7 +817,8 @@ export default function AdminTabBookings() {
             guestName,
             phoneToSend || undefined,
             dni,
-            manualBooking.isProfessor
+            manualBooking.isProfessor,
+            professorOverrideReason || undefined
           );
             showInfo('Turno fijo creado', 'Listo');
         } else {
@@ -747,6 +834,7 @@ export default function AdminTabBookings() {
                 asGuest: true,
                 guestIdentifier: `admin_${dni}_${Date.now()}`,
                 isProfessor: manualBooking.isProfessor,
+                professorOverrideReason: professorOverrideReason || undefined,
                 durationMinutes: manualBooking.durationMinutes,
                 openAccount: true
               }
@@ -756,7 +844,7 @@ export default function AdminTabBookings() {
         loadSchedule();
         setManualBooking({ 
             guestFirstName: '', guestLastName: '', guestPhone: '', guestDni: '', 
-      courtId: '', time: '', durationMinutes: manualDurationOptions[0] ?? DEFAULT_DURATION_MINUTES, isFixed: false, isProfessor: false, dayOfWeek: '1', startDateBase: getTodayLocalDate() 
+      courtId: '', time: '', durationMinutes: manualDurationOptions[0] ?? DEFAULT_DURATION_MINUTES, isFixed: false, isProfessor: false, professorOverrideReason: '', dayOfWeek: '1', startDateBase: getTodayLocalDate() 
         });
     } catch (error: any) { showError('Error al reservar: ' + error.message); }
   };
@@ -879,7 +967,7 @@ export default function AdminTabBookings() {
         const summary = await getAccountSummary(selectedPaymentAccountId);
         const remaining = Math.max(0, Number(summary?.remaining || 0));
         if (remaining <= 0.009) {
-          showInfo('La cuenta ya está saldada.', 'Listo');
+          showInfo('La cuenta ya estÃ¡ saldada.', 'Listo');
           setShowPaymentModal(false);
           return;
         }
@@ -929,7 +1017,7 @@ export default function AdminTabBookings() {
       .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
 
     if (parsedPayments.length === 0) {
-      showError('Ingresá al menos un monto válido para registrar el pago dividido.');
+      showError('IngresÃ¡ al menos un monto vÃ¡lido para registrar el pago dividido.');
       return;
     }
 
@@ -1018,7 +1106,7 @@ export default function AdminTabBookings() {
           </div>
 
           <div className="relative z-10">
-            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Teléfono</label>
+            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">TelÃ©fono</label>
             <input type="tel" value={manualBooking.guestPhone} onChange={(e) => setManualBooking({ ...manualBooking, guestPhone: e.target.value })} 
             className="w-full h-12 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all" placeholder="Ej: 3511234567" required/>
           </div>
@@ -1026,7 +1114,7 @@ export default function AdminTabBookings() {
           <div className="relative z-10">
             <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">DNI</label>
             <input type="text" value={manualBooking.guestDni} onChange={(e) => setManualBooking({ ...manualBooking, guestDni: e.target.value })} 
-            className="w-full h-12 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all" placeholder="Número de documento" required />
+            className="w-full h-12 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all" placeholder="NÃºmero de documento" required />
           </div>
 
           {/* FECHA (Usa focus-within para tapar TODO al abrirse) */}
@@ -1034,7 +1122,7 @@ export default function AdminTabBookings() {
             <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Fecha</label>
             {manualBooking.isFixed ? (
               <div className="h-12 bg-white/50 border-2 border-dashed border-[#347048]/20 rounded-xl px-4 flex items-center">
-                <span className="text-[#347048]/40 font-bold text-sm">Selecciona día abajo</span>
+                <span className="text-[#347048]/40 font-bold text-sm">Selecciona dÃ­a abajo</span>
               </div>
             ) : (
               <div className="relative flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px]">
@@ -1052,7 +1140,8 @@ export default function AdminTabBookings() {
                 <button
                   type="button"
                   onClick={handleManualNextDay}
-                  className="p-1 rounded-lg text-[#347048] hover:bg-[#347048]/10 transition-colors"
+                  disabled={isManualNextDisabled()}
+                  className="p-1 rounded-lg text-[#347048] disabled:opacity-20 hover:bg-[#347048]/10 transition-colors"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
@@ -1061,9 +1150,11 @@ export default function AdminTabBookings() {
                     selected={parseLocalDate(manualBooking.startDateBase || getTodayLocalDate())}
                     onChange={(date: Date | null) => {
                       if (!date) return;
-                      setManualBooking({ ...manualBooking, startDateBase: formatLocalDate(date) });
+                      const normalizedDate = manualBooking.isFixed ? date : clampSimpleBookingDate(date);
+                      setManualBooking({ ...manualBooking, startDateBase: formatLocalDate(normalizedDate) });
                     }}
                     minDate={new Date()}
+                    maxDate={manualBooking.isFixed || !adminSimpleMaxDate ? undefined : adminSimpleMaxDate}
                     showIcon={false}
                     variant="light"
                     inputClassName="w-full h-[46px] opacity-0 cursor-pointer"
@@ -1093,11 +1184,11 @@ export default function AdminTabBookings() {
 
           {/* DURACION */}
           <div className="relative z-[110]">
-            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Duración</label>
+            <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">DuraciÃ³n</label>
             <CustomSelect
               value={manualBooking.durationMinutes}
               onChange={(val: string) => setManualBooking({ ...manualBooking, durationMinutes: Number(val) })}
-              placeholder="Duración"
+              placeholder="DuraciÃ³n"
               options={manualDurationOptions.map((duration) => ({ value: duration, label: `${duration} min` }))}
             />
           </div>
@@ -1119,18 +1210,18 @@ export default function AdminTabBookings() {
           {/* DIA DE SEMANA */}
           {manualBooking.isFixed && (
             <div className="relative z-20">
-              <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Día de la semana</label>
+              <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">DÃ­a de la semana</label>
               <CustomSelect 
                 value={manualBooking.dayOfWeek}
                 onChange={(val: string) => setManualBooking({ ...manualBooking, dayOfWeek: val })}
-                placeholder="Selecciona día"
+                placeholder="Selecciona dÃ­a"
                 options={[
                   { value: '1', label: 'Lunes' },
                   { value: '2', label: 'Martes' },
-                  { value: '3', label: 'Miércoles' },
+                  { value: '3', label: 'MiÃ©rcoles' },
                   { value: '4', label: 'Jueves' },
                   { value: '5', label: 'Viernes' },
-                  { value: '6', label: 'Sábado' },
+                  { value: '6', label: 'SÃ¡bado' },
                   { value: '0', label: 'Domingo' }
                 ]}
               />
@@ -1145,16 +1236,30 @@ export default function AdminTabBookings() {
                     {manualBooking.isFixed && <Check size={16} className="text-[#347048]" strokeWidth={4} />}
                 </div>
                 <input type="checkbox" checked={manualBooking.isFixed} onChange={(e) => setManualBooking({ ...manualBooking, isFixed: e.target.checked })} className="hidden" />
-                <span className="text-sm uppercase tracking-wide">¿Es un turno fijo?</span>
+                <span className="text-sm uppercase tracking-wide">Â¿Es un turno fijo?</span>
               </label>
               <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
                 <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${manualBooking.isProfessor ? 'bg-[#926699] border-[#926699]' : 'border-[#347048]/20 bg-white'}`}>
                   {manualBooking.isProfessor && <Check size={16} className="text-[#347048]" strokeWidth={4} />}
                 </div>
                 <input type="checkbox" checked={manualBooking.isProfessor} onChange={(e) => setManualBooking({ ...manualBooking, isProfessor: e.target.checked })} className="hidden" />
-                <span className="text-sm uppercase tracking-wide">Profesor (aplica descuento)</span>
+                <span className="text-sm uppercase tracking-wide">Profesor (override operativo de duraciÃ³n)</span>
               </label>
             </div>
+
+            {manualBooking.isProfessor ? (
+              <div className="w-full sm:max-w-md">
+                <label className="block text-[10px] font-black text-[#347048]/50 mb-1 uppercase tracking-widest">Motivo del override</label>
+                <input
+                  type="text"
+                  minLength={10}
+                  value={manualBooking.professorOverrideReason}
+                  onChange={(e) => setManualBooking({ ...manualBooking, professorOverrideReason: e.target.value })}
+                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                  placeholder="Ej: Profesor del club, excepciÃ³n comercial"
+                />
+              </div>
+            ) : null}
 
             <button type="submit" className="w-full sm:w-auto px-10 py-4 bg-[#347048] hover:bg-[#B9CF32] text-[#EBE1D8] hover:text-[#347048] font-black rounded-2xl transition-all shadow-xl shadow-[#347048]/20 uppercase tracking-widest text-sm flex items-center justify-center gap-3 group">
               {manualBooking.isFixed ? <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" /> : <CalendarIcon size={18} />}
@@ -1169,7 +1274,7 @@ export default function AdminTabBookings() {
         <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6 mb-8">
           <h2 className="text-2xl font-black text-[#347048] uppercase italic tracking-tight flex items-center gap-3">
              <div className="w-2 h-8 bg-[#B9CF32] rounded-full"></div>
-             Agenda del Día
+             Agenda del DÃ­a
           </h2>
           <div className="flex flex-wrap items-center gap-4 bg-white/40 p-2 rounded-2xl border border-white/60">
             <div className="flex items-center gap-2 px-3">
@@ -1253,7 +1358,7 @@ export default function AdminTabBookings() {
                 </div>
                 {/* GRID HORARIA FIJA: por defecto 08:00 - 22:00, filas de 1 hora. */}
                 {/** Calculamos `gridSlots` localmente para render visual sin tocar `scheduleSlots` */}
-                {/* Horario calculado inline removido (no se renderiza directamente aquí). */}
+                {/* Horario calculado inline removido (no se renderiza directamente aquÃ­). */}
                 {/* COLUMNAS */}
                 <div className="absolute inset-0 flex">
                   {courts.map((court) => (
@@ -1264,7 +1369,7 @@ export default function AdminTabBookings() {
                   ))}
                 </div>
 
-                {/* LÍNEAS HORARIAS */}
+                {/* LÃNEAS HORARIAS */}
                 {gridSlots.map((time, index) => (
                   <div
                     key={time}
@@ -1285,8 +1390,8 @@ export default function AdminTabBookings() {
                     (c) => c.id === slot.courtId
                   );
 
-                  // calcular posición vertical relativa a gridSlots/openMinutes (puede ser horario con minutos)
-                  // Calcular posición vertical relativa a la primera fila de `gridSlots`
+                  // calcular posiciÃ³n vertical relativa a gridSlots/openMinutes (puede ser horario con minutos)
+                  // Calcular posiciÃ³n vertical relativa a la primera fila de `gridSlots`
                   const firstGridMinutes = (gridSlots.length > 0 ? toMinutes(gridSlots[0]) : null) ?? 8 * 60;
 
                   let startMinutes = toMinutes(slot.slotTime) ?? null;
@@ -1295,7 +1400,7 @@ export default function AdminTabBookings() {
                   if (startMinutes < firstGridMinutes && gridSlots.length > 0 && firstGridMinutes > startMinutes) {
                     // si el primer grid es mayor (por ejemplo 08:00) y el slot es temprano (00:00),
                     // asumimos que el slot pertenece a la misma fecha y no sumar 24h.
-                    // En la mayoría de casos, startMinutes >= firstGridMinutes.
+                    // En la mayorÃ­a de casos, startMinutes >= firstGridMinutes.
                   }
                   const slotIndexFloat = (startMinutes - firstGridMinutes) / 60;
                   if (slotIndexFloat < 0) return null; // fuera de rango
@@ -1306,7 +1411,7 @@ export default function AdminTabBookings() {
                   const left = `calc(${courtIndex * columnWidth}% + ${H_GAP_PX / 2}px)`;
                   const width = `calc(${columnWidth}% - ${H_GAP_PX}px)`;
 
-                  // Calcular duración real en minutos preferentemente desde start/end
+                  // Calcular duraciÃ³n real en minutos preferentemente desde start/end
                   let durationMinutes: number | null = null;
                   try {
                     const bStart = slot.booking?.startDateTime ? new Date(slot.booking.startDateTime) : slot.startDateTime ? new Date(slot.startDateTime) : null;
@@ -1423,7 +1528,7 @@ export default function AdminTabBookings() {
             <div className="text-center mb-6">
               <h3 className="text-2xl font-black mb-2 uppercase tracking-tight italic">Cobrar Reserva</h3>
               <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest">
-                {paymentMode === 'single' ? 'Selecciona el método de pago' : 'Ingresá múltiples pagos (debe sumar el total pendiente)'}
+                {paymentMode === 'single' ? 'Selecciona el mÃ©todo de pago' : 'IngresÃ¡ mÃºltiples pagos (debe sumar el total pendiente)'}
               </p>
               <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest mt-1">
                 Saldo pendiente: ${paymentRemainingTarget.toLocaleString()}
@@ -1533,3 +1638,4 @@ export default function AdminTabBookings() {
     </>
   );
 }
+

@@ -198,6 +198,8 @@ export default function AdminTabClub() {
     lightsFromHour: '',
     professorDiscountEnabled: false,
     professorDiscountPercent: '',
+    professorDurationOverrideEnabled: true,
+    professorDurationOverrideMinutes: '60',
     bookingConfirmationMode: 'MANUAL' as BookingConfirmationMode,
     bookingDepositPercent: '',
     allowManualConfirmationOverride: true,
@@ -207,6 +209,9 @@ export default function AdminTabClub() {
     autoCancelPendingWarningEnabled: false,
     autoCancelPendingWarningMinutesBefore: '',
     enforceCashShiftCloseWithOpenAccounts: false,
+    bookingSimpleAdvanceDaysUser: '30',
+    bookingSimpleAdvanceDaysAdmin: '30',
+    allowAdminSkipSimpleAdvanceLimit: false,
        openingDays: '',
         fixedBookingSettingsByActivity: {} as FixedBookingSettingsForm
   });
@@ -266,6 +271,8 @@ export default function AdminTabClub() {
           lightsFromHour: clubData.lightsFromHour || '',
           professorDiscountEnabled: clubData.professorDiscountEnabled ?? false,
           professorDiscountPercent: clubData.professorDiscountPercent != null ? String(clubData.professorDiscountPercent) : '',
+          professorDurationOverrideEnabled: clubData.professorDurationOverrideEnabled ?? true,
+          professorDurationOverrideMinutes: clubData.professorDurationOverrideMinutes != null ? String(clubData.professorDurationOverrideMinutes) : '60',
           bookingConfirmationMode: (clubData.bookingConfirmationMode ?? 'MANUAL') as BookingConfirmationMode,
           bookingDepositPercent: clubData.bookingDepositPercent != null ? String(clubData.bookingDepositPercent) : '',
           allowManualConfirmationOverride: clubData.allowManualConfirmationOverride ?? true,
@@ -275,6 +282,9 @@ export default function AdminTabClub() {
           autoCancelPendingWarningEnabled: clubData.autoCancelPendingWarningEnabled ?? false,
           autoCancelPendingWarningMinutesBefore: clubData.autoCancelPendingWarningMinutesBefore != null ? String(clubData.autoCancelPendingWarningMinutesBefore) : '',
           enforceCashShiftCloseWithOpenAccounts: clubData.enforceCashShiftCloseWithOpenAccounts ?? false,
+          bookingSimpleAdvanceDaysUser: clubData.bookingSimpleAdvanceDaysUser != null ? String(clubData.bookingSimpleAdvanceDaysUser) : '30',
+          bookingSimpleAdvanceDaysAdmin: clubData.bookingSimpleAdvanceDaysAdmin != null ? String(clubData.bookingSimpleAdvanceDaysAdmin) : '30',
+          allowAdminSkipSimpleAdvanceLimit: clubData.allowAdminSkipSimpleAdvanceLimit ?? false,
           openingDays: Array.isArray(clubData.openingDays) ? clubData.openingDays.join(',') : '',
           fixedBookingSettingsByActivity: buildFixedBookingSettingsForm(nextActivitySettings, clubData.fixedBookingSettingsByActivity)
           });
@@ -325,11 +335,21 @@ export default function AdminTabClub() {
         : null;
       const cancelMinutesRaw = Number(clubForm.autoCancelPendingBookingsMinutesBefore);
       const warningMinutesRaw = Number(clubForm.autoCancelPendingWarningMinutesBefore);
+      const simpleAdvanceUserRaw = Number(clubForm.bookingSimpleAdvanceDaysUser);
+      const simpleAdvanceAdminRaw = Number(clubForm.bookingSimpleAdvanceDaysAdmin);
       if (clubForm.autoCancelPendingBookingsEnabled) {
         if (!Number.isFinite(cancelMinutesRaw) || cancelMinutesRaw <= 0) {
           showError('Si activás auto-cancelación, los minutos antes del turno deben ser mayores a 0.');
           return;
         }
+      }
+      if (!Number.isFinite(simpleAdvanceUserRaw) || simpleAdvanceUserRaw < 0) {
+        showError('La anticipación máxima para usuarios debe ser 0 o mayor.');
+        return;
+      }
+      if (!Number.isFinite(simpleAdvanceAdminRaw) || simpleAdvanceAdminRaw < 0) {
+        showError('La anticipación máxima para admins debe ser 0 o mayor.');
+        return;
       }
       if (clubForm.autoCancelPendingBookingsEnabled && clubForm.autoCancelPendingWarningEnabled) {
         if (!Number.isFinite(warningMinutesRaw) || warningMinutesRaw <= 0) {
@@ -349,6 +369,9 @@ export default function AdminTabClub() {
         lightsFromHour: clubForm.lightsFromHour || null,
         professorDiscountEnabled: !!clubForm.professorDiscountEnabled,
         professorDiscountPercent: clubForm.professorDiscountPercent === '' ? null : Number(clubForm.professorDiscountPercent),
+        professorDurationOverrideEnabled: !!clubForm.professorDurationOverrideEnabled,
+        professorDurationOverrideMinutes:
+          clubForm.professorDurationOverrideMinutes === '' ? 60 : Number(clubForm.professorDurationOverrideMinutes),
         bookingConfirmationMode: clubForm.bookingConfirmationMode,
         bookingDepositPercent: bookingDepositPercentPayload,
         allowManualConfirmationOverride: !!clubForm.allowManualConfirmationOverride,
@@ -361,6 +384,9 @@ export default function AdminTabClub() {
             ? Number(warningMinutesRaw)
             : null,
         enforceCashShiftCloseWithOpenAccounts: !!clubForm.enforceCashShiftCloseWithOpenAccounts,
+        bookingSimpleAdvanceDaysUser: Math.floor(simpleAdvanceUserRaw),
+        bookingSimpleAdvanceDaysAdmin: Math.floor(simpleAdvanceAdminRaw),
+        allowAdminSkipSimpleAdvanceLimit: !!clubForm.allowAdminSkipSimpleAdvanceLimit,
         openingDays: openingDaysSet,
         fixedBookingSettingsByActivity
       };
@@ -701,6 +727,36 @@ export default function AdminTabClub() {
                   />
                 </div>
               </div>
+              <p className="text-[11px] text-[#347048]/70 font-bold mt-3">
+                Este descuento económico está deprecado. Recomendado: usar políticas en la nueva sección de descuentos.
+              </p>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
+                  <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.professorDurationOverrideEnabled ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                    {clubForm.professorDurationOverrideEnabled && <Check size={15} strokeWidth={4} />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={clubForm.professorDurationOverrideEnabled}
+                    onChange={(e) => setClubForm({ ...clubForm, professorDurationOverrideEnabled: e.target.checked })}
+                    className="hidden"
+                  />
+                  <span className="text-sm uppercase tracking-wide italic">Permitir override operativo para profesor</span>
+                </label>
+                <div>
+                  <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Duración override (min)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    disabled={!clubForm.professorDurationOverrideEnabled}
+                    value={clubForm.professorDurationOverrideMinutes}
+                    onChange={(e) => setClubForm({ ...clubForm, professorDurationOverrideMinutes: e.target.value })}
+                    className="w-32 h-10 bg-white border-2 border-transparent focus:border-[#926699] rounded-xl px-3 text-[#347048] font-black text-sm disabled:opacity-30 transition-all"
+                    placeholder="60"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
@@ -769,6 +825,59 @@ export default function AdminTabClub() {
                     </div>
                   </div>
                 ) : null}
+              </div>
+            </div>
+
+            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <div className="flex items-center gap-2 mb-4 text-[#347048]">
+                <Settings size={18} strokeWidth={3} />
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Anticipación reservas simples</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Usuarios (días)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={clubForm.bookingSimpleAdvanceDaysUser}
+                    onChange={(e) => setClubForm((prev) => ({ ...prev, bookingSimpleAdvanceDaysUser: e.target.value }))}
+                    className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                    placeholder="Ej: 30"
+                  />
+                  <p className="text-[10px] font-bold text-[#347048]/50 mt-1">
+                    0 significa solo el día actual.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Administradores (días)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={clubForm.bookingSimpleAdvanceDaysAdmin}
+                    onChange={(e) => setClubForm((prev) => ({ ...prev, bookingSimpleAdvanceDaysAdmin: e.target.value }))}
+                    className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                    placeholder="Ej: 60"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
+                    <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.allowAdminSkipSimpleAdvanceLimit ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                      {clubForm.allowAdminSkipSimpleAdvanceLimit && <Check size={15} strokeWidth={4} />}
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={clubForm.allowAdminSkipSimpleAdvanceLimit}
+                      onChange={(e) => setClubForm((prev) => ({ ...prev, allowAdminSkipSimpleAdvanceLimit: e.target.checked }))}
+                      className="hidden"
+                    />
+                    <span className="text-sm tracking-wide">Permitir que admin se saltee el límite</span>
+                  </label>
+                </div>
               </div>
             </div>
 

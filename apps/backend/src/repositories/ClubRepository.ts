@@ -28,6 +28,8 @@ export class ClubRepository {
         lightsFromHour?: string | null,
         professorDiscountEnabled: boolean = false,
         professorDiscountPercent?: number | null,
+        professorDurationOverrideEnabled: boolean = true,
+        professorDurationOverrideMinutes: number = 60,
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null,
         bookingConfirmationMode: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED' = 'MANUAL',
         bookingDepositPercent?: number | null,
@@ -38,6 +40,9 @@ export class ClubRepository {
         autoCancelPendingWarningEnabled: boolean = false,
         autoCancelPendingWarningMinutesBefore?: number | null,
         enforceCashShiftCloseWithOpenAccounts: boolean = false,
+        bookingSimpleAdvanceDaysUser: number = 30,
+        bookingSimpleAdvanceDaysAdmin: number = 30,
+        allowAdminSkipSimpleAdvanceLimit: boolean = false,
         openingDays?: number[] | null
     ): Promise<Club> {
         const location = await this.ensureLocation(city, province, country);
@@ -71,6 +76,8 @@ export class ClubRepository {
                         lightsFromHour: lightsFromHour ?? null,
                         professorDiscountEnabled,
                         professorDiscountPercent,
+                        professorDurationOverrideEnabled,
+                        professorDurationOverrideMinutes,
                         fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
                         bookingConfirmationMode,
                         bookingDepositPercent,
@@ -80,7 +87,14 @@ export class ClubRepository {
                         autoCancelPendingBookingsOnlyIfUnpaid,
                         autoCancelPendingWarningEnabled,
                         autoCancelPendingWarningMinutesBefore: autoCancelPendingWarningMinutesBefore ?? null,
-                        enforceCashShiftCloseWithOpenAccounts
+                        enforceCashShiftCloseWithOpenAccounts,
+                        bookingSimpleAdvanceDaysUser: Number.isFinite(Number(bookingSimpleAdvanceDaysUser))
+                            ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysUser)))
+                            : 30,
+                        bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(bookingSimpleAdvanceDaysAdmin))
+                            ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysAdmin)))
+                            : 30,
+                        allowAdminSkipSimpleAdvanceLimit
                     }
                 }
             },
@@ -166,6 +180,8 @@ export class ClubRepository {
             club.lightsFromHour ?? null,
             club.professorDiscountEnabled ?? false,
             club.professorDiscountPercent != null ? Number(club.professorDiscountPercent) : null,
+            club.professorDurationOverrideEnabled ?? true,
+            Number.isFinite(Number(club.professorDurationOverrideMinutes)) ? Number(club.professorDurationOverrideMinutes) : 60,
             club.fixedBookingSettingsByActivity ?? null,
             club.bookingConfirmationMode ?? 'MANUAL',
             club.bookingDepositPercent != null ? Number(club.bookingDepositPercent) : null,
@@ -176,6 +192,9 @@ export class ClubRepository {
             club.autoCancelPendingWarningEnabled ?? false,
             club.autoCancelPendingWarningMinutesBefore != null ? Number(club.autoCancelPendingWarningMinutesBefore) : null,
             club.enforceCashShiftCloseWithOpenAccounts ?? false,
+            Number.isFinite(Number(club.bookingSimpleAdvanceDaysUser)) ? Number(club.bookingSimpleAdvanceDaysUser) : 30,
+            Number.isFinite(Number(club.bookingSimpleAdvanceDaysAdmin)) ? Number(club.bookingSimpleAdvanceDaysAdmin) : 30,
+            Boolean(club.allowAdminSkipSimpleAdvanceLimit),
             club.openingDays ?? null
         );
     }
@@ -225,6 +244,8 @@ export class ClubRepository {
         lightsFromHour?: string | null;
         professorDiscountEnabled?: boolean;
         professorDiscountPercent?: number | null;
+        professorDurationOverrideEnabled?: boolean;
+        professorDurationOverrideMinutes?: number;
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
         bookingConfirmationMode?: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
         bookingDepositPercent?: number | null;
@@ -235,6 +256,9 @@ export class ClubRepository {
         autoCancelPendingWarningEnabled?: boolean;
         autoCancelPendingWarningMinutesBefore?: number | null;
         enforceCashShiftCloseWithOpenAccounts?: boolean;
+        bookingSimpleAdvanceDaysUser?: number;
+        bookingSimpleAdvanceDaysAdmin?: number;
+        allowAdminSkipSimpleAdvanceLimit?: boolean;
         openingDays?: number[] | null;
     }): Promise<Club> {
         const clubFields = {
@@ -278,6 +302,10 @@ export class ClubRepository {
                             lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : (data.lightsFromHour ?? null),
                             professorDiscountEnabled: data.professorDiscountEnabled ?? false,
                             professorDiscountPercent: data.professorDiscountPercent ?? null,
+                            professorDurationOverrideEnabled: data.professorDurationOverrideEnabled ?? true,
+                            professorDurationOverrideMinutes: Number.isFinite(Number(data.professorDurationOverrideMinutes))
+                                ? Math.max(1, Math.floor(Number(data.professorDurationOverrideMinutes)))
+                                : 60,
                             fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : (data.fixedBookingSettingsByActivity ?? undefined),
                             bookingConfirmationMode: data.bookingConfirmationMode ?? 'MANUAL',
                             bookingDepositPercent: data.bookingDepositPercent ?? null,
@@ -287,7 +315,14 @@ export class ClubRepository {
                             autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
                             autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled ?? false,
                             autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore ?? null,
-                            enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts ?? false
+                            enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts ?? false,
+                            bookingSimpleAdvanceDaysUser: Number.isFinite(Number(data.bookingSimpleAdvanceDaysUser))
+                                ? Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysUser)))
+                                : 30,
+                            bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(data.bookingSimpleAdvanceDaysAdmin))
+                                ? Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysAdmin)))
+                                : 30,
+                            allowAdminSkipSimpleAdvanceLimit: data.allowAdminSkipSimpleAdvanceLimit ?? false
                         },
                         update: {
                             ...(data.timeZone !== undefined ? { timeZone: data.timeZone } : {}),
@@ -302,6 +337,12 @@ export class ClubRepository {
                                 : {}),
                             ...(data.professorDiscountPercent !== undefined
                                 ? { professorDiscountPercent: data.professorDiscountPercent }
+                                : {}),
+                            ...(data.professorDurationOverrideEnabled !== undefined
+                                ? { professorDurationOverrideEnabled: data.professorDurationOverrideEnabled }
+                                : {}),
+                            ...(data.professorDurationOverrideMinutes !== undefined
+                                ? { professorDurationOverrideMinutes: Math.max(1, Math.floor(Number(data.professorDurationOverrideMinutes))) }
                                 : {}),
                             ...(data.fixedBookingSettingsByActivity !== undefined
                                 ? { fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : data.fixedBookingSettingsByActivity }
@@ -334,6 +375,16 @@ export class ClubRepository {
                             ...(data.enforceCashShiftCloseWithOpenAccounts !== undefined
                                 ? { enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts }
                                 : {})
+                            ,
+                            ...(data.bookingSimpleAdvanceDaysUser !== undefined
+                                ? { bookingSimpleAdvanceDaysUser: Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysUser))) }
+                                : {}),
+                            ...(data.bookingSimpleAdvanceDaysAdmin !== undefined
+                                ? { bookingSimpleAdvanceDaysAdmin: Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysAdmin))) }
+                                : {}),
+                            ...(data.allowAdminSkipSimpleAdvanceLimit !== undefined
+                                ? { allowAdminSkipSimpleAdvanceLimit: data.allowAdminSkipSimpleAdvanceLimit }
+                                : {})
                         }
                     }
                 }
@@ -352,6 +403,8 @@ export class ClubRepository {
         const resolvedLightsFromHour = this.formatLightsFromHour(settings?.lightsFromHour) ?? null;
         const resolvedProfessorDiscountEnabled = settings?.professorDiscountEnabled ?? false;
         const resolvedProfessorDiscountPercentRaw = settings?.professorDiscountPercent ?? null;
+        const resolvedProfessorDurationOverrideEnabled = settings?.professorDurationOverrideEnabled ?? true;
+        const resolvedProfessorDurationOverrideMinutesRaw = settings?.professorDurationOverrideMinutes ?? 60;
         const bookingConfirmationMode = settings?.bookingConfirmationMode ?? 'MANUAL';
         const bookingDepositPercentRaw = settings?.bookingDepositPercent ?? null;
         const allowManualConfirmationOverride = settings?.allowManualConfirmationOverride ?? true;
@@ -361,11 +414,23 @@ export class ClubRepository {
         const autoCancelPendingWarningEnabled = settings?.autoCancelPendingWarningEnabled ?? false;
         const autoCancelPendingWarningMinutesBeforeRaw = settings?.autoCancelPendingWarningMinutesBefore ?? null;
         const enforceCashShiftCloseWithOpenAccounts = settings?.enforceCashShiftCloseWithOpenAccounts ?? false;
+        const bookingSimpleAdvanceDaysUserRaw = settings?.bookingSimpleAdvanceDaysUser ?? 30;
+        const bookingSimpleAdvanceDaysAdminRaw = settings?.bookingSimpleAdvanceDaysAdmin ?? 30;
+        const allowAdminSkipSimpleAdvanceLimit = settings?.allowAdminSkipSimpleAdvanceLimit ?? false;
         const resolvedLightsExtraAmount = resolvedLightsExtraAmountRaw == null ? null : Number(resolvedLightsExtraAmountRaw);
         const resolvedProfessorDiscountPercent = resolvedProfessorDiscountPercentRaw == null ? null : Number(resolvedProfessorDiscountPercentRaw);
+        const resolvedProfessorDurationOverrideMinutes = Number.isFinite(Number(resolvedProfessorDurationOverrideMinutesRaw))
+            ? Math.max(1, Math.floor(Number(resolvedProfessorDurationOverrideMinutesRaw)))
+            : 60;
         const bookingDepositPercent = bookingDepositPercentRaw == null ? null : Number(bookingDepositPercentRaw);
         const autoCancelPendingBookingsMinutesBefore = autoCancelPendingBookingsMinutesBeforeRaw == null ? null : Number(autoCancelPendingBookingsMinutesBeforeRaw);
         const autoCancelPendingWarningMinutesBefore = autoCancelPendingWarningMinutesBeforeRaw == null ? null : Number(autoCancelPendingWarningMinutesBeforeRaw);
+        const bookingSimpleAdvanceDaysUser = Number.isFinite(Number(bookingSimpleAdvanceDaysUserRaw))
+            ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysUserRaw)))
+            : 30;
+        const bookingSimpleAdvanceDaysAdmin = Number.isFinite(Number(bookingSimpleAdvanceDaysAdminRaw))
+            ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysAdminRaw)))
+            : 30;
         const resolvedFixedBooking = (settings?.fixedBookingSettingsByActivity ?? null) as FixedBookingSettingsByActivity | null;
 
         return new Club(
@@ -390,6 +455,8 @@ export class ClubRepository {
             resolvedLightsFromHour,
             resolvedProfessorDiscountEnabled,
             resolvedProfessorDiscountPercent,
+            resolvedProfessorDurationOverrideEnabled,
+            resolvedProfessorDurationOverrideMinutes,
             resolvedFixedBooking,
             bookingConfirmationMode,
             bookingDepositPercent,
@@ -402,7 +469,10 @@ export class ClubRepository {
             enforceCashShiftCloseWithOpenAccounts,
             resolvedOpeningDays,
             dbClub.createdAt,
-            dbClub.updatedAt
+            dbClub.updatedAt,
+            bookingSimpleAdvanceDaysUser,
+            bookingSimpleAdvanceDaysAdmin,
+            allowAdminSkipSimpleAdvanceLimit
         );
     }
 

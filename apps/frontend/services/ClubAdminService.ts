@@ -24,6 +24,10 @@ export type ClubActivityType = {
   scheduleFixedSlots?: ActivityFixedSlot[] | null;
 };
 
+export type DiscountPolicyScope = 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ALL';
+export type DiscountAmountType = 'PERCENT' | 'FIXED';
+export type DiscountApplyMode = 'INCLUDE_ONLY' | 'EXCLUDE_LIST';
+
 export class ClubAdminService {
   /**
    * Obtener el schedule del admin para un club específico
@@ -345,22 +349,23 @@ export class ClubAdminService {
   }
 
   static async addItemToBooking(
-    bookingId: number, 
-    productId: number, 
-    quantity: number, 
-    paymentMethod: 'CASH' | 'TRANSFER'
+    bookingId: number,
+    productId: number,
+    quantity: number,
+    paymentMethod: 'CASH' | 'TRANSFER',
+    options?: { applyDiscount?: boolean }
   ) {
     if (!getToken()) throw new Error('No autenticado');
-    
-    // La URL está bien...
+
     const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-          bookingId,  // 👈 ¡FALTABA ESTA LÍNEA! AGREGALA
-          productId, 
-          quantity,
-          paymentMethod 
+      body: JSON.stringify({
+        bookingId,
+        productId,
+        quantity,
+        paymentMethod,
+        ...(options?.applyDiscount === undefined ? {} : { applyDiscount: options.applyDiscount })
       })
     });
 
@@ -370,7 +375,6 @@ export class ClubAdminService {
     }
     return res.json();
   }
-
   static async removeItemFromBooking(itemId: number | string) {
     if (!getToken()) throw new Error('No autenticado');
     const res = await fetchWithAuth(`${apiBase()}/bookings/items/${itemId}`, {
@@ -410,4 +414,96 @@ export class ClubAdminService {
     
     return res.json();
   }
+
+  static async listDiscountPolicies(slug: string) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/discount-policies`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al listar políticas de descuento');
+    }
+    return res.json();
+  }
+
+  static async createDiscountPolicy(slug: string, body: {
+    name: string;
+    description?: string;
+    scope: DiscountPolicyScope;
+    amountType: DiscountAmountType;
+    amountValue: number;
+    applyMode?: DiscountApplyMode;
+    isStackable?: boolean;
+    priority?: number;
+    isActive?: boolean;
+    startsAt?: string;
+    endsAt?: string;
+    targets?: Array<{
+      activityTypeId?: number;
+      productId?: number;
+      productCategory?: string;
+      serviceCode?: string;
+    }>;
+  }) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/discount-policies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al crear política de descuento');
+    }
+    return res.json();
+  }
+
+  static async listClientDiscountAssignments(slug: string, clientId: string) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/clients/${clientId}/discount-assignments`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al listar descuentos del cliente');
+    }
+    return res.json();
+  }
+
+  static async assignDiscountToClient(slug: string, clientId: string, body: {
+    policyId: string;
+    notes?: string;
+    startsAt?: string;
+    endsAt?: string;
+  }) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/clients/${clientId}/discount-assignments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al asignar descuento al cliente');
+    }
+    return res.json();
+  }
+
+  static async updateDiscountAssignment(slug: string, assignmentId: string, isActive: boolean) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/discount-assignments/${assignmentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive })
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al actualizar asignación');
+    }
+    return res.json();
+  }
 }
+

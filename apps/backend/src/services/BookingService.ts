@@ -26,6 +26,7 @@ import { ProjectionService } from './ProjectionService';
 import { BookingDomainService } from './BookingDomainService';
 import { getDepositRequiredAmount, isBookingTransitionAllowed, resolveInitialBookingStatus } from '../domain/bookingDomain';
 import { RefundService } from './RefundService';
+import { DiscountService } from './DiscountService';
 
 type CancelBookingReason = 'MANUAL' | 'AUTO_CANCEL_UNCONFIRMED';
 type CancelBookingOptions = {
@@ -42,6 +43,10 @@ type CancelBookingOptions = {
 };
 type CreateBookingOptions = {
     skipAccountCreation?: boolean;
+    skipAdvanceLimit?: boolean;
+    applyDiscount?: boolean;
+    professorOverrideReason?: string;
+    actorUserId?: number | null;
 };
 
 export class BookingService {
@@ -54,6 +59,7 @@ export class BookingService {
     private readonly projectionService = new ProjectionService();
     private readonly bookingDomainService = new BookingDomainService();
     private readonly refundService = new RefundService();
+    private readonly discountService = new DiscountService();
 
     constructor(
         private bookingRepo: BookingRepository,
@@ -141,13 +147,32 @@ export class BookingService {
             lightsEnabled: settings?.lightsEnabled ?? false,
             lightsExtraAmount: settings?.lightsExtraAmount ?? null,
             lightsFromHour: normalizedLightsFromHour,
+            // DEPRECATED (económico): migrar a DiscountPolicy
             professorDiscountEnabled: settings?.professorDiscountEnabled ?? false,
+            // DEPRECATED (económico): migrar a DiscountPolicy
             professorDiscountPercent: settings?.professorDiscountPercent ?? null,
+            // Regla operativa explícita separada del descuento económico
+            professorDurationOverrideEnabled: settings?.professorDurationOverrideEnabled ?? true,
+            professorDurationOverrideMinutes: Number.isFinite(Number(settings?.professorDurationOverrideMinutes))
+                ? Math.max(1, Math.floor(Number(settings?.professorDurationOverrideMinutes)))
+                : 60,
             fixedBookingSettingsByActivity: settings?.fixedBookingSettingsByActivity ?? null,
             bookingConfirmationMode: settings?.bookingConfirmationMode ?? 'MANUAL',
             bookingDepositPercent: settings?.bookingDepositPercent != null ? Number(settings.bookingDepositPercent) : null,
-            allowManualConfirmationOverride: settings?.allowManualConfirmationOverride ?? true
+            allowManualConfirmationOverride: settings?.allowManualConfirmationOverride ?? true,
+            bookingSimpleAdvanceDaysUser: Number.isFinite(Number(settings?.bookingSimpleAdvanceDaysUser))
+                ? Math.max(0, Math.floor(Number(settings?.bookingSimpleAdvanceDaysUser)))
+                : 30,
+            bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(settings?.bookingSimpleAdvanceDaysAdmin))
+                ? Math.max(0, Math.floor(Number(settings?.bookingSimpleAdvanceDaysAdmin)))
+                : 30,
+            allowAdminSkipSimpleAdvanceLimit: settings?.allowAdminSkipSimpleAdvanceLimit ?? false
         };
+    }
+
+    private getLocalDayStart(date: Date, timeZone: string) {
+        const local = TimeHelper.utcToLocal(date, timeZone);
+        return new Date(local.getFullYear(), local.getMonth(), local.getDate());
     }
 
     private resolveFixedBookingConfig(clubConfig: any, activity: ActivityType | null | undefined) {
@@ -476,6 +501,10 @@ export class BookingService {
             bookingId: number;
             clubId: number;
             bookingPrice: number;
+            activityTypeId?: number | null;
+            clientId?: string | null;
+            applyDiscount?: boolean;
+            actorUserId?: number | null;
         }
     ) {
         let account = await tx.account.findFirst({
@@ -510,21 +539,36 @@ export class BookingService {
             });
 
             if (!existingBookingItem) {
+                const discountDraft = params.applyDiscount === false
+                    ? {
+                        unitPrice: Number(bookingCharge.toFixed(2)),
+                        total: Number(bookingCharge.toFixed(2)),
+                        snapshots: []
+                    }
+                    : await this.discountService.computeDraftDiscountTx(tx, {
+                        clubId: params.clubId,
+                        clientId: params.clientId ?? null,
+                        itemType: 'BOOKING',
+                        quantity: 1,
+                        unitPrice: bookingCharge,
+                        activityTypeId: params.activityTypeId ?? null
+                    });
+
                 const bookingItem = await tx.accountItem.create({
                     data: {
                         accountId: account.id,
                         type: 'BOOKING',
                         description: 'Reserva cancha',
                         quantity: 1,
-                        unitPrice: bookingCharge,
-                        total: bookingCharge
+                        unitPrice: discountDraft.unitPrice,
+                        total: discountDraft.total
                     }
                 });
 
                 await tx.account.update({
                     where: { id: account.id },
                     data: {
-                        totalAmount: { increment: bookingCharge }
+                        totalAmount: { increment: discountDraft.total }
                     }
                 });
 
@@ -535,10 +579,26 @@ export class BookingService {
                     referenceId: String(params.bookingId),
                     accountId: account.id,
                     accountItemId: bookingItem.id,
-                    amount: bookingCharge,
+                    amount: discountDraft.total,
                     revenueAccount: 'BOOKING_REVENUE',
                     description: `Reserva cancha #${params.bookingId}`
                 });
+
+                if (discountDraft.snapshots.length) {
+                    await this.discountService.persistAppliedDiscountsTx(tx, {
+                        clubId: params.clubId,
+                        accountItemId: bookingItem.id,
+                        appliedByUserId: params.actorUserId ?? null,
+                        snapshots: discountDraft.snapshots
+                    });
+                }
+
+                if (Math.abs(Number(discountDraft.total || 0) - bookingCharge) > 0.009) {
+                    await tx.booking.update({
+                        where: { id: params.bookingId },
+                        data: { price: discountDraft.total }
+                    });
+                }
             }
         }
 
@@ -848,6 +908,19 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         }
         const clubConfig = this.resolveClubConfig((court as any)?.club);
         const activitySchedule = this.resolveActivitySchedule(activity);
+        const professorOverrideMinutes = Number(clubConfig?.professorDurationOverrideMinutes ?? 60);
+        const canProfessorDurationOverride =
+            Boolean(isProfessorOverride) &&
+            Boolean(clubConfig?.professorDurationOverrideEnabled) &&
+            Number.isFinite(professorOverrideMinutes) &&
+            professorOverrideMinutes > 0;
+        if (isProfessorOverride && !canProfessorDurationOverride) {
+            throw new Error('PROFESSOR_DURATION_OVERRIDE_DISABLED');
+        }
+        const professorOverrideReason = String(options?.professorOverrideReason || '').trim();
+        if (isProfessorOverride && !professorOverrideReason) {
+            throw new Error('PROFESSOR_OVERRIDE_REASON_REQUIRED');
+        }
         if (
             clubConfig?.bookingConfirmationMode === 'DEPOSIT_REQUIRED' &&
             (!Number.isFinite(Number(clubConfig?.bookingDepositPercent)) || Number(clubConfig?.bookingDepositPercent) <= 0)
@@ -857,9 +930,9 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
         this.assertValidDuration(effectiveDuration);
-        // Permitir override para profesores: si se indica isProfessorOverride y se solicita 60, permitir aunque no esté en allowedDurations
+        // Regla operativa explícita: permitir duración especial profesor aunque no esté en scheduleDurations
         if (!allowedDurations.includes(effectiveDuration)) {
-            if (!(isProfessorOverride && effectiveDuration === 60)) {
+            if (!(canProfessorDurationOverride && effectiveDuration === professorOverrideMinutes)) {
                 throw new Error("Duración no permitida por el club");
             }
         }
@@ -870,13 +943,42 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 const slotTime = `${String(localForSlot.getHours()).padStart(2, '0')}:${String(localForSlot.getMinutes()).padStart(2, '0')}`;
         const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
         const possibleSlotTimes = possibleSlots.map(s => s.slotTime);
-        if (!possibleSlotTimes.includes(slotTime)) {
-            throw new Error("Horario no permitido por el club");
+        const hasExactSlot = possibleSlotTimes.includes(slotTime);
+
+        if (!hasExactSlot) {
+            const canUseProfessorFixedSlotFallback =
+                canProfessorDurationOverride &&
+                effectiveDuration === professorOverrideMinutes &&
+                activitySchedule.mode === 'FIXED' &&
+                Array.isArray(activitySchedule.fixedSlots) &&
+                activitySchedule.fixedSlots.some((slot: any) => String(slot?.start) === slotTime);
+
+            if (!canUseProfessorFixedSlotFallback) {
+                throw new Error("Horario no permitido por el club");
+            }
         }
 
         // Verificar días de apertura del club (en la zona horaria del club)
         if (!this.isClubOpenOnLocalDate(clubConfig, startDateTime, clubTimeZone)) {
             throw new Error('El club está cerrado ese día');
+        }
+
+        // Política de anticipación para reservas simples.
+        const skipAdvanceLimitByConfig = createdByAdmin && Boolean(clubConfig?.allowAdminSkipSimpleAdvanceLimit);
+        if (!options?.skipAdvanceLimit && !skipAdvanceLimitByConfig) {
+            const maxAdvanceDays = createdByAdmin
+                ? Number(clubConfig?.bookingSimpleAdvanceDaysAdmin ?? 30)
+                : Number(clubConfig?.bookingSimpleAdvanceDaysUser ?? 30);
+            const safeMaxAdvanceDays = Number.isFinite(maxAdvanceDays) ? Math.max(0, Math.floor(maxAdvanceDays)) : 30;
+
+            const todayLocalStart = this.getLocalDayStart(new Date(), clubTimeZone);
+            const bookingLocalStart = this.getLocalDayStart(startDateTime, clubTimeZone);
+            const diffDays = Math.floor((bookingLocalStart.getTime() - todayLocalStart.getTime()) / (24 * 60 * 60 * 1000));
+
+            if (diffDays > safeMaxAdvanceDays) {
+                const actorLabel = createdByAdmin ? 'administradores' : 'usuarios';
+                throw new Error(`Límite de anticipación excedido para ${actorLabel}: máximo ${safeMaxAdvanceDays} días`);
+            }
         }
 
         const endDateTime = new Date(startDateTime.getTime() + effectiveDuration * 60000);
@@ -910,16 +1012,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             throw new Error('Precio de cancha no configurado.');
         }
         const clubPricingConfig = this.resolveClubConfig((court as any)?.club);
-        const isProfessor = Boolean(user?.isProfessor) || Boolean(isProfessorOverride);
         let finalPrice = BASE_PRICE;
-
-        if (isProfessor && clubPricingConfig?.professorDiscountEnabled) {
-            const discountPercent = Number(clubPricingConfig?.professorDiscountPercent ?? 0);
-            if (Number.isFinite(discountPercent) && discountPercent > 0) {
-                const clamped = Math.min(Math.max(discountPercent, 0), 100);
-                finalPrice = BASE_PRICE * (1 - clamped / 100);
-            }
-        }
+        // El descuento económico no se calcula acá: se unifica en DiscountPolicy sobre AccountItem.
         if (clubPricingConfig && clubPricingConfig.lightsEnabled && clubPricingConfig.lightsExtraAmount && clubPricingConfig.lightsFromHour) {
                 try {
                     const [lh, lm] = String(clubPricingConfig.lightsFromHour).split(':').map((n: string) => parseInt(n, 10));
@@ -986,12 +1080,25 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     include: { user: true, court: { include: { club: true } }, activity: true }
                 });
 
-                if (!options?.skipAccountCreation) {
+                // Estrategia lazy: para turnos simples no abrimos cuenta al crear.
+                // Solo se crea al confirmar, agregar consumos o registrar pagos.
+                if (options?.skipAccountCreation === false) {
                     await this.ensureBookingAccountWithChargeTx(tx, {
                         bookingId: saved.id,
                         clubId: bookingClubId,
-                        bookingPrice: Number(saved.price || 0)
+                        bookingPrice: Number(saved.price || 0),
+                        activityTypeId: saved.activityId,
+                        clientId: saved.clientId,
+                        applyDiscount: options?.applyDiscount,
+                        actorUserId: user?.id ?? null
                     });
+                    const refreshed = await tx.booking.findUnique({
+                        where: { id: saved.id },
+                        include: { user: true, court: { include: { club: true } }, activity: true }
+                    });
+                    if (refreshed) {
+                        saved = refreshed;
+                    }
                 }
 
                 await this.eventService.bookingCreated(bookingClubId, {
@@ -1056,9 +1163,28 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 activityId,
                 startDateTime: created.startDateTime,
                 endDateTime: created.endDateTime,
-                amount: Number(created.price || 0)
+                amount: Number(created.price || 0),
+                professorOverrideApplied: Boolean(isProfessorOverride),
+                professorOverrideReason: professorOverrideReason || null,
+                professorDurationOverrideMinutes: canProfessorDurationOverride ? professorOverrideMinutes : null
             }
         });
+
+        if (isProfessorOverride) {
+            await this.auditLogService.create({
+                clubId: (court as any).club.id,
+                userId: options?.actorUserId ?? user?.id ?? null,
+                entity: 'Booking',
+                entityId: String(created.id),
+                action: 'BOOKING_PROFESSOR_OVERRIDE',
+                payload: {
+                    reason: professorOverrideReason,
+                    requestedDurationMinutes: effectiveDuration,
+                    overrideMinutes: professorOverrideMinutes,
+                    overrideEnabledInClub: Boolean(clubConfig?.professorDurationOverrideEnabled)
+                }
+            });
+        }
 
         return this.bookingRepo.mapToEntity(created);
     }
@@ -1419,13 +1545,16 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             const status = await this.bookingDomainService.confirmBookingManuallyTx(tx, { bookingId, clubId });
             const booking = await tx.booking.findFirst({
                 where: { id: bookingId, clubId },
-                select: { id: true, clubId: true, price: true }
+                select: { id: true, clubId: true, price: true, activityId: true, clientId: true }
             });
             if (booking) {
                 await this.ensureBookingAccountWithChargeTx(tx, {
                     bookingId: booking.id,
                     clubId: booking.clubId,
-                    bookingPrice: Number(booking.price || 0)
+                    bookingPrice: Number(booking.price || 0),
+                    activityTypeId: booking.activityId,
+                    clientId: booking.clientId,
+                    actorUserId
                 });
             }
             return status;
@@ -1467,7 +1596,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 select: { id: true }
             });
             if (account) {
-                await this.bookingDomainService.closeAccountIfEligibleTx(tx, account.id);
+                // Mantener la cuenta abierta tras finalizar la reserva permite
+                // seguir cargando consumos post-cancha (ej. bar) hasta cierre manual.
                 await this.projectionService.refreshAccountSummary(account.id, tx);
             }
 
@@ -1900,7 +2030,9 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         guestPhone?: string | number, // Agregado para recibir el dato del front
         guestDni?: string,
         isProfessorOverride: boolean = false,
-        clubId?: number
+        clubId?: number,
+        professorOverrideReason?: string,
+        actorUserId?: number | null
     ) {
         const safePhone = guestPhone ? String(guestPhone) : undefined;
 
@@ -1927,9 +2059,22 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         if ((activity.clubId ?? null) !== ((court as any)?.club?.id ?? null)) {
             throw new Error("ACTIVITY_CLUB_MISMATCH");
         }
-        const duration = isProfessorOverride ? 60 : (activity ? activity.defaultDurationMinutes : 60);
-        this.assertValidDuration(duration);
         const clubConfigForFixed = this.resolveClubConfig((court as any)?.club);
+        const professorOverrideMinutes = Number(clubConfigForFixed?.professorDurationOverrideMinutes ?? 60);
+        const canProfessorDurationOverride =
+            Boolean(isProfessorOverride) &&
+            Boolean(clubConfigForFixed?.professorDurationOverrideEnabled) &&
+            Number.isFinite(professorOverrideMinutes) &&
+            professorOverrideMinutes > 0;
+        if (isProfessorOverride && !canProfessorDurationOverride) {
+            throw new Error('PROFESSOR_DURATION_OVERRIDE_DISABLED');
+        }
+        const normalizedProfessorOverrideReason = String(professorOverrideReason || '').trim();
+        if (isProfessorOverride && !normalizedProfessorOverrideReason) {
+            throw new Error('PROFESSOR_OVERRIDE_REASON_REQUIRED');
+        }
+        const duration = canProfessorDurationOverride ? professorOverrideMinutes : (activity ? activity.defaultDurationMinutes : 60);
+        this.assertValidDuration(duration);
         const fixedConfig = this.resolveFixedBookingConfig(clubConfigForFixed, activity ?? null);
 
         const explicitWeeks = Number(weeksToGenerate);
@@ -2053,7 +2198,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         isProfessorOverride,
                         duration,
                         true,
-                        { skipAccountCreation: true }
+                        {
+                            skipAccountCreation: true,
+                            skipAdvanceLimit: true,
+                            professorOverrideReason: normalizedProfessorOverrideReason,
+                            actorUserId: actorUserId ?? null
+                        }
                     );
 
                     await tx.booking.update({
@@ -2078,6 +2228,21 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             activityId,
             clubId: (court as any).club.id
         });
+
+        if (isProfessorOverride) {
+            await this.auditLogService.create({
+                clubId: (court as any).club.id,
+                userId: actorUserId ?? user?.id ?? null,
+                entity: 'FixedBooking',
+                entityId: String(fixedBooking.id),
+                action: 'FIXED_BOOKING_PROFESSOR_OVERRIDE',
+                payload: {
+                    reason: normalizedProfessorOverrideReason,
+                    overrideMinutes: professorOverrideMinutes,
+                    generatedCount
+                }
+            });
+        }
 
         return {
             fixedBookingId: fixedBooking.id,
@@ -2142,7 +2307,18 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         const account = await prisma.account.findFirst({
             where: { clubId, sourceType: 'BOOKING', sourceId: String(bookingId) },
-            include: { items: { orderBy: { createdAt: 'asc' } } }
+            include: {
+                items: {
+                    orderBy: { createdAt: 'asc' },
+                    include: {
+                        discounts: {
+                            include: {
+                                policy: { select: { id: true, name: true } }
+                            }
+                        }
+                    }
+                }
+            }
         });
 
         if (!account) return [];
@@ -2171,27 +2347,46 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             description: item.description,
             type: item.type,
             paidAmount: Number((paidByItem.get(item.id) || 0).toFixed(2)),
-            remainingAmount: Number(Math.max(0, Number(item.total || 0) - (paidByItem.get(item.id) || 0)).toFixed(2))
+            remainingAmount: Number(Math.max(0, Number(item.total || 0) - (paidByItem.get(item.id) || 0)).toFixed(2)),
+            discounts: Array.isArray((item as any).discounts)
+                ? (item as any).discounts.map((discount: any) => ({
+                    id: discount.id,
+                    policyId: discount.policyId,
+                    policyName: discount.policy?.name ?? null,
+                    scope: discount.scope,
+                    amountType: discount.amountType,
+                    amountValue: Number(discount.amountValue || 0),
+                    baseAmount: Number(discount.baseAmount || 0),
+                    discountAmount: Number(discount.discountAmount || 0),
+                    finalAmount: Number(discount.finalAmount || 0)
+                }))
+                : []
         }));
     }
 
-    async addItemToBooking(bookingId: number, productId: number, quantity: number, clubId: number, _paymentMethod: string = 'CASH') {
+    async addItemToBooking(
+        bookingId: number,
+        productId: number,
+        quantity: number,
+        clubId: number,
+        _paymentMethod: string = 'CASH',
+        options?: { applyDiscount?: boolean; actorUserId?: number | null }
+    ) {
         const booking = await prisma.booking.findFirst({ where: { id: bookingId, clubId } });
         const product = await prisma.product.findFirst({ where: { id: productId, clubId } });
         if (!booking || !product) throw new Error('Datos no encontrados');
         if (booking.status === 'CANCELLED') throw new Error('No se pueden agregar consumos a una reserva cancelada');
-        if (booking.status === 'COMPLETED') throw new Error('No se pueden agregar consumos a una reserva completada');
-        if (booking.status !== 'CONFIRMED') throw new Error('Solo se pueden agregar consumos a reservas confirmadas');
+        if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
+            throw new Error('Solo se pueden agregar consumos a reservas confirmadas o finalizadas');
+        }
 
         const normalizedQty = Math.floor(Number(quantity));
         if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) throw new Error('Cantidad inválida');
 
-        const itemTotal = Number(product.price) * normalizedQty;
-
         const result = await prisma.$transaction(async (tx) => {
             const txProduct = await tx.product.findFirst({
                 where: { id: productId, clubId },
-                select: { id: true, name: true, price: true, stock: true }
+                select: { id: true, name: true, price: true, stock: true, category: true }
             });
             if (!txProduct) throw new Error('Producto no encontrado');
             if (Number(txProduct.stock) < normalizedQty) throw new Error('Stock insuficiente');
@@ -2201,9 +2396,32 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             });
 
             if (!account) {
-                throw new Error('La reserva no tiene cuenta asociada');
+                account = await this.ensureBookingAccountWithChargeTx(tx, {
+                    bookingId,
+                    clubId,
+                    bookingPrice: Number(booking.price || 0),
+                    activityTypeId: booking.activityId,
+                    clientId: booking.clientId,
+                    actorUserId: options?.actorUserId ?? null
+                });
             }
             if (account.status !== 'OPEN') throw new Error('No se pueden agregar consumos a una cuenta cerrada');
+
+            const discountDraft = options?.applyDiscount === false
+                ? {
+                    unitPrice: Number(Number(txProduct.price || 0).toFixed(2)),
+                    total: Number((Number(txProduct.price || 0) * normalizedQty).toFixed(2)),
+                    snapshots: []
+                }
+                : await this.discountService.computeDraftDiscountTx(tx, {
+                    clubId,
+                    clientId: booking.clientId ?? null,
+                    itemType: 'PRODUCT',
+                    quantity: normalizedQty,
+                    unitPrice: Number(txProduct.price || 0),
+                    productId: txProduct.id,
+                    productCategory: txProduct.category
+                });
 
             const createdItem = await tx.accountItem.create({
                 data: {
@@ -2212,15 +2430,15 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     productId: txProduct.id,
                     description: txProduct.name,
                     quantity: normalizedQty,
-                    unitPrice: Number(txProduct.price),
-                    total: itemTotal
+                    unitPrice: discountDraft.unitPrice,
+                    total: discountDraft.total
                 }
             });
 
             await tx.account.update({
                 where: { id: account.id },
                 data: {
-                    totalAmount: { increment: itemTotal }
+                    totalAmount: { increment: discountDraft.total }
                 }
             });
 
@@ -2231,10 +2449,19 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 referenceId: createdItem.id,
                 accountId: account.id,
                 accountItemId: createdItem.id,
-                amount: itemTotal,
+                amount: discountDraft.total,
                 revenueAccount: 'BAR_REVENUE',
                 description: txProduct.name
             });
+
+            if (discountDraft.snapshots.length) {
+                await this.discountService.persistAppliedDiscountsTx(tx, {
+                    clubId,
+                    accountItemId: createdItem.id,
+                    appliedByUserId: options?.actorUserId ?? null,
+                    snapshots: discountDraft.snapshots
+                });
+            }
 
             const stockUpdate = await tx.product.updateMany({
                 where: { id: productId, clubId, stock: { gte: normalizedQty } },

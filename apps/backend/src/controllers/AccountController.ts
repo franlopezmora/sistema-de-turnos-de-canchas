@@ -130,7 +130,9 @@ export class AccountController {
         description: z.string().trim().min(1),
         quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
         unitPrice: z.preprocess((v) => Number(v), z.number().positive()),
-        type: z.enum(['BOOKING', 'PRODUCT', 'SERVICE', 'ADJUSTMENT']).optional()
+        type: z.enum(['BOOKING', 'PRODUCT', 'SERVICE', 'ADJUSTMENT']).optional(),
+        serviceCode: z.string().trim().min(1).optional(),
+        applyDiscount: z.preprocess((v) => v === undefined ? undefined : (v === true || v === 'true'), z.boolean().optional())
       });
 
       const paramsParsed = paramsSchema.safeParse(req.params);
@@ -140,9 +142,11 @@ export class AccountController {
 
       const clubId = this.resolveClubId(req);
       const safeDescription = sanitizeString(bodyParsed.data.description);
+      const actorUserId = this.resolveActorUserId(req);
       const item = await this.accountItemService.create(clubId, paramsParsed.data.id, {
         ...bodyParsed.data,
-        description: safeDescription
+        description: safeDescription,
+        actorUserId: actorUserId ?? null
       });
       return res.status(201).json(mapAccountItemDto(item));
     } catch (error: unknown) {

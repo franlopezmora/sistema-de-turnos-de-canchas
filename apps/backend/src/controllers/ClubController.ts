@@ -38,6 +38,8 @@ export class ClubController {
                 openingDays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
                 professorDiscountEnabled: z.boolean().optional(),
                 professorDiscountPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
+                professorDurationOverrideEnabled: z.boolean().optional(),
+                professorDurationOverrideMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
                 bookingConfirmationMode: z.enum(['AUTOMATIC', 'MANUAL', 'DEPOSIT_REQUIRED']).optional(),
                 bookingDepositPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
@@ -47,7 +49,10 @@ export class ClubController {
                 autoCancelPendingBookingsOnlyIfUnpaid: z.boolean().optional(),
                 autoCancelPendingWarningEnabled: z.boolean().optional(),
                 autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
-                enforceCashShiftCloseWithOpenAccounts: z.boolean().optional()
+                enforceCashShiftCloseWithOpenAccounts: z.boolean().optional(),
+                bookingSimpleAdvanceDaysUser: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
+                bookingSimpleAdvanceDaysAdmin: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
+                allowAdminSkipSimpleAdvanceLimit: z.boolean().optional()
             });
             const parsed = createClubSchema.safeParse(req.body);
             if (!parsed.success) {
@@ -55,10 +60,11 @@ export class ClubController {
             }
             const { slug, name, addressLine, city, province, country, contact, phone, logoUrl, clubImageUrl, instagramUrl, facebookUrl, websiteUrl, description, timeZone,
                 lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays, professorDiscountEnabled, professorDiscountPercent,
+                professorDurationOverrideEnabled, professorDurationOverrideMinutes,
                 fixedBookingSettingsByActivity, bookingConfirmationMode, bookingDepositPercent, allowManualConfirmationOverride,
                 autoCancelPendingBookingsEnabled, autoCancelPendingBookingsMinutesBefore, autoCancelPendingBookingsOnlyIfUnpaid,
                 autoCancelPendingWarningEnabled, autoCancelPendingWarningMinutesBefore,
-                enforceCashShiftCloseWithOpenAccounts } = parsed.data;
+                enforceCashShiftCloseWithOpenAccounts, bookingSimpleAdvanceDaysUser, bookingSimpleAdvanceDaysAdmin, allowAdminSkipSimpleAdvanceLimit } = parsed.data;
 
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
@@ -71,18 +77,27 @@ export class ClubController {
             }
             if (autoCancelPendingBookingsEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingBookingsMinutesBefore)) || Number(autoCancelPendingBookingsMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel está habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel estÃ¡ habilitado' });
                 }
             }
             if (autoCancelPendingWarningEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingWarningMinutesBefore)) || Number(autoCancelPendingWarningMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning está habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning estÃ¡ habilitado' });
                 }
             }
             if (autoCancelPendingBookingsEnabled && autoCancelPendingWarningEnabled) {
                 if (Number(autoCancelPendingWarningMinutesBefore) <= Number(autoCancelPendingBookingsMinutesBefore)) {
                     return res.status(400).json({ error: 'El warning debe configurarse antes de la cancelación automática' });
                 }
+            }
+            if ((professorDurationOverrideEnabled ?? true) && (!Number.isFinite(Number(professorDurationOverrideMinutes)) || Number(professorDurationOverrideMinutes) <= 0)) {
+                return res.status(400).json({ error: 'professorDurationOverrideMinutes debe ser mayor a 0' });
+            }
+            if (!Number.isFinite(Number(bookingSimpleAdvanceDaysUser ?? 30)) || Number(bookingSimpleAdvanceDaysUser ?? 30) < 0) {
+                return res.status(400).json({ error: 'bookingSimpleAdvanceDaysUser debe ser 0 o mayor' });
+            }
+            if (!Number.isFinite(Number(bookingSimpleAdvanceDaysAdmin ?? 30)) || Number(bookingSimpleAdvanceDaysAdmin ?? 30) < 0) {
+                return res.status(400).json({ error: 'bookingSimpleAdvanceDaysAdmin debe ser 0 o mayor' });
             }
 
             const safeDescription = description != null ? sanitizeString(description) : null;
@@ -110,6 +125,8 @@ export class ClubController {
                 lightsFromHour ?? null,
                 Boolean(professorDiscountEnabled),
                 professorDiscountPercent ?? null,
+                professorDurationOverrideEnabled ?? true,
+                Number.isFinite(Number(professorDurationOverrideMinutes)) ? Number(professorDurationOverrideMinutes) : 60,
                 fixedBookingSettingsByActivity ?? null,
                 bookingConfirmationMode ?? 'MANUAL',
                 bookingDepositPercent ?? null,
@@ -120,6 +137,9 @@ export class ClubController {
                 autoCancelPendingWarningEnabled ?? false,
                 autoCancelPendingWarningMinutesBefore ?? null,
                 enforceCashShiftCloseWithOpenAccounts ?? false,
+                Number(bookingSimpleAdvanceDaysUser ?? 30),
+                Number(bookingSimpleAdvanceDaysAdmin ?? 30),
+                allowAdminSkipSimpleAdvanceLimit ?? false,
                 Array.isArray(openingDays) ? openingDays : null
             );
             res.status(201).json(club);
@@ -132,7 +152,7 @@ export class ClubController {
         try {
             const id = parseInt(req.params.id as string);
             if (isNaN(id)) {
-                return res.status(400).json({ error: 'ID de club inválido' });
+                return res.status(400).json({ error: 'ID de club invÃ¡lido' });
             }
             const club = await this.clubService.getClubById(id);
             res.json(club);
@@ -168,7 +188,7 @@ export class ClubController {
             const idSchema = z.preprocess((v) => Number(v), z.number().int().positive());
             const idParsed = idSchema.safeParse(req.params.id);
             if (!idParsed.success) {
-                return res.status(400).json({ error: 'ID de club inválido' });
+                return res.status(400).json({ error: 'ID de club invÃ¡lido' });
             }
             const id = idParsed.data;
             const updateClubSchema = z.object({
@@ -192,6 +212,8 @@ export class ClubController {
                 lightsFromHour: z.string().optional().nullable(),
                 professorDiscountEnabled: z.boolean().optional(),
                 professorDiscountPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
+                professorDurationOverrideEnabled: z.boolean().optional(),
+                professorDurationOverrideMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
                 openingDays: z.array(z.number().int().min(0).max(6)).optional(),
                 bookingConfirmationMode: z.enum(['AUTOMATIC', 'MANUAL', 'DEPOSIT_REQUIRED']).optional(),
@@ -202,7 +224,10 @@ export class ClubController {
                 autoCancelPendingBookingsOnlyIfUnpaid: z.boolean().optional(),
                 autoCancelPendingWarningEnabled: z.boolean().optional(),
                 autoCancelPendingWarningMinutesBefore: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
-                enforceCashShiftCloseWithOpenAccounts: z.boolean().optional()
+                enforceCashShiftCloseWithOpenAccounts: z.boolean().optional(),
+                bookingSimpleAdvanceDaysUser: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
+                bookingSimpleAdvanceDaysAdmin: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
+                allowAdminSkipSimpleAdvanceLimit: z.boolean().optional()
             });
             const parsed = updateClubSchema.safeParse(req.body);
             if (!parsed.success) {
@@ -229,6 +254,8 @@ export class ClubController {
                 lightsFromHour,
                 professorDiscountEnabled,
                 professorDiscountPercent,
+                professorDurationOverrideEnabled,
+                professorDurationOverrideMinutes,
                 fixedBookingSettingsByActivity,
                 openingDays,
                 bookingConfirmationMode,
@@ -239,7 +266,10 @@ export class ClubController {
                 autoCancelPendingBookingsOnlyIfUnpaid,
                 autoCancelPendingWarningEnabled,
                 autoCancelPendingWarningMinutesBefore,
-                enforceCashShiftCloseWithOpenAccounts
+                enforceCashShiftCloseWithOpenAccounts,
+                bookingSimpleAdvanceDaysUser,
+                bookingSimpleAdvanceDaysAdmin,
+                allowAdminSkipSimpleAdvanceLimit
             } = parsed.data;
 
             const normalizedLogoUrl = await this.mediaStorageService.normalizeAsset(logoUrl ?? null, 'logoUrl');
@@ -258,18 +288,29 @@ export class ClubController {
             const resolvedWarningEnabled = autoCancelPendingWarningEnabled ?? false;
             if (resolvedAutoCancelEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingBookingsMinutesBefore)) || Number(autoCancelPendingBookingsMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel está habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel estÃ¡ habilitado' });
                 }
             }
             if (resolvedWarningEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingWarningMinutesBefore)) || Number(autoCancelPendingWarningMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning está habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning estÃ¡ habilitado' });
                 }
             }
             if (resolvedAutoCancelEnabled && resolvedWarningEnabled) {
                 if (Number(autoCancelPendingWarningMinutesBefore) <= Number(autoCancelPendingBookingsMinutesBefore)) {
                     return res.status(400).json({ error: 'El warning debe configurarse antes de la cancelación automática' });
                 }
+            }
+            if ((professorDurationOverrideEnabled ?? true) && professorDurationOverrideMinutes !== undefined) {
+                if (!Number.isFinite(Number(professorDurationOverrideMinutes)) || Number(professorDurationOverrideMinutes) <= 0) {
+                    return res.status(400).json({ error: 'professorDurationOverrideMinutes debe ser mayor a 0' });
+                }
+            }
+            if (bookingSimpleAdvanceDaysUser !== undefined && (!Number.isFinite(Number(bookingSimpleAdvanceDaysUser)) || Number(bookingSimpleAdvanceDaysUser) < 0)) {
+                return res.status(400).json({ error: 'bookingSimpleAdvanceDaysUser debe ser 0 o mayor' });
+            }
+            if (bookingSimpleAdvanceDaysAdmin !== undefined && (!Number.isFinite(Number(bookingSimpleAdvanceDaysAdmin)) || Number(bookingSimpleAdvanceDaysAdmin) < 0)) {
+                return res.status(400).json({ error: 'bookingSimpleAdvanceDaysAdmin debe ser 0 o mayor' });
             }
 
             const safeDescription = description != null ? sanitizeString(description) : null;
@@ -294,6 +335,11 @@ export class ClubController {
                 lightsFromHour: (lightsFromHour === '' || lightsFromHour == null) ? null : lightsFromHour,
                 professorDiscountEnabled: typeof professorDiscountEnabled === 'boolean' ? professorDiscountEnabled : undefined,
                 professorDiscountPercent: professorDiscountPercent ?? null,
+                professorDurationOverrideEnabled: typeof professorDurationOverrideEnabled === 'boolean' ? professorDurationOverrideEnabled : undefined,
+                professorDurationOverrideMinutes:
+                    Number.isFinite(Number(professorDurationOverrideMinutes))
+                        ? Number(professorDurationOverrideMinutes)
+                        : undefined,
                 fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
                 openingDays: Array.isArray(openingDays) ? openingDays : undefined,
                 bookingConfirmationMode,
@@ -304,7 +350,10 @@ export class ClubController {
                 autoCancelPendingBookingsOnlyIfUnpaid,
                 autoCancelPendingWarningEnabled,
                 autoCancelPendingWarningMinutesBefore,
-                enforceCashShiftCloseWithOpenAccounts
+                enforceCashShiftCloseWithOpenAccounts,
+                bookingSimpleAdvanceDaysUser,
+                bookingSimpleAdvanceDaysAdmin,
+                allowAdminSkipSimpleAdvanceLimit
             });
             res.json(club);
         } catch (error: any) {
@@ -334,3 +383,5 @@ export class ClubController {
     }
 };
 }
+
+

@@ -59,7 +59,15 @@ export const createBooking = async (
   userId?: number,
   // Aceptamos 'dni' también en el tipo para evitar errores de TS
   guestInfo?: { name?: string; email?: string; phone?: string; guestDni?: string; dni?: string },
-  options?: { asGuest?: boolean; guestIdentifier?: string; isProfessor?: boolean; durationMinutes?: number; openAccount?: boolean }
+  options?: {
+    asGuest?: boolean;
+    guestIdentifier?: string;
+    isProfessor?: boolean;
+    professorOverrideReason?: string;
+    durationMinutes?: number;
+    openAccount?: boolean;
+    applyDiscount?: boolean;
+  }
 ) => {
   const token = getToken();
   const guestId = token ? undefined : getOrCreateGuestId();
@@ -90,7 +98,9 @@ export const createBooking = async (
 
       ...(options?.asGuest ? { asGuest: true } : {}),
         ...(options?.isProfessor ? { isProfessor: true } : {}),
-        ...(Number.isFinite(options?.durationMinutes) ? { durationMinutes: options?.durationMinutes } : {})
+        ...(options?.professorOverrideReason ? { professorOverrideReason: options.professorOverrideReason } : {}),
+        ...(Number.isFinite(options?.durationMinutes) ? { durationMinutes: options?.durationMinutes } : {}),
+        ...(options?.applyDiscount === undefined ? {} : { applyDiscount: options.applyDiscount })
     }),
   });
 
@@ -299,7 +309,8 @@ export const createFixedBooking = async (
   guestName?: string,
   guestPhone?: string,
   guestDni?: string, // <--- Recibimos el dato (Argumento #7)
-  isProfessor?: boolean
+  isProfessor?: boolean,
+  professorOverrideReason?: string
 ) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
@@ -323,7 +334,8 @@ export const createFixedBooking = async (
     ...(guestName ? { guestName } : {}),
     ...(guestPhone ? { guestPhone } : {}),
     ...(guestDni ? { guestDni } : {}),
-    ...(isProfessor ? { isProfessor: true } : {})
+    ...(isProfessor ? { isProfessor: true } : {}),
+    ...(professorOverrideReason ? { professorOverrideReason } : {})
   });
 };
 

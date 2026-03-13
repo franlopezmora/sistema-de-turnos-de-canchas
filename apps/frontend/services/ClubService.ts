@@ -32,8 +32,12 @@ export interface Club {
   lightsEnabled?: boolean;
   lightsExtraAmount?: number | null;
   lightsFromHour?: string | null;
+  // DEPRECATED (económico): usar DiscountPolicy
   professorDiscountEnabled?: boolean;
+  // DEPRECATED (económico): usar DiscountPolicy
   professorDiscountPercent?: number | null;
+  professorDurationOverrideEnabled?: boolean;
+  professorDurationOverrideMinutes?: number;
   fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
   bookingConfirmationMode?: BookingConfirmationMode;
   bookingDepositPercent?: number | null;
@@ -44,6 +48,9 @@ export interface Club {
   autoCancelPendingWarningEnabled?: boolean;
   autoCancelPendingWarningMinutesBefore?: number | null;
   enforceCashShiftCloseWithOpenAccounts?: boolean;
+  bookingSimpleAdvanceDaysUser?: number;
+  bookingSimpleAdvanceDaysAdmin?: number;
+  allowAdminSkipSimpleAdvanceLimit?: boolean;
   openingDays?: number[] | null;
   createdAt?: string;
   updatedAt?: string;

@@ -51,7 +51,21 @@ export const mapAccountItemDto = (item: any) => ({
   quantity: item.quantity,
   unitPrice: toNumber(item.unitPrice),
   total: toNumber(item.total),
-  createdAt: item.createdAt
+  createdAt: item.createdAt,
+  discounts: Array.isArray(item.discounts)
+    ? item.discounts.map((discount: any) => ({
+        id: discount.id,
+        policyId: discount.policyId,
+        policyName: discount.policy?.name ?? null,
+        scope: discount.scope,
+        amountType: discount.amountType,
+        amountValue: toNumber(discount.amountValue),
+        baseAmount: toNumber(discount.baseAmount),
+        discountAmount: toNumber(discount.discountAmount),
+        finalAmount: toNumber(discount.finalAmount),
+        createdAt: discount.createdAt
+      }))
+    : []
 });
 
 export const mapAccountDto = (account: any) => ({

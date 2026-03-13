@@ -34,6 +34,8 @@ export class ClubService {
         lightsFromHour?: string | null,
         professorDiscountEnabled: boolean = false,
         professorDiscountPercent?: number | null,
+        professorDurationOverrideEnabled: boolean = true,
+        professorDurationOverrideMinutes: number = 60,
         fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null,
         bookingConfirmationMode: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED' = 'MANUAL',
         bookingDepositPercent?: number | null,
@@ -44,6 +46,9 @@ export class ClubService {
         autoCancelPendingWarningEnabled: boolean = false,
         autoCancelPendingWarningMinutesBefore?: number | null,
         enforceCashShiftCloseWithOpenAccounts: boolean = false,
+        bookingSimpleAdvanceDaysUser: number = 30,
+        bookingSimpleAdvanceDaysAdmin: number = 30,
+        allowAdminSkipSimpleAdvanceLimit: boolean = false,
         openingDays?: number[] | null
     ) {
         return await this.clubRepo.createClub(
@@ -67,6 +72,8 @@ export class ClubService {
             lightsFromHour,
             professorDiscountEnabled,
             professorDiscountPercent,
+            professorDurationOverrideEnabled,
+            professorDurationOverrideMinutes,
             fixedBookingSettingsByActivity,
             bookingConfirmationMode,
             bookingDepositPercent,
@@ -77,6 +84,9 @@ export class ClubService {
             autoCancelPendingWarningEnabled,
             autoCancelPendingWarningMinutesBefore,
             enforceCashShiftCloseWithOpenAccounts,
+            bookingSimpleAdvanceDaysUser,
+            bookingSimpleAdvanceDaysAdmin,
+            allowAdminSkipSimpleAdvanceLimit,
             openingDays
         );
     }
@@ -120,6 +130,8 @@ export class ClubService {
             lightsFromHour?: string | null;
             professorDiscountEnabled?: boolean;
             professorDiscountPercent?: number | null;
+            professorDurationOverrideEnabled?: boolean;
+            professorDurationOverrideMinutes?: number;
             fixedBookingSettingsByActivity?: FixedBookingSettingsByActivity | null;
             bookingConfirmationMode?: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
             bookingDepositPercent?: number | null;
@@ -130,6 +142,9 @@ export class ClubService {
             autoCancelPendingWarningEnabled?: boolean;
             autoCancelPendingWarningMinutesBefore?: number | null;
             enforceCashShiftCloseWithOpenAccounts?: boolean;
+            bookingSimpleAdvanceDaysUser?: number;
+            bookingSimpleAdvanceDaysAdmin?: number;
+            allowAdminSkipSimpleAdvanceLimit?: boolean;
             openingDays?: number[] | null;
         }
     ): Promise<Club> {

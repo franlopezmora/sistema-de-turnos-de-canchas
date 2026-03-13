@@ -52,7 +52,9 @@ export class BookingController {
                 ),
                 guestPhone: optionalTrimmedString(),
                 guestDni: optionalTrimmedString(),
-                isProfessor: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional()
+                isProfessor: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional(),
+                professorOverrideReason: optionalTrimmedString(10),
+                applyDiscount: z.preprocess((v) => v === undefined ? undefined : (v === true || v === 'true'), z.boolean().optional())
             });
 
             const dataToValidate = {
@@ -65,7 +67,7 @@ export class BookingController {
                 return res.status(400).json({ error: parsed.error.format() });
             }
 
-            let { courtId, startDateTime, date: dateStr, slotTime, activityId, durationMinutes, guestIdentifier, guestName, guestEmail, guestPhone, guestDni, isProfessor } = parsed.data;
+            let { courtId, startDateTime, date: dateStr, slotTime, activityId, durationMinutes, guestIdentifier, guestName, guestEmail, guestPhone, guestDni, isProfessor, professorOverrideReason, applyDiscount } = parsed.data;
             guestName = guestName ? sanitizeString(guestName, 200) : undefined;
             guestIdentifier = guestIdentifier ? sanitizeString(guestIdentifier, 100) : undefined;
             guestEmail = guestEmail ? sanitizeString(guestEmail, 254) : undefined;
@@ -97,19 +99,17 @@ export class BookingController {
             const forceGuest = isAdmin && asGuest;
             const effectiveUserId = forceGuest ? null : (userIdFromToken ? Number(userIdFromToken) : null);
             const effectiveGuestIdentifier = forceGuest && !guestIdentifier ? `admin_${Date.now()}` : guestIdentifier;
-            const applyProfessorDiscount = isAdmin && Boolean(isProfessor);
+            if (Boolean(isProfessor) && !isAdmin) {
+                return res.status(403).json({ error: 'Solo ADMIN/OWNER puede activar override de profesor' });
+            }
+            const applyProfessorOverride = isAdmin && Boolean(isProfessor);
+            if (applyProfessorOverride && !String(professorOverrideReason || '').trim()) {
+                return res.status(400).json({ error: 'Debe indicar motivo del override de profesor' });
+            }
 
             const now = new Date();
             if (startDate.getTime() < now.getTime()) {
                 return res.status(400).json({ error: "No se pueden reservar turnos en el pasado." });
-            }
-
-            if (userRole !== 'ADMIN') {
-                const maxDate = new Date(now);
-                maxDate.setMonth(now.getMonth() + 1);
-                if (startDate.getTime() > maxDate.getTime()) {
-                    return res.status(400).json({ error: "Solo se pueden reservar turnos hasta 1 mes desde hoy." });
-                }
             }
 
             if (!effectiveUserId && !forceGuest && !effectiveGuestIdentifier) {
@@ -142,9 +142,14 @@ export class BookingController {
                 Number(courtId),
                 startDate,
                 Number(activityId),
-                applyProfessorDiscount,
+                applyProfessorOverride,
                 durationMinutes,
-                isAdmin
+                isAdmin,
+                {
+                    applyDiscount,
+                    professorOverrideReason: professorOverrideReason?.trim() || undefined,
+                    actorUserId: Number(user?.userId || 0) || null
+                }
             );
 
             const courtWithClub = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: { include: { settings: true } } } });
@@ -163,6 +168,12 @@ export class BookingController {
                 return res.status(409).json({
                     error: 'El horario acaba de ser reservado por otro jugador'
                 });
+            }
+            if (error?.message === 'PROFESSOR_OVERRIDE_REASON_REQUIRED') {
+                return res.status(400).json({ error: 'Debe indicar motivo del override de profesor' });
+            }
+            if (error?.message === 'PROFESSOR_DURATION_OVERRIDE_DISABLED') {
+                return res.status(400).json({ error: 'El override de duración para profesor está deshabilitado en el club' });
             }
             res.status(400).json({ error: error.message || "Error desconocido" });
         }
@@ -410,6 +421,12 @@ export class BookingController {
 
             res.json({ date: date, slotsWithCourts });
         } catch (error: any) {
+            if (error?.message === 'PROFESSOR_OVERRIDE_REASON_REQUIRED') {
+                return res.status(400).json({ error: 'Debe indicar motivo del override de profesor' });
+            }
+            if (error?.message === 'PROFESSOR_DURATION_OVERRIDE_DISABLED') {
+                return res.status(400).json({ error: 'El override de duración para profesor está deshabilitado en el club' });
+            }
             res.status(400).json({ error: error.message });
         }
     }
@@ -446,17 +463,24 @@ export class BookingController {
                 guestName: z.string().optional(),
                 guestPhone: z.union([z.string(), z.number()]).optional(),
                 guestDni: z.string().optional(),
-                isProfessor: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional()
+                isProfessor: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional(),
+                professorOverrideReason: z.string().trim().min(10).optional()
             });
             const parsed = createFixedSchema.safeParse(req.body);
             if (!parsed.success) {
                 return res.status(400).json({ error: parsed.error.format() });
             }
-            const { userId, courtId, activityId, startDateTime, guestName, guestPhone, guestDni, isProfessor } = parsed.data;
+            const { userId, courtId, activityId, startDateTime, guestName, guestPhone, guestDni, isProfessor, professorOverrideReason } = parsed.data;
             const user = (req as any).user;
             const membershipRole = String((req as any).membershipRole || '');
             const isAdmin = user?.role === 'ADMIN' || membershipRole === 'OWNER' || membershipRole === 'ADMIN';
             const clubId = (req as any).clubId;
+            if (Boolean(isProfessor) && !isAdmin) {
+                return res.status(403).json({ error: 'Solo ADMIN/OWNER puede activar override de profesor' });
+            }
+            if (Boolean(isProfessor) && !String(professorOverrideReason || '').trim()) {
+                return res.status(400).json({ error: 'Debe indicar motivo del override de profesor' });
+            }
 
             if (!userId && !isAdmin) {
                 return res.status(403).json({ error: "Solo un administrador puede crear turnos fijos sin usuario." });
@@ -483,7 +507,9 @@ export class BookingController {
                 guestPhone,
                 guestDni,
                 Boolean(isProfessor),
-                clubId
+                clubId,
+                professorOverrideReason?.trim() || undefined,
+                Number(user?.userId || 0) || null
             );
             
             res.status(201).json(result);
@@ -528,14 +554,15 @@ export class BookingController {
                 bookingId: z.preprocess((v) => (v === undefined || v === null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
                 productId: z.preprocess((v) => Number(v), z.number().int().positive()),
                 quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
-                paymentMethod: z.enum(['CASH', 'TRANSFER', 'MERCADOPAGO', 'CARD', 'OTHER']).optional()
+                paymentMethod: z.enum(['CASH', 'TRANSFER', 'MERCADOPAGO', 'CARD', 'OTHER']).optional(),
+                applyDiscount: z.preprocess((v) => v === undefined ? undefined : (v === true || v === 'true'), z.boolean().optional())
             });
             const paramId = req.params.id || req.params.bookingId;
             const bodyParsed = addItemSchema.safeParse(req.body);
             if (!bodyParsed.success) {
                 return res.status(400).json({ error: bodyParsed.error.format() });
             }
-            const { productId, quantity, paymentMethod } = bodyParsed.data;
+            const { productId, quantity, paymentMethod, applyDiscount } = bodyParsed.data;
             const rawBookingId = paramId ?? bodyParsed.data.bookingId;
             if (rawBookingId === undefined || rawBookingId === null) {
                 return res.status(400).json({ error: "Falta el ID de la reserva (bookingId en URL o body)" });
@@ -553,7 +580,8 @@ export class BookingController {
                 Number(productId),
                 Number(quantity),
                 clubId,
-                paymentMethod ?? 'CASH'
+                paymentMethod ?? 'CASH',
+                { applyDiscount, actorUserId: Number((req as any).user?.userId || 0) || null }
             );
 
             return res.json(newItem);
@@ -750,8 +778,4 @@ export class BookingController {
     }
 }
 }
-
-
-
-
 

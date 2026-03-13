@@ -17,6 +17,7 @@ import { ProductRepository } from '../repositories/ProductRepository';
 import { CashRepository } from '../repositories/CashRepository';
 import { z } from 'zod';
 import { ActivityTypeAdminService } from '../services/ActivityTypeAdminService';
+import { DiscountController } from '../controllers/DiscountController';
 
 const router = Router();
 
@@ -45,6 +46,7 @@ const bookingController = new BookingController(bookingService);
 const courtController = new CourtController();
 const clubController = new ClubController(clubService);
 const activityTypeAdminService = new ActivityTypeAdminService();
+const discountController = new DiscountController();
 
 // Todas las rutas requieren autenticación, rol ADMIN y verificación de acceso al club
 // El middleware verifyClubAccess agrega req.clubId al request
@@ -266,6 +268,41 @@ router.get('/:slug/admin/clients-list',
     verifyClubAccess,
     requireRole('ADMIN'),
     clubController.getClubClientsList 
+);
+
+router.get('/:slug/admin/discount-policies',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    discountController.listPolicies
+);
+
+router.post('/:slug/admin/discount-policies',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    discountController.createPolicy
+);
+
+router.get('/:slug/admin/clients/:clientId/discount-assignments',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    discountController.listClientAssignments
+);
+
+router.post('/:slug/admin/clients/:clientId/discount-assignments',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    discountController.assignToClient
+);
+
+router.patch('/:slug/admin/discount-assignments/:assignmentId',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    discountController.setAssignmentStatus
 );
 
 router.get('/:slug/admin/stats/dashboard', 

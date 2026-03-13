@@ -176,6 +176,8 @@ export class BookingRepository {
             s?.lightsFromHour != null ? String(s.lightsFromHour) : null,
             s?.professorDiscountEnabled ?? false,
             s?.professorDiscountPercent != null ? Number(s.professorDiscountPercent) : null,
+            s?.professorDurationOverrideEnabled ?? true,
+            s?.professorDurationOverrideMinutes != null ? Number(s.professorDurationOverrideMinutes) : 60,
             (s?.fixedBookingSettingsByActivity ?? null) as any,
             s?.bookingConfirmationMode ?? 'MANUAL',
             s?.bookingDepositPercent != null ? Number(s.bookingDepositPercent) : null,

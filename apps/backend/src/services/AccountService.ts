@@ -4,6 +4,7 @@ import { AccountingService } from './AccountingService';
 import { acquireTransactionAdvisoryLock } from '../utils/advisoryLock';
 import { ProjectionService } from './ProjectionService';
 import { getDerivedPaymentStatus } from '../domain/bookingDomain';
+import { DiscountService } from './DiscountService';
 
 const USE_PROJECTION_READ_MODELS = String(process.env.READ_MODEL_SOURCE || '').toLowerCase() === 'projection';
 const EPSILON = 0.009;
@@ -17,6 +18,7 @@ type OpenAccountInput = {
 export class AccountService {
   private readonly accountingService = new AccountingService();
   private readonly projectionService = new ProjectionService();
+  private readonly discountService = new DiscountService();
 
   async calculateNetPaidAmountTx(tx: Prisma.TransactionClient, accountId: string): Promise<number> {
     const [paymentsAgg, refundsAgg] = await Promise.all([
@@ -276,7 +278,15 @@ export class AccountService {
         ...(bookingId ? { sourceType: 'BOOKING', sourceId: String(bookingId) } : {})
       },
       include: {
-        items: true,
+        items: {
+          include: {
+            discounts: {
+              include: {
+                policy: { select: { id: true, name: true } }
+              }
+            }
+          }
+        },
         payments: { include: { allocations: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -287,7 +297,16 @@ export class AccountService {
     const account = await prismaRead.account.findFirst({
       where: { id: accountId, clubId },
       include: {
-        items: { orderBy: { createdAt: 'asc' } },
+        items: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            discounts: {
+              include: {
+                policy: { select: { id: true, name: true } }
+              }
+            }
+          }
+        },
         payments: { orderBy: { createdAt: 'asc' }, include: { allocations: true } }
       }
     });
@@ -418,54 +437,73 @@ export class AccountService {
     quantity: number;
     unitPrice: number;
     type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
+    serviceCode?: string;
+    applyDiscount?: boolean;
+    actorUserId?: number | null;
   }) {
     return prisma.$transaction(async (tx) => {
       const account = await tx.account.findFirst({ where: { id: accountId, clubId } });
       if (!account) throw new Error('Cuenta no encontrada');
       if (account.status !== 'OPEN') throw new Error('Solo se pueden agregar consumos a cuentas abiertas');
+
+      let bookingContext: { status: string; clientId: string | null; activityId: number } | null = null;
       if (account.sourceType === 'BOOKING') {
         const booking = await tx.booking.findFirst({
           where: { id: Number(account.sourceId), clubId },
-          select: { status: true }
+          select: { status: true, clientId: true, activityId: true }
         });
         if (!booking) throw new Error('Reserva asociada a la cuenta no encontrada');
         if (booking.status === 'CANCELLED') {
           throw new Error('No se pueden agregar consumos a una reserva cancelada');
         }
-        if (booking.status === 'COMPLETED') {
-          throw new Error('No se pueden agregar consumos a una reserva completada');
+        if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
+          throw new Error('Solo se pueden agregar consumos a reservas confirmadas o finalizadas');
         }
-        if (booking.status !== 'CONFIRMED') {
-          throw new Error('Solo se pueden agregar consumos a reservas confirmadas');
-        }
+        bookingContext = booking;
       }
 
       const quantity = Math.floor(Number(input.quantity));
       const unitPrice = Number(input.unitPrice);
-      const total = quantity * unitPrice;
 
       if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Cantidad inválida');
       if (!Number.isFinite(unitPrice) || unitPrice <= 0) throw new Error('Precio unitario inválido');
 
+      const itemType = input.type ?? 'PRODUCT';
+      const discountDraft = input.applyDiscount === false
+        ? {
+            unitPrice: Number(unitPrice.toFixed(2)),
+            total: Number((quantity * unitPrice).toFixed(2)),
+            snapshots: []
+          }
+        : await this.discountService.computeDraftDiscountTx(tx, {
+            clubId,
+            clientId: bookingContext?.clientId ?? null,
+            itemType,
+            quantity,
+            unitPrice,
+            activityTypeId: bookingContext?.activityId ?? null,
+            serviceCode: input.serviceCode
+          });
+
       const item = await tx.accountItem.create({
         data: {
           accountId,
-          type: input.type ?? 'PRODUCT',
+          type: itemType,
           description: input.description,
           quantity,
-          unitPrice: new Prisma.Decimal(unitPrice),
-          total: new Prisma.Decimal(total)
+          unitPrice: new Prisma.Decimal(discountDraft.unitPrice),
+          total: new Prisma.Decimal(discountDraft.total)
         }
       });
 
       await tx.account.update({
         where: { id: accountId },
         data: {
-          totalAmount: { increment: new Prisma.Decimal(total) }
+          totalAmount: { increment: new Prisma.Decimal(discountDraft.total) }
         }
       });
 
-      const revenueAccount = this.accountingService.mapRevenueAccount(input.type ?? 'PRODUCT');
+      const revenueAccount = this.accountingService.mapRevenueAccount(itemType);
       await this.accountingService.createAccountItemTransaction(tx, {
         clubId,
         type: 'ACCOUNT_ITEM',
@@ -473,10 +511,19 @@ export class AccountService {
         referenceId: item.id,
         accountId,
         accountItemId: item.id,
-        amount: total,
+        amount: discountDraft.total,
         revenueAccount,
         description: input.description
       });
+
+      if (discountDraft.snapshots.length) {
+        await this.discountService.persistAppliedDiscountsTx(tx, {
+          clubId,
+          accountItemId: item.id,
+          snapshots: discountDraft.snapshots,
+          appliedByUserId: input.actorUserId ?? null
+        });
+      }
 
       await this.projectionService.refreshAccountSummary(accountId, tx);
       return item;

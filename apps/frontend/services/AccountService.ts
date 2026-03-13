@@ -77,7 +77,14 @@ export const getOrCreateBookingAccount = async (bookingId: number) => {
   return openAccount({ sourceType: 'BOOKING', sourceId: String(bookingId) });
 };
 
-export const addAccountItem = async (accountId: string, body: { description: string; quantity: number; unitPrice: number; type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT' }) => {
+export const addAccountItem = async (accountId: string, body: {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
+  serviceCode?: string;
+  applyDiscount?: boolean;
+}) => {
   const res = await fetchWithAuth(`${apiBase()}/accounts/${accountId}/items`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
