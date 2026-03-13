@@ -13,7 +13,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "name": "TuCancha App",
+    "name": "TuCancha",
     "url": SITE_URL || undefined,
     "logo": LOGO_URL
   };
@@ -21,13 +21,14 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   return (
     <>
       <Head>
+        <title>TuCancha</title>
         <link rel="icon" href="/Vector.svg" type="image/svg+xml" />
         <link rel="manifest" href="/site.webmanifest" />
         <link rel="apple-touch-icon" href={LOGO_PATH} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="TuCancha App" />
-        <meta property="og:title" content="TuCancha App" />
+        <meta property="og:site_name" content="TuCancha" />
+        <meta property="og:title" content="TuCancha" />
         <meta property="og:description" content="Reserva canchas y gestiona turnos fácilmente." />
         <meta property="og:image" content={LOGO_URL} />
         <meta property="og:image:width" content="512" />

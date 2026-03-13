@@ -2,7 +2,7 @@ import AdminLayout from '../../components/AdminLayout';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabClients from '../../components/admin/AdminTabClients';
-import Head from 'next/dist/shared/lib/head';
+import Head from 'next/head';
 import { hasAdminAccess } from '../../utils/session';
 
 export default function AdminClientesPage() {
@@ -15,7 +15,7 @@ export default function AdminClientesPage() {
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
       <AdminLayout>
         <Head>
-          <title>Clientes | Admin Panel</title>
+          <title>Clientes | TuCancha Admin</title>
         </Head>
         <AdminTabClients />
       </AdminLayout>

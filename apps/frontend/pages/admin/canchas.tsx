@@ -2,7 +2,7 @@ import AdminLayout from '../../components/AdminLayout';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabCourts from '../../components/admin/AdminTabCourts';
-import Head from 'next/dist/shared/lib/head';
+import Head from 'next/head';
 import { hasAdminAccess } from '../../utils/session';
 
 export default function AdminCanchasPage() {
@@ -15,7 +15,7 @@ export default function AdminCanchasPage() {
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
       <AdminLayout>
         <Head>
-          <title>Canchas | Admin Panel</title>
+          <title>Canchas | TuCancha Admin</title>
         </Head>
         <AdminTabCourts />
       </AdminLayout>

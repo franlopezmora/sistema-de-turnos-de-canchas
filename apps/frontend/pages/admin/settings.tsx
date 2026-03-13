@@ -2,7 +2,7 @@ import AdminLayout from '../../components/AdminLayout';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabClub from '../../components/admin/AdminTabClub';
-import Head from 'next/dist/shared/lib/head';
+import Head from 'next/head';
 import { hasAdminAccess } from '../../utils/session';
 
 export default function AdminSettingsPage() {
@@ -15,7 +15,7 @@ export default function AdminSettingsPage() {
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
       <AdminLayout>
         <Head>
-          <title>Configuracion | Admin Panel</title>
+          <title>Configuracion | TuCancha Admin</title>
         </Head>
         <AdminTabClub />
       </AdminLayout>

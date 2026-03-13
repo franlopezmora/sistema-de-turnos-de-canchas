@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import Head from 'next/head';
 import { useRouter } from 'next/router';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
@@ -14,7 +15,16 @@ export default function AdminIndex() {
     router.replace('/admin/agenda');
   }, [authChecked, user, router]);
 
-  if (!authChecked || !user) return null;
-  if (!hasAdminAccess(user)) return <NotFound message="No tenés permiso para acceder al panel de administración." />;
-  return null;
+  return (
+    <>
+      <Head>
+        <title>Admin | TuCancha</title>
+      </Head>
+      {!authChecked || !user
+        ? null
+        : !hasAdminAccess(user)
+          ? <NotFound message="No tenes permiso para acceder al panel de administracion." />
+          : null}
+    </>
+  );
 }

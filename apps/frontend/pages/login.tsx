@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { login, register } from '../services/AuthService';
 import { ClubService } from '../services/ClubService';
@@ -97,7 +98,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4 relative overflow-hidden bg-[#347048]">
+    <>
+      <Head>
+        <title>Ingresar | TuCancha</title>
+      </Head>
+      <div className="flex min-h-screen items-center justify-center p-4 relative overflow-hidden bg-[#347048]">
       
       {/* Decoración de Fondo (Estilo Wimbledon) */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none opacity-20">
@@ -254,6 +259,7 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

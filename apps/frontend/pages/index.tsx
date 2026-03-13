@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
+import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { ClubService, Club } from '../services/ClubService';
 import { getApiUrl } from '../utils/apiUrl';
@@ -626,11 +627,15 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden bg-[#347048] text-[#D4C5B0] selection:bg-[#B9CF32] selection:text-[#347048]" onClick={() => {
-      setShowCityDropdown(false);
-      setShowSportDropdown(false);
-      setShowUserMenu(false);
-    }}>
+    <>
+      <Head>
+        <title>Inicio | TuCancha</title>
+      </Head>
+      <div className="min-h-screen relative overflow-x-hidden bg-[#347048] text-[#D4C5B0] selection:bg-[#B9CF32] selection:text-[#347048]" onClick={() => {
+        setShowCityDropdown(false);
+        setShowSportDropdown(false);
+        setShowUserMenu(false);
+      }}>
       
       {/* NAVBAR */}
       <nav className="absolute top-0 left-0 right-0 z-50 px-6 py-6 flex justify-between items-center max-w-7xl mx-auto">
@@ -1367,7 +1372,8 @@ export default function Home() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

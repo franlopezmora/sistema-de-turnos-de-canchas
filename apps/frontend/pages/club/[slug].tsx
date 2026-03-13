@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Head from 'next/head';
 import { useRouter } from 'next/router';
 import BookingGrid from '../../components/BookingGrid';
 import Navbar from '../../components/NavBar';
@@ -70,37 +71,52 @@ export default function ClubPage() {
 
   const slugReady = router.isReady && slug && typeof slug === 'string';
   const stillLoading = !slugReady || loadingClub;
+  const pageTitle = club?.name ? `${club.name} | TuCancha` : 'TuCancha';
 
   if (stillLoading) {
     return (
-      <main className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-4 bg-[#347048] text-[#D4C5B0]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 rounded-full border-2 border-emerald-500/40 border-t-emerald-400 animate-spin" />
-          <p className="text-[#D4C5B0]/80 text-sm">Cargando club...</p>
-        </div>
-      </main>
+      <>
+        <Head>
+          <title>{pageTitle}</title>
+        </Head>
+        <main className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-4 bg-[#347048] text-[#D4C5B0]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-10 w-10 rounded-full border-2 border-emerald-500/40 border-t-emerald-400 animate-spin" />
+            <p className="text-[#D4C5B0]/80 text-sm">Cargando club...</p>
+          </div>
+        </main>
+      </>
     );
   }
 
   if (error || !club) {
     return (
-      <main className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-4 bg-[#347048] text-[#D4C5B0]">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-[#D4C5B0] mb-4">Club no encontrado</h1>
-          <p className="text-[#D4C5B0]/80 mb-4">{error || 'El club solicitado no existe'}</p>
-          <button
-            onClick={() => router.push('/')}
-            className="px-6 py-2 rounded-full bg-[#D4C5B0] text-[#347048] font-bold hover:bg-[#B9CF32] transition-all"
-          >
-            Volver al inicio
-          </button>
-        </div>
-      </main>
+      <>
+        <Head>
+          <title>{pageTitle}</title>
+        </Head>
+        <main className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-4 bg-[#347048] text-[#D4C5B0]">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-[#D4C5B0] mb-4">Club no encontrado</h1>
+            <p className="text-[#D4C5B0]/80 mb-4">{error || 'El club solicitado no existe'}</p>
+            <button
+              onClick={() => router.push('/')}
+              className="px-6 py-2 rounded-full bg-[#D4C5B0] text-[#347048] font-bold hover:bg-[#B9CF32] transition-all"
+            >
+              Volver al inicio
+            </button>
+          </div>
+        </main>
+      </>
     );
   }
 
   return (
-    <main className="min-h-screen relative bg-[#347048] text-[#D4C5B0]">
+    <>
+      <Head>
+        <title>{pageTitle}</title>
+      </Head>
+      <main className="min-h-screen relative bg-[#347048] text-[#D4C5B0]">
 
       {/* Contenido (Z-10 para que esté sobre el fondo) */}
       <div className="absolute top-0 left-0 w-full z-50"> 
@@ -283,6 +299,7 @@ export default function ClubPage() {
           </p>
         </footer>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

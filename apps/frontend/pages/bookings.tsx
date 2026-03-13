@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Navbar from '../components/NavBar';
 import { getMyBookings, cancelBooking } from '../services/BookingService';
@@ -216,7 +217,11 @@ export default function MyBookingsPage() {
 
   // --- RENDERIZADO VISUAL PREMIUM ---
   return (
-    <div className="min-h-screen bg-[#347048] relative overflow-hidden text-[#D4C5B0]">
+    <>
+      <Head>
+        <title>Mis turnos | TuCancha</title>
+      </Head>
+      <div className="min-h-screen bg-[#347048] relative overflow-hidden text-[#D4C5B0]">
       {/* Fondo Decorativo */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none opacity-20">
         <div className="absolute top-[-10%] right-[-10%] w-[420px] h-[420px] bg-[#B9CF32]/30 rounded-full"></div>
@@ -447,6 +452,7 @@ export default function MyBookingsPage() {
         isWarning={modalState.isWarning}
         onConfirm={modalState.onConfirm}
       />
-    </div>
+      </div>
+    </>
   );
 }

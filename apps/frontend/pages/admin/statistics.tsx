@@ -22,7 +22,7 @@ export default function AdminStatisticsPage() {
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
       <AdminLayout>
         <Head>
-          <title>Estadísticas | Admin Panel</title>
+          <title>Estadísticas | TuCancha Admin</title>
         </Head>
         
         {/* 👇 ACÁ ESTÁ LA MAGIA: Le pasamos el slug manual si no está en la URL */}

@@ -3,7 +3,7 @@ import AdminLayout from '../../components/AdminLayout';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabProducts from '../../components/admin/AdminTabProducts';
-import Head from 'next/dist/shared/lib/head';
+import Head from 'next/head';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
 
 export default function AdminProductsPage() {
@@ -24,7 +24,7 @@ export default function AdminProductsPage() {
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
       <AdminLayout>
         <Head>
-          <title>Productos & Stock | Admin Panel</title>
+          <title>Productos y Stock | TuCancha Admin</title>
         </Head>
         <AdminTabProducts clubSlug={clubSlug} />
       </AdminLayout>

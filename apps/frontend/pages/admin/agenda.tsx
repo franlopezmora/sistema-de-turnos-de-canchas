@@ -2,7 +2,7 @@ import AdminLayout from '../../components/AdminLayout';
 import NotFound from '../../components/NotFound';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import AdminTabBookings from '../../components/admin/AdminTabBookings';
-import Head from 'next/dist/shared/lib/head';
+import Head from 'next/head';
 import { hasAdminAccess } from '../../utils/session';
 
 export default function AdminAgendaPage() {
@@ -15,7 +15,7 @@ export default function AdminAgendaPage() {
     <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
       <AdminLayout>
         <Head>
-          <title>Turnos | Admin Panel</title>
+          <title>Turnos | TuCancha Admin</title>
         </Head>
         <AdminTabBookings />
       </AdminLayout>

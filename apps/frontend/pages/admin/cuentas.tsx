@@ -212,7 +212,7 @@ export default function AdminAccountsPage() {
   return (
     <AdminLayout>
       <Head>
-        <title>Cuentas | Admin Panel</title>
+        <title>Cuentas | TuCancha Admin</title>
       </Head>
 
       <div className="bg-[#EBE1D8] border-4 border-white/50 rounded-[2rem] p-8 shadow-2xl text-[#347048] space-y-6">
@@ -605,5 +605,4 @@ export default function AdminAccountsPage() {
     </AdminLayout>
   );
 }
-
 
