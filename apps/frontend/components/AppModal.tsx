@@ -21,6 +21,7 @@ type AppModalProps = {
   confirmDisabled?: boolean;
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
+  zIndexClass?: string;
 };
 
 /**
@@ -45,7 +46,8 @@ export default function AppModal({
   holdDuration = 1200,
   confirmDisabled = false,
   closeOnBackdrop = true,
-  closeOnEscape = true
+  closeOnEscape = true,
+  zIndexClass = 'z-[99999]'
 }: AppModalProps) {
   const [mounted, setMounted] = useState(false);
   const [inputText, setInputText] = useState(inputValue);
@@ -149,7 +151,7 @@ export default function AppModal({
     <div
       role="dialog"
       aria-modal="true"
-  className="fixed inset-0 z-[99999] bg-[#347048]/85 flex items-center justify-center p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 ${zIndexClass} bg-[#347048]/85 flex items-center justify-center p-4 animate-in fade-in duration-200`}
       onMouseDown={(event) => {
         if (!closeOnBackdrop) return;
         backdropMouseDownRef.current = event.target === event.currentTarget;

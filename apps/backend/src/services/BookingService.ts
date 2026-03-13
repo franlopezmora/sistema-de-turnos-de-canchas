@@ -40,6 +40,9 @@ type CancelBookingOptions = {
         executionNotes?: string;
     };
 };
+type CreateBookingOptions = {
+    skipAccountCreation?: boolean;
+};
 
 export class BookingService {
     private readonly pricingService = new PricingService();
@@ -467,6 +470,82 @@ export class BookingService {
         };
     }
 
+    private async ensureBookingAccountWithChargeTx(
+        tx: Prisma.TransactionClient,
+        params: {
+            bookingId: number;
+            clubId: number;
+            bookingPrice: number;
+        }
+    ) {
+        let account = await tx.account.findFirst({
+            where: {
+                clubId: params.clubId,
+                sourceType: 'BOOKING',
+                sourceId: String(params.bookingId)
+            }
+        });
+
+        if (!account) {
+            account = await tx.account.create({
+                data: {
+                    clubId: params.clubId,
+                    sourceType: 'BOOKING',
+                    sourceId: String(params.bookingId),
+                    status: 'OPEN',
+                    totalAmount: 0,
+                    paidAmount: 0
+                }
+            });
+        }
+
+        const bookingCharge = Number(params.bookingPrice || 0);
+        if (bookingCharge > 0) {
+            const existingBookingItem = await tx.accountItem.findFirst({
+                where: {
+                    accountId: account.id,
+                    type: 'BOOKING'
+                },
+                select: { id: true }
+            });
+
+            if (!existingBookingItem) {
+                const bookingItem = await tx.accountItem.create({
+                    data: {
+                        accountId: account.id,
+                        type: 'BOOKING',
+                        description: 'Reserva cancha',
+                        quantity: 1,
+                        unitPrice: bookingCharge,
+                        total: bookingCharge
+                    }
+                });
+
+                await tx.account.update({
+                    where: { id: account.id },
+                    data: {
+                        totalAmount: { increment: bookingCharge }
+                    }
+                });
+
+                await this.accountingService.createAccountItemTransaction(tx, {
+                    clubId: params.clubId,
+                    type: 'ACCOUNT_ITEM',
+                    referenceType: 'BOOKING',
+                    referenceId: String(params.bookingId),
+                    accountId: account.id,
+                    accountItemId: bookingItem.id,
+                    amount: bookingCharge,
+                    revenueAccount: 'BOOKING_REVENUE',
+                    description: `Reserva cancha #${params.bookingId}`
+                });
+            }
+        }
+
+        await this.projectionService.refreshAccountSummary(account.id, tx);
+        return account;
+    }
+
     private buildBookingCreatedOutboxMessages(params: {
         bookingId: number;
         courtName: string;
@@ -732,7 +811,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         activityId: number,
         isProfessorOverride: boolean = false,
         durationMinutes?: number,
-        createdByAdmin = false
+        createdByAdmin = false,
+        options?: CreateBookingOptions
     ): Promise<Booking> {
         let user: User | null = null;
         if (userId) {
@@ -906,50 +986,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     include: { user: true, court: { include: { club: true } }, activity: true }
                 });
 
-                const createdAccount = await tx.account.create({
-                    data: {
+                if (!options?.skipAccountCreation) {
+                    await this.ensureBookingAccountWithChargeTx(tx, {
+                        bookingId: saved.id,
                         clubId: bookingClubId,
-                        sourceType: 'BOOKING',
-                        sourceId: String(saved.id),
-                        status: 'OPEN',
-                        totalAmount: 0,
-                        paidAmount: 0
-                    }
-                });
-
-                const bookingCharge = Number(saved.price || 0);
-                if (bookingCharge > 0) {
-                    const bookingItem = await tx.accountItem.create({
-                        data: {
-                            accountId: createdAccount.id,
-                            type: 'BOOKING',
-                            description: 'Reserva cancha',
-                            quantity: 1,
-                            unitPrice: bookingCharge,
-                            total: bookingCharge
-                        }
+                        bookingPrice: Number(saved.price || 0)
                     });
-
-                    await tx.account.update({
-                        where: { id: createdAccount.id },
-                        data: {
-                            totalAmount: { increment: bookingCharge }
-                        }
-                    });
-
-                    await this.accountingService.createAccountItemTransaction(tx, {
-                        clubId: bookingClubId,
-                        type: 'ACCOUNT_ITEM',
-                        referenceType: 'BOOKING',
-                        referenceId: String(saved.id),
-                        accountId: createdAccount.id,
-                        accountItemId: bookingItem.id,
-                        amount: bookingCharge,
-                        revenueAccount: 'BOOKING_REVENUE',
-                        description: `Reserva cancha #${saved.id}`
-                    });
-
-                    await this.projectionService.refreshAccountSummary(createdAccount.id, tx);
                 }
 
                 await this.eventService.bookingCreated(bookingClubId, {
@@ -1166,17 +1208,33 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 if (now.getTime() < cancelAt.getTime()) return;
 
                 if (onlyIfUnpaid) {
-                    const account = await this.bookingDomainService.getBookingAccountTx(tx, bookingId, currentBooking.court.club.id);
-                    const netPaid = await this.accountService.calculateNetPaidAmountTx(tx, account.id);
-                    if (netPaid > 0.009) return;
+                    const account = await tx.account.findFirst({
+                        where: {
+                            sourceType: 'BOOKING',
+                            sourceId: String(bookingId),
+                            clubId: currentBooking.court.club.id
+                        },
+                        select: { id: true }
+                    });
+                    if (account) {
+                        const netPaid = await this.accountService.calculateNetPaidAmountTx(tx, account.id);
+                        if (netPaid > 0.009) return;
+                    }
                 }
             } else if (!isBookingTransitionAllowed(currentBooking.status as any, 'CANCELLED')) {
                 throw new Error('Solo se pueden cancelar reservas pendientes o confirmadas');
             }
 
-            const account = await this.bookingDomainService.getBookingAccountTx(tx, bookingId, booking.court.club.id);
-            const totalAmount = Number(account.totalAmount || 0);
-            const paidAmount = await this.accountService.calculateNetPaidAmountTx(tx, account.id);
+            const account = await tx.account.findFirst({
+                where: {
+                    sourceType: 'BOOKING',
+                    sourceId: String(bookingId),
+                    clubId: booking.court.club.id
+                },
+                select: { id: true, totalAmount: true }
+            });
+            const totalAmount = account ? Number(account.totalAmount || 0) : 0;
+            const paidAmount = account ? await this.accountService.calculateNetPaidAmountTx(tx, account.id) : 0;
 
             await tx.booking.update({
                 where: { id: bookingId },
@@ -1207,7 +1265,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
             let refundedAmount = 0;
             let netPaidAfterRefund = paidAmount;
-            if (paidAmount > 0.009) {
+            if (paidAmount > 0.009 && account) {
                 const refunds = await this.refundService.refundBookingPaymentsTx(tx, {
                     bookingId: booking.id,
                     clubId: booking.court.club.id,
@@ -1236,7 +1294,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 : Number(Math.max(0, paidAmount - refundedAmount).toFixed(2));
             const reversalAmount = Number(Math.max(0, totalAmount - retainedAmount).toFixed(2));
 
-            if (reversalAmount > 0.009) {
+            if (account && reversalAmount > 0.009) {
                 const adjustmentItem = await tx.accountItem.create({
                     data: {
                         accountId: account.id,
@@ -1268,7 +1326,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     description: `Anulacion obligacion reserva #${booking.id}`,
                     createdByUserId: cancelledByUserId ?? null
                 });
-            } else {
+            } else if (account) {
                 await tx.account.update({
                     where: { id: account.id },
                     data: {
@@ -1278,13 +1336,15 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 });
             }
 
-            await tx.account.update({
-                where: { id: account.id },
-                data: {
-                    status: 'CLOSED',
-                    closedAt: new Date()
-                }
-            });
+            if (account) {
+                await tx.account.update({
+                    where: { id: account.id },
+                    data: {
+                        status: 'CLOSED',
+                        closedAt: new Date()
+                    }
+                });
+            }
 
             await this.eventService.bookingCancelled(booking.court.club.id, {
                 bookingId,
@@ -1319,7 +1379,9 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             });
 
             await this.outboxService.enqueueMany(outboxMessages, tx);
-            await this.projectionService.refreshAccountSummary(account.id, tx);
+            if (account) {
+                await this.projectionService.refreshAccountSummary(account.id, tx);
+            }
             wasCancelled = true;
         });
 
@@ -1354,7 +1416,19 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
     async confirmBooking(bookingId: number, actorUserId: number, clubId: number) {
         const updatedStatus = await prisma.$transaction(async (tx) => {
-            return this.bookingDomainService.confirmBookingManuallyTx(tx, { bookingId, clubId });
+            const status = await this.bookingDomainService.confirmBookingManuallyTx(tx, { bookingId, clubId });
+            const booking = await tx.booking.findFirst({
+                where: { id: bookingId, clubId },
+                select: { id: true, clubId: true, price: true }
+            });
+            if (booking) {
+                await this.ensureBookingAccountWithChargeTx(tx, {
+                    bookingId: booking.id,
+                    clubId: booking.clubId,
+                    bookingPrice: Number(booking.price || 0)
+                });
+            }
+            return status;
         });
 
         await this.auditLogService.create({
@@ -1388,9 +1462,14 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 data: { status: 'COMPLETED' }
             });
 
-            const account = await this.bookingDomainService.getBookingAccountTx(tx, bookingId, clubId);
-            await this.bookingDomainService.closeAccountIfEligibleTx(tx, account.id);
-            await this.projectionService.refreshAccountSummary(account.id, tx);
+            const account = await tx.account.findFirst({
+                where: { sourceType: 'BOOKING', sourceId: String(bookingId), clubId },
+                select: { id: true }
+            });
+            if (account) {
+                await this.bookingDomainService.closeAccountIfEligibleTx(tx, account.id);
+                await this.projectionService.refreshAccountSummary(account.id, tx);
+            }
 
             return updatedBooking;
         });
@@ -1973,7 +2052,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         activityId,
                         isProfessorOverride,
                         duration,
-                        true
+                        true,
+                        { skipAccountCreation: true }
                     );
 
                     await tx.booking.update({

@@ -325,9 +325,10 @@ Si no se confirma antes de las *${limitTime}*, puede cancelarse automáticamente
             where: { sourceType: 'BOOKING', sourceId: String(booking.id), clubId: booking.clubId },
             select: { id: true }
           });
-          if (!account) continue;
-          const netPaid = await this.accountService.calculateNetPaidAmount(account.id);
-          if (netPaid > EPSILON) continue;
+          if (account) {
+            const netPaid = await this.accountService.calculateNetPaidAmount(account.id);
+            if (netPaid > EPSILON) continue;
+          }
         }
 
         const before = await prisma.booking.findUnique({ where: { id: booking.id }, select: { status: true, autoCancelledAt: true } });

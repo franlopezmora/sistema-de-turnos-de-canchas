@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Banknote, CreditCard, X } from 'lucide-react';
 
 export interface PaymentCalculatorItem {
@@ -27,6 +28,7 @@ export interface PaymentCalculatorProps {
   onClose: () => void;
   onConfirm: (result: PaymentCalculatorResult) => Promise<void>;
   submitting?: boolean;
+  zIndexClass?: string;
 }
 
 export default function PaymentCalculator({
@@ -37,11 +39,13 @@ export default function PaymentCalculator({
   grandTotal,
   onClose,
   onConfirm,
-  submitting = false
+  submitting = false,
+  zIndexClass = 'z-[9999]'
 }: PaymentCalculatorProps) {
   const isApprox = (a: number, b: number) => Math.abs(Number(a || 0) - Number(b || 0)) <= 0.01;
   const backdropRef = useRef<boolean>(false);
   const initializedSelectionRef = useRef<boolean>(false);
+  const [mounted, setMounted] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<number | string>('');
   const [itemAllocations, setItemAllocations] = useState<Record<string, number>>({});
   const [courtPortion, setCourtPortion] = useState<number>(0);
@@ -113,6 +117,10 @@ export default function PaymentCalculator({
   const summaryPaidNow = conceptBreakdown.reduce((sum, row) => sum + row.paidNow, 0);
   const summaryDebtAfter = conceptBreakdown.reduce((sum, row) => sum + row.debtAfter, 0);
   const unassignedAmount = Math.max(0, amountEntered - selectedTotal);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (initializedSelectionRef.current) return;
@@ -211,9 +219,9 @@ export default function PaymentCalculator({
     });
   };
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 bg-[#347048]/85 flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 bg-[#347048]/85 flex items-center justify-center ${zIndexClass} p-4 animate-in fade-in duration-200`}
       onMouseDown={(event) => {
         backdropRef.current = event.target === event.currentTarget;
       }}
@@ -500,4 +508,7 @@ export default function PaymentCalculator({
       </div>
     </div>
   );
+
+  if (!mounted) return null;
+  return createPortal(modal, document.body);
 }

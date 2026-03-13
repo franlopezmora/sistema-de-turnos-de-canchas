@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/AdminLayout';
 import { addAccountItem, closeAccount, getAccountById, listAccounts, openAccount, registerPayment, type PaymentMethod, type PaymentSource } from '../../services/AccountService';
-import { listRefunds, requestPaymentRefund, type RefundRecord } from '../../services/PaymentService';
+import type { RefundDraft } from '../../modules/refunds/refund.types';
+import { buildDefaultRefundDraft } from '../../modules/refunds/refund.policy';
+import { validateRefundAmountInput } from '../../modules/refunds/refund.validators';
+import { requestManualRefund } from '../../modules/refunds/refund.facade';
+import RefundRequestModal from '../../components/admin/refunds/RefundRequestModal';
 
 type AccountRow = {
   id: string;
@@ -32,15 +36,10 @@ export default function AdminAccountsPage() {
   const [splitPayments, setSplitPayments] = useState<Array<{ amount: number; method: PaymentMethod; source: PaymentSource }>>([{ amount: 0, method: 'CASH', source: 'POS' }]);
   const [newAccount, setNewAccount] = useState({ sourceType: 'MANUAL' as const, sourceId: '' });
   const [itemAllocationDraft, setItemAllocationDraft] = useState<Record<string, number>>({});
-  const [refunds, setRefunds] = useState<RefundRecord[]>([]);
-  const [loadingRefunds, setLoadingRefunds] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundPaymentId, setRefundPaymentId] = useState('');
   const [refundPaymentMaxAmount, setRefundPaymentMaxAmount] = useState(0);
-  const [refundAmountInput, setRefundAmountInput] = useState('');
-  const [refundReasonType, setRefundReasonType] = useState<'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_FAILURE' | 'PARTIAL_PRICING_ERROR' | 'OTHER'>('OTHER');
-  const [refundExecutionNotes, setRefundExecutionNotes] = useState('');
-  const [refundExecuteNow, setRefundExecuteNow] = useState(false);
+  const [refundDraft, setRefundDraft] = useState<RefundDraft>(() => buildDefaultRefundDraft('ACCOUNT_MANUAL', 0));
   const [submittingRefund, setSubmittingRefund] = useState(false);
 
   const refreshLists = useCallback(async () => {
@@ -75,22 +74,6 @@ export default function AdminAccountsPage() {
     }
   }, []);
 
-  const loadRefunds = useCallback(async (accountId: string) => {
-    if (!accountId) {
-      setRefunds([]);
-      return;
-    }
-    try {
-      setLoadingRefunds(true);
-      const data = await listRefunds({ accountId, take: 100 });
-      setRefunds(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      setError(err.message || 'Error al cargar devoluciones');
-    } finally {
-      setLoadingRefunds(false);
-    }
-  }, []);
-
   useEffect(() => {
     refreshLists();
   }, [refreshLists]);
@@ -98,10 +81,6 @@ export default function AdminAccountsPage() {
   useEffect(() => {
     if (selectedId) loadDetail(selectedId);
   }, [selectedId, loadDetail]);
-
-  useEffect(() => {
-    if (selectedId) loadRefunds(selectedId);
-  }, [selectedId, loadRefunds]);
 
   const totals = useMemo(() => ({
     open: openAccounts.length,
@@ -142,32 +121,76 @@ export default function AdminAccountsPage() {
     return map;
   }, [detail]);
 
-  const formatRefundStatus = (status?: string) => {
+  const formatAccountSourceType = (sourceType?: string) => {
+    switch (sourceType) {
+      case 'MANUAL':
+        return 'Manual';
+      case 'BAR':
+        return 'Bar';
+      case 'TABLE':
+        return 'Mesa';
+      case 'BOOKING':
+        return 'Reserva';
+      default:
+        return sourceType || '-';
+    }
+  };
+  const formatAccountStatus = (status?: string) => {
     switch (status) {
-      case 'REQUESTED':
-        return 'Solicitada';
-      case 'APPROVED':
-        return 'Aprobada';
-      case 'READY_TO_EXECUTE':
-        return 'Lista para ejecutar';
-      case 'EXECUTED':
-        return 'Ejecutada';
-      case 'FAILED':
-        return 'Fallida';
-      case 'CANCELLED':
-        return 'Cancelada';
+      case 'OPEN':
+        return 'Abierta';
+      case 'CLOSED':
+        return 'Cerrada';
       default:
         return status || '-';
     }
   };
-
+  const formatItemType = (type?: string) => {
+    switch (type) {
+      case 'PRODUCT':
+        return 'Producto';
+      case 'BOOKING':
+        return 'Reserva';
+      case 'SERVICE':
+        return 'Servicio';
+      case 'ADJUSTMENT':
+        return 'Ajuste';
+      default:
+        return type || '-';
+    }
+  };
+  const formatPaymentMethod = (method?: string) => {
+    switch (method) {
+      case 'CASH':
+        return 'Efectivo';
+      case 'TRANSFER':
+        return 'Transferencia';
+      case 'MERCADO_PAGO':
+        return 'Mercado Pago';
+      case 'CARD':
+        return 'Tarjeta';
+      case 'OTHER':
+        return 'Otro';
+      default:
+        return method || '-';
+    }
+  };
+  const formatPaymentSource = (source?: string) => {
+    switch (source) {
+      case 'POS':
+        return 'Mostrador (POS)';
+      case 'ONLINE':
+        return 'Online';
+      case 'BACKOFFICE':
+        return 'Administración';
+      default:
+        return source || '-';
+    }
+  };
   const openRefundModal = (paymentId: string, amount: number) => {
     setRefundPaymentId(paymentId);
     setRefundPaymentMaxAmount(amount);
-    setRefundAmountInput(String(Number(amount.toFixed(2))));
-    setRefundReasonType('OTHER');
-    setRefundExecutionNotes('');
-    setRefundExecuteNow(false);
+    setRefundDraft(buildDefaultRefundDraft('ACCOUNT_MANUAL', amount));
     setShowRefundModal(true);
   };
 
@@ -178,32 +201,18 @@ export default function AdminAccountsPage() {
 
   const submitRefundModal = async () => {
     try {
-      const parsedAmount = Number(refundAmountInput);
-      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-        throw new Error('Monto invalido');
-      }
-      if (parsedAmount > refundPaymentMaxAmount + 0.009) {
-        throw new Error('El monto no puede superar el pago original');
-      }
+      const validation = validateRefundAmountInput(refundDraft.amountInput, refundPaymentMaxAmount);
+      if (validation.error) throw new Error(validation.error);
       if (!refundPaymentId) {
         throw new Error('Pago invalido');
       }
-
       setSubmittingRefund(true);
-      await requestPaymentRefund(refundPaymentId, {
-        amount: Number(parsedAmount.toFixed(2)),
-        reasonType: refundReasonType,
-        reason: 'Refund solicitado desde cuentas',
-        executionMethod: 'CASH',
-        executionNotes: refundExecutionNotes.trim() || undefined,
-        executeNow: refundExecuteNow
-      });
-      await loadRefunds(selectedId);
+      await requestManualRefund(refundPaymentId, refundDraft, refundPaymentMaxAmount, 'Devolucion solicitada desde cuentas');
       await loadDetail(selectedId);
       await refreshLists();
       setShowRefundModal(false);
     } catch (err: any) {
-      setError(err.message || 'No se pudo solicitar refund');
+      setError(err.message || 'No se pudo solicitar devolucion');
     } finally {
       setSubmittingRefund(false);
     }
@@ -233,15 +242,15 @@ export default function AdminAccountsPage() {
               onChange={(e) => setNewAccount((prev) => ({ ...prev, sourceType: e.target.value as any }))}
               className="w-full h-10 border rounded-lg px-3"
             >
-              <option value="MANUAL">MANUAL</option>
-              <option value="BAR">BAR</option>
-              <option value="TABLE">TABLE</option>
-              <option value="BOOKING">BOOKING</option>
+              <option value="MANUAL">Manual</option>
+              <option value="BAR">Bar</option>
+              <option value="TABLE">Mesa</option>
+              <option value="BOOKING">Reserva</option>
             </select>
             <input
               value={newAccount.sourceId}
               onChange={(e) => setNewAccount((prev) => ({ ...prev, sourceId: e.target.value }))}
-              placeholder="Source ID"
+              placeholder="ID de origen"
               className="w-full h-10 border rounded-lg px-3"
             />
             <button
@@ -270,9 +279,9 @@ export default function AdminAccountsPage() {
                   <div className="text-xs font-black uppercase tracking-wider">
                     {account.sourceType === 'BOOKING' && account.booking
                       ? `${account.booking.clientName || 'Sin cliente'} · ${formatBookingDateTime(account.booking.startDateTime)} · ${account.booking.courtName || 'Sin cancha'}`
-                      : `${account.sourceType} · ${account.sourceId}`}
+                      : `${formatAccountSourceType(account.sourceType)} · ${account.sourceId}`}
                   </div>
-                  <div className="text-xs">Estado: {account.status}</div>
+                  <div className="text-xs">Estado: {formatAccountStatus(account.status)}</div>
                 </button>
               ))}
               {openAccounts.length === 0 && <div className="text-xs font-bold text-[#347048]/50">No hay cuentas abiertas.</div>}
@@ -293,10 +302,10 @@ export default function AdminAccountsPage() {
               <input type="number" min={1} value={newItem.quantity} onChange={(e) => setNewItem((prev) => ({ ...prev, quantity: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
               <input type="number" min={0} step="0.01" value={newItem.unitPrice} onChange={(e) => setNewItem((prev) => ({ ...prev, unitPrice: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
               <select value={newItem.type} onChange={(e) => setNewItem((prev) => ({ ...prev, type: e.target.value as any }))} className="h-10 border rounded-lg px-3">
-                <option value="PRODUCT">PRODUCT</option>
-                <option value="BOOKING">BOOKING</option>
-                <option value="SERVICE">SERVICE</option>
-                <option value="ADJUSTMENT">ADJUSTMENT</option>
+                <option value="PRODUCT">Producto</option>
+                <option value="BOOKING">Reserva</option>
+                <option value="SERVICE">Servicio</option>
+                <option value="ADJUSTMENT">Ajuste</option>
               </select>
               <button
                 onClick={async () => {
@@ -316,7 +325,7 @@ export default function AdminAccountsPage() {
               <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
                 {(detail.items || []).map((item: any) => (
                   <div key={item.id} className="flex items-center justify-between border border-[#347048]/10 rounded-lg px-2 py-1">
-                    <span className="font-bold">{item.description} · {item.type}</span>
+                    <span className="font-bold">{item.description} · {formatItemType(item.type)}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-[#347048]/70">Pendiente: ${Number(itemOutstandingMap.get(String(item.id)) || 0).toLocaleString()}</span>
                       <input
@@ -344,16 +353,16 @@ export default function AdminAccountsPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
               <input type="number" min={0} step="0.01" value={payment.amount} onChange={(e) => setPayment((prev) => ({ ...prev, amount: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
               <select value={payment.method} onChange={(e) => setPayment((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))} className="h-10 border rounded-lg px-3">
-                <option value="CASH">CASH</option>
-                <option value="TRANSFER">TRANSFER</option>
-                <option value="MERCADO_PAGO">MERCADO_PAGO</option>
-                <option value="CARD">CARD</option>
-                <option value="OTHER">OTHER</option>
+                <option value="CASH">Efectivo</option>
+                <option value="TRANSFER">Transferencia</option>
+                <option value="MERCADO_PAGO">Mercado Pago</option>
+                <option value="CARD">Tarjeta</option>
+                <option value="OTHER">Otro</option>
               </select>
               <select value={payment.source} onChange={(e) => setPayment((prev) => ({ ...prev, source: e.target.value as PaymentSource }))} className="h-10 border rounded-lg px-3">
-                <option value="POS">POS</option>
-                <option value="ONLINE">ONLINE</option>
-                <option value="BACKOFFICE">BACKOFFICE</option>
+                <option value="POS">Mostrador (POS)</option>
+                <option value="ONLINE">Online</option>
+                <option value="BACKOFFICE">Administración</option>
               </select>
               <button
                 onClick={async () => {
@@ -396,21 +405,21 @@ export default function AdminAccountsPage() {
             </div>
 
             <div className="rounded-xl border border-[#347048]/10 p-3 space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Split payments</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Pagos divididos</p>
               {splitPayments.map((splitPayment, index) => (
                 <div key={`split-payment-${index}`} className="grid grid-cols-1 md:grid-cols-4 gap-2">
                   <input type="number" min={0} step="0.01" value={splitPayment.amount} onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, amount: Number(e.target.value) } : entry))} className="h-10 border rounded-lg px-3" />
                   <select value={splitPayment.method} onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, method: e.target.value as PaymentMethod } : entry))} className="h-10 border rounded-lg px-3">
-                    <option value="CASH">CASH</option>
-                    <option value="TRANSFER">TRANSFER</option>
-                    <option value="MERCADO_PAGO">MERCADO_PAGO</option>
-                    <option value="CARD">CARD</option>
-                    <option value="OTHER">OTHER</option>
+                    <option value="CASH">Efectivo</option>
+                    <option value="TRANSFER">Transferencia</option>
+                    <option value="MERCADO_PAGO">Mercado Pago</option>
+                    <option value="CARD">Tarjeta</option>
+                    <option value="OTHER">Otro</option>
                   </select>
                   <select value={splitPayment.source} onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, source: e.target.value as PaymentSource } : entry))} className="h-10 border rounded-lg px-3">
-                    <option value="POS">POS</option>
-                    <option value="ONLINE">ONLINE</option>
-                    <option value="BACKOFFICE">BACKOFFICE</option>
+                    <option value="POS">Mostrador (POS)</option>
+                    <option value="ONLINE">Online</option>
+                    <option value="BACKOFFICE">Administración</option>
                   </select>
                   <button onClick={() => setSplitPayments((prev) => prev.filter((_, entryIndex) => entryIndex !== index))} className="h-10 rounded-lg border border-[#347048]/20 text-xs font-black uppercase text-[#347048]">
                     Quitar
@@ -430,13 +439,13 @@ export default function AdminAccountsPage() {
                   }}
                   className="h-9 px-3 rounded-lg bg-[#347048] text-[#EBE1D8] text-xs font-black uppercase"
                 >
-                  Registrar split
+                  Registrar pagos divididos
                 </button>
               </div>
             </div>
 
             <div className="rounded-xl border border-[#347048]/10 p-3 space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Pagos de la cuenta (refund manual)</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Pagos de la cuenta (devolución manual)</p>
               <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
                 {(detail.payments || []).map((entry: any) => {
                   const paymentId = String(entry?.id || '');
@@ -446,14 +455,14 @@ export default function AdminAccountsPage() {
                     <div key={paymentId} className="flex items-center justify-between gap-2 border border-[#347048]/10 rounded-lg px-2 py-1">
                       <div className="min-w-0">
                         <p className="font-black truncate">{paymentId}</p>
-                        <p className="text-[#347048]/70 truncate">{entry.method} · ${amount.toLocaleString()}</p>
+                        <p className="text-[#347048]/70 truncate">{formatPaymentMethod(entry.method)} · {formatPaymentSource(entry.source)} · ${amount.toLocaleString()}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => openRefundModal(paymentId, amount)}
                         className="h-8 rounded-lg border border-[#347048]/20 px-2 text-[10px] font-black uppercase"
                       >
-                        Solicitar refund
+                        Solicitar devolución
                       </button>
                     </div>
                   );
@@ -462,33 +471,6 @@ export default function AdminAccountsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-[#347048]/10 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Devoluciones de la cuenta</p>
-                <button
-                  type="button"
-                  onClick={() => loadRefunds(selectedId)}
-                  className="h-7 rounded-lg border border-[#347048]/20 px-2 text-[10px] font-black uppercase"
-                >
-                  Recargar
-                </button>
-              </div>
-              {loadingRefunds ? (
-                <div className="text-xs text-[#347048]/60">Cargando devoluciones...</div>
-              ) : (
-                <div className="space-y-1 max-h-36 overflow-y-auto text-xs">
-                  {refunds.map((refund) => (
-                    <div key={refund.id} className="border border-[#347048]/10 rounded-lg px-2 py-1">
-                      <p className="font-black">{refund.id}</p>
-                      <p className="text-[#347048]/70">
-                        ${Number(refund.amount || 0).toLocaleString()} · {formatRefundStatus(refund.status)} · {refund.executionMethod || '-'}
-                      </p>
-                    </div>
-                  ))}
-                  {!loadingRefunds && refunds.length === 0 ? <div className="text-[#347048]/50">Sin devoluciones para esta cuenta.</div> : null}
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -500,9 +482,9 @@ export default function AdminAccountsPage() {
                 <div className="font-black uppercase">
                   {account.sourceType === 'BOOKING' && account.booking
                     ? `${account.booking.clientName || 'Sin cliente'} · ${formatBookingDateTime(account.booking.startDateTime)} · ${account.booking.courtName || 'Sin cancha'}`
-                    : `${account.sourceType} · ${account.sourceId}`}
+                    : `${formatAccountSourceType(account.sourceType)} · ${account.sourceId}`}
                 </div>
-                <div>Estado: {account.status}</div>
+                <div>Estado: {formatAccountStatus(account.status)}</div>
               </div>
             ))}
             {!loading && closedAccounts.length === 0 && <div className="text-xs font-bold text-[#347048]/50">No hay cuentas cerradas.</div>}
@@ -510,98 +492,18 @@ export default function AdminAccountsPage() {
         </div>
       </div>
 
-      {showRefundModal ? (
-        <div className="fixed inset-0 z-[9999] bg-[#347048]/70 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#EBE1D8] border-4 border-white/60 rounded-[1.5rem] shadow-2xl p-6 text-[#347048] space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-xl font-black uppercase italic">Solicitar refund</h3>
-                <p className="text-xs font-black uppercase tracking-widest text-[#347048]/60">
-                  Pago: {refundPaymentId}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeRefundModal}
-                disabled={submittingRefund}
-                className="h-8 px-3 rounded-lg border border-[#347048]/20 text-xs font-black uppercase"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-[#347048]/60 mb-1">Monto</label>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={refundAmountInput}
-                  onChange={(e) => setRefundAmountInput(e.target.value)}
-                  className="w-full h-10 border rounded-lg px-3 bg-white"
-                />
-                <p className="text-[11px] text-[#347048]/60 mt-1">Maximo: ${refundPaymentMaxAmount.toLocaleString()}</p>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-[#347048]/60 mb-1">Tipo</label>
-                <select
-                  value={refundReasonType}
-                  onChange={(e) => setRefundReasonType(e.target.value as 'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_FAILURE' | 'PARTIAL_PRICING_ERROR' | 'OTHER')}
-                  className="w-full h-10 border rounded-lg px-3 bg-white"
-                >
-                  <option value="FULL">FULL</option>
-                  <option value="PARTIAL_COMMERCIAL">PARTIAL_COMMERCIAL</option>
-                  <option value="PARTIAL_SERVICE_FAILURE">PARTIAL_SERVICE_FAILURE</option>
-                  <option value="PARTIAL_PRICING_ERROR">PARTIAL_PRICING_ERROR</option>
-                  <option value="OTHER">OTHER</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-[#347048]/60 mb-1">Nota operativa</label>
-                <textarea
-                  value={refundExecutionNotes}
-                  onChange={(e) => setRefundExecutionNotes(e.target.value)}
-                  rows={3}
-                  maxLength={500}
-                  className="w-full border rounded-lg px-3 py-2 bg-white resize-none"
-                  placeholder="Detalle interno"
-                />
-              </div>
-
-              <label className="inline-flex items-center gap-2 text-xs font-bold">
-                <input
-                  type="checkbox"
-                  checked={refundExecuteNow}
-                  onChange={(e) => setRefundExecuteNow(e.target.checked)}
-                />
-                Ejecutar ahora
-              </label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={closeRefundModal}
-                disabled={submittingRefund}
-                className="h-10 rounded-lg border border-[#347048]/20 text-xs font-black uppercase"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={submitRefundModal}
-                disabled={submittingRefund}
-                className="h-10 rounded-lg bg-[#347048] text-[#EBE1D8] text-xs font-black uppercase disabled:opacity-50"
-              >
-                {submittingRefund ? 'Enviando...' : 'Confirmar refund'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <RefundRequestModal
+        show={showRefundModal}
+        title="Solicitar devolucion"
+        paymentId={refundPaymentId}
+        maxAmount={refundPaymentMaxAmount}
+        draft={refundDraft}
+        submitting={submittingRefund}
+        onClose={closeRefundModal}
+        onSubmit={submitRefundModal}
+        onChangeDraft={setRefundDraft}
+        submitLabel="Confirmar devolucion"
+      />
     </AdminLayout>
   );
 }

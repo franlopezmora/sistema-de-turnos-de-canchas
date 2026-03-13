@@ -2,8 +2,9 @@
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ClientService } from '../services/ClientService';
-import { registerBookingPartialPayment } from '../services/BookingService';
-import { Phone, DollarSign, Calendar, Users, Trophy, Search, X, CheckCircle, Receipt, Banknote, CreditCard } from 'lucide-react';
+import { getAccountById, registerPayment } from '../services/AccountService';
+import { Phone, DollarSign, Users, Trophy, Search, X, CheckCircle, Receipt } from 'lucide-react';
+import PaymentCalculator, { type PaymentCalculatorResult } from './PaymentCalculator';
 import AppModal from './AppModal';
 import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
 
@@ -29,6 +30,11 @@ const bookingStatusLabel: Record<string, string> = {
   CANCELLED: 'Cancelado'
 };
 
+const accountStatusLabel: Record<string, string> = {
+  OPEN: 'Abierta',
+  CLOSED: 'Cerrada'
+};
+
 const paymentStatusLabel: Record<string, string> = {
   PENDING: 'Pendiente',
   PAID: 'Pagado',
@@ -36,17 +42,10 @@ const paymentStatusLabel: Record<string, string> = {
   PARTIAL: 'Parcial'
 };
 
-const formatSaleDescription = (raw?: string) => {
-  const value = (raw || '').trim();
-  if (!value) return 'Venta registrada en caja';
-  return value.replace(/^venta\s*:\s*/i, '').trim() || 'Venta registrada en caja';
-};
-
 const getEntryReference = (entry: any) => {
-  const isSale = entry?.sourceType === 'SALE';
-  const stableId = Number(isSale ? (entry?.movementId ?? entry?.id) : (entry?.bookingId ?? entry?.id));
-  if (!Number.isFinite(stableId) || stableId <= 0) return isSale ? 'V-?' : 'R-?';
-  return `${isSale ? 'V' : 'R'}-${stableId}`;
+  const accountId = String(entry?.id || '').trim();
+  if (accountId) return `C-${accountId.slice(-6).toUpperCase()}`;
+  return 'C-?';
 };
 
 const sortByCreationDesc = (a: any, b: any) => {
@@ -62,6 +61,80 @@ interface ClientsPageProps {
   clubSlug?: string;
 }
 
+const EPSILON = 0.009;
+
+type PendingAccountItem = {
+  id: string;
+  type: string;
+  description: string;
+  quantity: number;
+  total: number;
+  paid: number;
+  remaining: number;
+};
+
+type PendingAccountBreakdown = {
+  total: number;
+  paid: number;
+  remaining: number;
+  items: PendingAccountItem[];
+  bookingPendingItems: PendingAccountItem[];
+  consumptionPendingItems: PendingAccountItem[];
+  courtPending: number;
+  consumptionPending: number;
+  totalPending: number;
+};
+
+const buildPendingBreakdown = (detail: any): PendingAccountBreakdown => {
+  const items = Array.isArray(detail?.items) ? detail.items : [];
+  const payments = Array.isArray(detail?.payments) ? detail.payments : [];
+
+  const allocatedByItem = new Map<string, number>();
+  for (const paymentEntry of payments) {
+    const allocations = Array.isArray(paymentEntry?.allocations) ? paymentEntry.allocations : [];
+    for (const allocation of allocations) {
+      const itemId = String(allocation?.accountItemId || '').trim();
+      if (!itemId) continue;
+      const prev = Number(allocatedByItem.get(itemId) || 0);
+      allocatedByItem.set(itemId, Number((prev + Number(allocation?.amount || 0)).toFixed(2)));
+    }
+  }
+
+  const normalizedItems: PendingAccountItem[] = items.map((item: any) => {
+    const id = String(item?.id || '');
+    const total = Number(item?.total || 0);
+    const paid = Math.max(0, Number(allocatedByItem.get(id) || 0));
+    const remaining = Math.max(0, Number((total - paid).toFixed(2)));
+    return {
+      id,
+      type: String(item?.type || 'OTHER'),
+      description: String(item?.description || 'Concepto'),
+      quantity: Math.max(1, Number(item?.quantity || 1)),
+      total,
+      paid: Number(paid.toFixed(2)),
+      remaining
+    };
+  });
+
+  const bookingPendingItems = normalizedItems.filter((item) => item.type === 'BOOKING' && item.remaining > EPSILON);
+  const consumptionPendingItems = normalizedItems.filter((item) => item.type !== 'BOOKING' && item.remaining > EPSILON);
+  const courtPending = Number(bookingPendingItems.reduce((sum, item) => sum + item.remaining, 0).toFixed(2));
+  const consumptionPending = Number(consumptionPendingItems.reduce((sum, item) => sum + item.remaining, 0).toFixed(2));
+  const totalPending = Number((courtPending + consumptionPending).toFixed(2));
+
+  return {
+    total: Number(detail?.total || 0),
+    paid: Number(detail?.paid || 0),
+    remaining: Number(detail?.remaining || 0),
+    items: normalizedItems,
+    bookingPendingItems,
+    consumptionPendingItems,
+    courtPending,
+    consumptionPending,
+    totalPending
+  };
+};
+
 export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,10 +142,14 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const [selectedClientHistory, setSelectedClientHistory] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showPayMethodModal, setShowPayMethodModal] = useState(false);
-  const [debtTarget, setDebtTarget] = useState<{ type: 'BOOKING' | 'SALE'; id: number } | null>(null);
+  const [debtTarget, setDebtTarget] = useState<{ accountId: string } | null>(null);
+  const [submittingCalculator, setSubmittingCalculator] = useState(false);
+  const [selectedAccountDetail, setSelectedAccountDetail] = useState<any>(null);
+  const [showAccountDetailModal, setShowAccountDetailModal] = useState(false);
+  const [accountBreakdownById, setAccountBreakdownById] = useState<Record<string, PendingAccountBreakdown>>({});
+  const [loadingAccountDetailById, setLoadingAccountDetailById] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
   const debtBackdropMouseDownRef = useRef(false);
-  const payMethodBackdropMouseDownRef = useRef(false);
   const historyBackdropMouseDownRef = useRef(false);
 
   // --- LÓGICA DEL APPMODAL ---
@@ -115,26 +192,44 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const totalClients = clients.length;
   const topClient = clients.reduce((prev, current) => (prev.totalBookings > current.totalBookings) ? prev : current, {name: '-', totalBookings: 0});
 
-  const handleOpenPayModal = (target: { type: 'BOOKING' | 'SALE'; id: number }) => {
-    const selectedEntry = selectedDebtor?.bookings?.find(
-      (entry: any) => (target.type === 'SALE' ? entry.movementId : entry.id) === target.id
-    );
+  const ensureAccountBreakdown = useCallback(async (accountId: string) => {
+    const key = String(accountId || '').trim();
+    if (!key) return null;
+    if (accountBreakdownById[key]) return accountBreakdownById[key];
+    if (loadingAccountDetailById[key]) return null;
+
+    try {
+      setLoadingAccountDetailById((prev) => ({ ...prev, [key]: true }));
+      const detail = await getAccountById(key);
+      const breakdown = buildPendingBreakdown(detail);
+      setAccountBreakdownById((prev) => ({ ...prev, [key]: breakdown }));
+      return breakdown;
+    } catch (error) {
+      console.error('Error obteniendo detalle de cuenta:', error);
+      return null;
+    } finally {
+      setLoadingAccountDetailById((prev) => ({ ...prev, [key]: false }));
+    }
+  }, [accountBreakdownById, loadingAccountDetailById]);
+
+  const handleOpenPayModal = async (target: { accountId: string }) => {
+    const selectedEntry = selectedDebtor?.bookings?.find((entry: any) => entry.id === target.accountId);
 
     if (!selectedEntry || Number(selectedEntry.amount || 0) <= 0.01) {
       showInfo('Este registro ya no tiene deuda pendiente.', 'Sin deuda');
       return;
     }
 
+    await ensureAccountBreakdown(String(target.accountId));
     setDebtTarget(target);
     setShowPayMethodModal(true);
   };
 
-  const processDebtPayment = async (method: 'CASH' | 'TRANSFER') => {
+  const processDebtPayment = async (result: PaymentCalculatorResult) => {
     if (!debtTarget) return;
     try {
-      const bookingInfo = selectedDebtorPendingEntries.find(
-        (entry: any) => (debtTarget.type === 'SALE' ? entry.movementId : entry.id) === debtTarget.id
-      );
+      setSubmittingCalculator(true);
+      const bookingInfo = selectedDebtorPendingEntries.find((entry: any) => entry.id === debtTarget.accountId);
 
       if (!bookingInfo || Number(bookingInfo.amount || 0) <= 0.01) {
         showInfo('Este registro ya no tiene deuda pendiente.', 'Sin deuda');
@@ -143,12 +238,43 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
         return;
       }
 
-      if (debtTarget.type !== 'BOOKING') {
-        showInfo('Este tipo de deuda todavia no soporta cobro directo desde Clientes.', 'Flujo no disponible');
-        return;
+      const breakdown = accountBreakdownById[String(bookingInfo.id)];
+      const itemAllocationMap = new Map<string, number>(
+        (result.itemAllocations || [])
+          .map((entry) => [String(entry.key), Number(entry.amount || 0)] as const)
+          .filter(([, amount]) => amount > EPSILON)
+      );
+
+      const allocations: Array<{ accountItemId: string; amount: number }> = [];
+      for (const item of breakdown?.consumptionPendingItems || []) {
+        const allocated = Number(itemAllocationMap.get(String(item.id)) || 0);
+        if (allocated > EPSILON) {
+          allocations.push({
+            accountItemId: String(item.id),
+            amount: Number(Math.min(item.remaining, allocated).toFixed(2))
+          });
+        }
       }
 
-      await registerBookingPartialPayment(Number(debtTarget.id), Number(bookingInfo.amount), method);
+      let remainingCourtToAllocate = Math.max(0, Number(result.courtAmount || 0));
+      for (const item of breakdown?.bookingPendingItems || []) {
+        if (remainingCourtToAllocate <= EPSILON) break;
+        const amount = Math.min(item.remaining, remainingCourtToAllocate);
+        if (amount > EPSILON) {
+          allocations.push({
+            accountItemId: String(item.id),
+            amount: Number(amount.toFixed(2))
+          });
+          remainingCourtToAllocate = Number((remainingCourtToAllocate - amount).toFixed(2));
+        }
+      }
+
+      await registerPayment({
+        accountId: String(bookingInfo.id),
+        amount: Number(result.amount || 0),
+        method: result.method,
+        allocations: allocations.length > 0 ? allocations : undefined
+      });
 
       await loadClients();
       setShowPayMethodModal(false);
@@ -157,6 +283,8 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       showInfo('Cobro registrado correctamente.', 'Pago aplicado');
     } catch (error) {
       showError("No se pudo procesar el cobro. Intenta nuevamente.");
+    } finally {
+      setSubmittingCalculator(false);
     }
   };
 
@@ -164,6 +292,15 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     .slice()
     .sort(sortByCreationDesc)
     .filter((entry: any) => Number(entry.amount || 0) > 0.01);
+  const selectedDebtEntry = selectedDebtorPendingEntries.find((entry: any) => entry.id === debtTarget?.accountId);
+  const selectedDebtBreakdown = selectedDebtEntry ? accountBreakdownById[String(selectedDebtEntry.id)] : null;
+  const selectedAccountBreakdown = selectedAccountDetail ? accountBreakdownById[String(selectedAccountDetail.id)] : null;
+
+  const openAccountDetail = async (account: any) => {
+    await ensureAccountBreakdown(String(account?.id || ''));
+    setSelectedAccountDetail(account);
+    setShowAccountDetailModal(true);
+  };
   
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -313,71 +450,65 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                 </div>
 
                 <div className="p-8 overflow-y-auto custom-scrollbar space-y-4 bg-white/40">
-                  {selectedDebtorPendingEntries.length > 0 ? selectedDebtorPendingEntries.map((booking: any) => {
-                      const isSale = booking.sourceType === 'SALE';
-                      const itemsTotal = (booking.items || []).reduce((sum: number, item: any) => sum + (Number(item.price) * item.quantity), 0);
-                      const courtPrice = Number(booking.price) - itemsTotal;
-                      const totalPaid = Number(booking.paid || 0);
-                      const explicitCourtDebt = Number(booking.courtDebtInAccount || 0);
-                      const isCourtPaid = !isSale && explicitCourtDebt <= 0.01;
+                  {selectedDebtorPendingEntries.length > 0 ? selectedDebtorPendingEntries.map((account: any) => {
+                      const paymentStatus = String(account.paymentStatus || '');
+                      const accountStatus = String(account.accountStatus || account.status || '');
+                      const isPending = Number(account.amount || 0) > 0.01;
 
-                      let remainingPayment = Math.max(0, totalPaid - (isCourtPaid ? courtPrice : 0));
-
-                      const itemsWithStatus = (booking.items || []).map((item: any) => {
-                        const itemCost = Number(item.price) * item.quantity;
-                        const method = String(item.paymentMethod || '').toUpperCase();
-
-                        if (method === 'DEBT') {
-                          return { ...item, isPaid: false };
-                        }
-
-                        if (method === 'CASH' || method === 'TRANSFER') {
-                          return { ...item, isPaid: true };
-                        }
-
-                        let isPaid = false;
-                        if (remainingPayment >= itemCost) {
-                          remainingPayment -= itemCost;
-                          isPaid = true;
-                        }
-                        return { ...item, isPaid };
-                      });
-
-                        return (
-                        <div key={booking.id} className="bg-white p-5 rounded-[1.5rem] border-2 border-[#347048]/5 flex justify-between items-center shadow-sm">
-                            <div className="flex flex-col flex-1">
-                                <div className="flex items-center gap-3 mb-3">
-                                  <span className="font-black text-[#347048] text-sm bg-[#347048]/5 px-3 py-1 rounded-lg italic">{getEntryReference(booking)}</span>
-                                    <span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(booking.date)}</span>
-                                </div>
-                                <div className={`text-sm font-black uppercase tracking-tight flex justify-between mb-2 pr-10 ${!isSale && isCourtPaid ? 'text-[#347048]/20 line-through' : 'text-[#347048]'}`}>
-                                    <span>{isSale ? 'Venta extra' : `Cancha: ${booking.courtName || booking.court?.name}`}</span>
-                                    <span className="text-xs opacity-60 font-mono">${(isSale ? Number(booking.price || 0) : courtPrice)}</span>
-                                </div>
-                                {isSale ? (
-                                  <div className="text-[11px] font-bold text-[#347048]/70 uppercase tracking-wide pr-10">
-                                    {formatSaleDescription(booking.description)}
-                                  </div>
-                                ) : (
-                                  <div className="space-y-1.5 pl-3 border-l-4 border-[#347048]/5">
-                                      {itemsWithStatus.map((item: any, idx: number) => (
-                                        <div key={idx} className={`flex justify-between items-center text-[11px] font-bold uppercase tracking-wide pr-10 ${item.isPaid ? 'text-[#347048]/20 line-through' : 'text-[#347048]/60'}`}>
-                                            <span className="flex items-center gap-2"><span className={`px-1.5 py-0.5 rounded-md ${item.isPaid ? 'bg-gray-100 text-gray-400' : 'bg-[#926699] text-white'}`}>{item.quantity}x</span>{item.name || item.product?.name}</span>
-                                            <span className="font-mono">${Number(item.price) * item.quantity}</span>
-                                        </div>
-                                      ))}
-                                  </div>
-                                )}
+                      return (
+                        <div
+                          key={account.id}
+                          role="button"
+                          onClick={() => openAccountDetail(account)}
+                          className="bg-white p-5 rounded-[1.5rem] border-2 border-[#347048]/5 flex justify-between items-center shadow-sm cursor-pointer hover:scale-[1.01] transition-transform"
+                        >
+                          <div className="flex flex-col flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="font-black text-[#347048] text-sm bg-[#347048]/5 px-3 py-1 rounded-lg italic">{getEntryReference(account)}</span>
+                              <span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(account.date)}</span>
                             </div>
-                            <div className="flex items-center gap-6 pl-8 border-l-2 border-dashed border-[#347048]/10">
-                                <div className="text-right">
-                                    <div className="text-2xl font-black text-red-600 font-mono italic tracking-tighter">${booking.amount}</div>
-                                    <div className="text-[9px] text-[#347048]/40 uppercase font-black tracking-widest">Adeudado</div>
-                                </div>
-                                <button onClick={() => handleOpenPayModal({ type: booking.sourceType === 'SALE' ? 'SALE' : 'BOOKING', id: booking.sourceType === 'SALE' ? booking.movementId : booking.id })} className="bg-[#B9CF32] hover:bg-[#aebd2b] text-[#347048] h-12 w-12 flex items-center justify-center rounded-2xl shadow-lg transition-all active:scale-95"><DollarSign size={24} strokeWidth={3} /></button>
+                            <div className="text-sm font-black uppercase tracking-tight flex justify-between mb-2 pr-10 text-[#347048]">
+                              <span>Cuenta {account.sourceType || '-'}</span>
+                              <span className="text-xs opacity-60 font-mono">${Number(account.totalAmount || 0).toLocaleString()}</span>
                             </div>
+                            <div className="text-[11px] font-bold text-[#347048]/70 uppercase tracking-wide pr-10">
+                              {account.bookingId
+                                ? `Reserva #${account.bookingId} · Cancha: ${account.courtName || '-'}`
+                                : `Origen: ${account.sourceType || '-'}#${account.sourceId || '-'}`}
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${accountStatus === 'OPEN' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                {accountStatusLabel[accountStatus] || accountStatus || 'Cuenta'}
+                              </span>
+                              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${['DEBT', 'PARTIAL'].includes(paymentStatus) ? 'bg-red-50 text-red-500 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                {paymentStatusLabel[paymentStatus] || paymentStatus || 'Pago'}
+                              </span>
+                              <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-[#347048]/5 text-[#347048]/80 border-[#347048]/10">
+                                Pagado ${Number(account.paidAmount || 0).toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6 pl-8 border-l-2 border-dashed border-[#347048]/10">
+                            <div className="text-right">
+                              <div className={`text-2xl font-black font-mono italic tracking-tighter ${isPending ? 'text-red-600' : 'text-emerald-600'}`}>
+                                ${Number(account.amount || 0).toLocaleString()}
+                              </div>
+                              <div className="text-[9px] text-[#347048]/40 uppercase font-black tracking-widest">
+                                {isPending ? 'Pendiente' : 'Saldado'}
+                              </div>
+                            </div>
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleOpenPayModal({ accountId: String(account.id) });
+                              }}
+                              className="bg-[#B9CF32] hover:bg-[#aebd2b] text-[#347048] h-12 w-12 flex items-center justify-center rounded-2xl shadow-lg transition-all active:scale-95"
+                            >
+                              <DollarSign size={24} strokeWidth={3} />
+                            </button>
+                          </div>
                         </div>
-                        );
+                      );
                     }) : (
                       <p className="text-center text-[#347048]/40 font-black py-8 uppercase italic">Sin deuda pendiente</p>
                     )}
@@ -388,83 +519,33 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
           document.body
           )}
 
-      {/* MODAL MÉTODOS PAGO */}
-    {mounted && showPayMethodModal && createPortal(
-  <div
-    className="fixed inset-0 bg-[#347048]/80 backdrop-blur-[2px] flex items-center justify-center z-[100002] p-4 animate-in fade-in duration-200"
-    onMouseDown={(event) => {
-      payMethodBackdropMouseDownRef.current = event.target === event.currentTarget;
-    }}
-    onTouchStart={(event) => {
-      payMethodBackdropMouseDownRef.current = event.target === event.currentTarget;
-    }}
-    onClick={(event) => {
-      const startedOnBackdrop = payMethodBackdropMouseDownRef.current;
-      payMethodBackdropMouseDownRef.current = false;
-      if (startedOnBackdrop && event.target === event.currentTarget) {
-        setShowPayMethodModal(false);
-      }
-    }}
-  >
-      <div className="bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] shadow-2xl max-w-sm w-full max-h-[88vh] overflow-hidden flex flex-col">
-        <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
-          <div className="sticky top-0 z-20 bg-[#EBE1D8] border-b border-[#347048]/10 px-8 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-2xl font-black text-[#347048] text-center uppercase tracking-tight italic">¿Método de cobro?</h3>
-              <button
-                onClick={() => setShowPayMethodModal(false)}
-                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100 shrink-0"
-                title="Cerrar ventana"
-              >
-                <X size={20} strokeWidth={3} />
-              </button>
-            </div>
-          </div>
-
-          <div className="p-8">
-            {/* Buscamos el monto exacto de la reserva que estamos saldando */}
-            {(() => {
-              const bookingInfo = selectedDebtorPendingEntries.find((b: any) => (debtTarget?.type === 'SALE' ? b.movementId : b.id) === debtTarget?.id);
-              return bookingInfo ? (
-                <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
-                  A SALDAR: <span className="text-[#347048] text-lg font-black">${bookingInfo.amount.toLocaleString()}</span>
-                </p>
-              ) : (
-                <p className="text-[#347048]/60 text-xs font-bold mb-8 text-center uppercase tracking-widest">
-                  Se registrará en caja diaria
-                </p>
-              );
-            })()}
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <button
-                onClick={() => processDebtPayment('CASH')}
-                className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
-              >
-                <Banknote size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-                <span className="font-black text-[10px] uppercase tracking-widest">Efectivo</span>
-              </button>
-              <button
-                onClick={() => processDebtPayment('TRANSFER')}
-                className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-3xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group"
-              >
-                <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-                <span className="font-black text-[10px] uppercase tracking-widest">Digital</span>
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowPayMethodModal(false)}
-              className="w-full text-[#347048]/40 hover:text-[#347048] text-[10px] font-black uppercase tracking-widest hover:underline transition-all"
-            >
-              Cancelar operación
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
-    )}
+      {showPayMethodModal && selectedDebtEntry && (
+        <PaymentCalculator
+          courtPending={selectedDebtBreakdown ? Number(selectedDebtBreakdown.courtPending || 0) : Number(selectedDebtEntry.amount || 0)}
+          courtBaseTotal={selectedDebtBreakdown ? Number(selectedDebtBreakdown.courtPending || 0) : Number(selectedDebtEntry.amount || 0)}
+          cartItems={selectedDebtBreakdown
+            ? selectedDebtBreakdown.consumptionPendingItems.map((item) => {
+                const qty = Math.max(1, Number(item.quantity || 1));
+                return {
+                  id: String(item.id),
+                  productName: item.description,
+                  quantity: qty,
+                  price: Number((item.remaining / qty).toFixed(2))
+                };
+              })
+            : []}
+          alreadyPaid={0}
+          grandTotal={selectedDebtBreakdown ? Number(selectedDebtBreakdown.totalPending || 0) : Number(selectedDebtEntry.amount || 0)}
+          onClose={() => {
+            if (submittingCalculator) return;
+            setShowPayMethodModal(false);
+            setDebtTarget(null);
+          }}
+          onConfirm={processDebtPayment}
+          submitting={submittingCalculator}
+          zIndexClass="z-[100003]"
+        />
+      )}
 
       {/* HISTORIAL COMPLETO */}
       {mounted && selectedClientHistory && createPortal(
@@ -503,25 +584,38 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                 selectedClientHistory.history
                   .slice()
                   .sort(sortByCreationDesc)
-                  .map((booking: any) => {
-                    const isSale = booking.sourceType === 'SALE';
-                    const status = booking.status;
-                    const pStatus = booking.paymentStatus;
-                    const itemsTotal = (booking.items || []).reduce((sum: number, item: any) => sum + Number(item.price) * item.quantity, 0);
-                    const courtPrice = Number(booking.price || 0) - itemsTotal;
+                  .map((account: any) => {
+                    const accountStatus = account.accountStatus || account.status;
+                    const pStatus = account.paymentStatus;
                     return (
-                      <div key={`${booking.sourceType || 'BOOKING'}-${booking.movementId || booking.bookingId || booking.id}`} className="bg-white p-5 rounded-[1.5rem] border border-[#347048]/5 flex justify-between items-center shadow-sm">
+                      <div
+                        key={String(account.id)}
+                        role="button"
+                        onClick={() => openAccountDetail(account)}
+                        className="bg-white p-5 rounded-[1.5rem] border border-[#347048]/5 flex justify-between items-center shadow-sm cursor-pointer hover:scale-[1.01] transition-transform"
+                      >
                         <div className="flex flex-col gap-2 flex-1">
-                          <div className="flex items-center gap-3"><span className="font-black text-[#347048] text-sm italic">{getEntryReference(booking)}</span><span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(booking.date)} · {booking.time}</span></div>
-                          <div className="text-xs font-black text-[#347048] uppercase tracking-tight">{isSale ? `Venta extra: ${formatSaleDescription(booking.description)}` : `Cancha: ${booking.courtName || booking.court?.name}`} <span className="opacity-40 ml-2 font-mono">${(isSale ? Number(booking.price || 0) : courtPrice).toLocaleString()}</span></div>
+                          <div className="flex items-center gap-3"><span className="font-black text-[#347048] text-sm italic">{getEntryReference(account)}</span><span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(account.date)} · {account.time}</span></div>
+                          <div className="text-xs font-black text-[#347048] uppercase tracking-tight">
+                            Cuenta {account.sourceType || '-'} {account.sourceId ? `#${account.sourceId}` : ''}
+                            <span className="opacity-40 ml-2 font-mono">${Number(account.totalAmount || 0).toLocaleString()}</span>
+                          </div>
+                          {account.bookingId && (
+                            <div className="text-[10px] font-bold text-[#347048]/60 uppercase tracking-widest">
+                              Reserva #{account.bookingId} · Cancha: {account.courtName || '-'}
+                            </div>
+                          )}
                           <div className="flex flex-wrap gap-2 mt-1">
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${status === 'CANCELLED' ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{bookingStatusLabel[status] ?? status}</span>
+                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${accountStatus === 'OPEN' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{accountStatusLabel[accountStatus] ?? accountStatus}</span>
+                            {account.bookingStatus && (
+                              <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-[#347048]/5 text-[#347048]/70 border-[#347048]/10">{bookingStatusLabel[account.bookingStatus] ?? account.bookingStatus}</span>
+                            )}
                             {pStatus && (
                               <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${['DEBT', 'PARTIAL'].includes(pStatus) ? 'bg-red-50 text-red-500 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{paymentStatusLabel[pStatus] ?? pStatus}</span>
                             )}
                           </div>
                         </div>
-                        <div className="text-right pl-6 border-l border-dashed border-[#347048]/10"><div className="text-xl font-black text-[#347048] italic tracking-tighter">${Number(booking.price).toLocaleString()}</div><div className="text-[9px] font-black text-[#347048]/40 uppercase">{booking.amount > 0 ? `DEBE $${Number(booking.amount).toLocaleString()}` : 'SALDADO'}</div></div>
+                        <div className="text-right pl-6 border-l border-dashed border-[#347048]/10"><div className="text-xl font-black text-[#347048] italic tracking-tighter">${Number(account.totalAmount || 0).toLocaleString()}</div><div className="text-[9px] font-black text-[#347048]/40 uppercase">{Number(account.amount || 0) > 0 ? `DEBE $${Number(account.amount).toLocaleString()}` : 'SALDADO'}</div></div>
                       </div>
                     );
                 })
@@ -534,6 +628,88 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       )}
 
       {/* COMPONENTE MODAL GLOBAL PARA ALERTAS */}
+      <AppModal
+        show={showAccountDetailModal}
+        title="Detalle de la cuenta"
+        onClose={() => setShowAccountDetailModal(false)}
+        onConfirm={() => setShowAccountDetailModal(false)}
+        confirmText="Cerrar"
+        cancelText=""
+        zIndexClass="z-[100004]"
+        message={selectedAccountDetail ? (
+          <div className="space-y-4 text-sm text-[#347048]">
+            <div className="space-y-1">
+              <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Referencia</div>
+              <div className="text-base font-black text-[#347048]">{getEntryReference(selectedAccountDetail)}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Fecha</div>
+                <div className="font-bold">{formatDate(selectedAccountDetail.date)} · {selectedAccountDetail.time || '--:--'}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Origen</div>
+                <div className="font-bold">{selectedAccountDetail.sourceType || '-'}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Total</div>
+                <div className="font-black text-lg text-[#347048]">${Number(selectedAccountDetail.totalAmount || 0).toLocaleString()}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Pendiente</div>
+                <div className={`font-black text-lg ${Number(selectedAccountDetail.amount || 0) > 0.01 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  ${Number(selectedAccountDetail.amount || 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[#347048]/10 bg-white/60 p-3 space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Estado</div>
+              <div className="flex flex-wrap gap-2">
+                <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest rounded-md border ${String(selectedAccountDetail.accountStatus || selectedAccountDetail.status) === 'OPEN' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                  {accountStatusLabel[String(selectedAccountDetail.accountStatus || selectedAccountDetail.status)] || String(selectedAccountDetail.accountStatus || selectedAccountDetail.status)}
+                </span>
+                <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest rounded-md border ${['DEBT', 'PARTIAL'].includes(String(selectedAccountDetail.paymentStatus || '')) ? 'bg-red-50 text-red-500 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                  {paymentStatusLabel[String(selectedAccountDetail.paymentStatus || '')] || String(selectedAccountDetail.paymentStatus || '-')}
+                </span>
+              </div>
+              {selectedAccountDetail.bookingId && (
+                <div className="text-xs font-bold text-[#347048]/80">
+                  Reserva #{selectedAccountDetail.bookingId} · Cancha: {selectedAccountDetail.courtName || '-'}
+                </div>
+              )}
+            </div>
+            <div className="rounded-2xl border border-[#347048]/10 bg-white/60 p-3 space-y-2">
+              <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Conceptos de la cuenta</div>
+              {loadingAccountDetailById[String(selectedAccountDetail.id)] ? (
+                <div className="text-xs font-bold text-[#347048]/60">Cargando detalle...</div>
+              ) : selectedAccountBreakdown?.items?.length ? (
+                <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                  {selectedAccountBreakdown.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs border-b border-[#347048]/10 pb-2 last:border-b-0 last:pb-0">
+                      <div className="flex flex-col">
+                        <span className="font-black text-[#347048]">
+                          {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.description}
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">
+                          Tipo: {item.type === 'BOOKING' ? 'Cancha' : item.type}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-black text-[#347048]">${Number(item.total || 0).toLocaleString()}</div>
+                        <div className={`text-[10px] font-black uppercase tracking-widest ${item.remaining > EPSILON ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {item.remaining > EPSILON ? `Debe $${Number(item.remaining).toLocaleString()}` : 'Saldado'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs font-bold text-[#347048]/60">Sin items registrados en esta cuenta.</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      />
       <AppModal 
         show={modalState.show} 
         onClose={closeModal} 

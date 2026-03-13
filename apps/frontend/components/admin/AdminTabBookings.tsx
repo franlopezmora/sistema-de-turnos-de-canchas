@@ -11,7 +11,6 @@ import {
   getBookingFinancialSummary
 } from '../../services/BookingService';
 import { getAccountSummary, getOrCreateBookingAccount, registerPayment } from '../../services/AccountService';
-import { approveRefund, cancelRefund, executeRefund, failRefund, listPendingRefunds, retryRefund, type RefundRecord } from '../../services/PaymentService';
 import { ClubAdminService } from '../../services/ClubAdminService';
 import AppModal from '../AppModal';
 import BookingManagerModal from './BookingManagerModal';
@@ -20,6 +19,10 @@ import DatePickerDark from '../../components/ui/DatePickerDark';
 import { Trash2, Check, Calendar as CalendarIcon, RefreshCw, ChevronDown, CalendarPlus, Repeat, Banknote, CreditCard, X, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'; 
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 import { formatTime24 } from '../../utils/dateTime';
+import type { RefundDraft } from '../../modules/refunds/refund.types';
+import { buildDefaultRefundDraft } from '../../modules/refunds/refund.policy';
+import { validateRefundAmountInput } from '../../modules/refunds/refund.validators';
+import RefundRequestModal from './refunds/RefundRequestModal';
 
 const CLUB_TIME_SLOTS = [
   '08:00', '09:30', '11:00', '12:30',
@@ -260,25 +263,6 @@ const formatPaymentStatus = (status?: string) => {
 
 const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString()}`;
 
-const formatRefundStatus = (status?: string) => {
-  switch (status) {
-    case 'REQUESTED':
-      return 'Solicitada';
-    case 'APPROVED':
-      return 'Aprobada';
-    case 'READY_TO_EXECUTE':
-      return 'Lista para ejecutar';
-    case 'EXECUTED':
-      return 'Ejecutada';
-    case 'FAILED':
-      return 'Fallida';
-    case 'CANCELLED':
-      return 'Cancelada';
-    default:
-      return status || '-';
-  }
-};
-
 export default function AdminTabBookings() {
   const [courts, setCourts] = useState<any[]>([]);
   const [scheduleDate, setScheduleDate] = useState(() => getTodayLocalDate());
@@ -292,15 +276,9 @@ export default function AdminTabBookings() {
   const [selectedPaymentAccountId, setSelectedPaymentAccountId] = useState<string | null>(null);
   const [paymentRemainingTarget, setPaymentRemainingTarget] = useState(0);
   const [selectedBookingDetail, setSelectedBookingDetail] = useState<{ booking: any; slotTime: string; courtName?: string } | null>(null);
-  const [pendingRefunds, setPendingRefunds] = useState<RefundRecord[]>([]);
-  const [loadingRefunds, setLoadingRefunds] = useState(false);
-  const [refundActionId, setRefundActionId] = useState<string | null>(null);
   const [showCancelRefundModal, setShowCancelRefundModal] = useState(false);
   const [cancelRefundPaidAmount, setCancelRefundPaidAmount] = useState(0);
-  const [cancelRefundAmountInput, setCancelRefundAmountInput] = useState('');
-  const [cancelRefundExecuteNow, setCancelRefundExecuteNow] = useState(true);
-  const [cancelRefundReasonType, setCancelRefundReasonType] = useState<'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_FAILURE' | 'PARTIAL_PRICING_ERROR' | 'OTHER'>('FULL');
-  const [cancelRefundExecutionNotes, setCancelRefundExecutionNotes] = useState('');
+  const [cancelRefundDraft, setCancelRefundDraft] = useState<RefundDraft>(() => buildDefaultRefundDraft('BOOKING_CANCELLATION', 0));
   const cancelRefundResolverRef = useRef<((value: CancelRefundDecision | null) => void) | null>(null);
   const params = useParams();
   const urlSlug = params.slug;
@@ -584,27 +562,14 @@ export default function AdminTabBookings() {
     setCourts(Array.isArray(data) ? data : []);
   }, [getClubSlug]);
 
-  const loadPendingRefundQueue = useCallback(async () => {
-    try {
-      setLoadingRefunds(true);
-      const data = await listPendingRefunds(40);
-      setPendingRefunds(Array.isArray(data) ? data : []);
-    } catch (error: any) {
-      console.error('Error loading pending refunds:', error?.message || error);
-    } finally {
-      setLoadingRefunds(false);
-    }
-  }, []);
-
   const loadSchedule = useCallback(async () => {
     try {
       setLoadingSchedule(true);
       const data = await getAdminSchedule(scheduleDate);
       setScheduleBookings(data || []);
-      await loadPendingRefundQueue();
       setLastUpdate(new Date());
     } catch (error: any) { showError('Error: ' + error.message); } finally { setLoadingSchedule(false); }
-  }, [scheduleDate, loadPendingRefundQueue]);
+  }, [scheduleDate]);
 
   useEffect(() => { loadCourts(); }, [loadCourts]);
   useEffect(() => { loadSchedule(); }, [loadSchedule]);
@@ -796,89 +761,6 @@ export default function AdminTabBookings() {
     } catch (error: any) { showError('Error al reservar: ' + error.message); }
   };
 
-  const refreshAfterRefundAction = async () => {
-    await loadPendingRefundQueue();
-    await loadSchedule();
-  };
-
-  const runRefundAction = async (refundId: string, action: () => Promise<any>, successMessage: string) => {
-    try {
-      setRefundActionId(refundId);
-      await action();
-      showInfo(successMessage, 'Listo');
-      await refreshAfterRefundAction();
-    } catch (error: any) {
-      showError(error?.message || 'No se pudo procesar la devolucion');
-    } finally {
-      setRefundActionId(null);
-    }
-  };
-
-  const handleApproveRefund = (refund: RefundRecord, executeNow = false) => {
-    showConfirm({
-      title: executeNow ? 'Aprobar y ejecutar devolucion' : 'Aprobar devolucion',
-      message: `Devolucion ${formatMoney(Number(refund.amount || 0))}.`,
-      confirmText: executeNow ? 'Aprobar y ejecutar' : 'Aprobar',
-      cancelText: 'Cancelar',
-      onConfirm: async () =>
-        runRefundAction(
-          refund.id,
-          () => approveRefund(refund.id, { executeNow }),
-          executeNow ? 'Devolucion aprobada y ejecutada.' : 'Devolucion aprobada.'
-        )
-    });
-  };
-
-  const handleExecuteRefund = (refund: RefundRecord) => {
-    showConfirm({
-      title: 'Ejecutar devolucion',
-      message: `Se ejecutara devolucion por ${formatMoney(Number(refund.amount || 0))}.`,
-      confirmText: 'Ejecutar',
-      cancelText: 'Cancelar',
-      onConfirm: async () => runRefundAction(refund.id, () => executeRefund(refund.id), 'Devolucion ejecutada.')
-    });
-  };
-
-  const handleRetryRefund = (refund: RefundRecord, executeNow = true) => {
-    showConfirm({
-      title: 'Reintentar devolucion',
-      message: `Se reintentara devolucion por ${formatMoney(Number(refund.amount || 0))}.`,
-      confirmText: executeNow ? 'Reintentar y ejecutar' : 'Reintentar',
-      cancelText: 'Cancelar',
-      onConfirm: async () =>
-        runRefundAction(
-          refund.id,
-          () => retryRefund(refund.id, { executeNow }),
-          executeNow ? 'Devolucion reintentada y ejecutada.' : 'Devolucion reintentada.'
-        )
-    });
-  };
-
-  const handleFailRefund = (refund: RefundRecord) => {
-    showConfirm({
-      title: 'Marcar devolucion como fallida',
-      message: `Se marcara como fallida la devolucion por ${formatMoney(Number(refund.amount || 0))}.`,
-      confirmText: 'Marcar fallida',
-      cancelText: 'Volver',
-      onConfirm: async () =>
-        runRefundAction(
-          refund.id,
-          () => failRefund(refund.id, 'Fallo manual informado por administrador'),
-          'Devolucion marcada como fallida.'
-        )
-    });
-  };
-
-  const handleCancelRefund = (refund: RefundRecord) => {
-    showConfirm({
-      title: 'Cancelar devolucion',
-      message: `Se cancelara la devolucion por ${formatMoney(Number(refund.amount || 0))}.`,
-      confirmText: 'Cancelar devolucion',
-      cancelText: 'Volver',
-      onConfirm: async () => runRefundAction(refund.id, () => cancelRefund(refund.id, 'Cancelada por administrador'), 'Devolucion cancelada.')
-    });
-  };
-
   const getBookingPaidAmount = async (bookingId: number) => {
     try {
       const summary = await getBookingFinancialSummary(bookingId);
@@ -909,10 +791,7 @@ export default function AdminTabBookings() {
     if (paidAmount <= 0.009) return undefined;
 
     setCancelRefundPaidAmount(paidAmount);
-    setCancelRefundAmountInput(String(Number(paidAmount.toFixed(2))));
-    setCancelRefundExecuteNow(true);
-    setCancelRefundReasonType('FULL');
-    setCancelRefundExecutionNotes('');
+    setCancelRefundDraft(buildDefaultRefundDraft('BOOKING_CANCELLATION', paidAmount));
     setShowCancelRefundModal(true);
 
     return await new Promise<CancelRefundDecision | null>((resolve) => {
@@ -928,13 +807,9 @@ export default function AdminTabBookings() {
   };
 
   const handleSubmitCancelRefundModal = () => {
-    const parsedAmount = Number(cancelRefundAmountInput);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      showError('Monto de devolucion invalido');
-      return;
-    }
-    if (parsedAmount > cancelRefundPaidAmount + 0.009) {
-      showError('El monto de devolucion no puede superar lo pagado neto');
+    const validation = validateRefundAmountInput(cancelRefundDraft.amountInput, cancelRefundPaidAmount);
+    if (validation.error) {
+      showError(validation.error);
       return;
     }
 
@@ -943,10 +818,10 @@ export default function AdminTabBookings() {
     cancelRefundResolverRef.current = null;
     resolver?.({
       refund: {
-        amount: Number(parsedAmount.toFixed(2)),
-        executeNow: cancelRefundExecuteNow,
-        reasonType: cancelRefundReasonType,
-        executionNotes: cancelRefundExecutionNotes.trim() || undefined
+        amount: validation.amount,
+        executeNow: cancelRefundDraft.executeNow,
+        reasonType: cancelRefundDraft.reasonType,
+        executionNotes: cancelRefundDraft.executionNotes.trim() || undefined
       }
     });
   };
@@ -1338,125 +1213,6 @@ export default function AdminTabBookings() {
           </div>
         </div>
 
-        <div className="mb-6 rounded-2xl border border-[#347048]/15 bg-white/70 p-4">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <p className="text-[11px] font-black uppercase tracking-[0.15em] text-[#347048]/70">Devoluciones pendientes / fallidas</p>
-            <button
-              type="button"
-              onClick={loadPendingRefundQueue}
-              className="text-[10px] font-black uppercase tracking-[0.15em] rounded-lg border border-[#347048]/20 px-3 py-1.5 hover:border-[#B9CF32]"
-            >
-              Recargar
-            </button>
-          </div>
-          {loadingRefunds ? (
-            <div className="text-xs font-bold text-[#347048]/60">Cargando devoluciones...</div>
-          ) : pendingRefunds.length === 0 ? (
-            <div className="text-xs font-bold text-[#347048]/50">No hay devoluciones pendientes.</div>
-          ) : (
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {pendingRefunds.map((refund) => {
-                const actionBusy = refundActionId === refund.id;
-                return (
-                  <div key={refund.id} className="rounded-xl border border-[#347048]/10 bg-white px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-black text-[#347048] truncate">
-                          {formatMoney(Number(refund.amount || 0))} · {formatRefundStatus(refund.status)}
-                        </p>
-                        <p className="text-[10px] font-bold text-[#347048]/60 truncate">
-                          {refund.executionMethod || 'Sin metodo'} · pago {refund.paymentId}
-                        </p>
-                        {refund.failedReason ? (
-                          <p className="text-[10px] font-bold text-red-600 truncate">Fallo: {refund.failedReason}</p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-center justify-end gap-1">
-                        {refund.status === 'REQUESTED' ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleApproveRefund(refund, false)}
-                              className="rounded-lg bg-[#347048] text-[#EBE1D8] px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Aprobar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleApproveRefund(refund, true)}
-                              className="rounded-lg bg-[#926699] text-white px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Aprobar + ejecutar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleCancelRefund(refund)}
-                              className="rounded-lg border border-red-200 text-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Cancelar
-                            </button>
-                          </>
-                        ) : null}
-                        {(refund.status === 'APPROVED' || refund.status === 'READY_TO_EXECUTE') ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleExecuteRefund(refund)}
-                              className="rounded-lg bg-[#347048] text-[#EBE1D8] px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Ejecutar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleFailRefund(refund)}
-                              className="rounded-lg border border-[#926699]/40 text-[#926699] px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Marcar fallida
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleCancelRefund(refund)}
-                              className="rounded-lg border border-red-200 text-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Cancelar
-                            </button>
-                          </>
-                        ) : null}
-                        {refund.status === 'FAILED' ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleRetryRefund(refund, true)}
-                              className="rounded-lg bg-[#926699] text-white px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Reintentar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actionBusy}
-                              onClick={() => handleCancelRefund(refund)}
-                              className="rounded-lg border border-red-200 text-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide disabled:opacity-50"
-                            >
-                              Cancelar
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         <div className="flex flex-wrap items-center gap-4 mb-6 text-[10px] font-black uppercase tracking-widest text-[#347048]/60">
           <span className="flex items-center gap-2">
             <span className="w-5 h-0.5 rounded-full bg-[#B9CF32]"></span>
@@ -1761,128 +1517,17 @@ export default function AdminTabBookings() {
         </ModalPortal>
       )}
 
-      {showCancelRefundModal && (
-        <ModalPortal onClose={handleCloseCancelRefundModal} maxWidthClass="max-w-lg">
-          <div className="relative text-[#347048]">
-            <button
-              type="button"
-              onClick={handleCloseCancelRefundModal}
-              className="absolute right-0 top-0 -mt-2 -mr-2 bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
-              title="Cerrar ventana"
-            >
-              <X size={20} strokeWidth={3} />
-            </button>
-
-            <div className="text-center mb-5">
-              <h3 className="text-2xl font-black mb-2 uppercase tracking-tight italic">Gestion de devolucion</h3>
-              <p className="text-[#347048]/60 text-xs font-bold uppercase tracking-widest">
-                Pagado neto: {formatMoney(cancelRefundPaidAmount)}
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-black uppercase tracking-widest text-[#347048]/70 mb-2">
-                  Monto a devolver
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={cancelRefundAmountInput}
-                  onChange={(event) => setCancelRefundAmountInput(event.target.value)}
-                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
-                />
-                <p className="mt-2 text-[11px] font-bold text-[#347048]/60">
-                  Maximo permitido: {formatMoney(cancelRefundPaidAmount)}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase tracking-widest text-[#347048]/70 mb-2">
-                  Ejecucion
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCancelRefundExecuteNow(true)}
-                    className={`h-11 rounded-xl border-2 text-xs font-black uppercase tracking-wide ${
-                      cancelRefundExecuteNow
-                        ? 'bg-[#347048] border-[#347048] text-[#EBE1D8]'
-                        : 'bg-white border-[#347048]/20 text-[#347048]'
-                    }`}
-                  >
-                    Ejecutar ahora
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCancelRefundExecuteNow(false)}
-                    className={`h-11 rounded-xl border-2 text-xs font-black uppercase tracking-wide ${
-                      !cancelRefundExecuteNow
-                        ? 'bg-[#926699] border-[#926699] text-white'
-                        : 'bg-white border-[#347048]/20 text-[#347048]'
-                    }`}
-                  >
-                    Dejar pendiente
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase tracking-widest text-[#347048]/70 mb-2">
-                  Tipo de devolucion
-                </label>
-                <select
-                  value={cancelRefundReasonType}
-                  onChange={(event) =>
-                    setCancelRefundReasonType(
-                      event.target.value as 'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_FAILURE' | 'PARTIAL_PRICING_ERROR' | 'OTHER'
-                    )
-                  }
-                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
-                >
-                  <option value="FULL">Total</option>
-                  <option value="PARTIAL_COMMERCIAL">Parcial comercial</option>
-                  <option value="PARTIAL_SERVICE_FAILURE">Parcial por servicio</option>
-                  <option value="PARTIAL_PRICING_ERROR">Parcial por precio</option>
-                  <option value="OTHER">Otro</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase tracking-widest text-[#347048]/70 mb-2">
-                  Nota operativa
-                </label>
-                <textarea
-                  value={cancelRefundExecutionNotes}
-                  onChange={(event) => setCancelRefundExecutionNotes(event.target.value)}
-                  maxLength={500}
-                  rows={3}
-                  className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 py-2 text-sm font-semibold resize-none"
-                  placeholder="Detalle interno de la devolucion"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleCloseCancelRefundModal}
-                  className="py-3 bg-white border-2 border-[#347048]/20 rounded-xl text-[#347048] font-black uppercase text-[10px] tracking-[0.2em]"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmitCancelRefundModal}
-                  className="py-3 bg-[#347048] text-[#EBE1D8] rounded-xl font-black uppercase text-[10px] tracking-[0.2em]"
-                >
-                  Continuar
-                </button>
-              </div>
-            </div>
-          </div>
-        </ModalPortal>
-      )}
+      <RefundRequestModal
+        show={showCancelRefundModal}
+        title="Gestion de devolucion"
+        maxAmount={cancelRefundPaidAmount}
+        draft={cancelRefundDraft}
+        onClose={handleCloseCancelRefundModal}
+        onSubmit={handleSubmitCancelRefundModal}
+        onChangeDraft={setCancelRefundDraft}
+        closeLabel="Cancelar"
+        submitLabel="Continuar"
+      />
 
       <AppModal show={modalState.show} onClose={closeModal} onCancel={modalState.onCancel} title={modalState.title} message={modalState.message} cancelText={modalState.cancelText} confirmText={modalState.confirmText} isWarning={modalState.isWarning} onConfirm={modalState.onConfirm} closeOnBackdrop={modalState.closeOnBackdrop} closeOnEscape={modalState.closeOnEscape} />
     </>

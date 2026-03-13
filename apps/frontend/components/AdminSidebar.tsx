@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { Calendar, Users, Package, DollarSign, LayoutGrid, BarChart3, Settings, Wallet } from 'lucide-react';
+import { Calendar, Users, Package, DollarSign, LayoutGrid, BarChart3, Settings, Wallet, RotateCcw } from 'lucide-react';
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -26,6 +26,7 @@ const AdminSidebar = ({ isOpen, onClose }: AdminSidebarProps) => {
     { name: 'Clientes', path: '/admin/clientes', icon: <Users size={20} /> },
     { name: 'Productos & Stock', path: '/admin/products', icon: <Package size={20} /> },
     { name: 'Cuentas', path: '/admin/cuentas', icon: <Wallet size={20} /> },
+    { name: 'Devoluciones', path: '/admin/devoluciones', icon: <RotateCcw size={20} /> },
     { name: 'Caja y Movimientos', path: '/admin/cash', icon: <DollarSign size={20} /> },
     { name: 'Estadísticas', path: '/admin/statistics', icon: <BarChart3 size={20} /> },
     { name: 'Canchas', path: '/admin/canchas', icon: <LayoutGrid size={20} /> },

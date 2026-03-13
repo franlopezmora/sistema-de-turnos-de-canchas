@@ -206,15 +206,17 @@ export class AccountService {
         return existing;
       }
 
+      let bookingForAccount: { id: number; status: string; price: Prisma.Decimal } | null = null;
       if (input.sourceType === 'BOOKING') {
         const booking = await tx.booking.findFirst({
           where: { id: Number(input.sourceId), clubId: input.clubId },
-          select: { id: true, status: true }
+          select: { id: true, status: true, price: true }
         });
         if (!booking) throw new Error('No se puede abrir cuenta: la reserva no existe');
         if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') {
           throw new Error('No se puede abrir cuenta para una reserva terminal');
         }
+        bookingForAccount = booking as { id: number; status: string; price: Prisma.Decimal };
       }
 
       const account = await tx.account.create({
@@ -225,6 +227,41 @@ export class AccountService {
           status: 'OPEN'
         }
       });
+
+      if (input.sourceType === 'BOOKING' && bookingForAccount) {
+        const bookingCharge = Number(bookingForAccount.price || 0);
+        if (bookingCharge > 0) {
+          const bookingItem = await tx.accountItem.create({
+            data: {
+              accountId: account.id,
+              type: 'BOOKING',
+              description: 'Reserva cancha',
+              quantity: 1,
+              unitPrice: new Prisma.Decimal(bookingCharge),
+              total: new Prisma.Decimal(bookingCharge)
+            }
+          });
+
+          await tx.account.update({
+            where: { id: account.id },
+            data: {
+              totalAmount: { increment: new Prisma.Decimal(bookingCharge) }
+            }
+          });
+
+          await this.accountingService.createAccountItemTransaction(tx, {
+            clubId: input.clubId,
+            type: 'ACCOUNT_ITEM',
+            referenceType: 'BOOKING',
+            referenceId: String(bookingForAccount.id),
+            accountId: account.id,
+            accountItemId: bookingItem.id,
+            amount: bookingCharge,
+            revenueAccount: 'BOOKING_REVENUE',
+            description: `Reserva cancha #${bookingForAccount.id}`
+          });
+        }
+      }
 
       await this.projectionService.refreshAccountSummary(account.id, tx);
       return account;

@@ -22,11 +22,47 @@ export class ClientDebtService {
       select: {
         id: true,
         sourceId: true,
-        totalAmount: true
+        totalAmount: true,
+        status: true,
+        createdAt: true
       }
     });
 
-    const accountIds = bookingAccounts.map((account) => account.id);
+    const bookingIds = bookingAccounts
+      .map((account) => Number(account.sourceId))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    const bookings = bookingIds.length > 0
+      ? await prisma.booking.findMany({
+          where: {
+            id: { in: bookingIds },
+            clubId
+          },
+          select: {
+            id: true,
+            clientId: true,
+            startDateTime: true,
+            status: true,
+            court: {
+              select: {
+                name: true
+              }
+            }
+          }
+        })
+      : [];
+
+    const bookingById = new Map(bookings.map((booking) => [booking.id, booking]));
+    const clientAccountPairs = bookingAccounts
+      .map((account) => {
+        const bookingId = Number(account.sourceId);
+        const booking = bookingById.get(bookingId);
+        if (!booking?.clientId) return null;
+        return { account, booking };
+      })
+      .filter((pair): pair is { account: (typeof bookingAccounts)[number]; booking: (typeof bookings)[number] } => Boolean(pair));
+
+    const accountIds = clientAccountPairs.map((pair) => pair.account.id);
     const [paymentAgg, refundAgg] = await Promise.all([
       accountIds.length > 0
         ? prisma.payment.groupBy({
@@ -47,72 +83,67 @@ export class ClientDebtService {
     const paymentByAccount = new Map(paymentAgg.map((row) => [row.accountId, Number(row._sum.amount || 0)]));
     const refundByAccount = new Map(refundAgg.map((row) => [row.accountId, Number(row._sum.amount || 0)]));
 
-    const accountBySourceId = new Map(bookingAccounts.map((account) => [account.sourceId, account]));
-    const debtBookingIds = bookingAccounts
-      .filter((account) => {
-        const netPaid = Math.max(0, (paymentByAccount.get(account.id) || 0) - (refundByAccount.get(account.id) || 0));
-        return Number(account.totalAmount || 0) - netPaid > 0.009;
-      })
-      .map((account) => Number(account.sourceId))
-      .filter((id) => Number.isInteger(id) && id > 0);
+    const accountsByClient = new Map<string, Array<{
+      id: string;
+      sourceType: 'BOOKING';
+      sourceId: string;
+      accountStatus: string;
+      date: string;
+      time: string;
+      createdAt: Date;
+      bookingId: number;
+      bookingStatus: string;
+      paymentStatus: 'PAID' | 'PARTIAL' | 'DEBT';
+      totalAmount: number;
+      paidAmount: number;
+      amount: number;
+      courtName: string | null;
+      items: never[];
+    }>>();
 
-    const debtBookings = debtBookingIds.length > 0
-      ? await prisma.booking.findMany({
-          where: {
-            id: { in: debtBookingIds },
-            clubId
-          },
-          select: {
-            id: true,
-            clientId: true,
-            startDateTime: true,
-            status: true,
-            price: true,
-            court: {
-              select: {
-                name: true
-              }
-            }
-          }
-        })
-      : [];
+    for (const { account, booking } of clientAccountPairs) {
+      const clientId = booking.clientId;
+      if (!clientId) continue;
 
-    const debtBookingsByClient = new Map<string, Array<(typeof debtBookings)[number]>>();
-    for (const booking of debtBookings) {
-      if (!booking.clientId) continue;
-      const existing = debtBookingsByClient.get(booking.clientId) || [];
-      existing.push(booking);
-      debtBookingsByClient.set(booking.clientId, existing);
+      const paid = Math.max(0, (paymentByAccount.get(account.id) || 0) - (refundByAccount.get(account.id) || 0));
+      const total = Number(account.totalAmount || 0);
+      const remaining = Math.max(0, Number((total - paid).toFixed(2)));
+      const paymentStatus = remaining <= 0.009 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'DEBT';
+
+      const dt = new Date(booking.startDateTime);
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mm = String(dt.getMinutes()).padStart(2, '0');
+
+      const existing = accountsByClient.get(clientId) || [];
+      existing.push({
+        id: account.id,
+        sourceType: 'BOOKING',
+        sourceId: account.sourceId,
+        accountStatus: account.status,
+        date: dt.toISOString().slice(0, 10),
+        time: `${hh}:${mm}`,
+        createdAt: account.createdAt,
+        bookingId: booking.id,
+        bookingStatus: booking.status,
+        paymentStatus,
+        totalAmount: total,
+        paidAmount: Number(paid.toFixed(2)),
+        amount: remaining,
+        courtName: booking.court?.name ?? null,
+        items: []
+      });
+      accountsByClient.set(clientId, existing);
     }
 
     return clients.map((client) => ({
-      history: (debtBookingsByClient.get(client.id) || [])
-        .map((booking) => {
-          const accountRecord = accountBySourceId.get(String(booking.id));
-          const total = Number(accountRecord?.totalAmount ?? booking.price ?? 0);
-          const paid = accountRecord
-            ? Math.max(0, (paymentByAccount.get(accountRecord.id) || 0) - (refundByAccount.get(accountRecord.id) || 0))
-            : 0;
-          const remaining = Math.max(0, Number((total - paid).toFixed(2)));
-          const paymentStatus = remaining <= 0.009 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'DEBT';
-          const dt = new Date(booking.startDateTime);
-          const hh = String(dt.getHours()).padStart(2, '0');
-          const mm = String(dt.getMinutes()).padStart(2, '0');
-
-          return {
-            id: booking.id,
-            sourceType: 'BOOKING',
-            date: dt.toISOString().slice(0, 10),
-            time: `${hh}:${mm}`,
-            status: booking.status,
-            paymentStatus,
-            price: Number(booking.price ?? 0),
-            amount: remaining,
-            courtName: booking.court?.name,
-            items: []
-          };
-        })
-        .sort((a, b) => (a.date < b.date ? 1 : -1)),
+      history: (accountsByClient.get(client.id) || [])
+        .slice()
+        .sort((a, b) => {
+          const aTs = new Date(a.createdAt).getTime();
+          const bTs = new Date(b.createdAt).getTime();
+          if (aTs !== bTs) return bTs - aTs;
+          return a.id < b.id ? 1 : -1;
+        }),
       id: client.id,
       firstName: client.name,
       lastName: '',
@@ -120,15 +151,7 @@ export class ClientDebtService {
       email: client.email,
       phoneNumber: client.phone,
       totalBookings: client._count.bookings,
-      totalDebt: (debtBookingsByClient.get(client.id) || []).reduce((sum, booking) => {
-        const accountRecord = accountBySourceId.get(String(booking.id));
-        const total = Number(accountRecord?.totalAmount ?? booking.price ?? 0);
-        const paid = accountRecord
-          ? Math.max(0, (paymentByAccount.get(accountRecord.id) || 0) - (refundByAccount.get(accountRecord.id) || 0))
-          : 0;
-        const remaining = Math.max(0, Number((total - paid).toFixed(2)));
-        return sum + remaining;
-      }, 0)
+      totalDebt: (accountsByClient.get(client.id) || []).reduce((sum, account) => sum + Number(account.amount || 0), 0)
     }));
   }
 }

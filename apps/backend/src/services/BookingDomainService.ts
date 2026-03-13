@@ -76,17 +76,31 @@ export class BookingDomainService {
       throw new Error('Reserva no encontrada');
     }
 
-    const account = await this.getBookingAccountTx(tx, bookingId, booking.clubId);
+    const account = await tx.account.findFirst({
+      where: {
+        sourceType: 'BOOKING',
+        sourceId: String(bookingId),
+        clubId: booking.clubId
+      },
+      include: {
+        items: true,
+        payments: true
+      }
+    });
     const confirmationSettings = await this.getClubConfirmationSettingsTx(tx, booking.clubId);
 
     const bookingBaseAmount = roundMoney(
-      account.items
+      (account?.items || [])
         .filter((item) => item.type === 'BOOKING')
         .reduce((sum, item) => sum + Number(item.total || 0), 0) || Number(booking.price || 0)
     );
 
-    const total = roundMoney(Number(account.totalAmount || 0));
-    const paid = roundMoney(await this.accountService.calculateNetPaidAmountTx(tx, account.id));
+    const total = account
+      ? roundMoney(Number(account.totalAmount || 0))
+      : bookingBaseAmount;
+    const paid = account
+      ? roundMoney(await this.accountService.calculateNetPaidAmountTx(tx, account.id))
+      : 0;
     const remaining = roundMoney(Math.max(0, total - paid));
 
     const depositRequiredAmount = getDepositRequiredAmount({
@@ -97,7 +111,28 @@ export class BookingDomainService {
 
     return {
       booking,
-      account,
+      account: account ?? {
+        id: '',
+        clubId: booking.clubId,
+        sourceType: 'BOOKING',
+        sourceId: String(booking.id),
+        status: 'OPEN',
+        totalAmount: new Prisma.Decimal(total),
+        paidAmount: new Prisma.Decimal(paid),
+        items: bookingBaseAmount > 0
+          ? [{
+              id: '',
+              accountId: '',
+              type: 'BOOKING',
+              description: 'Reserva cancha',
+              quantity: 1,
+              unitPrice: new Prisma.Decimal(bookingBaseAmount),
+              total: new Prisma.Decimal(bookingBaseAmount),
+              createdAt: booking.startDateTime
+            }]
+          : [],
+        payments: []
+      },
       confirmationSettings,
       total,
       paid,
