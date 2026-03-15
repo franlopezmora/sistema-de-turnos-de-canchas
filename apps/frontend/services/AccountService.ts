@@ -6,7 +6,8 @@ const apiBase = () => `${getApiUrl()}/api`;
 
 export type AccountSource = 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
 export type AccountStatus = 'OPEN' | 'CLOSED';
-export type PaymentMethod = 'CASH' | 'TRANSFER' | 'CARD' | 'MERCADO_PAGO' | 'OTHER';
+export type PaymentMethod = 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
+export type PaymentChannel = 'AUTO' | 'CASH_DRAWER' | 'BANK_ACCOUNT' | 'CARD_TERMINAL' | 'VIRTUAL_WALLET' | 'OTHER';
 export type PaymentSource = 'POS' | 'ONLINE' | 'BACKOFFICE';
 
 export const listAccounts = async (filters?: { status?: AccountStatus; bookingId?: number }) => {
@@ -101,6 +102,9 @@ export const registerPayment = async (body: {
   accountId: string;
   amount: number;
   method: PaymentMethod;
+  channel?: PaymentChannel;
+  collectorAccountLabel?: string;
+  externalReference?: string;
   source?: PaymentSource;
   cashShiftId?: string;
   allocations?: Array<{ accountItemId: string; amount: number }>;
@@ -109,6 +113,9 @@ export const registerPayment = async (body: {
     accountId: body.accountId,
     amount: body.amount,
     method: body.method,
+    channel: body.channel,
+    collectorAccountLabel: body.collectorAccountLabel,
+    externalReference: body.externalReference,
     source: body.source,
     cashShiftId: body.cashShiftId,
     allocations: body.allocations
@@ -122,6 +129,9 @@ export const registerPayment = async (body: {
     body: JSON.stringify({
       amount: body.amount,
       method: body.method,
+      channel: body.channel,
+      collectorAccountLabel: body.collectorAccountLabel,
+      externalReference: body.externalReference,
       source: body.source ?? 'POS',
       cashShiftId: body.cashShiftId,
       allocations: body.allocations
@@ -146,7 +156,7 @@ export const closeAccount = async (accountId: string) => {
   return res.json();
 };
 
-export const createCashMovement = async (body: { type: 'PAYMENT_IN' | 'REFUND' | 'WITHDRAW' | 'DEPOSIT'; amount: number; method: 'CASH' | 'TRANSFER' | 'CARD' | 'MP'; concept: string }) => {
+export const createCashMovement = async (body: { type: 'PAYMENT_IN' | 'REFUND' | 'WITHDRAW' | 'DEPOSIT'; amount: number; method: 'CASH' | 'TRANSFER' | 'CARD'; concept: string }) => {
   const res = await fetchWithAuth(`${apiBase()}/cash`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

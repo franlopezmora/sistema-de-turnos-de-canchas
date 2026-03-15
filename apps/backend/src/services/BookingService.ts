@@ -1207,11 +1207,24 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     ],
                     NOT: { status: BookingStatus.CANCELLED }
                 },
-                include: { user: true, court: { include: { club: true } }, activity: true }
+                include: { user: true, client: true, court: { include: { club: true } }, activity: true }
             });
 
             if (overlapping.length > 0) {
-                throw new Error(`El turno ${startDateTime.toISOString()} ya está confirmado.`);
+                const error: any = new Error('El horario se superpone con reservas existentes.');
+                error.code = 'BOOKING_OVERLAP';
+                error.overlaps = overlapping.map((item: any) => ({
+                    bookingId: item.id,
+                    startDateTime: item.startDateTime,
+                    endDateTime: item.endDateTime,
+                    status: item.status,
+                    courtName: item?.court?.name || '',
+                    activityName: item?.activity?.name || '',
+                    clientName: item?.client?.name
+                        || `${item?.user?.firstName || ''} ${item?.user?.lastName || ''}`.trim()
+                        || 'Cliente'
+                }));
+                throw error;
             }
 
             let saved;
@@ -2196,7 +2209,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         isProfessorOverride: boolean = false,
         clubId?: number,
         professorOverrideReason?: string,
-        actorUserId?: number | null
+        actorUserId?: number | null,
+        allowOverlappingSeries: boolean = false
     ) {
         const safePhone = guestPhone ? String(guestPhone) : undefined;
 
@@ -2271,18 +2285,78 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 courtId,
                 dayOfWeek,
                 status: { not: 'CANCELLED' } // Importante: Ignora los dados de baja
+            },
+            include: {
+                user: true,
+                court: true,
+                activity: true
             }
         });
 
-        const overlapsFixed = existingFixed.some((fixed) => {
+        const conflictingFixed = existingFixed.filter((fixed) => {
             const fixedStart = Number((fixed as any).startTimeMinutes);
             const fixedEnd = Number((fixed as any).endTimeMinutes);
             if (!Number.isFinite(fixedStart) || !Number.isFinite(fixedEnd)) return false;
             return startTimeMinutes < fixedEnd && endTimeMinutes > fixedStart;
         });
+        const overlapsFixed = conflictingFixed.length > 0;
 
-        if (overlapsFixed) {
-            throw new Error("Ya existe un turno fijo en ese horario para esta cancha.");
+        if (overlapsFixed && !allowOverlappingSeries) {
+            const fixedError: any = new Error("Ya existe un turno fijo en ese horario para esta cancha.");
+            fixedError.code = 'FIXED_BOOKING_OVERLAP';
+            const overlapsByOccurrence: Array<{
+                fixedBookingId: number;
+                requestedStartDateTime: Date;
+                dayOfWeek: number;
+                startTimeMinutes: number;
+                endTimeMinutes: number;
+                courtName: string;
+                activityName: string;
+                clientName: string;
+            }> = [];
+
+            for (let i = 0; i < totalOccurrences; i++) {
+                const currentStart = new Date(startDateTime);
+                currentStart.setDate(startDateTime.getDate() + (i * generationFrequencyDays));
+
+                for (const fixed of conflictingFixed) {
+                    const fixedDay = Number(fixed?.dayOfWeek);
+                    const currentDay = currentStart.getDay();
+                    if (Number.isFinite(fixedDay) && fixedDay !== currentDay) {
+                        continue;
+                    }
+
+                    overlapsByOccurrence.push({
+                        fixedBookingId: Number(fixed?.id),
+                        requestedStartDateTime: currentStart,
+                        dayOfWeek: Number(fixed?.dayOfWeek ?? dayOfWeek),
+                        startTimeMinutes: Number((fixed as any)?.startTimeMinutes ?? 0),
+                        endTimeMinutes: Number((fixed as any)?.endTimeMinutes ?? 0),
+                        courtName: fixed?.court?.name || '',
+                        activityName: fixed?.activity?.name || '',
+                        clientName: fixed?.guestName
+                            || `${fixed?.user?.firstName || ''} ${fixed?.user?.lastName || ''}`.trim()
+                            || 'Cliente'
+                    });
+                }
+            }
+
+            fixedError.overlaps = overlapsByOccurrence.length > 0
+                ? overlapsByOccurrence
+                : conflictingFixed.map((fixed) => ({
+                    fixedBookingId: Number(fixed?.id),
+                    requestedStartDateTime: startDateTime,
+                    dayOfWeek: Number(fixed?.dayOfWeek ?? dayOfWeek),
+                    startTimeMinutes: Number((fixed as any)?.startTimeMinutes ?? 0),
+                    endTimeMinutes: Number((fixed as any)?.endTimeMinutes ?? 0),
+                    courtName: fixed?.court?.name || '',
+                    activityName: fixed?.activity?.name || '',
+                    clientName: fixed?.guestName
+                        || `${fixed?.user?.firstName || ''} ${fixed?.user?.lastName || ''}`.trim()
+                        || 'Cliente'
+                }));
+            fixedError.canProceed = true;
+            throw fixedError;
         }
 
         // 2. Preparar fechas límites
@@ -2302,6 +2376,26 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         // ATÓMICO: crear FixedBooking y bookings hijas en una sola transacción
         let fixedBooking: any;
         let generatedCount = 0;
+        const createdOccurrences: Array<{
+            bookingId: number;
+            startDateTime: Date;
+            endDateTime: Date;
+            status: string;
+            courtName: string;
+            activityName: string;
+        }> = [];
+        const skippedOccurrences: Array<{
+            requestedStartDateTime: Date;
+            requestedEndDateTime: Date;
+            reason: string;
+            conflictingBookingId?: number;
+            conflictingStartDateTime?: Date;
+            conflictingEndDateTime?: Date;
+            conflictingClientName?: string;
+            conflictingCourtName?: string;
+            conflictingActivityName?: string;
+            conflictingStatus?: string;
+        }> = [];
         await prisma.$transaction(async (tx) => {
             // A. Crear el "Padre" (Turno Fijo)
             fixedBooking = await tx.fixedBooking.create({
@@ -2329,6 +2423,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     status: { not: 'CANCELLED' },
                     startDateTime: { gte: firstStart },
                     endDateTime: { lte: lastEnd }
+                },
+                include: {
+                    user: true,
+                    client: true,
+                    court: true,
+                    activity: true
                 }
             });
 
@@ -2340,11 +2440,26 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 const currentEnd = new Date(currentStart.getTime() + duration * 60000);
                 this.assertValidRange(currentStart, currentEnd);
 
-                const hasConflict = existingBookings.some((existing: any) => {
+                const conflictingBooking = existingBookings.find((existing: any) => {
                     return existing.startDateTime < currentEnd && existing.endDateTime > currentStart;
                 });
+                const hasConflict = Boolean(conflictingBooking);
 
                 if (hasConflict) {
+                    skippedOccurrences.push({
+                        requestedStartDateTime: currentStart,
+                        requestedEndDateTime: currentEnd,
+                        reason: 'BOOKING_OVERLAP',
+                        conflictingBookingId: Number(conflictingBooking?.id),
+                        conflictingStartDateTime: conflictingBooking?.startDateTime,
+                        conflictingEndDateTime: conflictingBooking?.endDateTime,
+                        conflictingClientName: conflictingBooking?.client?.name
+                            || `${conflictingBooking?.user?.firstName || ''} ${conflictingBooking?.user?.lastName || ''}`.trim()
+                            || 'Cliente',
+                        conflictingCourtName: conflictingBooking?.court?.name || '',
+                        conflictingActivityName: conflictingBooking?.activity?.name || '',
+                        conflictingStatus: conflictingBooking?.status || ''
+                    });
                     continue;
                 }
 
@@ -2375,13 +2490,37 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         data: { fixedBookingId: fixedBooking.id }
                     });
 
+                    createdOccurrences.push({
+                        bookingId: createdBooking.id,
+                        startDateTime: createdBooking.startDateTime,
+                        endDateTime: createdBooking.endDateTime,
+                        status: String(createdBooking.status || 'PENDING'),
+                        courtName: String(createdBooking?.court?.name || court.name || ''),
+                        activityName: String(createdBooking?.activity?.name || activity?.name || '')
+                    });
                     generatedCount += 1;
                 } catch (error) {
-                    if (this.isOverlapConstraintError(error) || String((error as Error)?.message || '').includes('ya fue reservado')) {
+                    if (
+                        this.isOverlapConstraintError(error)
+                        || String((error as Error)?.message || '').includes('ya fue reservado')
+                        || String((error as Error)?.message || '').includes('SLOT_ALREADY_BOOKED')
+                    ) {
+                        skippedOccurrences.push({
+                            requestedStartDateTime: currentStart,
+                            requestedEndDateTime: currentEnd,
+                            reason: 'BOOKING_OVERLAP'
+                        });
                         continue;
                     }
                     throw error;
                 }
+            }
+
+            if (generatedCount === 0) {
+                const noOccurrencesError: any = new Error('No se pudo crear ningún turno fijo porque todos los horarios se superponen.');
+                noOccurrencesError.code = 'FIXED_BOOKING_NO_OCCURRENCES';
+                noOccurrencesError.overlaps = skippedOccurrences;
+                throw noOccurrencesError;
             }
         });
 
@@ -2411,6 +2550,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         return {
             fixedBookingId: fixedBooking.id,
             generatedCount,
+            createdOccurrences,
+            skippedOccurrences,
             msg: `Se crearon ${generatedCount} turnos pendientes.`
         };
     }

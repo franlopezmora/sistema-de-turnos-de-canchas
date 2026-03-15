@@ -72,7 +72,6 @@ enum PaymentMethod {
   CASH
   TRANSFER
   CARD
-  MERCADO_PAGO
   OTHER
 }
 
@@ -82,11 +81,19 @@ enum PaymentSource {
   BACKOFFICE
 }
 
+enum PaymentChannel {
+  AUTO
+  CASH_DRAWER
+  BANK_ACCOUNT
+  CARD_TERMINAL
+  VIRTUAL_WALLET
+  OTHER
+}
+
 enum CashMovementMethod {
   CASH
   TRANSFER
   CARD
-  MP
 }
 
 enum LedgerEntryType {
@@ -154,7 +161,6 @@ enum RefundExecutionMethod {
   CASH
   TRANSFER
   CARD_REVERSAL
-  MP_REFUND
   CREDIT_NOTE
   OTHER
 }
@@ -635,6 +641,9 @@ model Payment {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   amount    Decimal  @db.Decimal(10, 2)
   method    PaymentMethod
+  channel   PaymentChannel @default(AUTO)
+  collectorAccountLabel String?
+  externalReference String?
   source    PaymentSource @default(POS)
   idempotencyKey String?
 
@@ -650,6 +659,8 @@ model Payment {
   ledgerEntries LedgerEntry[]
 
   @@index([accountId])
+  @@index([channel])
+  @@index([externalReference])
   @@index([source])
   @@index([cashShiftId])
   @@index([idempotencyKey])

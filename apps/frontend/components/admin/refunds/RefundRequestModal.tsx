@@ -38,7 +38,7 @@ export default function RefundRequestModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[10050] bg-[#1f3f2b]/65 backdrop-blur-[2px] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[10050] bg-[#1f3f2b]/65 flex items-center justify-center p-4">
       <div className="w-full max-w-lg bg-[#EBE1D8] border-4 border-white/70 rounded-[1.5rem] shadow-2xl shadow-[#183022]/35 p-6 text-[#347048] space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>

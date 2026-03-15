@@ -1,4 +1,4 @@
-import { LedgerAccount, LedgerDirection, LedgerEntryType, LedgerReferenceType, PaymentMethod, Prisma } from '@prisma/client';
+import { LedgerAccount, LedgerDirection, LedgerEntryType, LedgerReferenceType, PaymentChannel, PaymentMethod, Prisma } from '@prisma/client';
 
 type TxClient = Prisma.TransactionClient;
 
@@ -23,6 +23,7 @@ type PaymentPostingInput = BaseTransactionInput & {
   paymentId: string;
   amount: number;
   paymentMethod: PaymentMethod;
+  paymentChannel?: PaymentChannel;
 };
 
 type RefundPostingInput = BaseTransactionInput & {
@@ -30,13 +31,17 @@ type RefundPostingInput = BaseTransactionInput & {
   refundId: string;
   amount: number;
   paymentMethod: PaymentMethod;
+  paymentChannel?: PaymentChannel;
 };
 
 export class AccountingService {
-  mapPaymentDebitAccount(method: PaymentMethod): LedgerAccount {
+  mapPaymentDebitAccount(method: PaymentMethod, channel: PaymentChannel = 'AUTO'): LedgerAccount {
+    if (channel === 'CASH_DRAWER') return 'CASH';
+    if (channel === 'CARD_TERMINAL') return 'CARD_CLEARING';
+    if (channel === 'VIRTUAL_WALLET') return 'ONLINE_GATEWAY';
+    if (channel === 'BANK_ACCOUNT') return 'BANK';
     if (method === 'CASH') return 'CASH';
     if (method === 'CARD') return 'CARD_CLEARING';
-    if (method === 'MERCADO_PAGO') return 'ONLINE_GATEWAY';
     return 'BANK';
   }
 
@@ -156,7 +161,7 @@ export class AccountingService {
     });
 
     const amount = new Prisma.Decimal(input.amount);
-    const debitAccount = this.mapPaymentDebitAccount(input.paymentMethod);
+    const debitAccount = this.mapPaymentDebitAccount(input.paymentMethod, input.paymentChannel ?? 'AUTO');
 
     await tx.ledgerEntry.createMany({
       data: [
@@ -206,7 +211,7 @@ export class AccountingService {
     });
 
     const amount = new Prisma.Decimal(Math.abs(input.amount));
-    const creditAccount = this.mapPaymentDebitAccount(input.paymentMethod);
+    const creditAccount = this.mapPaymentDebitAccount(input.paymentMethod, input.paymentChannel ?? 'AUTO');
 
     await tx.ledgerEntry.createMany({
       data: [

@@ -229,7 +229,7 @@ export default function AdminTabRefunds() {
 
       {mounted && selectedRefund && createPortal(
         <div
-          className="fixed inset-0 z-[10040] flex items-center justify-center bg-[#1f3f2b]/70 backdrop-blur-[2px] p-4"
+          className="fixed inset-0 z-[10040] flex items-center justify-center bg-[#1f3f2b]/70 p-4"
           onMouseDown={(event) => {
             detailBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}

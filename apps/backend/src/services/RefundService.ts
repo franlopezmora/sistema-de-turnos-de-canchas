@@ -80,14 +80,12 @@ export class RefundService {
   private readonly accountService = new AccountService();
 
   private mapPaymentMethodToCashMovement(method: PaymentMethod): CashMovementMethod {
-    if (method === 'MERCADO_PAGO') return 'MP';
     if (method === 'CARD') return 'CARD';
     if (method === 'TRANSFER') return 'TRANSFER';
     return 'CASH';
   }
 
   private mapPaymentMethodToExecutionMethod(method: PaymentMethod): RefundExecutionMethod {
-    if (method === 'MERCADO_PAGO') return 'MP_REFUND';
     if (method === 'CARD') return 'CARD_REVERSAL';
     if (method === 'TRANSFER') return 'TRANSFER';
     return 'CASH';
@@ -297,6 +295,7 @@ export class RefundService {
       refundId: refund.id,
       amount: Number(refund.amount || 0),
       paymentMethod: refund.payment.method,
+      paymentChannel: refund.payment.channel ?? 'AUTO',
       description: `Devolucion pago ${refund.paymentId}`,
       createdByUserId: input.executedByUserId ?? refund.createdByUserId ?? null
     });

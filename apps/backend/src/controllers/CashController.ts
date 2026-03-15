@@ -26,7 +26,7 @@ export class CashController {
         amount: z.preprocess((v) => Number(v), z.number().positive()),
         concept: z.string().trim().min(1),
         type: z.enum(['PAYMENT_IN', 'REFUND', 'WITHDRAW', 'DEPOSIT']),
-        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'MP'])
+        method: z.enum(['CASH', 'TRANSFER', 'CARD'])
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
@@ -71,9 +71,11 @@ export class CashController {
       const schema = z.object({
         productId: z.preprocess((v) => Number(v), z.number().int().positive()),
         quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
-        method: z.enum(['CASH', 'TRANSFER']),
+        method: z.enum(['CASH', 'TRANSFER', 'CARD']),
+        channel: z.enum(['BANK_ACCOUNT', 'VIRTUAL_WALLET']).optional(),
         payments: z.array(z.object({
-          method: z.enum(['CASH', 'TRANSFER']),
+          method: z.enum(['CASH', 'TRANSFER', 'CARD']),
+          channel: z.enum(['BANK_ACCOUNT', 'VIRTUAL_WALLET']).optional(),
           amount: z.preprocess((v) => Number(v), z.number().positive())
         })).optional(),
         guestName: z.string().trim().optional(),
@@ -97,6 +99,7 @@ export class CashController {
         productId: parsed.data.productId,
         quantity: parsed.data.quantity,
         method: parsed.data.method,
+        channel: parsed.data.channel,
         payments: parsed.data.payments,
         guestName: parsed.data.guestName ? sanitizeString(parsed.data.guestName, 200) : undefined,
         guestPhone: parsed.data.guestPhone ? sanitizeString(parsed.data.guestPhone, 30) : undefined,

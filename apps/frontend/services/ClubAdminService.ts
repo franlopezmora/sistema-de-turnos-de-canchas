@@ -278,7 +278,9 @@ export class ClubAdminService {
 
     if (!res.ok) {
       const error = await res.json();
-      throw new Error(error.error || error.message || 'Error al crear reserva fija');
+      const err: any = new Error(error.error || error.message || 'Error al crear reserva fija');
+      err.details = error;
+      throw err;
     }
     return res.json();
   }
@@ -352,7 +354,7 @@ export class ClubAdminService {
     bookingId: number,
     productId: number,
     quantity: number,
-    paymentMethod: 'CASH' | 'TRANSFER',
+    paymentMethod: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER',
     options?: { applyDiscount?: boolean }
   ) {
     if (!getToken()) throw new Error('No autenticado');
@@ -508,4 +510,3 @@ export class ClubAdminService {
     return res.json();
   }
 }
-

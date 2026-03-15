@@ -7,13 +7,13 @@ type FakeState = {
   paymentAmount: number;
   paidAmount: number;
   source: 'POS' | 'ONLINE' | 'BACKOFFICE';
-  method: 'CASH' | 'TRANSFER' | 'CARD' | 'MERCADO_PAGO' | 'OTHER';
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
   refunds: Array<{
     id: string;
     amount: number;
     status?: 'REQUESTED' | 'APPROVED' | 'READY_TO_EXECUTE' | 'EXECUTED' | 'FAILED' | 'CANCELLED';
     reason?: string | null;
-    executionMethod?: 'CASH' | 'TRANSFER' | 'CARD_REVERSAL' | 'MP_REFUND' | 'CREDIT_NOTE' | 'OTHER' | null;
+    executionMethod?: 'CASH' | 'TRANSFER' | 'CARD_REVERSAL' | 'CREDIT_NOTE' | 'OTHER' | null;
     paymentId?: string;
     accountId?: string;
     clubId?: number;

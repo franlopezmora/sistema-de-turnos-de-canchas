@@ -6,7 +6,8 @@ import { RefundService } from '../services/RefundService';
 
 const refundStatusEnum = z.enum(['REQUESTED', 'APPROVED', 'READY_TO_EXECUTE', 'EXECUTED', 'FAILED', 'CANCELLED']);
 const refundReasonTypeEnum = z.enum(['FULL', 'PARTIAL_COMMERCIAL', 'PARTIAL_SERVICE_FAILURE', 'PARTIAL_PRICING_ERROR', 'OTHER']);
-const refundExecutionMethodEnum = z.enum(['CASH', 'TRANSFER', 'CARD_REVERSAL', 'MP_REFUND', 'CREDIT_NOTE', 'OTHER']);
+const refundExecutionMethodEnum = z.enum(['CASH', 'TRANSFER', 'CARD_REVERSAL', 'CREDIT_NOTE', 'OTHER']);
+const paymentChannelEnum = z.enum(['AUTO', 'CASH_DRAWER', 'BANK_ACCOUNT', 'CARD_TERMINAL', 'VIRTUAL_WALLET', 'OTHER']);
 
 export class PaymentController {
   private readonly paymentService = new PaymentService();
@@ -21,7 +22,9 @@ export class PaymentController {
     try {
       const querySchema = z.object({
         accountId: z.string().trim().min(1).optional(),
-        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'MERCADO_PAGO', 'OTHER']).optional(),
+        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'OTHER']).optional(),
+        channel: paymentChannelEnum.optional(),
+        externalReference: z.string().trim().min(1).max(120).optional(),
         from: z.string().datetime().optional(),
         to: z.string().datetime().optional(),
         take: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().positive().max(500).optional())
@@ -49,7 +52,10 @@ export class PaymentController {
       const bodySchema = z.object({
         accountId: z.string().trim().min(1),
         amount: z.preprocess((v) => Number(v), z.number().positive()),
-        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'MERCADO_PAGO', 'OTHER']),
+        method: z.enum(['CASH', 'TRANSFER', 'CARD', 'OTHER']),
+        channel: paymentChannelEnum.optional(),
+        collectorAccountLabel: z.string().trim().max(120).optional(),
+        externalReference: z.string().trim().max(120).optional(),
         source: z.enum(['POS', 'ONLINE', 'BACKOFFICE']).optional(),
         cashShiftId: z.string().trim().min(1).optional()
       });
@@ -69,6 +75,9 @@ export class PaymentController {
         accountId: parsed.data.accountId,
         amount: parsed.data.amount,
         method: parsed.data.method,
+        channel: parsed.data.channel,
+        collectorAccountLabel: parsed.data.collectorAccountLabel,
+        externalReference: parsed.data.externalReference,
         source: parsed.data.source,
         cashShiftId: parsed.data.cashShiftId,
         createdByUserId: this.resolveActorUserId(req),

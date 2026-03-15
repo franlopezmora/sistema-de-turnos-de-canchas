@@ -11,7 +11,8 @@ export interface PaymentCalculatorItem {
 }
 
 export type PaymentCalculatorResult = {
-  method: 'CASH' | 'TRANSFER';
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
+  channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
   amount: number;
   courtAmount: number;
   paidItemIds: number[];
@@ -49,6 +50,7 @@ export default function PaymentCalculator({
   const [paymentAmount, setPaymentAmount] = useState<number | string>('');
   const [itemAllocations, setItemAllocations] = useState<Record<string, number>>({});
   const [courtPortion, setCourtPortion] = useState<number>(0);
+  const [transferChannel, setTransferChannel] = useState<'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>('BANK_ACCOUNT');
 
   const safeCourtPending = Math.max(0, Number(courtPending || 0));
   const safeCourtBaseTotal = Math.max(0, Number(courtBaseTotal ?? courtPending ?? 0));
@@ -176,7 +178,7 @@ export default function PaymentCalculator({
     setPaymentAmount('');
   };
 
-  const handlePaymentConfirm = async (method: 'CASH' | 'TRANSFER') => {
+  const handlePaymentConfirm = async (method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER', forcedChannel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET') => {
     if (submitting) return;
     if (!amountEntered || amountEntered <= 0) return;
 
@@ -211,6 +213,7 @@ export default function PaymentCalculator({
 
     await onConfirm({
       method,
+      channel: method === 'TRANSFER' ? (forcedChannel ?? transferChannel) : undefined,
       amount: amountEntered,
       courtAmount: Number(courtPortion) || 0,
       paidItemIds: numericItemIds,
@@ -472,7 +475,31 @@ export default function PaymentCalculator({
         </div>
 
         <div className="mb-2">
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setTransferChannel('BANK_ACCOUNT')}
+              className={`h-9 rounded-xl border text-[10px] font-black uppercase tracking-wider ${
+                transferChannel === 'BANK_ACCOUNT'
+                  ? 'bg-[#347048] text-[#B9CF32] border-[#347048]'
+                  : 'bg-white text-[#347048]/70 border-[#347048]/20'
+              }`}
+            >
+              Transferencia a banco
+            </button>
+            <button
+              type="button"
+              onClick={() => setTransferChannel('VIRTUAL_WALLET')}
+              className={`h-9 rounded-xl border text-[10px] font-black uppercase tracking-wider ${
+                transferChannel === 'VIRTUAL_WALLET'
+                  ? 'bg-[#347048] text-[#B9CF32] border-[#347048]'
+                  : 'bg-white text-[#347048]/70 border-[#347048]/20'
+              }`}
+            >
+              Transferencia a billetera
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
             <button
               type="button"
               onClick={() => handlePaymentConfirm('CASH')}
@@ -490,7 +517,30 @@ export default function PaymentCalculator({
               className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-              <span className="font-black text-[10px] uppercase tracking-widest">Digital</span>
+              <span className="font-black text-[10px] uppercase tracking-widest">Transferencia</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handlePaymentConfirm('CARD')}
+              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
+              className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+              <span className="font-black text-[10px] uppercase tracking-widest">Tarjeta</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTransferChannel('VIRTUAL_WALLET');
+                handlePaymentConfirm('TRANSFER', 'VIRTUAL_WALLET');
+              }}
+              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
+              className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+              <span className="font-black text-[10px] uppercase tracking-widest">QR / Billetera</span>
             </button>
           </div>
         </div>

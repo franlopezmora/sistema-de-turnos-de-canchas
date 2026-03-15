@@ -193,6 +193,51 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     });
   };
 
+  const buildBookingSummaryMessage = (params: {
+    courtName: string;
+    activityName: string;
+    start: Date;
+    end: Date;
+    durationMinutes: number;
+    price: number;
+  }) => (
+    <div className="space-y-3">
+      <p className="text-sm text-[#347048]/80">Tu reserva fue registrada con éxito.</p>
+      <div className="grid grid-cols-1 gap-2 rounded-xl border border-[#926699]/20 bg-[#fdfaff] p-3 text-sm text-[#347048]">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Cancha:</span>
+          <span className="text-[#347048] font-black">{params.courtName}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Actividad:</span>
+          <span className="text-[#347048] font-black">{params.activityName}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Fecha:</span>
+          <span className="text-[#347048] font-black">
+            {params.start.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Horario:</span>
+          <span className="text-[#347048] font-black">
+            {params.start.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+            {' - '}
+            {params.end.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Duración:</span>
+          <span className="text-[#347048] font-black">{params.durationMinutes} min</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Precio:</span>
+          <span className="text-[#347048] font-black text-lg">${params.price.toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
+  );
+
   const [disabledSlots, setDisabledSlots] = useState<Record<string, boolean>>({});
   const [priceQuote, setPriceQuote] = useState<BookingQuote | null>(null);
   const [isQuoteLoading, setIsQuoteLoading] = useState(false);
@@ -632,6 +677,19 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
         !isAuthenticated ? guestInfo : undefined,
         { durationMinutes: selectedDuration }
       );
+      const startDateTime = bookingDateTime;
+      const endDateTime = new Date(startDateTime.getTime() + selectedDuration * 60000);
+      const fallbackPrice = Number(priceInfo.final || 0);
+      const parsedCreatedPrice = Number((createResult as any)?.price);
+      const finalPrice = Number.isFinite(parsedCreatedPrice) && parsedCreatedPrice >= 0 ? parsedCreatedPrice : fallbackPrice;
+      const bookingSummaryMessage = buildBookingSummaryMessage({
+        courtName: String(selectedCourt.name || `Cancha ${selectedCourt.id}`),
+        activityName: String(selectedCourt.activityType?.name || selectedActivityFilter || 'Actividad'),
+        start: startDateTime,
+        end: endDateTime,
+        durationMinutes: selectedDuration,
+        price: finalPrice
+      });
 
       // Guardar bloqueo temporal localmente (Optimistic UI)
       const dateString = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(
@@ -659,7 +717,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
         }
       } catch (_) { /* noop */ }
 
-      showInfo('¡Reserva confirmada! Te esperamos en la cancha.', 'Listo');
+      showInfo(bookingSummaryMessage, 'Reserva confirmada');
     } catch (error: any) {
       showError('Ups: ' + error.message);
     } finally {

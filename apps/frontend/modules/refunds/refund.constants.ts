@@ -17,13 +17,11 @@ const REFUND_STATUS_LABELS: Record<RefundStatus, string> = {
   CANCELLED: 'Cancelada'
 };
 
-const REFUND_EXECUTION_METHOD_LABELS: Partial<Record<RefundExecutionMethod | 'CASH' | 'TRANSFER' | 'CARD' | 'MERCADO_PAGO' | 'POS' | 'ONLINE' | 'BACKOFFICE', string>> = {
+const REFUND_EXECUTION_METHOD_LABELS: Partial<Record<RefundExecutionMethod | 'CASH' | 'TRANSFER' | 'CARD' | 'POS' | 'ONLINE' | 'BACKOFFICE', string>> = {
   CASH: 'Efectivo',
   TRANSFER: 'Transferencia',
   CARD: 'Tarjeta',
-  MERCADO_PAGO: 'Mercado Pago',
   CARD_REVERSAL: 'Reversa de tarjeta',
-  MP_REFUND: 'Devolucion MP',
   CREDIT_NOTE: 'Nota de credito',
   OTHER: 'Otro',
   POS: 'Mostrador (POS)',

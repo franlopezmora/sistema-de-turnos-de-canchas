@@ -209,7 +209,8 @@ const getFormattedDateLabel = (date: Date) => {
 };
 
 type SplitPaymentDraft = {
-  method: 'CASH' | 'TRANSFER' | 'MERCADO_PAGO' | 'CARD' | 'OTHER';
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
+  channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
   amount: string;
 };
 
@@ -263,6 +264,7 @@ const formatPaymentStatus = (status?: string) => {
 };
 
 const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString()}`;
+const WEEKDAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 export default function AdminTabBookings() {
   const [courts, setCourts] = useState<any[]>([]);
@@ -273,6 +275,7 @@ export default function AdminTabBookings() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'single' | 'split'>('single');
   const [splitPayments, setSplitPayments] = useState<SplitPaymentDraft[]>([{ method: 'CASH', amount: '' }]);
+  const [singleTransferChannel, setSingleTransferChannel] = useState<'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>('BANK_ACCOUNT');
   const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
   const [selectedPaymentAccountId, setSelectedPaymentAccountId] = useState<string | null>(null);
   const [paymentRemainingTarget, setPaymentRemainingTarget] = useState(0);
@@ -295,6 +298,7 @@ export default function AdminTabBookings() {
     setSelectedBookingId(bookingId);
     setPaymentMode('single');
     setSplitPayments([{ method: 'CASH', amount: '' }]);
+    setSingleTransferChannel('BANK_ACCOUNT');
     try {
       const account = await getOrCreateBookingAccount(bookingId);
       const summary = await getAccountSummary(account.id);
@@ -615,6 +619,211 @@ export default function AdminTabBookings() {
   const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
   const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
   const wrapAction = (action?: () => Promise<void> | void) => async () => { closeModal(); await action?.(); };
+  const formatShortDateTime = (raw: string | Date) => {
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return String(raw || '');
+    return date.toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+  const formatMinutesAsTime = (minutes: number) => {
+    const safe = Number(minutes || 0);
+    const hh = String(Math.floor(safe / 60)).padStart(2, '0');
+    const mm = String(safe % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  };
+  const buildDetailedBookingErrorMessage = (error: any) => {
+    const details = error?.details || {};
+    const overlaps = Array.isArray(details?.overlaps) ? details.overlaps : [];
+    if (!overlaps.length) return `Error al reservar: ${error?.message || 'Error desconocido'}`;
+
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-[#347048]/80">{error?.message || 'Se detectaron superposiciones.'}</p>
+        <div className="max-h-64 overflow-y-auto rounded-xl border border-red-200 bg-red-50/40 p-3 space-y-2">
+          {overlaps.map((overlap: any, index: number) => {
+            const hasFixed = Number.isFinite(Number(overlap?.startTimeMinutes)) && Number.isFinite(Number(overlap?.endTimeMinutes));
+            return (
+              <div key={`${overlap?.bookingId || overlap?.fixedBookingId || 'ov'}-${index}`} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs text-[#347048]">
+                <div className="font-black text-red-700 uppercase tracking-wide">
+                  {hasFixed ? 'Turno fijo existente' : 'Reserva existente'}
+                </div>
+                <div>
+                  {hasFixed
+                    ? `${WEEKDAY_LABELS[Number(overlap?.dayOfWeek ?? 0)] || 'Día'} ${formatMinutesAsTime(Number(overlap?.startTimeMinutes || 0))} - ${formatMinutesAsTime(Number(overlap?.endTimeMinutes || 0))}`
+                    : `${formatShortDateTime(overlap?.startDateTime || overlap?.requestedStartDateTime)} - ${formatShortDateTime(overlap?.endDateTime || overlap?.requestedEndDateTime)}`}
+                </div>
+                {!!overlap?.clientName && <div>Cliente: <span className="font-bold">{overlap.clientName}</span></div>}
+                {!!overlap?.conflictingClientName && <div>Cliente: <span className="font-bold">{overlap.conflictingClientName}</span></div>}
+                {!!overlap?.courtName && <div>Cancha: <span className="font-bold">{overlap.courtName}</span></div>}
+                {!!overlap?.conflictingCourtName && <div>Cancha: <span className="font-bold">{overlap.conflictingCourtName}</span></div>}
+                {!!overlap?.activityName && <div>Actividad: <span className="font-bold">{overlap.activityName}</span></div>}
+                {!!overlap?.conflictingActivityName && <div>Actividad: <span className="font-bold">{overlap.conflictingActivityName}</span></div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+  const buildFixedOverlapConfirmMessage = (error: any) => {
+    const details = error?.details || {};
+    const overlaps = Array.isArray(details?.overlaps) ? details.overlaps : [];
+
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-[#347048]/80">
+          Se detectó superposición con un turno fijo existente. Si continuás, se creará la serie omitiendo las fechas que choquen.
+        </p>
+        {overlaps.length > 0 && (
+          <div className="max-h-64 overflow-y-auto rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+            {overlaps.map((overlap: any, index: number) => (
+              <div key={`${overlap?.fixedBookingId || 'fixed'}-${index}`} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-[#347048]">
+                <div className="font-black text-amber-700 uppercase tracking-wide">Turno fijo existente</div>
+                <div>
+                  {`${WEEKDAY_LABELS[Number(overlap?.dayOfWeek ?? 0)] || 'Día'} ${formatMinutesAsTime(Number(overlap?.startTimeMinutes || 0))} - ${formatMinutesAsTime(Number(overlap?.endTimeMinutes || 0))}`}
+                </div>
+                {!!overlap?.requestedStartDateTime && (
+                  <div>Fecha de superposición: <span className="font-bold">{formatShortDateTime(overlap.requestedStartDateTime)}</span></div>
+                )}
+                {!!overlap?.clientName && <div>Cliente: <span className="font-bold">{overlap.clientName}</span></div>}
+                {!!overlap?.courtName && <div>Cancha: <span className="font-bold">{overlap.courtName}</span></div>}
+                {!!overlap?.activityName && <div>Actividad: <span className="font-bold">{overlap.activityName}</span></div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+  const buildSimpleBookingSummaryMessage = (params: {
+    courtName: string;
+    activityName: string;
+    guestName: string;
+    start: Date;
+    durationMinutes: number;
+    price: number;
+  }) => {
+    const end = new Date(params.start.getTime() + params.durationMinutes * 60000);
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-[#347048]/80">Reserva simple creada correctamente.</p>
+        <div className="grid grid-cols-1 gap-2 rounded-xl border border-[#926699]/20 bg-[#fdfaff] p-3 text-sm text-[#347048]">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#926699] uppercase text-xs">Cliente:</span>
+            <span className="text-[#347048] font-black">{params.guestName}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#926699] uppercase text-xs">Cancha:</span>
+            <span className="text-[#347048] font-black">{params.courtName}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#926699] uppercase text-xs">Actividad:</span>
+            <span className="text-[#347048] font-black">{params.activityName}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#926699] uppercase text-xs">Fecha:</span>
+            <span className="text-[#347048] font-black">{params.start.toLocaleDateString('es-AR')}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#926699] uppercase text-xs">Horario:</span>
+            <span className="text-[#347048] font-black">{`${formatTime(params.start)} - ${formatTime(end)}`}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#926699] uppercase text-xs">Duración:</span>
+            <span className="text-[#347048] font-black">{params.durationMinutes} min</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-[#926699] uppercase text-xs">Precio:</span>
+            <span className="text-[#347048] font-black text-lg">{formatMoney(params.price)}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const buildFixedBookingSummaryMessage = (params: {
+    courtName: string;
+    activityName: string;
+    guestName: string;
+    firstDate: Date;
+    slotTime: string;
+    generatedCount: number;
+    dayOfWeek: number;
+    createdOccurrences?: Array<{
+      bookingId?: number;
+      startDateTime?: string;
+      endDateTime?: string;
+    }>;
+    skippedOccurrences?: Array<{
+      requestedStartDateTime?: string;
+      requestedEndDateTime?: string;
+    }>;
+  }) => (
+    <div className="space-y-3">
+      <p className="text-sm text-[#347048]/80">Turno fijo creado correctamente.</p>
+      <div className="grid grid-cols-1 gap-2 rounded-xl border border-[#926699]/20 bg-[#fdfaff] p-3 text-sm text-[#347048]">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Cliente:</span>
+          <span className="text-[#347048] font-black">{params.guestName}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Cancha:</span>
+          <span className="text-[#347048] font-black">{params.courtName}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Actividad:</span>
+          <span className="text-[#347048] font-black">{params.activityName}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Día fijo:</span>
+          <span className="text-[#347048] font-black">{WEEKDAY_LABELS[params.dayOfWeek] || 'No definido'}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Horario:</span>
+          <span className="text-[#347048] font-black">{params.slotTime}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Primera fecha:</span>
+          <span className="text-[#347048] font-black">{params.firstDate.toLocaleDateString('es-AR')}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-[#926699] uppercase text-xs">Turnos generados:</span>
+          <span className="text-[#347048] font-black text-lg">{params.generatedCount}</span>
+        </div>
+      </div>
+      <div className="rounded-xl border border-[#347048]/15 bg-white/70 p-3">
+        <div className="font-bold text-[#926699] uppercase text-xs mb-2">Turnos creados</div>
+        {Array.isArray(params.createdOccurrences) && params.createdOccurrences.length > 0 ? (
+          <div className="max-h-52 overflow-y-auto space-y-2">
+            {params.createdOccurrences.map((occurrence: any, index: number) => (
+              <div key={`${occurrence?.bookingId || 'occ'}-${index}`} className="rounded-lg border border-[#347048]/10 bg-white px-3 py-2 text-xs text-[#347048]">
+                <div className="font-bold">
+                  {formatShortDateTime(occurrence?.startDateTime || '')}
+                  {' - '}
+                  {formatShortDateTime(occurrence?.endDateTime || '')}
+                </div>
+                {Number.isFinite(Number(occurrence?.bookingId)) && (
+                  <div className="text-[#347048]/70">ID reserva: #{Number(occurrence.bookingId)}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-[#347048]/70">No se recibió el detalle de turnos creados.</div>
+        )}
+      </div>
+      {Array.isArray(params.skippedOccurrences) && params.skippedOccurrences.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900">
+          {params.skippedOccurrences.length} ocurrencia(s) no se crearon por superposición.
+        </div>
+      )}
+    </div>
+  );
   
   const showConfirm = (options: {
     title: string; message: ReactNode; confirmText?: string; cancelText?: string; isWarning?: boolean;
@@ -796,6 +1005,47 @@ export default function AdminTabBookings() {
     let dateBase: Date;
     let guestName = `${firstName} ${lastName}`.trim();
     let phoneToSend = "";
+    const resetManualForm = () => {
+      setManualBooking({
+        guestFirstName: '', guestLastName: '', guestPhone: '', guestDni: '',
+        courtId: '', time: '', durationMinutes: manualDurationOptions[0] ?? DEFAULT_DURATION_MINUTES, isFixed: false, isProfessor: false, professorOverrideReason: '', dayOfWeek: '1', startDateBase: getTodayLocalDate()
+      });
+    };
+    const submitFixedBooking = async (allowOverlappingSeries = false) => {
+      const fixedResult = await createFixedBooking(
+        undefined,
+        Number(manualBooking.courtId),
+        selectedActivityId,
+        dateBase,
+        guestName,
+        phoneToSend || undefined,
+        dni,
+        manualBooking.isProfessor,
+        professorOverrideReason || undefined,
+        { allowOverlappingSeries }
+      );
+
+      showInfo(
+        buildFixedBookingSummaryMessage({
+          courtName: String(selectedManualCourt?.name || `Cancha ${manualBooking.courtId}`),
+          activityName: String(selectedManualCourt?.activityType?.name || 'Actividad'),
+          guestName,
+          firstDate: dateBase,
+          slotTime: manualBooking.time,
+          generatedCount: Number((fixedResult as any)?.generatedCount || 0),
+          dayOfWeek: Number(manualBooking.dayOfWeek),
+          createdOccurrences: Array.isArray((fixedResult as any)?.createdOccurrences)
+            ? (fixedResult as any).createdOccurrences
+            : [],
+          skippedOccurrences: Array.isArray((fixedResult as any)?.skippedOccurrences)
+            ? (fixedResult as any).skippedOccurrences
+            : []
+        }),
+        'Turno fijo creado'
+      );
+      await loadSchedule();
+      resetManualForm();
+    };
     try {
         const rawPhone = phone.replace(/\D/g, '');
         phoneToSend = rawPhone ? `+549${rawPhone}` : '';
@@ -808,22 +1058,10 @@ export default function AdminTabBookings() {
           dateBase = new Date(`${manualBooking.startDateBase}T${manualBooking.time}:00`);
         }
         if (manualBooking.isFixed) {
-
-          await createFixedBooking(
-            undefined,
-            Number(manualBooking.courtId),
-            selectedActivityId,
-            dateBase,
-            guestName,
-            phoneToSend || undefined,
-            dni,
-            manualBooking.isProfessor,
-            professorOverrideReason || undefined
-          );
-            showInfo('Turno fijo creado', 'Listo');
+          await submitFixedBooking(false);
         } else {
             const guestData = { name: guestName, phone: phoneToSend, dni: dni, document: dni, dniNumber: dni };
-            await createBooking(
+            const createdBooking = await createBooking(
               Number(manualBooking.courtId),
               selectedActivityId,
               dateBase,
@@ -839,14 +1077,42 @@ export default function AdminTabBookings() {
                 openAccount: true
               }
             );
-            showInfo('Reserva simple creada', 'Listo');
+            showInfo(
+              buildSimpleBookingSummaryMessage({
+                courtName: String(selectedManualCourt?.name || `Cancha ${manualBooking.courtId}`),
+                activityName: String(selectedManualCourt?.activityType?.name || 'Actividad'),
+                guestName,
+                start: dateBase,
+                durationMinutes: Number(manualBooking.durationMinutes || DEFAULT_DURATION_MINUTES),
+                price: Number((createdBooking as any)?.price || 0)
+              }),
+              'Reserva simple creada'
+            );
+            await loadSchedule();
+            resetManualForm();
         }
-        loadSchedule();
-        setManualBooking({ 
-            guestFirstName: '', guestLastName: '', guestPhone: '', guestDni: '', 
-      courtId: '', time: '', durationMinutes: manualDurationOptions[0] ?? DEFAULT_DURATION_MINUTES, isFixed: false, isProfessor: false, professorOverrideReason: '', dayOfWeek: '1', startDateBase: getTodayLocalDate() 
+    } catch (error: any) {
+      const canProceedFixedOverlap = Boolean(manualBooking.isFixed && error?.details?.canProceed);
+      if (canProceedFixedOverlap) {
+        showConfirm({
+          title: 'Superposición detectada',
+          message: buildFixedOverlapConfirmMessage(error),
+          confirmText: 'Crear igualmente',
+          cancelText: 'Cancelar',
+          isWarning: true,
+          closeOnBackdrop: false,
+          onConfirm: async () => {
+            try {
+              await submitFixedBooking(true);
+            } catch (retryError: any) {
+              showError(buildDetailedBookingErrorMessage(retryError));
+            }
+          }
         });
-    } catch (error: any) { showError('Error al reservar: ' + error.message); }
+        return;
+      }
+      showError(buildDetailedBookingErrorMessage(error));
+    }
   };
 
   const getBookingPaidAmount = async (bookingId: number) => {
@@ -961,7 +1227,7 @@ export default function AdminTabBookings() {
     }
   };
 
-  const handleConfirmBooking = async (method: 'CASH' | 'TRANSFER' | 'MERCADO_PAGO' | 'CARD' | 'OTHER') => {
+  const handleConfirmBooking = async (method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER', forcedChannel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET') => {
     if (!selectedBookingId || !selectedPaymentAccountId) return;
     try {
         const summary = await getAccountSummary(selectedPaymentAccountId);
@@ -975,7 +1241,8 @@ export default function AdminTabBookings() {
         await registerPayment({
           accountId: selectedPaymentAccountId,
           amount: remaining,
-          method
+          method,
+          ...(method === 'TRANSFER' ? { channel: forcedChannel || singleTransferChannel } : {})
         });
         setShowPaymentModal(false);
         loadSchedule(); 
@@ -988,7 +1255,7 @@ export default function AdminTabBookings() {
   };
 
   const addSplitPaymentRow = () => {
-    setSplitPayments((prev) => [...prev, { method: 'TRANSFER', amount: '' }]);
+    setSplitPayments((prev) => [...prev, { method: 'TRANSFER', channel: 'BANK_ACCOUNT', amount: '' }]);
   };
 
   const removeSplitPaymentRow = (index: number) => {
@@ -1012,6 +1279,7 @@ export default function AdminTabBookings() {
     const parsedPayments = splitPayments
       .map((payment) => ({
         method: payment.method,
+        channel: payment.method === 'TRANSFER' ? (payment.channel || 'BANK_ACCOUNT') : undefined,
         amount: Number(payment.amount)
       }))
       .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
@@ -1035,7 +1303,8 @@ export default function AdminTabBookings() {
         await registerPayment({
           accountId: selectedPaymentAccountId,
           amount: payment.amount,
-          method: payment.method
+          method: payment.method,
+          channel: payment.channel
         });
       }
       setShowPaymentModal(false);
@@ -1543,7 +1812,39 @@ export default function AdminTabBookings() {
                   </button>
                   <button onClick={() => handleConfirmBooking('TRANSFER')} className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-[1.5rem] text-[#347048] transition-all shadow-sm group">
                     <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-                    <span className="font-black text-xs uppercase tracking-tighter">Digital</span>
+                    <span className="font-black text-xs uppercase tracking-tighter">Transferencia</span>
+                  </button>
+                  <button onClick={() => handleConfirmBooking('CARD')} className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-[1.5rem] text-[#347048] transition-all shadow-sm group">
+                    <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+                    <span className="font-black text-xs uppercase tracking-tighter">Tarjeta</span>
+                  </button>
+                  <button onClick={() => handleConfirmBooking('TRANSFER', 'VIRTUAL_WALLET')} className="flex flex-col items-center justify-center p-6 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-[1.5rem] text-[#347048] transition-all shadow-sm group">
+                    <CreditCard size={36} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
+                    <span className="font-black text-xs uppercase tracking-tighter">QR / Billetera</span>
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setSingleTransferChannel('BANK_ACCOUNT')}
+                    className={`h-9 rounded-xl border text-[10px] font-black uppercase tracking-wider ${
+                      singleTransferChannel === 'BANK_ACCOUNT'
+                        ? 'bg-[#347048] text-[#B9CF32] border-[#347048]'
+                        : 'bg-white text-[#347048]/70 border-[#347048]/20'
+                    }`}
+                  >
+                    Transferencia a banco
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSingleTransferChannel('VIRTUAL_WALLET')}
+                    className={`h-9 rounded-xl border text-[10px] font-black uppercase tracking-wider ${
+                      singleTransferChannel === 'VIRTUAL_WALLET'
+                        ? 'bg-[#347048] text-[#B9CF32] border-[#347048]'
+                        : 'bg-white text-[#347048]/70 border-[#347048]/20'
+                    }`}
+                  >
+                    Transferencia a billetera
                   </button>
                 </div>
                 <button
@@ -1559,22 +1860,39 @@ export default function AdminTabBookings() {
                   <div key={`split-payment-${index}`} className="grid grid-cols-12 gap-2 items-center">
                     <select
                       value={payment.method}
-                      onChange={(e) => updateSplitPayment(index, { method: e.target.value as 'CASH' | 'TRANSFER' | 'MERCADO_PAGO' | 'CARD' | 'OTHER' })}
+                      onChange={(e) => {
+                        const method = e.target.value as 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
+                        updateSplitPayment(index, {
+                          method,
+                          channel: method === 'TRANSFER' ? (payment.channel || 'BANK_ACCOUNT') : undefined
+                        });
+                      }}
                       className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
                     >
                       <option value="CASH">Efectivo</option>
-                      <option value="TRANSFER">Digital</option>
-                      <option value="MERCADO_PAGO">MercadoPago</option>
+                      <option value="TRANSFER">Transferencia</option>
                       <option value="CARD">Tarjeta</option>
                       <option value="OTHER">Otro</option>
                     </select>
+                    {payment.method === 'TRANSFER' ? (
+                      <select
+                        value={payment.channel || 'BANK_ACCOUNT'}
+                        onChange={(e) => updateSplitPayment(index, { channel: e.target.value as 'BANK_ACCOUNT' | 'VIRTUAL_WALLET' })}
+                        className="col-span-3 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-2 text-[10px] font-black uppercase tracking-wider"
+                      >
+                        <option value="BANK_ACCOUNT">Banco</option>
+                        <option value="VIRTUAL_WALLET">Billetera</option>
+                      </select>
+                    ) : (
+                      <div className="col-span-3 h-11" />
+                    )}
                     <input
                       type="number"
                       min={0}
                       step="0.01"
                       value={payment.amount}
                       onChange={(e) => updateSplitPayment(index, { amount: e.target.value })}
-                      className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
+                      className="col-span-2 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-2 text-sm font-black"
                       placeholder="Monto"
                     />
                     <button
@@ -1638,4 +1956,3 @@ export default function AdminTabBookings() {
     </>
   );
 }
-

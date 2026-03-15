@@ -419,7 +419,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       {/* MODAL DETALLE DE DEUDA */}
       {mounted && selectedDebtor && createPortal(
         <div
-          className="fixed inset-0 bg-[#347048]/90 flex items-center justify-center z-[100001] p-4 animate-in fade-in backdrop-blur-sm"
+          className="fixed inset-0 bg-[#347048]/90 flex items-center justify-center z-[100001] p-4 animate-in fade-in"
           onMouseDown={(event) => {
             debtBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -550,7 +550,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       {/* HISTORIAL COMPLETO */}
       {mounted && selectedClientHistory && createPortal(
         <div
-          className="fixed inset-0 bg-[#347048]/90 flex items-center justify-center z-[100002] p-4 backdrop-blur-[2px] animate-in fade-in"
+          className="fixed inset-0 bg-[#347048]/90 flex items-center justify-center z-[100002] p-4 animate-in fade-in"
           onMouseDown={(event) => {
             historyBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -726,5 +726,4 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     </div>
   );
 }
-
 

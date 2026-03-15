@@ -200,7 +200,7 @@ export class CashService {
             const movementAccount =
                 movement.method === 'TRANSFER' ? 'BANK' :
                 movement.method === 'CARD' ? 'CARD_CLEARING' :
-                movement.method === 'MP' ? 'ONLINE_GATEWAY' : 'CASH';
+                'CASH';
 
             const transaction = await tx.ledgerTransaction.create({
                 data: {
@@ -294,8 +294,9 @@ export class CashService {
         clubId: number;
         productId: number;
         quantity: number;
-        method: 'CASH' | 'TRANSFER';
-        payments?: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>;
+        method: 'CASH' | 'TRANSFER' | 'CARD';
+        channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
+        payments?: Array<{ method: 'CASH' | 'TRANSFER' | 'CARD'; channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET'; amount: number }>;
         guestName?: string;
         guestPhone?: string;
         guestDni?: string;
@@ -321,9 +322,10 @@ export class CashService {
 
         const paymentPlan = (Array.isArray(input.payments) && input.payments.length > 0
             ? input.payments
-            : [{ method: input.method, amount: total }])
+            : [{ method: input.method, channel: input.channel, amount: total }])
             .map((payment) => ({
                 method: payment.method,
+                channel: payment.channel,
                 amount: Number(payment.amount)
             }))
             .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
@@ -441,6 +443,7 @@ export class CashService {
                 accountId: sale.accountId,
                 amount: payment.amount,
                 method: payment.method as PaymentMethod,
+                channel: payment.method === 'TRANSFER' ? payment.channel : undefined,
                 source: 'POS',
                 createdByUserId: actorUserId ?? input.userId,
                 allocations: sale.accountItemId

@@ -119,7 +119,9 @@ export const createBooking = async (
 
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.error || errorData.message || 'Error al reservar');
+    const err: any = new Error(errorData.error || errorData.message || 'Error al reservar');
+    err.details = errorData;
+    throw err;
   }
 
   return response.json();
@@ -262,7 +264,7 @@ export const completeBooking = async (bookingId: number) => {
 
 export const splitBookingPayment = async (
   bookingId: number,
-  payments: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>
+  payments: Array<{ method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER'; channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET'; amount: number }>
 ) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
@@ -280,7 +282,8 @@ export const splitBookingPayment = async (
     results.push(await registerPayment({
       accountId: account.id,
       amount: Number(payment.amount),
-      method: payment.method
+      method: payment.method,
+      channel: payment.channel
     }));
   }
 
@@ -290,7 +293,8 @@ export const splitBookingPayment = async (
 export const registerBookingPartialPayment = async (
   bookingId: number,
   amount: number,
-  method: 'CASH' | 'TRANSFER',
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER',
+  channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET',
   allocations?: Array<{ accountItemId: string; amount: number }>
 ) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
@@ -299,6 +303,7 @@ export const registerBookingPartialPayment = async (
     accountId: account.id,
     amount,
     method,
+    channel,
     allocations
   });
 };
@@ -375,7 +380,10 @@ export const createFixedBooking = async (
   guestPhone?: string,
   guestDni?: string, // <--- Recibimos el dato (Argumento #7)
   isProfessor?: boolean,
-  professorOverrideReason?: string
+  professorOverrideReason?: string,
+  options?: {
+    allowOverlappingSeries?: boolean;
+  }
 ) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
 
@@ -400,7 +408,8 @@ export const createFixedBooking = async (
     ...(guestPhone ? { guestPhone } : {}),
     ...(guestDni ? { guestDni } : {}),
     ...(isProfessor ? { isProfessor: true } : {}),
-    ...(professorOverrideReason ? { professorOverrideReason } : {})
+    ...(professorOverrideReason ? { professorOverrideReason } : {}),
+    ...(options?.allowOverlappingSeries ? { allowOverlappingSeries: true } : {})
   });
 };
 

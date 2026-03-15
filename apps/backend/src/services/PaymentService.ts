@@ -1,4 +1,4 @@
-import { CashMovementMethod, PaymentMethod, PaymentSource, Prisma } from '@prisma/client';
+import { CashMovementMethod, PaymentChannel, PaymentMethod, PaymentSource, Prisma } from '@prisma/client';
 import { prisma, prismaRead } from '../prisma';
 import { AccountingService } from './AccountingService';
 import { EventService } from './EventService';
@@ -12,6 +12,8 @@ type ListPaymentsFilters = {
   clubId?: number;
   accountId?: string;
   method?: PaymentMethod;
+  channel?: PaymentChannel;
+  externalReference?: string;
   from?: Date;
   to?: Date;
   take?: number;
@@ -22,6 +24,9 @@ type CreatePaymentInput = {
   accountId: string;
   amount: number;
   method: PaymentMethod;
+  channel?: PaymentChannel;
+  collectorAccountLabel?: string;
+  externalReference?: string;
   source?: PaymentSource;
   cashShiftId?: string;
   createdByUserId?: number;
@@ -42,6 +47,23 @@ export class PaymentService {
 
   private roundMoney(value: number) {
     return Number((Number(value || 0)).toFixed(2));
+  }
+
+  private normalizeText(value: unknown, maxLen: number): string | null {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    return text.length > maxLen ? text.slice(0, maxLen) : text;
+  }
+
+  private resolvePaymentChannel(method: PaymentMethod, channel?: PaymentChannel): PaymentChannel {
+    if (method === 'CASH') return 'CASH_DRAWER';
+    if (method === 'CARD') return 'CARD_TERMINAL';
+    if (method === 'TRANSFER') {
+      if (channel === 'VIRTUAL_WALLET') return 'VIRTUAL_WALLET';
+      return 'BANK_ACCOUNT';
+    }
+    if (channel && channel !== 'AUTO') return channel;
+    return 'OTHER';
   }
 
   private async getAllocatedByItemTx(
@@ -185,6 +207,8 @@ export class PaymentService {
       ...(filters.clubId ? { account: { clubId: filters.clubId } } : {}),
       ...(filters.accountId ? { accountId: filters.accountId } : {}),
       ...(filters.method ? { method: filters.method } : {}),
+      ...(filters.channel ? { channel: filters.channel } : {}),
+      ...(filters.externalReference ? { externalReference: filters.externalReference.trim() } : {}),
       ...(filters.from || filters.to
         ? {
             createdAt: {
@@ -213,6 +237,9 @@ export class PaymentService {
 
     return prisma.$transaction(async (tx) => {
       const source = input.source ?? 'POS';
+      const channel = this.resolvePaymentChannel(input.method, input.channel);
+      const collectorAccountLabel = this.normalizeText(input.collectorAccountLabel, 120);
+      const externalReference = this.normalizeText(input.externalReference, 120);
       const scopedIdempotencyKey = input.idempotencyKey
         ? `payment:${input.accountId}:${input.idempotencyKey.trim()}`
         : undefined;
@@ -312,6 +339,9 @@ export class PaymentService {
         data: {
           amount: new Prisma.Decimal(input.amount),
           method: input.method,
+          channel,
+          collectorAccountLabel,
+          externalReference,
           source,
           accountId: input.accountId,
           cashShiftId: source === 'POS' ? resolvedCashShiftId : null,
@@ -345,6 +375,7 @@ export class PaymentService {
         paymentId: payment.id,
         amount: input.amount,
         paymentMethod: input.method,
+        paymentChannel: channel,
         description: `Pago registrado (${input.method})`,
         createdByUserId: input.createdByUserId ?? null
       });
@@ -353,7 +384,6 @@ export class PaymentService {
 
       if (source === 'POS' && resolvedCashShiftId) {
         const movementMethod: CashMovementMethod =
-          input.method === 'MERCADO_PAGO' ? 'MP' :
           input.method === 'CARD' ? 'CARD' :
           input.method === 'TRANSFER' ? 'TRANSFER' : 'CASH';
 
@@ -381,6 +411,7 @@ export class PaymentService {
         userId: input.createdByUserId ?? null,
         amount: input.amount,
         method: input.method,
+        channel,
         source
       }, tx);
 

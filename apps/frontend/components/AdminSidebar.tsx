@@ -38,7 +38,7 @@ const AdminSidebar = ({ isOpen, onClose }: AdminSidebarProps) => {
     <>
       {/* 1. BACKDROP OSCURO (Fondo negro transparente) */}
       <div 
-        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 bg-black/60 z-[60] transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
       />
 

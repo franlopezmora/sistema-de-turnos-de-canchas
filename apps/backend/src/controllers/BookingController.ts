@@ -166,6 +166,12 @@ export class BookingController {
 
         } catch (error: any) {
             console.error(error);
+            if (error?.code === 'BOOKING_OVERLAP') {
+                return res.status(409).json({
+                    error: 'El horario se superpone con reservas existentes.',
+                    overlaps: Array.isArray(error?.overlaps) ? error.overlaps : []
+                });
+            }
             if (error?.message === 'SLOT_ALREADY_BOOKED') {
                 return res.status(409).json({
                     error: 'El horario acaba de ser reservado por otro jugador'
@@ -547,13 +553,14 @@ export class BookingController {
                 guestPhone: z.union([z.string(), z.number()]).optional(),
                 guestDni: z.string().optional(),
                 isProfessor: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional(),
-                professorOverrideReason: z.string().trim().min(10).optional()
+                professorOverrideReason: z.string().trim().min(10).optional(),
+                allowOverlappingSeries: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional()
             });
             const parsed = createFixedSchema.safeParse(req.body);
             if (!parsed.success) {
                 return res.status(400).json({ error: parsed.error.format() });
             }
-            const { userId, courtId, activityId, startDateTime, guestName, guestPhone, guestDni, isProfessor, professorOverrideReason } = parsed.data;
+            const { userId, courtId, activityId, startDateTime, guestName, guestPhone, guestDni, isProfessor, professorOverrideReason, allowOverlappingSeries } = parsed.data;
             const user = (req as any).user;
             const membershipRole = String((req as any).membershipRole || '');
             const isAdmin = user?.role === 'ADMIN' || membershipRole === 'OWNER' || membershipRole === 'ADMIN';
@@ -592,11 +599,25 @@ export class BookingController {
                 Boolean(isProfessor),
                 clubId,
                 professorOverrideReason?.trim() || undefined,
-                Number(user?.userId || 0) || null
+                Number(user?.userId || 0) || null,
+                Boolean(allowOverlappingSeries)
             );
             
             res.status(201).json(result);
         } catch (error: any) {
+            if (error?.code === 'FIXED_BOOKING_OVERLAP') {
+                return res.status(409).json({
+                    error: 'El turno fijo se superpone con otro turno fijo existente.',
+                    overlaps: Array.isArray(error?.overlaps) ? error.overlaps : [],
+                    canProceed: true
+                });
+            }
+            if (error?.code === 'FIXED_BOOKING_NO_OCCURRENCES') {
+                return res.status(409).json({
+                    error: error.message || 'No se pudo crear ningún turno fijo por superposición.',
+                    overlaps: Array.isArray(error?.overlaps) ? error.overlaps : []
+                });
+            }
             res.status(400).json({ error: error.message });
         }
     }
@@ -637,7 +658,7 @@ export class BookingController {
                 bookingId: z.preprocess((v) => (v === undefined || v === null || v === '' ? undefined : Number(v)), z.number().int().positive().optional()),
                 productId: z.preprocess((v) => Number(v), z.number().int().positive()),
                 quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
-                paymentMethod: z.enum(['CASH', 'TRANSFER', 'MERCADOPAGO', 'CARD', 'OTHER']).optional(),
+                paymentMethod: z.enum(['CASH', 'TRANSFER', 'CARD', 'OTHER']).optional(),
                 applyDiscount: z.preprocess((v) => v === undefined ? undefined : (v === true || v === 'true'), z.boolean().optional())
             });
             const paramId = req.params.id || req.params.bookingId;

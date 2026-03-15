@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/AdminLayout';
-import { addAccountItem, closeAccount, getAccountById, listAccounts, openAccount, registerPayment, type PaymentMethod, type PaymentSource } from '../../services/AccountService';
+import { addAccountItem, closeAccount, getAccountById, listAccounts, openAccount, registerPayment, type PaymentChannel, type PaymentMethod, type PaymentSource } from '../../services/AccountService';
 import type { RefundDraft } from '../../modules/refunds/refund.types';
 import { buildDefaultRefundDraft } from '../../modules/refunds/refund.policy';
 import { validateRefundAmountInput } from '../../modules/refunds/refund.validators';
@@ -32,8 +32,8 @@ export default function AdminAccountsPage() {
   const [error, setError] = useState<string>('');
 
   const [newItem, setNewItem] = useState<{ description: string; quantity: number; unitPrice: number; type: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT' }>({ description: '', quantity: 1, unitPrice: 0, type: 'PRODUCT' });
-  const [payment, setPayment] = useState<{ amount: number; method: PaymentMethod; source: PaymentSource }>({ amount: 0, method: 'CASH', source: 'POS' });
-  const [splitPayments, setSplitPayments] = useState<Array<{ amount: number; method: PaymentMethod; source: PaymentSource }>>([{ amount: 0, method: 'CASH', source: 'POS' }]);
+  const [payment, setPayment] = useState<{ amount: number; method: PaymentMethod; channel: PaymentChannel; collectorAccountLabel: string; externalReference: string; source: PaymentSource }>({ amount: 0, method: 'CASH', channel: 'AUTO', collectorAccountLabel: '', externalReference: '', source: 'POS' });
+  const [splitPayments, setSplitPayments] = useState<Array<{ amount: number; method: PaymentMethod; channel: PaymentChannel; collectorAccountLabel: string; externalReference: string; source: PaymentSource }>>([{ amount: 0, method: 'CASH', channel: 'AUTO', collectorAccountLabel: '', externalReference: '', source: 'POS' }]);
   const [newAccount, setNewAccount] = useState({ sourceType: 'MANUAL' as const, sourceId: '' });
   const [itemAllocationDraft, setItemAllocationDraft] = useState<Record<string, number>>({});
   const [showRefundModal, setShowRefundModal] = useState(false);
@@ -67,7 +67,12 @@ export default function AdminAccountsPage() {
     try {
       const data = await getAccountById(id);
       setDetail(data);
-      setPayment((prev) => ({ ...prev, amount: Number(data.remaining || 0) }));
+      setPayment((prev) => ({
+        ...prev,
+        amount: Number(data.remaining || 0),
+        collectorAccountLabel: '',
+        externalReference: ''
+      }));
       setItemAllocationDraft({});
     } catch (err: any) {
       setError(err.message || 'Error al cargar detalle');
@@ -165,8 +170,6 @@ export default function AdminAccountsPage() {
         return 'Efectivo';
       case 'TRANSFER':
         return 'Transferencia';
-      case 'MERCADO_PAGO':
-        return 'Mercado Pago';
       case 'CARD':
         return 'Tarjeta';
       case 'OTHER':
@@ -185,6 +188,24 @@ export default function AdminAccountsPage() {
         return 'Administración';
       default:
         return source || '-';
+    }
+  };
+  const formatPaymentChannel = (channel?: string) => {
+    switch (channel) {
+      case 'CASH_DRAWER':
+        return 'Caja';
+      case 'BANK_ACCOUNT':
+        return 'Cuenta bancaria';
+      case 'CARD_TERMINAL':
+        return 'Terminal tarjeta';
+      case 'VIRTUAL_WALLET':
+        return 'Billetera virtual';
+      case 'AUTO':
+        return 'Automático';
+      case 'OTHER':
+        return 'Otro';
+      default:
+        return channel || '-';
     }
   };
   const openRefundModal = (paymentId: string, amount: number) => {
@@ -297,7 +318,7 @@ export default function AdminAccountsPage() {
               <div>Restante: ${Number(detail.remaining || 0).toLocaleString()}</div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
               <input placeholder="Descripción" value={newItem.description} onChange={(e) => setNewItem((prev) => ({ ...prev, description: e.target.value }))} className="h-10 border rounded-lg px-3" />
               <input type="number" min={1} value={newItem.quantity} onChange={(e) => setNewItem((prev) => ({ ...prev, quantity: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
               <input type="number" min={0} step="0.01" value={newItem.unitPrice} onChange={(e) => setNewItem((prev) => ({ ...prev, unitPrice: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
@@ -350,15 +371,33 @@ export default function AdminAccountsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
               <input type="number" min={0} step="0.01" value={payment.amount} onChange={(e) => setPayment((prev) => ({ ...prev, amount: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
               <select value={payment.method} onChange={(e) => setPayment((prev) => ({ ...prev, method: e.target.value as PaymentMethod }))} className="h-10 border rounded-lg px-3">
                 <option value="CASH">Efectivo</option>
                 <option value="TRANSFER">Transferencia</option>
-                <option value="MERCADO_PAGO">Mercado Pago</option>
                 <option value="CARD">Tarjeta</option>
                 <option value="OTHER">Otro</option>
               </select>
+              <select value={payment.channel} onChange={(e) => setPayment((prev) => ({ ...prev, channel: e.target.value as PaymentChannel }))} className="h-10 border rounded-lg px-3">
+                <option value="AUTO">Canal automático</option>
+                <option value="BANK_ACCOUNT">Cuenta bancaria</option>
+                <option value="VIRTUAL_WALLET">Billetera virtual</option>
+              </select>
+              <input
+                type="text"
+                value={payment.collectorAccountLabel}
+                onChange={(e) => setPayment((prev) => ({ ...prev, collectorAccountLabel: e.target.value }))}
+                className="h-10 border rounded-lg px-3"
+                placeholder="Cuenta receptora (opcional)"
+              />
+              <input
+                type="text"
+                value={payment.externalReference}
+                onChange={(e) => setPayment((prev) => ({ ...prev, externalReference: e.target.value }))}
+                className="h-10 border rounded-lg px-3"
+                placeholder="Referencia externa"
+              />
               <select value={payment.source} onChange={(e) => setPayment((prev) => ({ ...prev, source: e.target.value as PaymentSource }))} className="h-10 border rounded-lg px-3">
                 <option value="POS">Mostrador (POS)</option>
                 <option value="ONLINE">Online</option>
@@ -380,6 +419,9 @@ export default function AdminAccountsPage() {
                     accountId: selectedId,
                     amount: amountToPay,
                     method: payment.method,
+                    channel: payment.channel,
+                    collectorAccountLabel: payment.collectorAccountLabel,
+                    externalReference: payment.externalReference,
                     source: payment.source,
                     allocations: allocations.length > 0 ? allocations : undefined
                   });
@@ -407,15 +449,33 @@ export default function AdminAccountsPage() {
             <div className="rounded-xl border border-[#347048]/10 p-3 space-y-2">
               <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Pagos divididos</p>
               {splitPayments.map((splitPayment, index) => (
-                <div key={`split-payment-${index}`} className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <div key={`split-payment-${index}`} className="grid grid-cols-1 md:grid-cols-7 gap-2">
                   <input type="number" min={0} step="0.01" value={splitPayment.amount} onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, amount: Number(e.target.value) } : entry))} className="h-10 border rounded-lg px-3" />
                   <select value={splitPayment.method} onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, method: e.target.value as PaymentMethod } : entry))} className="h-10 border rounded-lg px-3">
                     <option value="CASH">Efectivo</option>
                     <option value="TRANSFER">Transferencia</option>
-                    <option value="MERCADO_PAGO">Mercado Pago</option>
                     <option value="CARD">Tarjeta</option>
                     <option value="OTHER">Otro</option>
                   </select>
+                  <select value={splitPayment.channel} onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, channel: e.target.value as PaymentChannel } : entry))} className="h-10 border rounded-lg px-3">
+                    <option value="AUTO">Canal automático</option>
+                    <option value="BANK_ACCOUNT">Cuenta bancaria</option>
+                    <option value="VIRTUAL_WALLET">Billetera virtual</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={splitPayment.collectorAccountLabel}
+                    onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, collectorAccountLabel: e.target.value } : entry))}
+                    className="h-10 border rounded-lg px-3"
+                    placeholder="Cuenta receptora"
+                  />
+                  <input
+                    type="text"
+                    value={splitPayment.externalReference}
+                    onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, externalReference: e.target.value } : entry))}
+                    className="h-10 border rounded-lg px-3"
+                    placeholder="Referencia"
+                  />
                   <select value={splitPayment.source} onChange={(e) => setSplitPayments((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, source: e.target.value as PaymentSource } : entry))} className="h-10 border rounded-lg px-3">
                     <option value="POS">Mostrador (POS)</option>
                     <option value="ONLINE">Online</option>
@@ -427,12 +487,20 @@ export default function AdminAccountsPage() {
                 </div>
               ))}
               <div className="flex gap-2">
-                <button onClick={() => setSplitPayments((prev) => [...prev, { amount: 0, method: 'CASH', source: 'POS' }])} className="h-9 px-3 rounded-lg border border-[#347048]/20 text-xs font-black uppercase text-[#347048]">Agregar tramo</button>
+                <button onClick={() => setSplitPayments((prev) => [...prev, { amount: 0, method: 'CASH', channel: 'AUTO', collectorAccountLabel: '', externalReference: '', source: 'POS' }])} className="h-9 px-3 rounded-lg border border-[#347048]/20 text-xs font-black uppercase text-[#347048]">Agregar tramo</button>
                 <button
                   onClick={async () => {
                     const validSplits = splitPayments.filter((entry) => Number.isFinite(entry.amount) && entry.amount > 0);
                     for (const splitPayment of validSplits) {
-                      await registerPayment({ accountId: selectedId, amount: splitPayment.amount, method: splitPayment.method, source: splitPayment.source });
+                      await registerPayment({
+                        accountId: selectedId,
+                        amount: splitPayment.amount,
+                        method: splitPayment.method,
+                        channel: splitPayment.channel,
+                        collectorAccountLabel: splitPayment.collectorAccountLabel,
+                        externalReference: splitPayment.externalReference,
+                        source: splitPayment.source
+                      });
                     }
                     await loadDetail(selectedId);
                     await refreshLists();
@@ -455,7 +523,12 @@ export default function AdminAccountsPage() {
                     <div key={paymentId} className="flex items-center justify-between gap-2 border border-[#347048]/10 rounded-lg px-2 py-1">
                       <div className="min-w-0">
                         <p className="font-black truncate">{paymentId}</p>
-                        <p className="text-[#347048]/70 truncate">{formatPaymentMethod(entry.method)} · {formatPaymentSource(entry.source)} · ${amount.toLocaleString()}</p>
+                        <p className="text-[#347048]/70 truncate">{formatPaymentMethod(entry.method)} · {formatPaymentChannel(entry.channel)} · {formatPaymentSource(entry.source)} · ${amount.toLocaleString()}</p>
+                        {(entry.collectorAccountLabel || entry.externalReference) && (
+                          <p className="text-[#347048]/50 truncate">
+                            {entry.collectorAccountLabel ? `Cuenta: ${entry.collectorAccountLabel}` : ''}{entry.collectorAccountLabel && entry.externalReference ? ' · ' : ''}{entry.externalReference ? `Ref: ${entry.externalReference}` : ''}
+                          </p>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -507,4 +580,3 @@ export default function AdminAccountsPage() {
     </AdminLayout>
   );
 }
-

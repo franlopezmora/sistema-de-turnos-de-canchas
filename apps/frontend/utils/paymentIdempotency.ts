@@ -2,6 +2,9 @@ type PaymentFingerprintInput = {
   accountId: string;
   amount: number;
   method: string;
+  channel?: string;
+  collectorAccountLabel?: string;
+  externalReference?: string;
   source?: string;
   cashShiftId?: string;
   allocations?: Array<{
@@ -28,6 +31,9 @@ const buildFingerprint = (input: PaymentFingerprintInput) => {
     accountId: input.accountId,
     amount: Number(input.amount || 0).toFixed(2),
     method: input.method,
+    channel: input.channel || 'AUTO',
+    collectorAccountLabel: String(input.collectorAccountLabel || '').trim() || null,
+    externalReference: String(input.externalReference || '').trim() || null,
     source: input.source || 'POS',
     cashShiftId: input.cashShiftId || null,
     allocations: normalizedAllocations

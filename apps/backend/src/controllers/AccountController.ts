@@ -220,7 +220,10 @@ export class AccountController {
       const paramsSchema = z.object({ id: z.string().min(1) });
       const bodySchema = z.object({
         amount: z.preprocess((v) => Number(v), z.number().positive()),
-        method: z.enum(['CASH', 'CARD', 'TRANSFER', 'MERCADO_PAGO', 'OTHER']),
+        method: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER']),
+        channel: z.enum(['AUTO', 'CASH_DRAWER', 'BANK_ACCOUNT', 'CARD_TERMINAL', 'VIRTUAL_WALLET', 'OTHER']).optional(),
+        collectorAccountLabel: z.string().trim().max(120).optional(),
+        externalReference: z.string().trim().max(120).optional(),
         source: z.enum(['POS', 'ONLINE', 'BACKOFFICE']).optional(),
         cashShiftId: z.string().trim().min(1).optional(),
         allocations: z.array(z.object({
@@ -246,6 +249,9 @@ export class AccountController {
         accountId: paramsParsed.data.id,
         amount: bodyParsed.data.amount,
         method: bodyParsed.data.method,
+        channel: bodyParsed.data.channel,
+        collectorAccountLabel: bodyParsed.data.collectorAccountLabel,
+        externalReference: bodyParsed.data.externalReference,
         source: bodyParsed.data.source,
         cashShiftId: bodyParsed.data.cashShiftId,
         createdByUserId: actorUserId,

@@ -27,7 +27,7 @@ interface CartItem {
   quantity: number;
   price: number;
   type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
-  paymentMethod?: 'CASH' | 'TRANSFER' | null;
+  paymentMethod?: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER' | null;
   isNew: boolean;
 }
 
@@ -142,7 +142,9 @@ export default function BookingConsumption(
 
   const formatMethodLabel = (method?: string) => {
     if (method === 'CASH') return 'Efectivo';
-    if (method === 'TRANSFER') return 'Digital';
+    if (method === 'TRANSFER') return 'Transferencia';
+    if (method === 'CARD') return 'Tarjeta';
+    if (method === 'OTHER') return 'Otro';
     return method || 'Sin método';
   };
 
@@ -229,6 +231,7 @@ export default function BookingConsumption(
           bookingId,
           paymentAmount,
           result.method,
+          result.channel,
           hasBookingItemForCourt ? allocations : undefined
         );
         setBookingIsPendingLocal(false);
@@ -344,13 +347,17 @@ export default function BookingConsumption(
                             ? 'text-blue-700'
                             : item.paymentMethod === 'CASH'
                               ? 'text-emerald-700'
+                                : item.paymentMethod === 'CARD'
+                                  ? 'text-violet-700'
                               : 'text-[#347048]/40'
                       }`}>
                         <Lock size={8} />
                         {item.paymentMethod === 'TRANSFER'
-                            ? 'Pagado digital'
+                            ? 'Pagado transferencia'
                             : item.paymentMethod === 'CASH'
                               ? 'Pagado efectivo'
+                                : item.paymentMethod === 'CARD'
+                                  ? 'Pagado tarjeta'
                               : 'Estado no disponible'}
                       </span>
                     )}

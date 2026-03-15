@@ -5,7 +5,7 @@ type CashCreateInput = {
   clubId: number;
   cashShiftId: string;
   type: 'PAYMENT_IN' | 'REFUND' | 'WITHDRAW' | 'DEPOSIT';
-  method: 'CASH' | 'TRANSFER' | 'CARD' | 'MP';
+  method: 'CASH' | 'TRANSFER' | 'CARD';
   amount: number;
   concept: string;
   paymentId?: string;

@@ -14,7 +14,7 @@ export class CashService {
     amount: number | string;
     description: string;
     type: 'INCOME' | 'EXPENSE';
-    method: 'CASH' | 'TRANSFER';
+    method: 'CASH' | 'TRANSFER' | 'CARD';
   }) {
     const res = await fetchWithAuth(`${apiBase()}/cash`, {
       method: 'POST',
@@ -91,8 +91,9 @@ export class CashService {
   static async createProductSale(payload: {
     productId: number;
     quantity: number;
-    method: 'CASH' | 'TRANSFER';
-    payments?: Array<{ method: 'CASH' | 'TRANSFER'; amount: number }>;
+    method: 'CASH' | 'TRANSFER' | 'CARD';
+    channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
+    payments?: Array<{ method: 'CASH' | 'TRANSFER' | 'CARD'; channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET'; amount: number }>;
     userId?: number;
     guestName?: string;
     guestPhone?: string;

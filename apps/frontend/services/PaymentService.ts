@@ -4,7 +4,7 @@ import { getApiUrl } from '../utils/apiUrl';
 const apiBase = () => `${getApiUrl()}/api`;
 
 export type RefundStatus = 'REQUESTED' | 'APPROVED' | 'READY_TO_EXECUTE' | 'EXECUTED' | 'FAILED' | 'CANCELLED';
-export type RefundExecutionMethod = 'CASH' | 'TRANSFER' | 'CARD_REVERSAL' | 'MP_REFUND' | 'CREDIT_NOTE' | 'OTHER';
+export type RefundExecutionMethod = 'CASH' | 'TRANSFER' | 'CARD_REVERSAL' | 'CREDIT_NOTE' | 'OTHER';
 export type RefundReasonType = 'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_FAILURE' | 'PARTIAL_PRICING_ERROR' | 'OTHER';
 
 export type RefundRecord = {

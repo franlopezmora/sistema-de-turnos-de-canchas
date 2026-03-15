@@ -30,7 +30,7 @@ type CartItem = {
   paidAmount?: number;
   remainingAmount?: number;
   type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
-  paymentMethod?: 'CASH' | 'TRANSFER' | null;
+  paymentMethod?: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER' | null;
   discounts?: Array<{
     id: string;
     policyId?: string;
@@ -295,6 +295,7 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
           bookingId,
           paymentAmount,
           result.method,
+          result.channel,
           hasBookingItemForCourt ? allocations : undefined
         );
       }

@@ -14,7 +14,8 @@ interface Movement {
   type: 'INCOME' | 'EXPENSE';
   amount: number;
   description: string;
-  method: 'CASH' | 'TRANSFER';
+  method: 'CASH' | 'TRANSFER' | 'CARD';
+  channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET' | null;
   sourceType?: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | null;
   sourceId?: string | null;
   accountId?: string | null;
@@ -100,7 +101,8 @@ interface CashShiftCloseReport {
 }
 
 type SplitSalePaymentDraft = {
-  method: 'CASH' | 'TRANSFER';
+  method: 'CASH' | 'TRANSFER' | 'CARD';
+  channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
   amount: string;
 };
 
@@ -194,8 +196,8 @@ const AdminCashDashboard = () => {
   const [showMovementModal, setShowMovementModal] = useState(false);
 
   // Formulario
-  const [newMove, setNewMove] = useState({ description: '', amount: '', type: 'INCOME', method: 'CASH' });
-  const [productSale, setProductSale] = useState({ productId: '', quantity: '1', method: 'CASH' as 'CASH' | 'TRANSFER', clientQuery: '' });
+  const [newMove, setNewMove] = useState({ description: '', amount: '', type: 'INCOME', method: 'CASH' as 'CASH' | 'TRANSFER' | 'CARD' });
+  const [productSale, setProductSale] = useState({ productId: '', quantity: '1', method: 'CASH' as 'CASH' | 'TRANSFER' | 'CARD', channel: 'BANK_ACCOUNT' as 'BANK_ACCOUNT' | 'VIRTUAL_WALLET', clientQuery: '' });
   const [splitSaleEnabled, setSplitSaleEnabled] = useState(false);
   const [splitSalePayments, setSplitSalePayments] = useState<SplitSalePaymentDraft[]>([{ method: 'CASH', amount: '' }]);
 
@@ -302,6 +304,13 @@ const AdminCashDashboard = () => {
     return 'Pago cuenta';
   }, []);
 
+  const getMovementMethodLabel = useCallback((movement: Movement) => {
+    if (movement.method === 'CASH') return 'Efectivo';
+    if (movement.method === 'CARD') return 'Tarjeta';
+    if (movement.channel === 'VIRTUAL_WALLET') return 'QR / Billetera';
+    return 'Transferencia';
+  }, []);
+
   const fetchCash = async () => {
     try {
       const data = await CashService.getSummary();
@@ -313,7 +322,8 @@ const AdminCashDashboard = () => {
           type: movement?.type === 'PAYMENT_IN' || movement?.type === 'DEPOSIT' || movement?.type === 'INCOME' ? 'INCOME' : 'EXPENSE',
           amount: Number(movement?.amount || 0),
           description: String(movement?.concept || movement?.description || 'Movimiento'),
-          method: movement?.method === 'CASH' ? 'CASH' : 'TRANSFER',
+          method: movement?.method === 'CASH' ? 'CASH' : movement?.method === 'CARD' ? 'CARD' : 'TRANSFER',
+          channel: movement?.channel ?? movement?.payment?.channel ?? movement?.refund?.payment?.channel ?? null,
           sourceType: movement?.sourceType ?? movement?.payment?.account?.sourceType ?? null,
           sourceId: movement?.sourceId ?? movement?.payment?.account?.sourceId ?? null,
           accountId: movement?.accountId ?? movement?.payment?.account?.id ?? null,
@@ -448,7 +458,7 @@ const AdminCashDashboard = () => {
       amount: newMove.amount,
       description: newMove.description,
       type: newMove.type as 'INCOME' | 'EXPENSE',
-      method: newMove.method as 'CASH' | 'TRANSFER'
+      method: newMove.method as 'CASH' | 'TRANSFER' | 'CARD'
     });
     
     setNewMove({ description: '', amount: '', type: 'INCOME', method: 'CASH' });
@@ -481,6 +491,7 @@ const AdminCashDashboard = () => {
     const parsedSplitPayments = splitSalePayments
       .map((payment) => ({
         method: payment.method,
+        channel: payment.method === 'TRANSFER' ? (payment.channel || 'BANK_ACCOUNT') : undefined,
         amount: Number(payment.amount)
       }))
       .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
@@ -510,6 +521,7 @@ const AdminCashDashboard = () => {
         productId: Number(productSale.productId),
         quantity: qty,
         method: productSale.method,
+        channel: productSale.method === 'TRANSFER' ? productSale.channel : undefined,
         ...(splitSaleEnabled ? { payments: parsedSplitPayments } : {}),
         userId: selectedClient?.id,
         guestName: selectedClient
@@ -519,7 +531,7 @@ const AdminCashDashboard = () => {
         guestDni: selectedClient?.dni || selectedClient?.dniNumber || selectedClient?.document || undefined
       });
 
-      setProductSale({ productId: '', quantity: '1', method: productSale.method, clientQuery: '' });
+      setProductSale({ productId: '', quantity: '1', method: productSale.method, channel: productSale.channel, clientQuery: '' });
   setSplitSaleEnabled(false);
   setSplitSalePayments([{ method: 'CASH', amount: '' }]);
       setSelectedClient(null);
@@ -865,16 +877,16 @@ const AdminCashDashboard = () => {
           <p className="text-[10px] font-bold text-[#347048]/40 uppercase italic tracking-widest">Dinero en caja fuerte</p>
         </div>
 
-        {/* DIGITAL / TRANSFERENCIAS */}
+        {/* BANCO / TRANSFERENCIAS */}
         <div className="bg-white border-4 border-white p-6 rounded-[2.5rem] shadow-xl flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 bg-blue-50 rounded-2xl text-blue-600"><CreditCard size={24} strokeWidth={2.5} /></div>
-            <span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">Banco / Digital</span>
+            <span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">Banco / Transferencias</span>
           </div>
           <p className="text-4xl font-black text-[#347048] italic tracking-tighter mb-4">
             ${(balance?.digital || 0).toLocaleString()}
           </p>
-          <p className="text-[10px] font-bold text-[#347048]/40 uppercase italic tracking-widest">MercadoPago y Bancos</p>
+          <p className="text-[10px] font-bold text-[#347048]/40 uppercase italic tracking-widest">Billeteras virtuales y bancos</p>
         </div>
       </div>
 
@@ -927,11 +939,15 @@ const AdminCashDashboard = () => {
                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest flex items-center gap-1 w-fit ${
                               m.method === 'CASH'
                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                                : 'bg-blue-50 text-blue-600 border-blue-100'
+                                : m.method === 'CARD'
+                                  ? 'bg-violet-50 text-violet-700 border-violet-200'
+                                  : 'bg-blue-50 text-blue-600 border-blue-100'
                             }`}>
                               {m.method === 'CASH'
                                 ? <><Banknote size={10} strokeWidth={3} /> Efectivo</>
-                                : <><CreditCard size={10} strokeWidth={3} /> Digital</>}
+                                : m.method === 'CARD'
+                                  ? <><CreditCard size={10} strokeWidth={3} /> Tarjeta</>
+                                  : <><CreditCard size={10} strokeWidth={3} /> {getMovementMethodLabel(m)}</>}
                             </span>
                             {(Number(m.bookingAmount || 0) > 0 || Number(m.barAmount || 0) > 0) ? (
                               <span className="text-[9px] font-black px-2 py-0.5 rounded-md border uppercase tracking-widest w-fit bg-white/60 text-[#347048]/70 border-[#347048]/20">
@@ -1015,7 +1031,7 @@ const AdminCashDashboard = () => {
 
             <div>
               <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Medio de Pago</label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <button 
                   type="button"
                   onClick={() => setNewMove({...newMove, method: 'CASH'})}
@@ -1034,7 +1050,17 @@ const AdminCashDashboard = () => {
                         ? 'bg-[#347048] border-[#347048] text-[#B9CF32] shadow-lg scale-105' 
                         : 'bg-white border-transparent text-[#347048]/40 hover:bg-white/80'}`}
                 >
-                  <CreditCard size={16} strokeWidth={2.5} /> Digital
+                  <CreditCard size={16} strokeWidth={2.5} /> Transferencia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewMove({...newMove, method: 'CARD'})}
+                  className={`py-3 flex items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                      newMove.method === 'CARD'
+                        ? 'bg-[#347048] border-[#347048] text-[#B9CF32] shadow-lg scale-105'
+                        : 'bg-white border-transparent text-[#347048]/40 hover:bg-white/80'}`}
+                >
+                  <CreditCard size={16} strokeWidth={2.5} /> Tarjeta
                 </button>
               </div>
             </div>
@@ -1145,9 +1171,9 @@ const AdminCashDashboard = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setProductSale({ ...productSale, method: 'TRANSFER' })}
+                    onClick={() => setProductSale({ ...productSale, method: 'TRANSFER', channel: 'BANK_ACCOUNT' })}
                     className={`h-14 w-full px-4 flex items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
-                      productSale.method === 'TRANSFER'
+                      productSale.method === 'TRANSFER' && productSale.channel === 'BANK_ACCOUNT'
                         ? 'bg-[#347048] border-[#347048] text-[#B9CF32] shadow-lg scale-105'
                         : 'bg-white border-transparent text-[#347048]/40 hover:bg-white/80'}`}
                   >
@@ -1156,7 +1182,37 @@ const AdminCashDashboard = () => {
                       strokeWidth={2.5}
                       className={productSale.method === 'TRANSFER' ? 'text-[#B9CF32]' : 'text-[#347048]/40'}
                     />
-                    Digital
+                    Transferencia
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProductSale({ ...productSale, method: 'CARD' })}
+                    className={`h-14 w-full px-4 flex items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                      productSale.method === 'CARD'
+                        ? 'bg-[#347048] border-[#347048] text-[#B9CF32] shadow-lg scale-105'
+                        : 'bg-white border-transparent text-[#347048]/40 hover:bg-white/80'}`}
+                  >
+                    <CreditCard
+                      size={16}
+                      strokeWidth={2.5}
+                      className={productSale.method === 'CARD' ? 'text-[#B9CF32]' : 'text-[#347048]/40'}
+                    />
+                    Tarjeta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProductSale({ ...productSale, method: 'TRANSFER', channel: 'VIRTUAL_WALLET' })}
+                    className={`h-14 w-full px-4 flex items-center justify-center gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                      productSale.method === 'TRANSFER' && productSale.channel === 'VIRTUAL_WALLET'
+                        ? 'bg-[#347048] border-[#347048] text-[#B9CF32] shadow-lg scale-105'
+                        : 'bg-white border-transparent text-[#347048]/40 hover:bg-white/80'}`}
+                  >
+                    <CreditCard
+                      size={16}
+                      strokeWidth={2.5}
+                      className={productSale.method === 'TRANSFER' && productSale.channel === 'VIRTUAL_WALLET' ? 'text-[#B9CF32]' : 'text-[#347048]/40'}
+                    />
+                    QR / Billetera
                   </button>
                 </div>
                 <button
@@ -1173,19 +1229,35 @@ const AdminCashDashboard = () => {
                       <div key={`split-sale-${index}`} className="grid grid-cols-12 gap-2">
                         <select
                           value={payment.method}
-                          onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, method: e.target.value as 'CASH' | 'TRANSFER' } : item))}
-                          className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
+                          onChange={(e) => {
+                            const method = e.target.value as 'CASH' | 'TRANSFER' | 'CARD';
+                            setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, method, channel: method === 'TRANSFER' ? (item.channel || 'BANK_ACCOUNT') : undefined } : item));
+                          }}
+                          className="col-span-4 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
                         >
                           <option value="CASH">Efectivo</option>
-                          <option value="TRANSFER">Digital</option>
+                          <option value="TRANSFER">Transferencia</option>
+                          <option value="CARD">Tarjeta</option>
                         </select>
+                        {payment.method === 'TRANSFER' ? (
+                          <select
+                            value={payment.channel || 'BANK_ACCOUNT'}
+                            onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, channel: e.target.value as 'BANK_ACCOUNT' | 'VIRTUAL_WALLET' } : item))}
+                            className="col-span-3 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-2 text-[10px] font-black uppercase tracking-wider"
+                          >
+                            <option value="BANK_ACCOUNT">Banco</option>
+                            <option value="VIRTUAL_WALLET">Billetera</option>
+                          </select>
+                        ) : (
+                          <div className="col-span-3 h-11" />
+                        )}
                         <input
                           type="number"
                           min={0}
                           step="0.01"
                           value={payment.amount}
                           onChange={(e) => setSplitSalePayments((prev) => prev.map((item, idx) => idx === index ? { ...item, amount: e.target.value } : item))}
-                          className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
+                          className="col-span-3 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-sm font-black"
                           placeholder="Monto"
                         />
                         <button
@@ -1200,7 +1272,7 @@ const AdminCashDashboard = () => {
                     ))}
                     <button
                       type="button"
-                      onClick={() => setSplitSalePayments((prev) => [...prev, { method: 'TRANSFER', amount: '' }])}
+                      onClick={() => setSplitSalePayments((prev) => [...prev, { method: 'TRANSFER', channel: 'BANK_ACCOUNT', amount: '' }])}
                       className="w-full h-10 rounded-xl border border-[#347048]/20 bg-white text-[#347048] text-[10px] font-black uppercase tracking-widest"
                     >
                       + Agregar tramo
@@ -1253,7 +1325,7 @@ const AdminCashDashboard = () => {
               <div className="space-y-1">
                 <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Medio</div>
                 <div className="font-bold">
-                  {selectedMovement.method === 'CASH' ? 'Efectivo' : 'Digital'}
+                  {getMovementMethodLabel(selectedMovement)}
                 </div>
               </div>
               <div className="space-y-1">
