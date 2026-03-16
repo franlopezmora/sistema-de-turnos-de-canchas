@@ -6,6 +6,15 @@ import process from 'process';
 const prisma = new PrismaClient();
 const prismaAny = prisma as any;
 
+const generateDisplayCode = (prefix: string) => {
+  const safePrefix = String(prefix || '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 4) || 'COD';
+  const token = Math.random().toString(36).slice(2, 10).toUpperCase();
+  return `${safePrefix}-${token}`;
+};
+
 if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
   console.error('❌ Seed bloqueado en producción. Define ALLOW_SEED=true para ejecutarlo conscientemente.');
   process.exit(1);

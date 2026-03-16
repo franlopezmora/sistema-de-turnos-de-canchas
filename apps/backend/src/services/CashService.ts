@@ -8,6 +8,7 @@ import { AuditLogService } from './AuditLogService';
 import { PaymentService } from './PaymentService';
 import { AccountingService } from './AccountingService';
 import { ProjectionService } from './ProjectionService';
+import { generateDisplayCode } from '../utils/displayCode';
 
 export class CashService {
     private readonly eventService = new EventService();
@@ -376,6 +377,7 @@ export class CashService {
 
             const account = await tx.account.create({
                 data: {
+                    displayCode: generateDisplayCode('CTA'),
                     clubId: input.clubId,
                     sourceType: 'BAR',
                     sourceId,

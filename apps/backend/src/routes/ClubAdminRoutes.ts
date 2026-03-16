@@ -18,6 +18,7 @@ import { CashRepository } from '../repositories/CashRepository';
 import { z } from 'zod';
 import { ActivityTypeAdminService } from '../services/ActivityTypeAdminService';
 import { DiscountController } from '../controllers/DiscountController';
+import { ClubServiceCatalogController } from '../controllers/ClubServiceCatalogController';
 
 const router = Router();
 
@@ -47,6 +48,7 @@ const courtController = new CourtController();
 const clubController = new ClubController(clubService);
 const activityTypeAdminService = new ActivityTypeAdminService();
 const discountController = new DiscountController();
+const clubServiceCatalogController = new ClubServiceCatalogController();
 
 // Todas las rutas requieren autenticación, rol ADMIN y verificación de acceso al club
 // El middleware verifyClubAccess agrega req.clubId al request
@@ -261,6 +263,34 @@ router.delete('/:slug/admin/products/:id',
     verifyClubAccess,
     requireRole('ADMIN'),
     productController.delete
+);
+
+router.get('/:slug/admin/services',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    clubServiceCatalogController.list
+);
+
+router.post('/:slug/admin/services',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    clubServiceCatalogController.create
+);
+
+router.put('/:slug/admin/services/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    clubServiceCatalogController.update
+);
+
+router.delete('/:slug/admin/services/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    clubServiceCatalogController.delete
 );
 
 router.get('/:slug/admin/clients-list',

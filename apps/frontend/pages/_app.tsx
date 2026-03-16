@@ -1,5 +1,6 @@
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
+import { useEffect } from 'react';
 import { ActiveClubProvider } from '../contexts/ActiveClubContext';
 
 // IMPORTANTE: Aquí buscamos el archivo en la carpeta styles
@@ -10,6 +11,21 @@ const LOGO_PATH = '/logo1.svg';
 const LOGO_URL = SITE_URL ? `${SITE_URL.replace(/\/+$/,'')}${LOGO_PATH}` : LOGO_PATH;
 
 export default function MyApp({ Component, pageProps }: AppProps) {
+  useEffect(() => {
+    const preventNumberInputWheel = (event: WheelEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (target.type !== 'number') return;
+      if (document.activeElement !== target) return;
+      event.preventDefault();
+    };
+
+    window.addEventListener('wheel', preventNumberInputWheel, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', preventNumberInputWheel);
+    };
+  }, []);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",

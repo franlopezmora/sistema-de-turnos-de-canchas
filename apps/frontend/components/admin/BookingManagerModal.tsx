@@ -408,7 +408,7 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                   disabled={loading || saving || isCancelled}
                   placeholder={loading ? 'Cargando productos...' : 'Agregar producto (ej: Gatorade)...'}
                   onSelect={handleSelectProduct}
-                  selectedName={selectedProduct?.name || ''}
+                  selectedName={selectedProduct?.name}
                   onInputChange={(value) => {
                     if (!selectedProduct) return;
                     if (value.trim().toLowerCase() !== selectedProduct.name.toLowerCase()) {

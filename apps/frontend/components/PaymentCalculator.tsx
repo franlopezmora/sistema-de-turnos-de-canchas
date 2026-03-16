@@ -50,7 +50,6 @@ export default function PaymentCalculator({
   const [paymentAmount, setPaymentAmount] = useState<number | string>('');
   const [itemAllocations, setItemAllocations] = useState<Record<string, number>>({});
   const [courtPortion, setCourtPortion] = useState<number>(0);
-  const [transferChannel, setTransferChannel] = useState<'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>('BANK_ACCOUNT');
   const [validationError, setValidationError] = useState('');
 
   const safeCourtPending = Math.max(0, Number(courtPending || 0));
@@ -217,7 +216,7 @@ export default function PaymentCalculator({
 
     await onConfirm({
       method,
-      channel: method === 'TRANSFER' ? (forcedChannel ?? transferChannel) : undefined,
+      channel: method === 'TRANSFER' ? (forcedChannel ?? 'BANK_ACCOUNT') : undefined,
       amount: amountEntered,
       courtAmount: Number(courtPortion) || 0,
       paidItemIds: numericItemIds,
@@ -239,7 +238,7 @@ export default function PaymentCalculator({
       }}
     >
       <div
-        className="bg-[#EBE1D8] border-4 border-white rounded-[2rem] shadow-2xl shadow-[#347048]/30 max-w-md w-full max-h-[88vh] overflow-hidden relative flex flex-col text-[#347048]"
+        className="bg-[#EBE1D8] border-4 border-white rounded-[2rem] shadow-2xl shadow-[#347048]/30 w-full max-w-2xl lg:max-w-3xl max-h-[88vh] overflow-hidden relative flex flex-col text-[#347048]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="overflow-y-auto flex-1 min-h-0 custom-scrollbar">
@@ -484,30 +483,6 @@ export default function PaymentCalculator({
         </div>
 
         <div className="mb-2">
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <button
-              type="button"
-              onClick={() => setTransferChannel('BANK_ACCOUNT')}
-              className={`h-9 rounded-xl border text-[10px] font-black uppercase tracking-wider ${
-                transferChannel === 'BANK_ACCOUNT'
-                  ? 'bg-[#347048] text-[#B9CF32] border-[#347048]'
-                  : 'bg-white text-[#347048]/70 border-[#347048]/20'
-              }`}
-            >
-              Transferencia a banco
-            </button>
-            <button
-              type="button"
-              onClick={() => setTransferChannel('VIRTUAL_WALLET')}
-              className={`h-9 rounded-xl border text-[10px] font-black uppercase tracking-wider ${
-                transferChannel === 'VIRTUAL_WALLET'
-                  ? 'bg-[#347048] text-[#B9CF32] border-[#347048]'
-                  : 'bg-white text-[#347048]/70 border-[#347048]/20'
-              }`}
-            >
-              Transferencia a billetera
-            </button>
-          </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button
               type="button"
@@ -521,12 +496,12 @@ export default function PaymentCalculator({
 
             <button
               type="button"
-              onClick={() => handlePaymentConfirm('TRANSFER')}
+              onClick={() => handlePaymentConfirm('TRANSFER', 'BANK_ACCOUNT')}
               disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
               className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-              <span className="font-black text-[10px] uppercase tracking-widest">Transferencia</span>
+              <span className="font-black text-[10px] uppercase tracking-widest">Transfer. banco</span>
             </button>
 
             <button
@@ -542,7 +517,6 @@ export default function PaymentCalculator({
             <button
               type="button"
               onClick={() => {
-                setTransferChannel('VIRTUAL_WALLET');
                 handlePaymentConfirm('TRANSFER', 'VIRTUAL_WALLET');
               }}
               disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}

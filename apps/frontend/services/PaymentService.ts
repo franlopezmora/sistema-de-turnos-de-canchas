@@ -9,6 +9,7 @@ export type RefundReasonType = 'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_
 
 export type RefundRecord = {
   id: string;
+  displayCode?: string | null;
   createdAt: string;
   amount: number;
   reason: string | null;

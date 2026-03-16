@@ -2,6 +2,7 @@ const toNumber = (value: unknown) => Number(value || 0);
 
 export const mapPaymentDto = (payment: any) => ({
   id: payment.id,
+  displayCode: payment.displayCode ?? null,
   createdAt: payment.createdAt,
   amount: toNumber(payment.amount),
   method: payment.method,
@@ -22,6 +23,7 @@ export const mapPaymentDto = (payment: any) => ({
 
 export const mapRefundDto = (refund: any) => ({
   id: refund.id,
+  displayCode: refund.displayCode ?? null,
   createdAt: refund.createdAt,
   amount: toNumber(refund.amount),
   reason: refund.reason ?? null,
@@ -73,6 +75,7 @@ export const mapAccountItemDto = (item: any) => ({
 
 export const mapAccountDto = (account: any) => ({
   id: account.id,
+  displayCode: account.displayCode ?? null,
   clubId: account.clubId,
   sourceType: account.sourceType,
   sourceId: account.sourceId,

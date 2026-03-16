@@ -2,15 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import AdminLayout from '../../components/AdminLayout';
 import { addAccountItem, closeAccount, getAccountById, listAccounts, openAccount, registerPayment, type PaymentChannel, type PaymentSource } from '../../services/AccountService';
-import { ClubAdminService } from '../../services/ClubAdminService';
+import { ClubAdminService, type ClubCatalogService } from '../../services/ClubAdminService';
 import AppModal from '../../components/AppModal';
 import type { RefundDraft } from '../../modules/refunds/refund.types';
 import { buildDefaultRefundDraft } from '../../modules/refunds/refund.policy';
 import { validateRefundAmountInput } from '../../modules/refunds/refund.validators';
 import { requestManualRefund } from '../../modules/refunds/refund.facade';
 import RefundRequestModal from '../../components/admin/refunds/RefundRequestModal';
+import AccountManagerModal from '../../components/admin/AccountManagerModal';
 import PaymentCalculator, { type PaymentCalculatorResult } from '../../components/PaymentCalculator';
-import ProductSearch, { type ProductSearchItem } from '../../components/ui/ProductSearch';
+import { type ClubProductSearchItem } from '../../components/ui/ClubProductSearch';
+import { type ClubServiceSearchItem } from '../../components/ui/ClubServiceSearch';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 import { reportUiError } from '../../utils/uiError';
 
@@ -29,6 +31,14 @@ type AccountRow = {
   } | null;
 };
 
+const EMPTY_NEW_ITEM = {
+  description: '',
+  quantity: 0,
+  unitPrice: 0,
+  type: 'PRODUCT' as const,
+  serviceCode: undefined
+};
+
 export default function AdminAccountsPage() {
   const [openAccounts, setOpenAccounts] = useState<AccountRow[]>([]);
   const [closedAccounts, setClosedAccounts] = useState<AccountRow[]>([]);
@@ -37,7 +47,7 @@ export default function AdminAccountsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
-  const [newItem, setNewItem] = useState<{ description: string; quantity: number; unitPrice: number; type: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT' }>({ description: '', quantity: 1, unitPrice: 0, type: 'PRODUCT' });
+  const [newItem, setNewItem] = useState<{ description: string; quantity: number; unitPrice: number; type: 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT'; serviceCode?: string }>(EMPTY_NEW_ITEM);
   const [payment, setPayment] = useState<{ channel: PaymentChannel; collectorAccountLabel: string; externalReference: string; source: PaymentSource }>({ channel: 'AUTO', collectorAccountLabel: '', externalReference: '', source: 'POS' });
   const [newAccount, setNewAccount] = useState({ sourceType: 'MANUAL' as const, sourceId: '' });
   const [showRefundModal, setShowRefundModal] = useState(false);
@@ -46,9 +56,13 @@ export default function AdminAccountsPage() {
   const [refundDraft, setRefundDraft] = useState<RefundDraft>(() => buildDefaultRefundDraft('ACCOUNT_MANUAL', 0));
   const [submittingRefund, setSubmittingRefund] = useState(false);
   const [clubSlug, setClubSlug] = useState('');
-  const [products, setProducts] = useState<ProductSearchItem[]>([]);
+  const [products, setProducts] = useState<ClubProductSearchItem[]>([]);
+  const [services, setServices] = useState<ClubServiceSearchItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [servicesLoading, setServicesLoading] = useState(false);
   const [showPaymentCalculator, setShowPaymentCalculator] = useState(false);
+  const [showOpenAccountModal, setShowOpenAccountModal] = useState(false);
+  const [openAccountModalError, setOpenAccountModalError] = useState('');
   const [submittingCalculator, setSubmittingCalculator] = useState(false);
   const [openAccountsSearch, setOpenAccountsSearch] = useState('');
   const [closedVisibleCount, setClosedVisibleCount] = useState(12);
@@ -118,12 +132,46 @@ export default function AdminAccountsPage() {
             stock: item?.stock !== undefined && item?.stock !== null ? Number(item.stock) : null
           }))
         : [];
-      setProducts(normalizedProducts.filter((item: ProductSearchItem) => Number(item.id) > 0 && item.name.trim().length > 0));
+      setProducts(normalizedProducts.filter((item: ClubProductSearchItem) => Number(item.id) > 0 && item.name.trim().length > 0));
     } catch (err: any) {
       setError(err?.message || 'No se pudieron cargar los productos del club');
       setProducts([]);
     } finally {
       setProductsLoading(false);
+    }
+  }, []);
+
+  const loadClubServices = useCallback(async (slug: string) => {
+    if (!slug) {
+      setServices([]);
+      return;
+    }
+    try {
+      setServicesLoading(true);
+      const data = await ClubAdminService.getServices(slug, false);
+      const normalizedServices = Array.isArray(data)
+        ? data.map((item: ClubCatalogService) => ({
+            id: Number(item?.id || 0),
+            code: String(item?.code || '').trim(),
+            name: String(item?.name || '').trim(),
+            price: Number(item?.price || 0),
+            isActive: Boolean(item?.isActive)
+          }))
+        : [];
+      setServices(
+        normalizedServices.filter(
+          (item: ClubServiceSearchItem) =>
+            Number(item.id) > 0 &&
+            item.name.length > 0 &&
+            item.code.length > 0 &&
+            Number.isFinite(item.price)
+        )
+      );
+    } catch (err: any) {
+      setError(err?.message || 'No se pudieron cargar los servicios del club');
+      setServices([]);
+    } finally {
+      setServicesLoading(false);
     }
   }, []);
 
@@ -149,8 +197,8 @@ export default function AdminAccountsPage() {
   useEffect(() => {
     const resolved = resolveClubSlug();
     setClubSlug(resolved);
-    void loadClubProducts(resolved);
-  }, [loadClubProducts, resolveClubSlug]);
+    void Promise.all([loadClubProducts(resolved), loadClubServices(resolved)]);
+  }, [loadClubProducts, loadClubServices, resolveClubSlug]);
 
   useEffect(() => {
     if (selectedId) loadDetail(selectedId);
@@ -303,7 +351,7 @@ export default function AdminAccountsPage() {
       case 'SERVICE':
         return 'Servicio';
       case 'ADJUSTMENT':
-        return 'Ajuste';
+        return 'Ajuste (+)';
       default:
         return formatRawCode(type);
     }
@@ -361,7 +409,7 @@ export default function AdminAccountsPage() {
     setShowPaymentCalculator(false);
     setShowCloseAccountConfirm(false);
     setShowRefundModal(false);
-    setNewItem({ description: '', quantity: 1, unitPrice: 0, type: 'PRODUCT' });
+    setNewItem(EMPTY_NEW_ITEM);
     setPayment({
       channel: 'AUTO',
       collectorAccountLabel: '',
@@ -370,12 +418,23 @@ export default function AdminAccountsPage() {
     });
   }, [isSelectedAccountClosed]);
 
-  const handleSelectProduct = (product: ProductSearchItem) => {
+  const handleSelectProduct = (product: ClubProductSearchItem) => {
     setNewItem((prev) => ({
       ...prev,
       description: product.name,
       unitPrice: Number(product.price || 0),
-      type: 'PRODUCT'
+      type: 'PRODUCT',
+      serviceCode: undefined
+    }));
+  };
+
+  const handleSelectService = (service: ClubServiceSearchItem) => {
+    setNewItem((prev) => ({
+      ...prev,
+      description: service.name,
+      unitPrice: Number(service.price || 0),
+      type: 'SERVICE',
+      serviceCode: service.code
     }));
   };
 
@@ -431,7 +490,17 @@ export default function AdminAccountsPage() {
         }
       }
 
-      const fallbackChannel = payment.channel !== 'AUTO' ? payment.channel : undefined;
+      const resolveAutoChannel = (method: string): PaymentChannel => {
+        if (method === 'CASH') return 'CASH_DRAWER';
+        if (method === 'TRANSFER') return 'BANK_ACCOUNT';
+        if (method === 'CARD') return 'CARD_TERMINAL';
+        return 'OTHER';
+      };
+      const resolvedSource: PaymentSource = payment.source || 'POS';
+      const fallbackChannel =
+        payment.channel !== 'AUTO'
+          ? payment.channel
+          : resolveAutoChannel(String(result.method || 'OTHER'));
 
       await registerPayment({
         accountId: selectedId,
@@ -440,7 +509,7 @@ export default function AdminAccountsPage() {
         channel: result.channel || fallbackChannel,
         collectorAccountLabel: payment.collectorAccountLabel,
         externalReference: payment.externalReference,
-        source: payment.source,
+        source: resolvedSource,
         allocations: allocations.length > 0 ? allocations : undefined
       });
 
@@ -485,6 +554,13 @@ export default function AdminAccountsPage() {
     }
   };
 
+  const pageCardClass = 'rounded-2xl border border-white/60 bg-white/40 p-4';
+  const fieldClass =
+    'w-full h-12 bg-white border-2 border-[#347048]/10 focus:border-[#B9CF32] rounded-xl px-4 text-sm font-bold text-[#347048] outline-none transition-all shadow-sm';
+  const selectClass = `${fieldClass} pr-10 appearance-none`;
+  const primaryButtonClass =
+    'w-full h-12 rounded-xl bg-[#347048] text-[#EBE1D8] font-black text-xs uppercase tracking-widest shadow-lg shadow-[#347048]/20 hover:bg-[#B9CF32] hover:text-[#347048] transition-all';
+
   return (
     <AdminLayout>
       <Head>
@@ -502,12 +578,12 @@ export default function AdminAccountsPage() {
         {error && <div className="text-sm font-bold text-red-600">{error}</div>}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="rounded-2xl border border-[#347048]/10 bg-white p-4 space-y-3">
-            <p className="text-xs font-black uppercase tracking-widest text-[#347048]/60">Abrir cuenta</p>
+          <div className={`${pageCardClass} space-y-3`}>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/60">Abrir cuenta</p>
             <select
               value={newAccount.sourceType}
               onChange={(e) => setNewAccount((prev) => ({ ...prev, sourceType: e.target.value as any }))}
-              className="w-full h-10 border rounded-lg px-3"
+              className={selectClass}
             >
               <option value="MANUAL">Manual</option>
               <option value="BAR">Bar</option>
@@ -518,7 +594,7 @@ export default function AdminAccountsPage() {
               value={newAccount.sourceId}
               onChange={(e) => setNewAccount((prev) => ({ ...prev, sourceId: e.target.value }))}
               placeholder="ID de origen"
-              className="w-full h-10 border rounded-lg px-3"
+              className={fieldClass}
             />
             <button
               onClick={async () => {
@@ -532,28 +608,41 @@ export default function AdminAccountsPage() {
                   setError(err?.message || 'No se pudo crear la cuenta');
                 }
               }}
-              className="w-full h-10 rounded-lg bg-[#347048] text-[#EBE1D8] font-black text-xs uppercase"
+              className={primaryButtonClass}
             >
               Crear
             </button>
           </div>
 
-          <div className="rounded-2xl border border-[#347048]/10 bg-white p-4 lg:col-span-2">
-            <p className="text-xs font-black uppercase tracking-widest text-[#347048]/60 mb-3">Cuentas abiertas</p>
+          <div className={`${pageCardClass} lg:col-span-2`}>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/60 mb-3">Cuentas abiertas</p>
             <input
               value={openAccountsSearch}
               onChange={(e) => setOpenAccountsSearch(e.target.value)}
               placeholder="Buscar por cliente, cancha, origen o ID"
-              className="w-full h-10 border rounded-lg px-3 mb-3 text-sm"
+              className={`${fieldClass} mb-3`}
             />
             <div className="space-y-2 max-h-44 overflow-y-auto">
               {filteredOpenAccounts.map((account) => (
                 <button
                   key={account.id}
-                  onClick={() => setSelectedId(account.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg border ${selectedId === account.id ? 'bg-[#347048] text-[#EBE1D8] border-[#347048]' : 'bg-white border-[#347048]/20 text-[#347048]'}`}
+                  onClick={() => {
+                    setOpenAccountModalError('');
+                    setShowOpenAccountModal(true);
+
+                    if (account.id === selectedId) {
+                      setNewItem(EMPTY_NEW_ITEM);
+                      void loadDetail(account.id);
+                      return;
+                    }
+
+                    setNewItem(EMPTY_NEW_ITEM);
+                    setDetail(null);
+                    setSelectedId(account.id);
+                  }}
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${selectedId === account.id ? 'bg-[#347048] text-[#EBE1D8] border-[#347048] shadow-lg shadow-[#347048]/20' : 'bg-white border-[#347048]/10 text-[#347048] hover:border-[#B9CF32]'}`}
                 >
-                  <div className="text-xs font-black uppercase tracking-wider">
+                  <div className="text-xs font-black uppercase tracking-widest">
                     {account.sourceType === 'BOOKING' && account.booking
                       ? `${account.booking.clientName || 'Sin cliente'} · ${formatBookingDateTime(account.booking.startDateTime)} · ${account.booking.courtName || 'Sin cancha'}`
                       : `${formatAccountSourceType(account.sourceType)} · ${account.sourceId}`}
@@ -566,178 +655,71 @@ export default function AdminAccountsPage() {
           </div>
         </div>
 
-        {detail && (
-          <div className="rounded-2xl border border-[#347048]/10 bg-white p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm font-bold">
-              <div>Total: ${Number(detail.total || 0).toLocaleString()}</div>
-              <div>Pagado: ${Number(detail.paid || 0).toLocaleString()}</div>
-              <div>Restante: ${Number(detail.remaining || 0).toLocaleString()}</div>
-            </div>
-
-            {isSelectedAccountClosed && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
-                Cuenta cerrada: solo lectura.
-              </div>
-            )}
-
-            {!isSelectedAccountClosed && (
-              <>
-                <details className="rounded-xl border border-[#347048]/10 p-3 space-y-2">
-                  <summary className="cursor-pointer text-[11px] font-black text-[#347048]">Cargar consumos</summary>
-                  <div className="space-y-2 pt-2">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60 mb-1">Producto del club</p>
-                      <ProductSearch
-                        products={products}
-                        onSelect={handleSelectProduct}
-                        minQueryLength={1}
-                        maxResults={12}
-                        disabled={productsLoading || !clubSlug}
-                        placeholder={productsLoading ? 'Cargando productos...' : clubSlug ? 'Buscar producto por nombre...' : 'No se detectó club para cargar productos'}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-                      <input placeholder="Descripción" value={newItem.description} onChange={(e) => setNewItem((prev) => ({ ...prev, description: e.target.value }))} className="h-10 border rounded-lg px-3" />
-                      <input type="number" min={1} value={newItem.quantity} onChange={(e) => setNewItem((prev) => ({ ...prev, quantity: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
-                      <input type="number" min={0} step="0.01" value={newItem.unitPrice} onChange={(e) => setNewItem((prev) => ({ ...prev, unitPrice: Number(e.target.value) }))} className="h-10 border rounded-lg px-3" />
-                      <select value={newItem.type} onChange={(e) => setNewItem((prev) => ({ ...prev, type: e.target.value as any }))} className="h-10 border rounded-lg px-3">
-                        <option value="PRODUCT">Producto</option>
-                        <option value="BOOKING">Reserva</option>
-                        <option value="SERVICE">Servicio</option>
-                        <option value="ADJUSTMENT">Ajuste</option>
-                      </select>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await addAccountItem(selectedId, newItem);
-                            setNewItem({ description: '', quantity: 1, unitPrice: 0, type: 'PRODUCT' });
-                            await loadDetail(selectedId);
-                            await refreshLists();
-                          } catch (err: any) {
-                            setError(err?.message || 'No se pudo agregar el consumo');
-                          }
-                        }}
-                        className="h-10 rounded-lg bg-[#926699] text-[#EBE1D8] text-xs font-black uppercase md:col-span-4"
-                      >
-                        Agregar consumo
-                      </button>
-                    </div>
-                  </div>
-                </details>
-
-                <details className="rounded-xl border border-[#347048]/10 p-3 space-y-2">
-                  <summary className="cursor-pointer text-[11px] font-black text-[#347048]">Items pendientes</summary>
-                  <div className="space-y-1 max-h-32 overflow-y-auto text-xs pt-2">
-                    {(detail.items || []).map((item: any) => (
-                      <div key={item.id} className="flex items-center justify-between border border-[#347048]/10 rounded-lg px-2 py-1">
-                        <span className="font-bold">{item.description} · {formatItemType(item.type)}</span>
-                        <span className="text-[#347048]/70">Pendiente: ${Number(itemOutstandingMap.get(String(item.id)) || 0).toLocaleString()}</span>
-                      </div>
-                    ))}
-                    {(!detail.items || detail.items.length === 0) && <div className="text-[#347048]/50">Sin items.</div>}
-                  </div>
-                </details>
-
-                <div className="rounded-xl border border-[#347048]/10 p-3 space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Registrar pago (recomendado)</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <select value={payment.channel} onChange={(e) => setPayment((prev) => ({ ...prev, channel: e.target.value as PaymentChannel }))} className="h-10 border rounded-lg px-3">
-                      <option value="AUTO">Canal automático</option>
-                      <option value="BANK_ACCOUNT">Cuenta bancaria</option>
-                      <option value="VIRTUAL_WALLET">Billetera virtual</option>
-                    </select>
-                    <input
-                      type="text"
-                      value={payment.collectorAccountLabel}
-                      onChange={(e) => setPayment((prev) => ({ ...prev, collectorAccountLabel: e.target.value }))}
-                      className="h-10 border rounded-lg px-3"
-                      placeholder="Cuenta receptora (opcional)"
-                    />
-                    <input
-                      type="text"
-                      value={payment.externalReference}
-                      onChange={(e) => setPayment((prev) => ({ ...prev, externalReference: e.target.value }))}
-                      className="h-10 border rounded-lg px-3"
-                      placeholder="Referencia externa"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <select value={payment.source} onChange={(e) => setPayment((prev) => ({ ...prev, source: e.target.value as PaymentSource }))} className="h-10 border rounded-lg px-3">
-                      <option value="POS">Mostrador (POS)</option>
-                      <option value="ONLINE">En línea</option>
-                      <option value="BACKOFFICE">Administración</option>
-                    </select>
-                    <button
-                      onClick={() => setShowPaymentCalculator(true)}
-                      disabled={paymentCalculatorContext.totalPending <= 0.009}
-                      className="h-10 rounded-lg bg-[#347048] disabled:opacity-60 disabled:cursor-not-allowed text-[#EBE1D8] text-xs font-black uppercase"
-                    >
-                      Abrir calculadora de cobro
-                    </button>
-                  </div>
-                  <p className="text-[11px] font-bold text-[#347048]/60">
-                    Pendiente calculado: ${paymentCalculatorContext.totalPending.toLocaleString()}.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setShowCloseAccountConfirm(true)}
-                  className="h-10 rounded-lg bg-[#B9CF32] text-[#347048] text-xs font-black uppercase"
-                >
-                  Cerrar cuenta
-                </button>
-              </>
-            )}
-
-            <details className="rounded-xl border border-[#347048]/10 p-3 space-y-2" open={isSelectedAccountClosed}>
-              <summary className="cursor-pointer text-[11px] font-black text-[#347048]">Historial de pagos y devoluciones</summary>
-              <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
-                {(detail.payments || []).map((entry: any) => {
-                  const paymentId = String(entry?.id || '');
-                  if (!paymentId) return null;
-                  const amount = Number(entry?.amount || 0);
-                  return (
-                    <div key={paymentId} className="flex items-center justify-between gap-2 border border-[#347048]/10 rounded-lg px-2 py-1">
-                      <div className="min-w-0">
-                        <p className="font-black truncate">{paymentId}</p>
-                        <p className="text-[#347048]/70 truncate">{formatPaymentMethod(entry.method)} · {formatPaymentChannel(entry.channel)} · {formatPaymentSource(entry.source)} · ${amount.toLocaleString()}</p>
-                        {(entry.collectorAccountLabel || entry.externalReference) && (
-                          <p className="text-[#347048]/50 truncate">
-                            {entry.collectorAccountLabel ? `Cuenta: ${entry.collectorAccountLabel}` : ''}{entry.collectorAccountLabel && entry.externalReference ? ' · ' : ''}{entry.externalReference ? `Ref: ${entry.externalReference}` : ''}
-                          </p>
-                        )}
-                      </div>
-                      {!isSelectedAccountClosed && (
-                        <button
-                          type="button"
-                          onClick={() => openRefundModal(paymentId, amount)}
-                          className="h-8 rounded-lg border border-[#347048]/20 px-2 text-[10px] font-black uppercase"
-                        >
-                          Solicitar devolución
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-                {(!detail.payments || detail.payments.length === 0) && <div className="text-[#347048]/50">Sin pagos.</div>}
-              </div>
-            </details>
-
-          </div>
-        )}
-
-        <div className="rounded-2xl border border-[#347048]/10 bg-white p-4">
-          <p className="text-xs font-black uppercase tracking-widest text-[#347048]/60 mb-2">Cuentas cerradas</p>
+        <AccountManagerModal
+          show={showOpenAccountModal}
+          accountId={selectedId}
+          detail={detail}
+          isClosed={isSelectedAccountClosed}
+          clubSlug={clubSlug}
+          products={products}
+          services={services}
+          productsLoading={productsLoading}
+          servicesLoading={servicesLoading}
+          newItem={newItem}
+          setNewItem={setNewItem}
+          payment={payment}
+          setPayment={setPayment}
+          itemOutstandingMap={itemOutstandingMap}
+          paymentCalculatorTotalPending={paymentCalculatorContext.totalPending}
+          paymentCalculatorCourtPending={paymentCalculatorContext.courtPending}
+          actionError={openAccountModalError}
+          formatItemType={formatItemType}
+          formatPaymentMethod={formatPaymentMethod}
+          formatPaymentChannel={formatPaymentChannel}
+          formatPaymentSource={formatPaymentSource}
+          onClose={() => {
+            setShowOpenAccountModal(false);
+            setShowPaymentCalculator(false);
+            setOpenAccountModalError('');
+            setNewItem(EMPTY_NEW_ITEM);
+          }}
+          onAddItem={async () => {
+            try {
+              await addAccountItem(selectedId, {
+                description: newItem.description,
+                quantity: newItem.quantity,
+                unitPrice: newItem.unitPrice,
+                type: newItem.type,
+                serviceCode: newItem.type === 'SERVICE' && newItem.serviceCode ? newItem.serviceCode : undefined
+              });
+              setNewItem(EMPTY_NEW_ITEM);
+              setOpenAccountModalError('');
+              await loadDetail(selectedId);
+              await refreshLists();
+            } catch (err: any) {
+              const message = err?.message || 'No se pudo agregar el consumo';
+              setOpenAccountModalError(message);
+              setError(message);
+            }
+          }}
+          onSelectProduct={handleSelectProduct}
+          onSelectService={handleSelectService}
+          onOpenPaymentCalculator={() => setShowPaymentCalculator(true)}
+          onOpenCloseAccountConfirm={() => setShowCloseAccountConfirm(true)}
+          onRequestRefund={openRefundModal}
+        />
+        <div className={pageCardClass}>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/60 mb-2">Cuentas cerradas</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {visibleClosedAccounts.map((account) => (
               <button
                 type="button"
                 key={account.id}
                 onClick={() => void openClosedAccountDetail(account.id)}
-                className={`w-full text-left border rounded-lg px-3 py-2 text-xs ${
+                className={`w-full text-left border-2 rounded-xl px-4 py-3 text-xs transition-all ${
                   selectedClosedAccountId === account.id && showClosedAccountModal
-                    ? 'bg-[#347048] text-[#EBE1D8] border-[#347048]'
-                    : 'border-[#347048]/15 text-[#347048]'
+                    ? 'bg-[#347048] text-[#EBE1D8] border-[#347048] shadow-lg shadow-[#347048]/20'
+                    : 'bg-white border-[#347048]/10 text-[#347048] hover:border-[#B9CF32]'
                 }`}
               >
                 <div className="font-black uppercase">
@@ -754,7 +736,7 @@ export default function AdminAccountsPage() {
             <button
               type="button"
               onClick={() => setClosedVisibleCount((prev) => prev + 12)}
-              className="mt-3 h-9 px-3 rounded-lg border border-[#347048]/20 text-xs font-black uppercase text-[#347048]"
+              className="mt-3 h-10 px-4 rounded-xl border-2 border-[#347048]/20 text-xs font-black uppercase tracking-widest text-[#347048] hover:bg-white transition-all"
             >
               Ver más
             </button>
@@ -763,7 +745,7 @@ export default function AdminAccountsPage() {
             <button
               type="button"
               onClick={() => setClosedVisibleCount(12)}
-              className="mt-3 ml-2 h-9 px-3 rounded-lg border border-[#347048]/20 text-xs font-black uppercase text-[#347048]"
+              className="mt-3 ml-2 h-10 px-4 rounded-xl border-2 border-[#347048]/20 text-xs font-black uppercase tracking-widest text-[#347048] hover:bg-white transition-all"
             >
               Ver menos
             </button>
@@ -803,6 +785,7 @@ export default function AdminAccountsPage() {
 
       <AppModal
         show={showClosedAccountModal}
+        zIndexClass="z-[100010]"
         title="Detalle de cuenta cerrada"
         message={
           loadingClosedAccountDetail ? (
@@ -876,6 +859,7 @@ export default function AdminAccountsPage() {
 
       <AppModal
         show={showCloseAccountConfirm}
+        zIndexClass="z-[100010]"
         title="Cerrar cuenta"
         message="Vas a cerrar la cuenta seleccionada. No vas a poder agregar consumos ni pagos después."
         confirmText={closingAccount ? 'Cerrando...' : 'Sí, cerrar cuenta'}
@@ -897,6 +881,7 @@ export default function AdminAccountsPage() {
             await closeAccount(selectedId);
             setDetail(null);
             setSelectedId('');
+            setShowOpenAccountModal(false);
             setShowCloseAccountConfirm(false);
             await refreshLists();
           } catch (err: any) {
@@ -922,6 +907,7 @@ export default function AdminAccountsPage() {
 
       <AppModal
         show={closeBlockedModal.show}
+        zIndexClass="z-[100010]"
         title="No se pudo cerrar la cuenta"
         message={closeBlockedModal.message}
         isWarning

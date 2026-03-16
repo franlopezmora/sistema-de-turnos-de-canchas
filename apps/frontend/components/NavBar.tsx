@@ -102,6 +102,23 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showUserMenu, showNotifications]);
 
+  useEffect(() => {
+    if (!showNotifications) return;
+
+    const closeIfDialogOpen = () => {
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs.length > 0) {
+        setShowNotifications(false);
+      }
+    };
+
+    closeIfDialogOpen();
+    const observer = new MutationObserver(closeIfDialogOpen);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [showNotifications]);
+
   const isAdmin = hasAdminAccess(user);
 
   const loadNotifications = useCallback(async () => {
@@ -141,7 +158,10 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
     }
   };
 
-  const handleLogout = () => setShowLogoutModal(true);
+  const handleLogout = () => {
+    setShowNotifications(false);
+    setShowLogoutModal(true);
+  };
   const isClubSlugView = router.pathname === '/club/[slug]';
   const isBookingsView = router.pathname === '/bookings';
   const isAdminView = router.pathname.startsWith('/admin') || router.pathname === '/club/[slug]/admin';
@@ -268,6 +288,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
         ref={navRef}
         onClick={() => {
           if (showUserMenu) setShowUserMenu(false);
+          if (showNotifications) setShowNotifications(false);
           onNavClick?.();
         }}
         className={`fixed top-0 left-0 right-0 z-[10000] transition-all duration-300 border-b border-[#EBE1D8]/10 ${
@@ -278,6 +299,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
           <button
             onClick={(event) => {
               event.stopPropagation();
+              setShowNotifications(false);
               setShowUserMenu(false);
               onMenuClick();
             }}
@@ -379,6 +401,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
+                      setShowNotifications(false);
                       onNavClick?.();
                       setShowUserMenu((prev) => !prev);
                     }}

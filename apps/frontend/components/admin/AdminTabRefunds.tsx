@@ -1,10 +1,12 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import type { RefundRecord, RefundStatus } from '../../modules/refunds/refund.types';
 import { searchRefunds, refundActions } from '../../modules/refunds/refund.facade';
 import { formatRefundExecutionMethod, formatRefundStatus } from '../../modules/refunds/refund.constants';
 import RefundList from './refunds/RefundList';
 import RefundLifecycleActions from './refunds/RefundLifecycleActions';
+import { formatAccountCode, formatPaymentCode, formatRefundCode } from '../../utils/displayCode';
 
 const STATUS_OPTIONS: Array<{ value: 'ALL' | RefundStatus; label: string }> = [
   { value: 'ALL', label: 'Todos' },
@@ -229,7 +231,7 @@ export default function AdminTabRefunds() {
 
       {mounted && selectedRefund && createPortal(
         <div
-          className="fixed inset-0 z-[10040] flex items-center justify-center bg-[#1f3f2b]/70 p-4"
+          className="fixed inset-0 z-[100210] flex items-center justify-center bg-black/55 p-4"
           onMouseDown={(event) => {
             detailBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -245,11 +247,12 @@ export default function AdminTabRefunds() {
           }}
         >
           <div
-            className="w-full max-w-2xl bg-[#EBE1D8] border-4 border-white rounded-[2rem] shadow-2xl text-[#347048] max-h-[90vh] overflow-hidden"
+            className="w-full max-w-2xl bg-[#EBE1D8] border-4 border-white/70 rounded-[2rem] shadow-2xl text-[#347048] max-h-[90vh] overflow-hidden"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="px-6 py-5 border-b border-[#347048]/10 bg-white/65 flex items-start justify-between gap-3">
+            <div className="px-6 py-5 border-b border-[#347048]/10 bg-white/60 flex items-start justify-between gap-3">
               <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/50">Gestion de devoluciones</p>
                 <h3 className="text-2xl font-black uppercase italic tracking-tight">Detalle de devolución</h3>
                 <p className="text-[11px] font-black uppercase tracking-widest text-[#347048]/60 mt-1">
                   {formatRefundStatus(selectedRefund.status)} · {formatMoney(selectedRefund.amount)}
@@ -258,22 +261,23 @@ export default function AdminTabRefunds() {
               <button
                 type="button"
                 onClick={() => setSelectedRefundId(null)}
-                className="h-10 px-3 rounded-xl border border-[#347048]/20 bg-white text-xs font-black uppercase tracking-wide"
+                title="Cerrar"
+                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
               >
-                Cerrar
+                <X size={20} strokeWidth={3} />
               </button>
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(90vh-88px)]">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <DetailItem label="ID devolución" value={selectedRefund.id} mono />
+                <DetailItem label="Código devolución" value={formatRefundCode(selectedRefund.id, (selectedRefund as any)?.displayCode)} />
                 <DetailItem label="Estado" value={formatRefundStatus(selectedRefund.status)} />
                 <DetailItem label="Monto" value={formatMoney(selectedRefund.amount)} />
                 <DetailItem label="Tipo motivo" value={selectedRefund.reasonType || '-'} />
                 <DetailItem label="Método ejecución" value={formatRefundExecutionMethod(selectedRefund.executionMethod) || 'Sin método'} />
                 <DetailItem label="Turno caja" value={selectedRefund.cashShiftId || '-'} mono />
-                <DetailItem label="ID pago" value={selectedRefund.paymentId || '-'} mono />
-                <DetailItem label="ID cuenta" value={selectedRefund.accountId || '-'} mono />
+                <DetailItem label="Código pago" value={selectedRefund.paymentId ? formatPaymentCode(selectedRefund.paymentId) : '-'} />
+                <DetailItem label="Código cuenta" value={selectedRefund.accountId ? formatAccountCode(selectedRefund.accountId) : '-'} />
                 <DetailItem label="Creada" value={formatDateTime(selectedRefund.createdAt)} />
                 <DetailItem label="Aprobada" value={formatDateTime(selectedRefund.approvedAt)} />
                 <DetailItem label="Ejecutada" value={formatDateTime(selectedRefund.executedAt)} />
@@ -283,6 +287,13 @@ export default function AdminTabRefunds() {
                 <DetailItem label="Aprobada por" value={selectedRefund.approvedByUserId != null ? String(selectedRefund.approvedByUserId) : '-'} />
                 <DetailItem label="Ejecutada por" value={selectedRefund.executedByUserId != null ? String(selectedRefund.executedByUserId) : '-'} />
                 <DetailItem label="Cancelada por" value={selectedRefund.cancelledByUserId != null ? String(selectedRefund.cancelledByUserId) : '-'} />
+              </div>
+
+              <div className="rounded-xl border border-[#347048]/10 bg-[#f7f4ef] px-3 py-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/55">Datos técnicos</p>
+                <p className="mt-1 text-[12px] font-mono break-all">refundId: {selectedRefund.id}</p>
+                <p className="text-[12px] font-mono break-all">paymentId: {selectedRefund.paymentId || '-'}</p>
+                <p className="text-[12px] font-mono break-all">accountId: {selectedRefund.accountId || '-'}</p>
               </div>
 
               <DetailBlock label="Motivo" value={selectedRefund.reason} />

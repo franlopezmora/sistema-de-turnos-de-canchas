@@ -13,6 +13,7 @@ export type BookingClient = {
 
 export class Booking {
     id: number;
+    displayCode?: string | null;
     startDateTime: Date;
     endDateTime: Date;
     listPrice: number;

@@ -10,6 +10,7 @@ import { prisma } from '../prisma';
 import { AccountingService } from './AccountingService';
 import { ProjectionService } from './ProjectionService';
 import { AccountService } from './AccountService';
+import { generateDisplayCode } from '../utils/displayCode';
 
 const EPSILON = 0.009;
 
@@ -414,6 +415,7 @@ export class RefundService {
 
     const refund = await tx.refund.create({
       data: {
+        displayCode: generateDisplayCode('DEV'),
         paymentId: payment.id,
         accountId: payment.accountId,
         clubId: payment.account.clubId,

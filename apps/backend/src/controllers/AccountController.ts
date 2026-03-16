@@ -130,7 +130,7 @@ export class AccountController {
         description: z.string().trim().min(1),
         quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
         unitPrice: z.preprocess((v) => Number(v), z.number().positive()),
-        type: z.enum(['BOOKING', 'PRODUCT', 'SERVICE', 'ADJUSTMENT']).optional(),
+        type: z.enum(['PRODUCT', 'SERVICE', 'ADJUSTMENT']).optional(),
         serviceCode: z.string().trim().min(1).optional(),
         applyDiscount: z.preprocess((v) => v === undefined ? undefined : (v === true || v === 'true'), z.boolean().optional())
       });

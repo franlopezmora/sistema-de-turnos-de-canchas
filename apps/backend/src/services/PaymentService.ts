@@ -7,6 +7,7 @@ import { ProjectionService } from './ProjectionService';
 import { metricsService } from './MetricsService';
 import { BookingDomainService } from './BookingDomainService';
 import { AccountService } from './AccountService';
+import { generateDisplayCode } from '../utils/displayCode';
 
 type ListPaymentsFilters = {
   clubId?: number;
@@ -337,6 +338,7 @@ export class PaymentService {
 
       const payment = await tx.payment.create({
         data: {
+          displayCode: generateDisplayCode('PAG'),
           amount: new Prisma.Decimal(input.amount),
           method: input.method,
           channel,

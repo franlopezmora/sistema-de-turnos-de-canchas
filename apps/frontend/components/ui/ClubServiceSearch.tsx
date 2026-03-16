@@ -1,45 +1,46 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Package, Plus, Search } from 'lucide-react';
+import { Plus, Search, Wrench } from 'lucide-react';
 
-export type ProductSearchItem = {
+export type ClubServiceSearchItem = {
   id: number;
+  code: string;
   name: string;
   price: number;
-  stock?: number | null;
+  isActive?: boolean;
 };
 
-type Props = {
-  products: ProductSearchItem[];
-  onSelect: (product: ProductSearchItem) => void;
+type ClubServiceSearchProps = {
+  services: ClubServiceSearchItem[];
+  value: string;
+  onChange: (value: string) => void;
+  onSelect: (service: ClubServiceSearchItem) => void;
+  selectedName?: string;
+  onInputChange?: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
-  autoFocus?: boolean;
   minQueryLength?: number;
   maxResults?: number;
   className?: string;
-  selectedName?: string;
-  onInputChange?: (value: string) => void;
 };
 
-export default function ProductSearch({
-  products,
+export default function ClubServiceSearch({
+  services,
+  value,
+  onChange,
   onSelect,
-  placeholder = 'Agregar producto (ej: Gatorade)...',
-  disabled = false,
-  autoFocus = false,
-  minQueryLength = 2,
-  maxResults = 10,
-  className = '',
   selectedName,
-  onInputChange
-}: Props) {
+  onInputChange,
+  placeholder = 'Buscar servicio del club...',
+  disabled = false,
+  minQueryLength = 1,
+  maxResults = 12,
+  className = ''
+}: ClubServiceSearchProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = String(value || '').trim().toLowerCase();
   const normalizedSelected = String(selectedName || '').trim().toLowerCase();
   const hasSelection = Boolean(normalizedSelected);
 
@@ -47,31 +48,18 @@ export default function ProductSearch({
     if (disabled) return [];
     if (hasSelection && normalizedQuery === normalizedSelected) return [];
     if (normalizedQuery.length < minQueryLength) return [];
-
-    const filtered = (products || []).filter((p) => {
-      const name = String(p?.name || '').toLowerCase();
-      return name.includes(normalizedQuery);
+    const filtered = (services || []).filter((service) => {
+      const name = String(service?.name || '').toLowerCase();
+      const code = String(service?.code || '').toLowerCase();
+      return name.includes(normalizedQuery) || code.includes(normalizedQuery);
     });
-
-    filtered.sort((a, b) => {
-      const aStock = Number(a?.stock ?? 0);
-      const bStock = Number(b?.stock ?? 0);
-      if (aStock !== bStock) return bStock - aStock;
-      return String(a.name).localeCompare(String(b.name), 'es');
-    });
-
+    filtered.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
     return filtered.slice(0, Math.max(1, maxResults));
-  }, [disabled, hasSelection, maxResults, minQueryLength, normalizedQuery, normalizedSelected, products]);
+  }, [disabled, hasSelection, maxResults, minQueryLength, normalizedQuery, normalizedSelected, services]);
 
   useEffect(() => {
-    if (!autoFocus) return;
-    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => window.clearTimeout(id);
-  }, [autoFocus]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
@@ -82,26 +70,17 @@ export default function ProductSearch({
   useEffect(() => {
     setActiveIndex(0);
     if (normalizedQuery.length >= minQueryLength && !(hasSelection && normalizedQuery === normalizedSelected)) {
-      setOpen(true);
+      setOpen(results.length > 0);
     } else {
       setOpen(false);
     }
-  }, [hasSelection, minQueryLength, normalizedQuery, normalizedSelected]);
+  }, [hasSelection, minQueryLength, normalizedQuery, normalizedSelected, results.length]);
 
-  useEffect(() => {
-    if (selectedName === undefined) return;
-    const nextValue = String(selectedName || '');
-    if (query === nextValue) return;
-    setQuery(nextValue);
-    setOpen(false);
-  }, [query, selectedName]);
-
-  const commitSelect = (product: ProductSearchItem) => {
-    onSelect(product);
-    setQuery(product?.name || '');
+  const commitSelect = (item: ClubServiceSearchItem) => {
+    onSelect(item);
+    onChange(String(item?.name || ''));
     setOpen(false);
     setActiveIndex(0);
-    inputRef.current?.focus();
   };
 
   return (
@@ -111,17 +90,16 @@ export default function ProductSearch({
           <Search size={18} strokeWidth={3} />
         </div>
         <input
-          ref={inputRef}
           type="text"
-          value={query}
+          value={value}
           disabled={disabled}
           onFocus={() => {
             if (hasSelection && normalizedQuery === normalizedSelected) return;
-            if (normalizedQuery.length >= minQueryLength) setOpen(true);
+            if (normalizedQuery.length >= minQueryLength && results.length > 0) setOpen(true);
           }}
           onChange={(e) => {
             const next = e.target.value;
-            setQuery(next);
+            onChange(next);
             if (onInputChange) onInputChange(next);
           }}
           onKeyDown={(e) => {
@@ -131,7 +109,6 @@ export default function ProductSearch({
               return;
             }
             if (results.length === 0) return;
-
             if (e.key === 'ArrowDown') {
               e.preventDefault();
               setActiveIndex((prev) => Math.min(prev + 1, results.length - 1));
@@ -155,36 +132,30 @@ export default function ProductSearch({
         />
       </div>
 
-      {open && !disabled && normalizedQuery.length >= minQueryLength && (
-        <div className="absolute z-[110] w-full mt-2 bg-white border-2 border-[#347048]/10 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      {open && !disabled && (
+        <div className="absolute z-[120] w-full mt-2 bg-white border-2 border-[#347048]/10 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-hidden">
           {results.length > 0 ? (
             <ul className="py-2">
-              {results.map((product, idx) => {
-                const outOfStock = Number(product?.stock ?? 1) <= 0;
+              {results.map((service, idx) => {
                 const isActive = idx === activeIndex;
                 return (
                   <li
-                    key={product.id}
+                    key={service.id}
                     onMouseEnter={() => setActiveIndex(idx)}
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => commitSelect(product)}
+                    onClick={() => commitSelect(service)}
                     className={`px-4 py-3 flex items-center justify-between cursor-pointer transition-colors border-b border-[#347048]/5 last:border-0 ${
                       isActive ? 'bg-[#B9CF32]/20' : 'hover:bg-[#B9CF32]/15'
-                    } ${outOfStock ? 'opacity-50' : ''}`}
+                    }`}
                   >
                     <div className="min-w-0">
-                      <p className="font-black text-sm text-[#347048] truncate">{product.name}</p>
-                      {product.stock !== undefined && product.stock !== null && (
-                        <p className="text-[10px] font-bold text-[#347048]/50 uppercase tracking-widest">
-                          Stock: {Number(product.stock) || 0}
-                        </p>
-                      )}
+                      <p className="font-black text-sm text-[#347048] truncate">{service.name}</p>
+                      <p className="text-[10px] font-bold text-[#347048]/50 uppercase tracking-widest">
+                        {service.code} - ${Number(service.price || 0).toLocaleString()}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="font-black text-[#347048]">${Number(product.price || 0).toLocaleString()}</span>
-                      <div className="bg-[#347048] text-[#B9CF32] p-1.5 rounded-lg">
-                        <Plus size={14} strokeWidth={4} />
-                      </div>
+                    <div className="bg-[#347048] text-[#B9CF32] p-1.5 rounded-lg shrink-0">
+                      <Plus size={14} strokeWidth={4} />
                     </div>
                   </li>
                 );
@@ -192,8 +163,8 @@ export default function ProductSearch({
             </ul>
           ) : (
             <div className="p-8 text-center">
-              <Package size={32} className="mx-auto text-[#347048]/20 mb-2" />
-              <p className="text-xs font-bold text-[#347048]/40 uppercase tracking-widest">No se encontraron productos</p>
+              <Wrench size={32} className="mx-auto text-[#347048]/20 mb-2" />
+              <p className="text-xs font-bold text-[#347048]/40 uppercase tracking-widest">Sin coincidencias</p>
             </div>
           )}
         </div>

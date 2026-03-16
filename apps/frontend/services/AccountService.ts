@@ -4,6 +4,36 @@ import { getPaymentIdempotencyKey } from '../utils/paymentIdempotency';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
+const humanizeAccountItemValidationError = (payload: any) => {
+  const rawError = payload?.error;
+  if (!rawError || typeof rawError !== 'object') return '';
+
+  const fieldMap: Record<string, string> = {
+    description: 'Ingresa una descripcion.',
+    quantity: 'La cantidad debe ser mayor a 0.',
+    unitPrice: 'El precio unitario debe ser mayor a 0.',
+    type: 'Selecciona un tipo de concepto valido.'
+  };
+
+  const fieldEntries = Object.entries(rawError).filter(([key]) => key !== '_errors');
+  for (const [field, detail] of fieldEntries) {
+    if (fieldMap[field]) {
+      return fieldMap[field];
+    }
+    const fieldErrors = Array.isArray((detail as any)?._errors) ? (detail as any)._errors : [];
+    if (fieldErrors.length > 0 && typeof fieldErrors[0] === 'string') {
+      return `${field}: ${fieldErrors[0]}`;
+    }
+  }
+
+  const rootErrors = Array.isArray((rawError as any)?._errors) ? (rawError as any)._errors : [];
+  if (rootErrors.length > 0 && typeof rootErrors[0] === 'string') {
+    return rootErrors[0];
+  }
+
+  return '';
+};
+
 export type AccountSource = 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
 export type AccountStatus = 'OPEN' | 'CLOSED';
 export type PaymentMethod = 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
@@ -93,7 +123,8 @@ export const addAccountItem = async (accountId: string, body: {
   });
   if (!res.ok) {
     const error = await res.json();
-    throw new Error(error.error || 'No se pudo agregar el consumo');
+    const validationMessage = humanizeAccountItemValidationError(error);
+    throw new Error(validationMessage || error.error || 'No se pudo agregar el consumo');
   }
   return res.json();
 };

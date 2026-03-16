@@ -27,6 +27,7 @@ import { BookingDomainService } from './BookingDomainService';
 import { getDepositRequiredAmount, isBookingTransitionAllowed, resolveInitialBookingStatus } from '../domain/bookingDomain';
 import { RefundService } from './RefundService';
 import { DiscountService } from './DiscountService';
+import { generateDisplayCode } from '../utils/displayCode';
 
 type CancelBookingReason = 'MANUAL' | 'AUTO_CANCEL_UNCONFIRMED';
 type CancelBookingOptions = {
@@ -681,6 +682,7 @@ export class BookingService {
         if (!account) {
             account = await tx.account.create({
                 data: {
+                    displayCode: generateDisplayCode('CTA'),
                     clubId: params.clubId,
                     sourceType: 'BOOKING',
                     sourceId: String(params.bookingId),
@@ -1240,6 +1242,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
                 saved = await tx.booking.create({
                     data: {
+                        displayCode: generateDisplayCode('RES'),
                         startDateTime,
                         endDateTime,
                         listPrice: finalPrice,

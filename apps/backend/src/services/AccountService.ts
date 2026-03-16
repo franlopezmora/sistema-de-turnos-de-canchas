@@ -5,6 +5,7 @@ import { acquireTransactionAdvisoryLock } from '../utils/advisoryLock';
 import { ProjectionService } from './ProjectionService';
 import { getDerivedPaymentStatus } from '../domain/bookingDomain';
 import { DiscountService } from './DiscountService';
+import { generateDisplayCode } from '../utils/displayCode';
 
 const USE_PROJECTION_READ_MODELS = String(process.env.READ_MODEL_SOURCE || '').toLowerCase() === 'projection';
 const EPSILON = 0.009;
@@ -236,6 +237,7 @@ export class AccountService {
       const account = await tx.account.create({
         data: {
           clubId: input.clubId,
+          displayCode: generateDisplayCode('CTA'),
           sourceType: input.sourceType,
           sourceId: input.sourceId,
           status: 'OPEN'

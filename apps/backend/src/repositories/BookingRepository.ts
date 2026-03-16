@@ -6,11 +6,13 @@ import { Club } from '../entities/Club';
 import { ActivityType } from '../entities/ActivityType';
 import { BookingStatus, Role } from '../entities/Enums';
 import { TimeHelper } from '../utils/TimeHelper';
+import { generateDisplayCode } from '../utils/displayCode';
 
 export class BookingRepository {
 
     async save(booking: Booking): Promise<Booking> {
         const data: any = {
+            displayCode: generateDisplayCode('RES'),
             startDateTime: booking.startDateTime,
             endDateTime: booking.endDateTime,
             listPrice: booking.listPrice,
@@ -231,6 +233,7 @@ export class BookingRepository {
             client
         );
         booking.listPrice = Number(dbItem.listPrice || dbItem.price || 0);
+        booking.displayCode = dbItem.displayCode ?? null;
         if (dbItem.cancelledBy) booking.cancelledBy = dbItem.cancelledBy;
         if (dbItem.cancelledAt) booking.cancelledAt = dbItem.cancelledAt;
         if (dbItem.createdAt) booking.createdAt = dbItem.createdAt;

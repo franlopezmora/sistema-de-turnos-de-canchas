@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 import type { RefundRecord } from '../../../modules/refunds/refund.types';
 import { formatRefundExecutionMethod, formatRefundStatus } from '../../../modules/refunds/refund.constants';
+import { formatAccountCode, formatPaymentCode, formatRefundCode } from '../../../utils/displayCode';
 
 type RefundListProps = {
   refunds: RefundRecord[];
@@ -57,13 +58,13 @@ export default function RefundList({
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-wide text-[#347048] truncate">
-                  ${Number(refund.amount || 0).toLocaleString()} · {formatRefundStatus(refund.status)}
+                  {formatRefundCode(refund.id, (refund as any)?.displayCode)} · ${Number(refund.amount || 0).toLocaleString()} · {formatRefundStatus(refund.status)}
                 </p>
                 <p className="text-[10px] font-bold text-[#347048]/60 truncate">
-                  {formatRefundExecutionMethod(refund.executionMethod) || 'Sin método'} · pago {refund.paymentId}
+                  {formatRefundExecutionMethod(refund.executionMethod) || 'Sin método'} · pago {formatPaymentCode(refund.paymentId)}
                 </p>
                 <p className="text-[10px] font-semibold text-[#347048]/55 truncate">
-                  Cuenta: {refund.accountId || 'sin cuenta'}
+                  Cuenta: {refund.accountId ? formatAccountCode(refund.accountId) : 'sin cuenta'}
                 </p>
                 {refund.failedReason ? (
                   <p className="text-[10px] font-bold text-red-600 truncate">Fallo: {refund.failedReason}</p>
@@ -85,3 +86,4 @@ export default function RefundList({
     </div>
   );
 }
+

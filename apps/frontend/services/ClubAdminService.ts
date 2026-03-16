@@ -27,6 +27,16 @@ export type ClubActivityType = {
 export type DiscountPolicyScope = 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ALL';
 export type DiscountAmountType = 'PERCENT' | 'FIXED';
 export type DiscountApplyMode = 'INCLUDE_ONLY' | 'EXCLUDE_LIST';
+export type ClubCatalogService = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 export type AuditLogUser = {
   id: number;
@@ -357,6 +367,75 @@ export class ClubAdminService {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Error al eliminar producto');
+    return res.json();
+  }
+
+  static async getServices(slug: string, includeInactive = false): Promise<ClubCatalogService[]> {
+    if (!getToken()) throw new Error('No autenticado');
+    const query = includeInactive ? '?includeInactive=true' : '';
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/services${query}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      const message =
+        (typeof error?.error === 'string' && error.error) ||
+        (typeof error?.message === 'string' && error.message) ||
+        'Error al cargar servicios';
+      throw new Error(message);
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  static async createService(slug: string, data: {
+    code: string;
+    name: string;
+    description?: string;
+    price: number;
+  }) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/services`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'Error al crear servicio');
+    }
+    return res.json();
+  }
+
+  static async updateService(slug: string, id: number, data: {
+    code?: string;
+    name?: string;
+    description?: string | null;
+    price?: number;
+    isActive?: boolean;
+  }) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/services/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'Error al actualizar servicio');
+    }
+    return res.json();
+  }
+
+  static async deleteService(slug: string, id: number) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/services/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'Error al eliminar servicio');
+    }
     return res.json();
   }
 

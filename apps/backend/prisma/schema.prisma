@@ -257,6 +257,7 @@ model Club {
   clients       Client[]
   bookings      Booking[]
   products      Product[]
+  servicesCatalog ClubServiceCatalog[]
   cashMovements CashMovement[]
   memberships   Membership[]
   fixedBookings FixedBooking[]
@@ -402,6 +403,7 @@ model Client {
 
 model Booking {
   id              Int           @id @default(autoincrement())
+  displayCode     String?       @unique
 
   startDateTime   DateTime      @db.Timestamptz(3)
   endDateTime     DateTime      @db.Timestamptz(3)
@@ -480,6 +482,7 @@ model FixedBooking {
 
 model Account {
   id           String       @id @default(cuid())
+  displayCode  String?      @unique
   clubId       Int
   club         Club          @relation(fields: [clubId], references: [id], onDelete: Restrict)
 
@@ -638,6 +641,7 @@ model AccountItemDiscount {
 
 model Payment {
   id        String   @id @default(cuid())
+  displayCode String? @unique
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   amount    Decimal  @db.Decimal(10, 2)
   method    PaymentMethod
@@ -901,6 +905,24 @@ model Product {
   @@map("Product")
 }
 
+model ClubServiceCatalog {
+  id          Int      @id @default(autoincrement())
+  code        String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  isActive    Boolean  @default(true)
+
+  clubId      Int
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([clubId, code])
+  @@index([clubId, isActive])
+}
+
 // Constraint: stock >= 0
 // Agregar en migración SQL:
 // ALTER TABLE "Product" ADD CONSTRAINT product_stock_non_negative CHECK (stock >= 0);
@@ -1043,6 +1065,7 @@ model CashShift {
 
 model Refund {
   id              String   @id @default(cuid())
+  displayCode     String?  @unique
   createdAt       DateTime @default(now()) @db.Timestamptz(3)
   amount          Decimal  @db.Decimal(10, 2)
   reason          String?
