@@ -245,7 +245,11 @@ const formatBookingStatus = (status?: string) => {
     case 'COMPLETED':
       return 'Finalizada';
     default:
-      return status || 'Pendiente';
+      if (!status) return 'Pendiente';
+      return status
+        .toLowerCase()
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
   }
 };
 
@@ -260,7 +264,11 @@ const formatPaymentStatus = (status?: string) => {
     case 'DEBT':
       return 'En cuenta';
     default:
-      return status || 'Pendiente';
+      if (!status) return 'Pendiente';
+      return status
+        .toLowerCase()
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
   }
 };
 

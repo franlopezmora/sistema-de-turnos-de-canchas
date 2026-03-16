@@ -34,14 +34,14 @@ export function validatePendingAutoCancelSettings(settings: PendingAutoCancelSet
   }
   if (settings.warningEnabled) {
     if (!Number.isFinite(Number(settings.warningMinutesBefore)) || Number(settings.warningMinutesBefore) <= 0) {
-      errors.push('autoCancelPendingWarningMinutesBefore debe ser > 0 cuando warning está habilitado');
+      errors.push('autoCancelPendingWarningMinutesBefore debe ser > 0 cuando el aviso está habilitado');
     }
   }
   if (settings.enabled && settings.warningEnabled) {
     const warning = Number(settings.warningMinutesBefore);
     const cancel = Number(settings.cancelMinutesBefore);
     if (Number.isFinite(warning) && Number.isFinite(cancel) && warning <= cancel) {
-      errors.push('warningMinutesBefore debe ser mayor a cancelMinutesBefore');
+      errors.push('warningMinutesBefore debe ser mayor a cancelMinutesBefore (el aviso debe ocurrir antes de la cancelación)');
     }
   }
   return errors;
@@ -364,4 +364,3 @@ Si no se confirma antes de las *${limitTime}*, puede cancelarse automáticamente
     return { scanned: candidates.length, cancelled };
   }
 }
-

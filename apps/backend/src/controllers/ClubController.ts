@@ -77,17 +77,17 @@ export class ClubController {
             }
             if (autoCancelPendingBookingsEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingBookingsMinutesBefore)) || Number(autoCancelPendingBookingsMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel estÃ¡ habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando la cancelación automática está habilitada' });
                 }
             }
             if (autoCancelPendingWarningEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingWarningMinutesBefore)) || Number(autoCancelPendingWarningMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning estÃ¡ habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando el aviso está habilitado' });
                 }
             }
             if (autoCancelPendingBookingsEnabled && autoCancelPendingWarningEnabled) {
                 if (Number(autoCancelPendingWarningMinutesBefore) <= Number(autoCancelPendingBookingsMinutesBefore)) {
-                    return res.status(400).json({ error: 'El warning debe configurarse antes de la cancelación automática' });
+                    return res.status(400).json({ error: 'El aviso debe configurarse antes de la cancelación automática' });
                 }
             }
             if ((professorDurationOverrideEnabled ?? true) && (!Number.isFinite(Number(professorDurationOverrideMinutes)) || Number(professorDurationOverrideMinutes) <= 0)) {
@@ -283,17 +283,17 @@ export class ClubController {
             const resolvedWarningEnabled = autoCancelPendingWarningEnabled ?? false;
             if (resolvedAutoCancelEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingBookingsMinutesBefore)) || Number(autoCancelPendingBookingsMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando auto-cancel estÃ¡ habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingBookingsMinutesBefore debe ser mayor a 0 cuando la cancelación automática está habilitada' });
                 }
             }
             if (resolvedWarningEnabled) {
                 if (!Number.isFinite(Number(autoCancelPendingWarningMinutesBefore)) || Number(autoCancelPendingWarningMinutesBefore) <= 0) {
-                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando warning estÃ¡ habilitado' });
+                    return res.status(400).json({ error: 'autoCancelPendingWarningMinutesBefore debe ser mayor a 0 cuando el aviso está habilitado' });
                 }
             }
             if (resolvedAutoCancelEnabled && resolvedWarningEnabled) {
                 if (Number(autoCancelPendingWarningMinutesBefore) <= Number(autoCancelPendingBookingsMinutesBefore)) {
-                    return res.status(400).json({ error: 'El warning debe configurarse antes de la cancelación automática' });
+                    return res.status(400).json({ error: 'El aviso debe configurarse antes de la cancelación automática' });
                 }
             }
             if ((professorDurationOverrideEnabled ?? true) && professorDurationOverrideMinutes !== undefined) {

@@ -22,11 +22,11 @@ const REFUND_EXECUTION_METHOD_LABELS: Partial<Record<RefundExecutionMethod | 'CA
   TRANSFER: 'Transferencia',
   CARD: 'Tarjeta',
   CARD_REVERSAL: 'Reversa de tarjeta',
-  CREDIT_NOTE: 'Nota de credito',
+  CREDIT_NOTE: 'Nota de crédito',
   OTHER: 'Otro',
   POS: 'Mostrador (POS)',
-  ONLINE: 'Online',
-  BACKOFFICE: 'Administracion'
+  ONLINE: 'En línea',
+  BACKOFFICE: 'Administración'
 };
 
 export function formatRefundStatus(status?: string | null): string {

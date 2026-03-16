@@ -171,7 +171,11 @@ export default function BookingConsumption(
     if (method === 'TRANSFER') return 'Transferencia';
     if (method === 'CARD') return 'Tarjeta';
     if (method === 'OTHER') return 'Otro';
-    return method || 'Sin método';
+    if (!method) return 'Sin método';
+    return method
+      .toLowerCase()
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
   const formatPaymentTime = (dateValue?: string) => {

@@ -1179,7 +1179,7 @@ export default function Home() {
               <RevealOnScroll delay={200}>
                 <div className="h-full flex flex-col items-center text-center p-6 bg-white/60 rounded-3xl border border-white">
                   <div className="bg-[#347048]/10 text-[#347048] p-4 rounded-2xl mb-4"><Calendar size={32} strokeWidth={2} /></div>
-                  <h4 className="text-[#347048] font-black text-lg mb-2">Reserva Online</h4>
+                  <h4 className="text-[#347048] font-black text-lg mb-2">Reserva en línea</h4>
                   <p className="text-[#347048]/70 text-sm font-medium">Sistema de turnos disponible las 24 horas para que tus clientes reserven en segundos.</p>
                 </div>
               </RevealOnScroll>
@@ -1195,7 +1195,7 @@ export default function Home() {
               <RevealOnScroll delay={400}>
                 <div className="h-full flex flex-col items-center text-center p-6 bg-white/60 rounded-3xl border border-white">
                   <div className="bg-blue-50 text-blue-500 p-4 rounded-2xl mb-4"><Users size={32} strokeWidth={2} /></div>
-                  <h4 className="text-[#347048] font-black text-lg mb-2">Panel Admin</h4>
+                  <h4 className="text-[#347048] font-black text-lg mb-2">Panel de administración</h4>
                   <p className="text-[#347048]/70 text-sm font-medium">Gestioná canchas, precios y base de datos de usuarios desde cualquier dispositivo.</p>
                 </div>
               </RevealOnScroll>
@@ -1224,7 +1224,7 @@ export default function Home() {
                 </p>
                 
                 <ul className="space-y-4 mb-10">
-                  <FeatureItem icon={<Calendar className="text-[#926699]" />} text="Reservas Online 24/7." />
+                  <FeatureItem icon={<Calendar className="text-[#926699]" />} text="Reservas en línea 24/7." />
                   <FeatureItem icon={<ShieldCheck className="text-[#926699]" />} text="Adiós a los deudores." />
                 </ul>
 

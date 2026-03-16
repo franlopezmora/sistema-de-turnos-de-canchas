@@ -51,7 +51,7 @@ const AdminSidebar = ({ isOpen, onClose }: AdminSidebarProps) => {
         <div className="p-6 flex justify-between items-center border-b border-[#347048]/10 bg-[#EBE1D8]">
           <div>
             <h2 className="text-2xl font-black text-[#926699] tracking-tighter italic uppercase">
-                Panel Admin
+                Panel de administración
             </h2>
             <p className="text-[#347048] text-[10px] font-bold uppercase tracking-widest opacity-60">
                 Gestión del Club
@@ -89,7 +89,7 @@ const AdminSidebar = ({ isOpen, onClose }: AdminSidebarProps) => {
             <div className="flex items-center gap-3 px-4 py-3 bg-[#347048]/5 rounded-xl border border-[#347048]/5">
                 <div className="w-2 h-2 rounded-full bg-[#0bbd49] animate-pulse shrink-0" />
                 <span className="text-xs font-bold text-[#347048]/60 uppercase tracking-wider">
-                    Sistema Online
+                    Sistema en línea
                 </span>
             </div>
         </div>

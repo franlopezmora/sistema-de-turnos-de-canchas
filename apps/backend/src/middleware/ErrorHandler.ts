@@ -9,6 +9,5 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
         stack: process.env.NODE_ENV === 'production' ? undefined : err?.stack
     });
     const status = err?.statusCode || 500;
-    res.status(status).json({ error: err?.message || 'Internal Server Error' });
+    res.status(status).json({ error: err?.message || 'Error interno del servidor' });
 };
-

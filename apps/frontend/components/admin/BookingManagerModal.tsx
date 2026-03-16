@@ -47,7 +47,11 @@ const formatBookingStatus = (status?: string) => {
   if (status === 'CONFIRMED') return 'Confirmada';
   if (status === 'COMPLETED') return 'Finalizada';
   if (status === 'CANCELLED') return 'Cancelada';
-  return status || 'Pendiente';
+  if (!status) return 'Pendiente';
+  return status
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 };
 const formatConfirmationMode = (mode?: BookingFinancialSummary['confirmationMode']) => {
   if (mode === 'AUTOMATIC') return 'Automática';

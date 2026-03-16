@@ -43,6 +43,40 @@ const paymentStatusLabel: Record<string, string> = {
   PARTIAL: 'Parcial'
 };
 
+const accountSourceTypeLabel: Record<string, string> = {
+  BOOKING: 'Reserva',
+  BAR: 'Bar',
+  TABLE: 'Mesa',
+  MANUAL: 'Manual',
+  OTHER: 'Otro'
+};
+
+const accountItemTypeLabel: Record<string, string> = {
+  BOOKING: 'Cancha',
+  PRODUCT: 'Producto',
+  BAR: 'Bar',
+  CONSUMPTION: 'Consumo',
+  OTHER: 'Otro'
+};
+
+const formatRawTypeFallback = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatAccountSourceType = (value: unknown) => {
+  const key = String(value || '').trim().toUpperCase();
+  if (!key) return '-';
+  return accountSourceTypeLabel[key] || formatRawTypeFallback(key);
+};
+
+const formatAccountItemType = (value: unknown) => {
+  const key = String(value || '').trim().toUpperCase();
+  if (!key) return '-';
+  return accountItemTypeLabel[key] || formatRawTypeFallback(key);
+};
+
 const getEntryReference = (entry: any) => {
   const accountId = String(entry?.id || '').trim();
   if (accountId) return `C-${accountId.slice(-6).toUpperCase()}`;
@@ -472,13 +506,13 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                               <span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(account.date)}</span>
                             </div>
                             <div className="text-sm font-black uppercase tracking-tight flex justify-between mb-2 pr-10 text-[#347048]">
-                              <span>Cuenta {account.sourceType || '-'}</span>
+                              <span>Cuenta {formatAccountSourceType(account.sourceType)}</span>
                               <span className="text-xs opacity-60 font-mono">${Number(account.totalAmount || 0).toLocaleString()}</span>
                             </div>
                             <div className="text-[11px] font-bold text-[#347048]/70 uppercase tracking-wide pr-10">
                               {account.bookingId
                                 ? `Reserva #${account.bookingId} · Cancha: ${account.courtName || '-'}`
-                                : `Origen: ${account.sourceType || '-'}#${account.sourceId || '-'}`}
+                                : `Origen: ${formatAccountSourceType(account.sourceType)}${account.sourceId ? ` #${account.sourceId}` : ''}`}
                             </div>
                             <div className="flex flex-wrap gap-2 mt-2">
                               <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${accountStatus === 'OPEN' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
@@ -601,7 +635,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                         <div className="flex flex-col gap-2 flex-1">
                           <div className="flex items-center gap-3"><span className="font-black text-[#347048] text-sm italic">{getEntryReference(account)}</span><span className="text-[10px] font-black text-[#347048]/40 uppercase tracking-widest">{formatDate(account.date)} · {account.time}</span></div>
                           <div className="text-xs font-black text-[#347048] uppercase tracking-tight">
-                            Cuenta {account.sourceType || '-'} {account.sourceId ? `#${account.sourceId}` : ''}
+                            Cuenta {formatAccountSourceType(account.sourceType)} {account.sourceId ? `#${account.sourceId}` : ''}
                             <span className="opacity-40 ml-2 font-mono">${Number(account.totalAmount || 0).toLocaleString()}</span>
                           </div>
                           {account.bookingId && (
@@ -653,7 +687,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
               </div>
               <div className="space-y-1">
                 <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Origen</div>
-                <div className="font-bold">{selectedAccountDetail.sourceType || '-'}</div>
+                <div className="font-bold">{formatAccountSourceType(selectedAccountDetail.sourceType)}</div>
               </div>
               <div className="space-y-1">
                 <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Total</div>
@@ -695,7 +729,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                           {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.description}
                         </span>
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">
-                          Tipo: {item.type === 'BOOKING' ? 'Cancha' : item.type}
+                          Tipo: {formatAccountItemType(item.type)}
                         </span>
                       </div>
                       <div className="text-right">
