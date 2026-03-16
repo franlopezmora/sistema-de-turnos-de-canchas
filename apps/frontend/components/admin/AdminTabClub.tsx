@@ -1086,7 +1086,7 @@ export default function AdminTabClub() {
                   <span className="text-sm tracking-wide">Activar cancelación automática de reservas pendientes</span>
                 </label>
                 <p className="text-[11px] text-[#347048]/70 font-bold">
-                  Solo aplica a reservas <span className="font-black">PENDING</span>. Las confirmadas nunca se cancelan automáticamente.
+                  Solo aplica a reservas <span className="font-black">Pendiente</span>. Las confirmadas nunca se cancelan automáticamente.
                 </p>
 
                 {clubForm.autoCancelPendingBookingsEnabled ? (

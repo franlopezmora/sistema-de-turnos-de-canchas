@@ -30,7 +30,7 @@ export type DiscountApplyMode = 'INCLUDE_ONLY' | 'EXCLUDE_LIST';
 
 export class ClubAdminService {
   /**
-   * Obtener el schedule del admin para un club específico
+   * Obtener la agenda del administrador para un club específico
    */
   static async getAdminSchedule(clubSlug: string, date: string) {
     if (!getToken()) throw new Error('No autenticado');
@@ -42,7 +42,7 @@ export class ClubAdminService {
 
     if (!res.ok) {
       const error = await res.json();
-      throw new Error(error.error || error.message || 'Error al cargar el schedule');
+      throw new Error(error.error || error.message || 'Error al cargar la agenda');
     }
     return res.json();
   }

@@ -113,7 +113,7 @@ export class CashShiftService {
 
   async close(clubId: number, shiftId: string, countedCash: number, actorUserId?: number) {
     if (!Number.isFinite(countedCash) || countedCash < 0) {
-      throw new Error('Cash contado inválido');
+      throw new Error('Monto contado en efectivo inválido');
     }
 
     return prisma.$transaction(async (tx) => {

@@ -311,6 +311,18 @@ const AdminCashDashboard = () => {
     return 'Transferencia';
   }, []);
 
+  const formatMovementSourceTypeLabel = useCallback((sourceType?: string | null) => {
+    if (!sourceType) return 'Cuenta';
+    if (sourceType === 'BOOKING') return 'Reserva';
+    if (sourceType === 'BAR') return 'Bar';
+    if (sourceType === 'TABLE') return 'Mesa';
+    if (sourceType === 'MANUAL') return 'Cuenta';
+    return sourceType
+      .toLowerCase()
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }, []);
+
   const fetchCash = async () => {
     try {
       const data = await CashService.getSummary();
@@ -968,7 +980,7 @@ const AdminCashDashboard = () => {
                                   ? 'Reserva'
                                   : m.sourceType === 'BAR'
                                     ? 'Bar'
-                                    : m.sourceType}
+                                    : formatMovementSourceTypeLabel(m.sourceType)}
                               </span>
                             ) : null}
                         </div>
@@ -1335,11 +1347,7 @@ const AdminCashDashboard = () => {
               <div className="space-y-1">
                 <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Origen</div>
                 <div className="font-bold">
-                  {selectedMovement.sourceType === 'BOOKING'
-                    ? 'Reserva'
-                    : selectedMovement.sourceType === 'BAR'
-                      ? 'Bar'
-                      : selectedMovement.sourceType || 'Manual'}
+                  {formatMovementSourceTypeLabel(selectedMovement.sourceType)}
                 </div>
               </div>
             </div>
