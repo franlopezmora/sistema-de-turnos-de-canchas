@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { validateOpeningDays } from '../utils/ActivityScheduleHelper';
 import { MediaStorageService } from '../services/MediaStorageService';
 import { sanitizeString } from '../utils/sanitize';
+import { AuditLogService } from '../services/AuditLogService';
 
 const fixedBookingActivityConfigSchema = z.object({
     fixedBookingDaysAhead: z.union([z.number(), z.string()]).transform((v) => Number(v)).pipe(z.number().int().positive()),
@@ -12,6 +13,7 @@ const fixedBookingActivityConfigSchema = z.object({
 
 export class ClubController {
     private readonly mediaStorageService = new MediaStorageService();
+    private readonly auditLogService = new AuditLogService();
     constructor(private clubService: ClubService) {}
 
     createClub = async (req: Request, res: Response) => {
@@ -263,6 +265,7 @@ export class ClubController {
                 bookingSimpleAdvanceDaysAdmin,
                 allowAdminSkipSimpleAdvanceLimit
             } = parsed.data;
+            const previousClub = await this.clubService.getClubById(id);
 
             const normalizedLogoUrl = await this.mediaStorageService.normalizeAsset(logoUrl ?? null, 'logoUrl');
             const normalizedClubImageUrl = await this.mediaStorageService.normalizeAsset(clubImageUrl ?? null, 'clubImageUrl');
@@ -345,6 +348,52 @@ export class ClubController {
                 bookingSimpleAdvanceDaysAdmin,
                 allowAdminSkipSimpleAdvanceLimit
             });
+
+            const toComparable = (value: unknown) => (value === undefined ? null : value);
+            const serializeComparable = (value: unknown) => JSON.stringify(toComparable(value));
+            const summarizeValue = (value: unknown) => {
+                if (value === undefined || value === null) return null;
+                if (typeof value === 'string') {
+                    const compact = value.length > 180 ? `${value.slice(0, 180)}...(${value.length} chars)` : value;
+                    return compact;
+                }
+                return value;
+            };
+
+            const changes = Object.keys(parsed.data)
+                .filter((key) => (parsed.data as any)[key] !== undefined)
+                .map((field) => {
+                    const before = (previousClub as any)[field];
+                    const after = (club as any)[field];
+                    return { field, before, after };
+                })
+                .filter((row) => serializeComparable(row.before) !== serializeComparable(row.after))
+                .map((row) => ({
+                    field: row.field,
+                    before: summarizeValue(row.before),
+                    after: summarizeValue(row.after)
+                }));
+
+            if (changes.length > 0) {
+                try {
+                    await this.auditLogService.create({
+                        clubId: club.id,
+                        userId: Number((req as any)?.user?.userId) || null,
+                        entity: 'CLUB',
+                        entityId: String(club.id),
+                        action: 'CLUB_CONFIG_UPDATED',
+                        payload: {
+                            source: 'ADMIN_SETTINGS',
+                            changedCount: changes.length,
+                            changedFields: changes.map((item) => item.field),
+                            changes
+                        }
+                    });
+                } catch {
+                    // No frenamos la operación principal por un error de auditoría.
+                }
+            }
+
             res.json(club);
         } catch (error: any) {
             res.status(400).json({ error: error.message });
@@ -373,4 +422,3 @@ export class ClubController {
     }
 };
 }
-

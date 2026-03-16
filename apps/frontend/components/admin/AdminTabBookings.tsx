@@ -20,6 +20,7 @@ import DatePickerDark from '../../components/ui/DatePickerDark';
 import { Trash2, Check, Calendar as CalendarIcon, RefreshCw, ChevronDown, CalendarPlus, Repeat, Banknote, CreditCard, X, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react'; 
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 import { formatTime24 } from '../../utils/dateTime';
+import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 import type { RefundDraft } from '../../modules/refunds/refund.types';
 import { buildDefaultRefundDraft } from '../../modules/refunds/refund.policy';
 import { validateRefundAmountInput } from '../../modules/refunds/refund.validators';
@@ -515,7 +516,9 @@ export default function AdminTabBookings() {
         const foundSlug = getActiveClubSlug(user);
         if (foundSlug) return foundSlug;
       }
-    } catch (e) { console.error(e); }
+    } catch (error) {
+      reportUiError({ area: 'AdminTabBookings', action: 'getClubSlug' }, error);
+    }
     return ''; 
   }, [urlSlug]);
 
@@ -573,7 +576,10 @@ export default function AdminTabBookings() {
           const results = await searchClients(currentSlug, value);
           setSearchResults(results || []);
           setShowDropdown(true);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+          reportUiError({ area: 'AdminTabBookings', action: 'searchClients' }, error);
+          showError('No se pudo completar la busqueda de clientes.');
+        }
       }, 300);
     } else { setShowDropdown(false); }
   };
@@ -1247,7 +1253,11 @@ export default function AdminTabBookings() {
         setShowPaymentModal(false);
         loadSchedule(); 
         showInfo('Cobro registrado correctamente.', "Listo");
-    } catch (error) { alert('Error al confirmar'); }
+    } catch (error) {
+      const message = extractErrorMessage(error, 'No se pudo confirmar el cobro.');
+      reportUiError({ area: 'AdminTabBookings', action: 'handleConfirmBooking' }, error);
+      showError(message);
+    }
   };
 
   const updateSplitPayment = (index: number, patch: Partial<SplitPaymentDraft>) => {

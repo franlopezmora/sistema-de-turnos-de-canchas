@@ -53,6 +53,7 @@ export const createApp = () => {
   const app = express();
   const whatsappDelivery = new WhatsappDeliveryService();
   const allowedOrigins = getAllowedOrigins();
+  type RequestWithId = Request & { requestId?: string };
 
   app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production',
@@ -63,7 +64,13 @@ export const createApp = () => {
   app.use(requestContextMiddleware);
   app.use(pinoHttp({
     logger: baseLogger,
-    genReqId: (req) => (req as any).requestId || (req as any).requestId,
+    genReqId: (req) => {
+      const requestId = (req as RequestWithId).requestId;
+      if (requestId) return requestId;
+      const headerReqId = req.header('x-request-id');
+      if (headerReqId) return headerReqId;
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    },
     customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
     customErrorMessage: (req, res, err) => `Error ${req.method} ${req.url}: ${err?.message}`,
   }));
@@ -135,10 +142,10 @@ export const createApp = () => {
       }
 
       return res.status(200).json({ status: 'ready' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(503).json({
         status: 'not_ready',
-        error: error?.message || 'Dependency check failed'
+        error: error instanceof Error ? error.message : 'Dependency check failed'
       });
     }
   });

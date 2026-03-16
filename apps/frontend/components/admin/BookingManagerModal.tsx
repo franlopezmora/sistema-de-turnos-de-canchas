@@ -10,6 +10,7 @@ import {
 import PaymentCalculator, { type PaymentCalculatorResult } from '../PaymentCalculator';
 import ProductSearch, { type ProductSearchItem } from '../ui/ProductSearch';
 import { formatDateTime24 } from '../../utils/dateTime';
+import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 
 type Props = {
   booking: any;
@@ -132,8 +133,9 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       setActionError(null);
       setSelectedProduct(null);
       setProductSearchKey((prev) => prev + 1);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      reportUiError({ area: 'BookingManagerModal', action: 'loadData' }, error);
+      setActionError('No se pudo cargar la información del turno.');
     } finally {
       setLoading(false);
     }
@@ -221,8 +223,10 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       await ClubAdminService.removeItemFromBooking(String(item.id));
       await loadData();
       onUpdated();
-    } catch (error: any) {
-      alert(error?.message || 'No se pudo eliminar el consumo');
+    } catch (error) {
+      const message = extractErrorMessage(error, 'No se pudo eliminar el consumo');
+      reportUiError({ area: 'BookingManagerModal', action: 'removeItem' }, error);
+      setActionError(message);
     } finally {
       setSaving(false);
     }
@@ -305,9 +309,10 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       await loadData();
       setShowPaymentCalculator(false);
       onUpdated();
-    } catch (e: any) {
-      const message = e?.message || 'No se pudo registrar el pago';
-      alert(`Error: ${message}`);
+    } catch (error) {
+      const message = extractErrorMessage(error, 'No se pudo registrar el pago');
+      reportUiError({ area: 'BookingManagerModal', action: 'handlePaymentConfirm' }, error);
+      setActionError(message);
     } finally {
       setSaving(false);
       paymentInFlightRef.current = false;

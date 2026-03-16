@@ -5,6 +5,8 @@ import { Trash2, Plus, ShoppingCart, Receipt, Lock, X, Banknote, Star } from 'lu
 import PaymentCalculator, { type PaymentCalculatorResult } from './PaymentCalculator';
 import ProductSearch, { type ProductSearchItem } from './ui/ProductSearch';
 import { formatTime24 } from '../utils/dateTime';
+import AppModal from './AppModal';
+import { extractErrorMessage, reportUiError } from '../utils/uiError';
 // import { BookingTicket } from './BookingTicket'; // Si no lo usás, podés borrar esta línea
 
 interface Props {
@@ -40,10 +42,33 @@ export default function BookingConsumption(
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    isWarning?: boolean;
+  }>({ show: false, title: 'Información', message: '' });
   const [financialSummary, setFinancialSummary] = useState<BookingFinancialSummary | null>(null);
   const [bookingChargeItemId, setBookingChargeItemId] = useState<string | null>(null);
   const [bookingIsPendingLocal, setBookingIsPendingLocal] = useState(bookingStatus === 'PENDING');
   const paymentInFlightRef = useRef(false);
+
+  const showErrorModal = (message: string) => {
+    setFeedbackModal({
+      show: true,
+      title: 'Error',
+      message,
+      isWarning: true
+    });
+  };
+
+  const showInfoModal = (message: string) => {
+    setFeedbackModal({
+      show: true,
+      title: 'Información',
+      message
+    });
+  };
 
   // Formulario
   const [quantity, setQuantity] = useState(1);
@@ -79,7 +104,8 @@ export default function BookingConsumption(
       setFinancialSummary(summary || null);
       setItemsToDelete([]); 
     } catch (error) {
-      console.error(error);
+      reportUiError({ area: 'BookingConsumption', action: 'loadData' }, error);
+      showErrorModal('No se pudo cargar la información del turno.');
     } finally {
       setLoading(false);
     }
@@ -247,8 +273,8 @@ export default function BookingConsumption(
       setFinancialSummary(updatedSummary || null);
       setShowPaymentModal(false);
       onConfirm();
-    } catch (error: any) {
-      const message = error?.message || 'No se pudo registrar el pago';
+    } catch (error) {
+      const message = extractErrorMessage(error, 'No se pudo registrar el pago');
 
       if (String(message).toLowerCase().includes('saldo pendiente')) {
         try {
@@ -258,9 +284,10 @@ export default function BookingConsumption(
         }
         setShowPaymentModal(false);
         onConfirm();
-        alert('Ese saldo ya fue cancelado. Se actualizó el estado del turno.');
+        showInfoModal('Ese saldo ya fue cancelado. Se actualizo el estado del turno.');
       } else {
-        alert('Error: ' + message);
+        reportUiError({ area: 'BookingConsumption', action: 'confirmPayment' }, error);
+        showErrorModal(message);
       }
     } finally {
       setSaving(false);
@@ -472,6 +499,17 @@ export default function BookingConsumption(
           submitting={saving}
         />
       )}
+
+      <AppModal
+        show={feedbackModal.show}
+        onClose={() => setFeedbackModal((prev) => ({ ...prev, show: false }))}
+        title={feedbackModal.title}
+        message={feedbackModal.message}
+        cancelText=""
+        confirmText="Aceptar"
+        isWarning={feedbackModal.isWarning}
+      />
     </div>
   );
 }
+

@@ -2,11 +2,12 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ClubService, Club, type BookingConfirmationMode } from '../../services/ClubService';
 import { getCourts } from '../../services/CourtService';
-import { ClubAdminService, ClubActivityType, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope } from '../../services/ClubAdminService';
+import { ClubAdminService, ClubActivityType, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope, type AuditLogEntry } from '../../services/ClubAdminService';
 import { searchClients } from '../../services/BookingService';
 import AppModal from '../AppModal';
 import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle, Check } from 'lucide-react';
 import { normalizeSessionUser } from '../../utils/session';
+import { useRouter } from 'next/router';
 
 type FixedBookingActivitySetting = {
   key: string;
@@ -20,6 +21,7 @@ type FixedBookingSettingsForm = Record<string, {
 
 const DEFAULT_FIXED_BOOKING_DAYS_AHEAD = '90';
 const DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS = '7';
+const UNSAVED_NAVIGATION_ABORT_TOKEN = '__UNSAVED_NAVIGATION_ABORT__';
 const BOOKING_CONFIRMATION_MODES: Array<{ value: BookingConfirmationMode; label: string; helper: string }> = [
   {
     value: 'AUTOMATIC',
@@ -66,6 +68,26 @@ type ClientSearchResult = {
   email?: string;
   phoneNumber?: string;
   dni?: string;
+};
+
+type ClubConfigSnapshot = {
+  clubForm: any;
+  openingDaysSet: number[];
+  activityScheduleForm: Record<number, ActivityScheduleFormValue>;
+};
+
+type ConfigChange = {
+  label: string;
+  before: string;
+  after: string;
+  critical?: boolean;
+};
+
+type ConfigHistoryEntry = {
+  id: string;
+  changedAt: string;
+  actor: string;
+  changes: ConfigChange[];
 };
 
 const formatDiscountScopeLabel = (scope: DiscountPolicyScope) => {
@@ -227,6 +249,7 @@ const buildActivitySettingsFromCourts = (courts: any[], existingRaw?: unknown): 
 };
 
 export default function AdminTabClub() {
+  const router = useRouter();
   const [club, setClub] = useState<Club | null>(null);
   const [loadingClub, setLoadingClub] = useState(false);
   const [clubForm, setClubForm] = useState({
@@ -264,9 +287,14 @@ export default function AdminTabClub() {
     show: boolean; title?: string; message?: ReactNode; cancelText?: string; confirmText?: string;
     isWarning?: boolean; onConfirm?: () => Promise<void> | void; onCancel?: () => Promise<void> | void;
     closeOnBackdrop?: boolean; closeOnEscape?: boolean;
+    holdToConfirm?: boolean; holdDuration?: number;
   }>({ show: false });
+  const initialConfigRef = useRef<ClubConfigSnapshot | null>(null);
+  const allowNavigationRef = useRef(false);
+  const pendingRouteRef = useRef<string | null>(null);
   const [activityTypes, setActivityTypes] = useState<ClubActivityType[]>([]);
   const [activityScheduleForm, setActivityScheduleForm] = useState<Record<number, ActivityScheduleFormValue>>({});
+  const [changeHistory, setChangeHistory] = useState<ConfigHistoryEntry[]>([]);
   const [discountPolicies, setDiscountPolicies] = useState<DiscountPolicyView[]>([]);
   const [loadingDiscountPolicies, setLoadingDiscountPolicies] = useState(false);
   const [discountPolicyForm, setDiscountPolicyForm] = useState({
@@ -289,9 +317,49 @@ export default function AdminTabClub() {
   const clientSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clientSearchWrapperRef = useRef<HTMLDivElement | null>(null);
 
-  const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
+  const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined, holdToConfirm: false, holdDuration: undefined }));
   const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
   const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
+
+  const cloneSnapshot = (snapshot: ClubConfigSnapshot): ClubConfigSnapshot => ({
+    clubForm: JSON.parse(JSON.stringify(snapshot.clubForm)),
+    openingDaysSet: [...snapshot.openingDaysSet],
+    activityScheduleForm: JSON.parse(JSON.stringify(snapshot.activityScheduleForm))
+  });
+
+  const normalizeDays = (days: number[]) => [...days].sort((a, b) => a - b);
+  const normalizeValue = (value: unknown) => {
+    if (value == null) return '';
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+    return String(value);
+  };
+
+  const mapAuditLogToHistoryEntry = (log: AuditLogEntry): ConfigHistoryEntry => {
+    const fullName = `${String(log.user?.firstName || '').trim()} ${String(log.user?.lastName || '').trim()}`.trim();
+    const actor = fullName || String(log.user?.email || 'Admin');
+    const rawChanges = Array.isArray(log.payload?.changes) ? log.payload.changes : [];
+    const changes: ConfigChange[] = rawChanges.slice(0, 20).map((item: any) => ({
+      label: String(item?.field || 'Cambio'),
+      before: item?.before == null ? '-' : String(item.before),
+      after: item?.after == null ? '-' : String(item.after),
+      critical: ['bookingConfirmationMode', 'bookingDepositPercent', 'autoCancelPendingBookingsEnabled', 'bookingSimpleAdvanceDaysUser', 'bookingSimpleAdvanceDaysAdmin'].includes(String(item?.field || ''))
+    }));
+    return { id: String(log.id), changedAt: String(log.createdAt), actor, changes };
+  };
+
+  const loadPersistentConfigHistory = useCallback(async (clubId: number) => {
+    try {
+      const logs = await ClubAdminService.listAuditLogs({
+        action: 'CLUB_CONFIG_UPDATED',
+        entity: 'CLUB',
+        entityId: String(clubId),
+        take: 20
+      });
+      setChangeHistory(logs.map(mapAuditLogToHistoryEntry));
+    } catch {
+      // si falla auditoria, no bloqueamos la pantalla
+    }
+  }, []);
 
   const loadDiscountPolicies = useCallback(async (clubSlug: string) => {
     try {
@@ -338,18 +406,10 @@ export default function AdminTabClub() {
         const courtsData = await getCourts();
         const activityTypesData = await ClubAdminService.getActivityTypes(clubData.slug);
         const nextActivitySettings = buildActivitySettingsFromCourts(courtsData, clubData.fixedBookingSettingsByActivity);
-        setClub(clubData);
-        setActivitySettings(nextActivitySettings);
-        setActivityTypes(Array.isArray(activityTypesData) ? activityTypesData : []);
-        setActivityScheduleForm(buildScheduleFormFromActivities(Array.isArray(activityTypesData) ? activityTypesData : []));
-        await loadDiscountPolicies(clubData.slug);
-        setClientSearch('');
-        setClientSearchResults([]);
-        setSelectedDiscountClient(null);
-        setClientAssignments([]);
-        setSelectedPolicyIdForAssignment('');
-        setAssignmentNotes('');
-        setClubForm({
+        const nextActivityTypes = Array.isArray(activityTypesData) ? activityTypesData : [];
+        const nextActivityScheduleForm = buildScheduleFormFromActivities(nextActivityTypes);
+        const nextOpeningDays = Array.isArray(clubData.openingDays) ? clubData.openingDays : [];
+        const nextClubForm = {
           slug: clubData.slug || '', name: clubData.name || '',
           addressLine: clubData.addressLine || '', city: clubData.city || '', province: clubData.province || '', country: clubData.country || '',
           contactInfo: clubData.contactInfo || '', phone: clubData.phone || '', logoUrl: clubData.logoUrl || '', clubImageUrl: clubData.clubImageUrl || '',
@@ -374,23 +434,266 @@ export default function AdminTabClub() {
           allowAdminSkipSimpleAdvanceLimit: clubData.allowAdminSkipSimpleAdvanceLimit ?? false,
           openingDays: Array.isArray(clubData.openingDays) ? clubData.openingDays.join(',') : '',
           fixedBookingSettingsByActivity: buildFixedBookingSettingsForm(nextActivitySettings, clubData.fixedBookingSettingsByActivity)
-          });
-          setOpeningDaysSet(Array.isArray(clubData.openingDays) ? clubData.openingDays : []);
-          setLogoPreview(clubData.logoUrl || null);
-          setClubImagePreview(clubData.clubImageUrl || null);
+        };
+        setClub(clubData);
+        setActivitySettings(nextActivitySettings);
+        setActivityTypes(nextActivityTypes);
+        setActivityScheduleForm(nextActivityScheduleForm);
+        await loadDiscountPolicies(clubData.slug);
+        setClientSearch('');
+        setClientSearchResults([]);
+        setSelectedDiscountClient(null);
+        setClientAssignments([]);
+        setSelectedPolicyIdForAssignment('');
+        setAssignmentNotes('');
+        setClubForm(nextClubForm);
+        setOpeningDaysSet(nextOpeningDays);
+        setLogoPreview(clubData.logoUrl || null);
+        setClubImagePreview(clubData.clubImageUrl || null);
+        initialConfigRef.current = cloneSnapshot({
+          clubForm: nextClubForm,
+          openingDaysSet: nextOpeningDays,
+          activityScheduleForm: nextActivityScheduleForm
+        });
+        await loadPersistentConfigHistory(clubData.id);
       }
     } catch (error: any) {
       showError('Error al cargar información del club: ' + error.message);
     } finally {
       setLoadingClub(false);
     }
-  }, [loadDiscountPolicies]);
+  }, [loadDiscountPolicies, loadPersistentConfigHistory]);
 
   useEffect(() => { loadClub(); }, [loadClub]);
 
-  const handleUpdateClub = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const buildConfigChanges = (): ConfigChange[] => {
+    const base = initialConfigRef.current;
+    if (!base) return [];
+    const changes: ConfigChange[] = [];
+    const criticalFields = new Set([
+      'bookingConfirmationMode',
+      'bookingDepositPercent',
+      'autoCancelPendingBookingsEnabled',
+      'autoCancelPendingBookingsMinutesBefore',
+      'bookingSimpleAdvanceDaysUser',
+      'bookingSimpleAdvanceDaysAdmin',
+      'enforceCashShiftCloseWithOpenAccounts',
+      'allowAdminSkipSimpleAdvanceLimit'
+    ]);
+    const labels: Record<string, string> = {
+      bookingConfirmationMode: 'Modo de confirmacion',
+      bookingDepositPercent: 'Porcentaje de seña',
+      autoCancelPendingBookingsEnabled: 'Auto-cancelacion pendientes',
+      autoCancelPendingBookingsMinutesBefore: 'Minutos auto-cancelacion',
+      bookingSimpleAdvanceDaysUser: 'Anticipacion usuarios',
+      bookingSimpleAdvanceDaysAdmin: 'Anticipacion admins',
+      enforceCashShiftCloseWithOpenAccounts: 'Bloqueo cierre de caja',
+      allowAdminSkipSimpleAdvanceLimit: 'Bypass de anticipacion admin',
+      openingDaysSet: 'Dias de apertura',
+      activityScheduleForm: 'Horarios por actividad'
+    };
+
+    const keys = Array.from(new Set([...Object.keys(base.clubForm || {}), ...Object.keys(clubForm || {})]));
+    for (const key of keys) {
+      const before = normalizeValue((base.clubForm as any)?.[key]);
+      const after = normalizeValue((clubForm as any)?.[key]);
+      if (before !== after) {
+        changes.push({
+          label: labels[key] || key,
+          before,
+          after,
+          critical: criticalFields.has(key)
+        });
+      }
+    }
+
+    const beforeDays = normalizeDays(base.openingDaysSet || []);
+    const afterDays = normalizeDays(openingDaysSet || []);
+    if (JSON.stringify(beforeDays) !== JSON.stringify(afterDays)) {
+      changes.push({
+        label: labels.openingDaysSet,
+        before: beforeDays.join(', ') || 'Todos',
+        after: afterDays.join(', ') || 'Todos',
+        critical: false
+      });
+    }
+
+    const beforeSchedule = JSON.stringify(base.activityScheduleForm || {});
+    const afterSchedule = JSON.stringify(activityScheduleForm || {});
+    if (beforeSchedule !== afterSchedule) {
+      changes.push({
+        label: labels.activityScheduleForm,
+        before: 'Configuracion previa',
+        after: 'Configuracion editada',
+        critical: true
+      });
+    }
+
+    return changes;
+  };
+
+  const configChanges = [...buildConfigChanges()].sort((a, b) => Number(Boolean(b.critical)) - Number(Boolean(a.critical)));
+  const hasUnsavedChanges = configChanges.length > 0;
+
+  const restoreFromSnapshot = () => {
+    const base = initialConfigRef.current;
+    if (!base) return;
+    const clone = cloneSnapshot(base);
+    setClubForm(clone.clubForm);
+    setOpeningDaysSet(clone.openingDaysSet);
+    setActivityScheduleForm(clone.activityScheduleForm);
+    setLogoPreview(clone.clubForm.logoUrl || null);
+    setClubImagePreview(clone.clubForm.clubImageUrl || null);
+    setLogoError(null);
+    setClubImageError(null);
+  };
+
+  const handleDiscardChanges = () => {
+    if (!hasUnsavedChanges) return;
+    setModalState({
+      show: true,
+      title: 'Descartar cambios',
+      message: 'Se perderan los cambios no guardados de esta pantalla.',
+      isWarning: true,
+      cancelText: 'Volver',
+      confirmText: 'Descartar',
+      onConfirm: () => {
+        closeModal();
+        restoreFromSnapshot();
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    const onRouteChangeStart = (url: string) => {
+      if (allowNavigationRef.current) return;
+      if (!hasUnsavedChanges) return;
+      if (url === router.asPath) return;
+
+      pendingRouteRef.current = url;
+      setModalState({
+        show: true,
+        title: 'Cambios sin guardar',
+        message: 'Si salis ahora, vas a perder cambios no guardados.',
+        isWarning: true,
+        cancelText: 'Quedarme',
+        confirmText: 'Salir igual',
+        closeOnBackdrop: false,
+        closeOnEscape: false,
+        onConfirm: async () => {
+          const nextUrl = pendingRouteRef.current;
+          pendingRouteRef.current = null;
+          closeModal();
+          if (!nextUrl) return;
+          allowNavigationRef.current = true;
+          try {
+            await router.push(nextUrl);
+          } finally {
+            allowNavigationRef.current = false;
+          }
+        },
+        onCancel: () => {
+          pendingRouteRef.current = null;
+          closeModal();
+        }
+      });
+
+      router.events.emit('routeChangeError');
+      throw UNSAVED_NAVIGATION_ABORT_TOKEN;
+    };
+
+    router.events.on('routeChangeStart', onRouteChangeStart);
+    return () => router.events.off('routeChangeStart', onRouteChangeStart);
+  }, [hasUnsavedChanges, router]);
+
+  useEffect(() => {
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason === UNSAVED_NAVIGATION_ABORT_TOKEN) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    return () => window.removeEventListener('unhandledrejection', onUnhandledRejection);
+  }, []);
+
+  const restoreBookingPolicyDefaults = () => {
+    setClubForm((prev) => ({
+      ...prev,
+      bookingConfirmationMode: 'MANUAL',
+      bookingDepositPercent: '',
+      allowManualConfirmationOverride: true,
+      autoCancelPendingBookingsEnabled: false,
+      autoCancelPendingBookingsMinutesBefore: '',
+      autoCancelPendingBookingsOnlyIfUnpaid: true,
+      autoCancelPendingWarningEnabled: false,
+      autoCancelPendingWarningMinutesBefore: '',
+      bookingSimpleAdvanceDaysUser: '30',
+      bookingSimpleAdvanceDaysAdmin: '30',
+      allowAdminSkipSimpleAdvanceLimit: false,
+      enforceCashShiftCloseWithOpenAccounts: false
+    }));
+  };
+
+  const handleUpdateClub = async (e?: React.FormEvent, skipConfirm = false) => {
+    e?.preventDefault();
     if (!club) { showError('No se pudo identificar el club'); return; }
+    if (!skipConfirm) {
+      if (!hasUnsavedChanges) {
+        showInfo('No hay cambios pendientes para guardar.');
+        return;
+      }
+      const criticalChanges = configChanges.filter((change) => change.critical);
+      const topChanges = configChanges.slice(0, 12);
+      setModalState({
+        show: true,
+        title: 'Revisar y confirmar cambios',
+        message: (
+          <div className="space-y-3">
+            <p className="text-sm font-bold">
+              Vas a aplicar <span className="font-black">{configChanges.length}</span> cambios de configuración.
+            </p>
+            {criticalChanges.length > 0 ? (
+              <p className="text-xs font-black text-red-600 uppercase tracking-widest">
+                Cambios críticos detectados: {criticalChanges.length}
+              </p>
+            ) : null}
+            <div className="max-h-56 overflow-auto rounded-xl border border-[#347048]/15 bg-white/80 p-3">
+              <ul className="space-y-1 text-xs text-[#347048]">
+                {topChanges.map((change) => (
+                  <li key={`${change.label}-${change.after}`}>
+                    {change.critical ? '• [CRITICO] ' : '• '}
+                    {change.label}: {change.before} → {change.after}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-xs font-bold text-[#347048]/70">
+              Confirmá solo si verificaste el impacto operativo de estos cambios.
+            </p>
+          </div>
+        ),
+        isWarning: criticalChanges.length > 0,
+        cancelText: 'Cancelar',
+        confirmText: 'Guardar cambios',
+        holdToConfirm: criticalChanges.length > 0,
+        holdDuration: criticalChanges.length > 0 ? 1400 : undefined,
+        onConfirm: async () => {
+          closeModal();
+          await handleUpdateClub(undefined, true);
+        }
+      });
+      return;
+    }
     try {
       const fixedBookingSettingsByActivity = activitySettings.reduce((acc, activity) => {
         const config = clubForm.fixedBookingSettingsByActivity[activity.key];
@@ -497,6 +800,12 @@ export default function AdminTabClub() {
       }
 
       setClub(updatedClub);
+      initialConfigRef.current = cloneSnapshot({
+        clubForm,
+        openingDaysSet,
+        activityScheduleForm
+      });
+      await loadPersistentConfigHistory(updatedClub.id);
       showInfo('Información del club actualizada correctamente', 'Éxito');
     } catch (error: any) {
       showError('Error al actualizar el club: ' + error.message);
@@ -729,7 +1038,12 @@ export default function AdminTabClub() {
             <div className="h-12 bg-white/50 animate-pulse rounded-2xl w-full"></div>
           </div>
         ) : club ? (
-          <form onSubmit={handleUpdateClub} className="space-y-8 relative z-10">
+          <form onSubmit={handleUpdateClub} className="space-y-8 relative z-10 pb-24">
+            <div className="space-y-6 rounded-[1.75rem] border-2 border-[#347048]/20 bg-white/30 p-5">
+              <div className="rounded-2xl border border-[#347048]/15 bg-white/40 p-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048]/70">Bloque de bajo riesgo</p>
+                <p className="text-[12px] font-bold text-[#347048]/70 mt-1">Identidad del club y datos visibles para clientes.</p>
+              </div>
             {/* GRID DE DATOS BÁSICOS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -868,6 +1182,63 @@ export default function AdminTabClub() {
                 <input ref={clubImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleClubImageFileChange} />
               </div>
             </div>
+
+            {/* REDES SOCIALES */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-1.5">
+                <label className={labelClass}>Instagram URL</label>
+                <div className="relative group">
+                  <input type="url" value={clubForm.instagramUrl} onChange={(e) => setClubForm({ ...clubForm, instagramUrl: e.target.value })} className={`${inputClass} pl-11`} placeholder="https://instagram.com/..." />
+                  <Instagram className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/30 group-focus-within:text-[#926699]" size={16} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className={labelClass}>Facebook URL</label>
+                <div className="relative group">
+                  <input type="url" value={clubForm.facebookUrl} onChange={(e) => setClubForm({ ...clubForm, facebookUrl: e.target.value })} className={`${inputClass} pl-11`} placeholder="https://facebook.com/..." />
+                  <Facebook className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/30 group-focus-within:text-[#347048]" size={16} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className={labelClass}>Sitio Web Propio</label>
+                <div className="relative group">
+                  <input type="url" value={clubForm.websiteUrl} onChange={(e) => setClubForm({ ...clubForm, websiteUrl: e.target.value })} className={`${inputClass} pl-11`} placeholder="https://mi-club.com" />
+                  <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/30 group-focus-within:text-[#B9CF32]" size={16} />
+                </div>
+              </div>
+            </div>
+
+            {/* DESCRIPCIÃ“N */}
+            <div className="space-y-2">
+              <label className={labelClass}>DescripciÃ³n del Club / InformaciÃ³n Adicional</label>
+              <textarea
+                value={clubForm.description}
+                onChange={(e) => setClubForm({ ...clubForm, description: e.target.value.slice(0, 100) })}
+                maxLength={50}
+                className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-[1.5rem] p-5 text-[#347048] font-bold placeholder-[#347048]/20 focus:outline-none shadow-sm transition-all resize-none"
+                rows={4}
+                placeholder="Escribe aquÃ­ las reglas del club, servicios (duchas, buffet, etc) o historia..."
+              />
+            </div>
+
+            </div>
+
+            <div className="space-y-6 rounded-[1.75rem] border-2 border-[#926699]/35 bg-[#926699]/5 p-5">
+              <div className="rounded-2xl border-2 border-[#926699]/30 bg-[#926699]/10 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048]">Bloque de alto riesgo</p>
+                    <p className="text-[12px] font-bold text-[#347048]/80 mt-1">Reglas operativas que impactan reservas, cobros y disponibilidad.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={restoreBookingPolicyDefaults}
+                    className="h-10 px-4 rounded-xl bg-white border border-[#347048]/20 text-[#347048] text-[11px] font-black uppercase tracking-widest hover:border-[#B9CF32]"
+                  >
+                    Restaurar recomendados
+                  </button>
+                </div>
+              </div>
 
             {/* LUCES Y HORARIOS (LIMA ACCENT) */}
             <div className="bg-[#B9CF32]/10 p-6 rounded-[1.5rem] border-2 border-[#B9CF32]/20">
@@ -1158,6 +1529,228 @@ export default function AdminTabClub() {
 
             <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
               <div className="flex items-center gap-2 mb-4 text-[#347048]">
+                <AlertTriangle size={18} strokeWidth={3} />
+                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Cierre de caja</h3>
+              </div>
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
+                  <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.enforceCashShiftCloseWithOpenAccounts ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
+                    {clubForm.enforceCashShiftCloseWithOpenAccounts && <Check size={15} strokeWidth={4} />}
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={clubForm.enforceCashShiftCloseWithOpenAccounts}
+                    onChange={(e) => setClubForm((prev) => ({ ...prev, enforceCashShiftCloseWithOpenAccounts: e.target.checked }))}
+                    className="hidden"
+                  />
+                  <span className="text-sm tracking-wide">Modo estricto: bloquear cierre de caja si hay cuentas abiertas</span>
+                </label>
+                <p className="text-[11px] text-[#347048]/70 font-bold">
+                  Recomendado desactivado. Si está activo, no se podrá cerrar la caja mientras exista al menos una cuenta abierta.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-2">Configuración de horarios por actividad</h4>
+              <p className="text-[11px] font-bold text-[#347048]/60 mb-4">
+                Definí acá horario de entrada/salida, duración de turnos y turnos fijos por cada actividad.
+              </p>
+
+              {activityTypes.length === 0 ? (
+                <p className="text-[11px] font-bold text-[#347048]/60">No hay actividades configuradas para este club.</p>
+              ) : (
+                <div className="space-y-4">
+                  {activityTypes.map((activity) => {
+                    const cfg = activityScheduleForm[activity.id];
+                    if (!cfg) return null;
+                    return (
+                      <div key={activity.id} className="bg-white/40 p-4 rounded-2xl border border-white">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+                          <p className="text-sm font-black text-[#347048] uppercase tracking-wide">{activity.name}</p>
+                          <p className="text-[10px] font-black text-[#347048]/50 uppercase tracking-widest">
+                            Duración por defecto: {activity.defaultDurationMinutes} min
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Modo</label>
+                            <select
+                              value={cfg.scheduleMode}
+                              onChange={(e) => setActivityScheduleForm((prev) => ({
+                                ...prev,
+                                [activity.id]: { ...prev[activity.id], scheduleMode: e.target.value as 'FIXED' | 'RANGE' }
+                              }))}
+                              className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                            >
+                              <option value="FIXED">Turnos fijos</option>
+                              <option value="RANGE">Rango horario</option>
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Duraciones (min, separadas por coma)</label>
+                            <input
+                              type="text"
+                              value={cfg.scheduleDurations}
+                              onChange={(e) => setActivityScheduleForm((prev) => ({
+                                ...prev,
+                                [activity.id]: { ...prev[activity.id], scheduleDurations: e.target.value }
+                              }))}
+                              className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm"
+                              placeholder="60, 90"
+                            />
+                          </div>
+
+                          {cfg.scheduleMode === 'RANGE' ? (
+                            <>
+                              <div>
+                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Apertura</label>
+                                <input
+                                  type="time"
+                                  value={cfg.scheduleOpenTime}
+                                  onChange={(e) => setActivityScheduleForm((prev) => ({
+                                    ...prev,
+                                    [activity.id]: { ...prev[activity.id], scheduleOpenTime: e.target.value }
+                                  }))}
+                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Cierre</label>
+                                <input
+                                  type="time"
+                                  value={cfg.scheduleCloseTime}
+                                  onChange={(e) => setActivityScheduleForm((prev) => ({
+                                    ...prev,
+                                    [activity.id]: { ...prev[activity.id], scheduleCloseTime: e.target.value }
+                                  }))}
+                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Intervalo (min)</label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={cfg.scheduleIntervalMinutes}
+                                  onChange={(e) => setActivityScheduleForm((prev) => ({
+                                    ...prev,
+                                    [activity.id]: { ...prev[activity.id], scheduleIntervalMinutes: e.target.value }
+                                  }))}
+                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="md:col-span-4">
+                              <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Turnos fijos (uno por línea: HH:mm-60)</label>
+                              <textarea
+                                rows={4}
+                                value={cfg.scheduleFixedSlots}
+                                onChange={(e) => setActivityScheduleForm((prev) => ({
+                                  ...prev,
+                                  [activity.id]: { ...prev[activity.id], scheduleFixedSlots: e.target.value }
+                                }))}
+                                className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 py-3 text-[#347048] font-black text-sm resize-none"
+                                placeholder={'08:00-60\n09:00-60\n10:30-90'}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2 bg-white/40 p-4 rounded-2xl border border-white">
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Turnos fijos por actividad</h4>
+                  {activitySettings.length === 0 ? (
+                    <p className="text-[11px] font-bold text-[#347048]/60">
+                      No hay actividades asociadas al club. Asigná actividades a las canchas para configurar turnos fijos por actividad.
+                    </p>
+                  ) : (
+                  <div className="space-y-3">
+                    {activitySettings.map((activity) => (
+                      <div key={activity.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                        <div>
+                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Actividad</label>
+                          <input
+                            type="text"
+                            value={activity.label}
+                            readOnly
+                            className="w-full h-11 bg-[#EBE1D8] border-2 border-transparent rounded-xl px-4 text-[#347048] font-black text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Días hacia adelante</label>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={clubForm.fixedBookingSettingsByActivity[activity.key]?.fixedBookingDaysAhead ?? DEFAULT_FIXED_BOOKING_DAYS_AHEAD}
+                            onChange={(e) => setClubForm((prev) => ({
+                              ...prev,
+                              fixedBookingSettingsByActivity: {
+                                ...prev.fixedBookingSettingsByActivity,
+                                [activity.key]: {
+                                  ...(prev.fixedBookingSettingsByActivity[activity.key] || {
+                                    fixedBookingDaysAhead: DEFAULT_FIXED_BOOKING_DAYS_AHEAD,
+                                    fixedBookingGenerationFrequencyDays: DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS
+                                  }),
+                                  fixedBookingDaysAhead: e.target.value
+                                }
+                              }
+                            }))}
+                            className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Frecuencia generación (días)</label>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={clubForm.fixedBookingSettingsByActivity[activity.key]?.fixedBookingGenerationFrequencyDays ?? DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS}
+                            onChange={(e) => setClubForm((prev) => ({
+                              ...prev,
+                              fixedBookingSettingsByActivity: {
+                                ...prev.fixedBookingSettingsByActivity,
+                                [activity.key]: {
+                                  ...(prev.fixedBookingSettingsByActivity[activity.key] || {
+                                    fixedBookingDaysAhead: DEFAULT_FIXED_BOOKING_DAYS_AHEAD,
+                                    fixedBookingGenerationFrequencyDays: DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS
+                                  }),
+                                  fixedBookingGenerationFrequencyDays: e.target.value
+                                }
+                              }
+                            }))}
+                            className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            </div>
+
+
+            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
+              <div className="rounded-2xl border-2 border-[#B9CF32]/30 bg-[#B9CF32]/10 p-4 mb-4">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048]">Bloque medio-alto riesgo</p>
+                <p className="text-[12px] font-bold text-[#347048]/80 mt-1">Descuentos por cliente impactan ingresos y margenes.</p>
+              </div>
+              <div className="flex items-center gap-2 mb-4 text-[#347048]">
                 <Settings size={18} strokeWidth={3} />
                 <h3 className="text-xs font-black uppercase tracking-[0.2em]">Descuentos por cliente</h3>
               </div>
@@ -1380,257 +1973,25 @@ export default function AdminTabClub() {
               </div>
             </div>
 
-            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
-              <div className="flex items-center gap-2 mb-4 text-[#347048]">
-                <AlertTriangle size={18} strokeWidth={3} />
-                <h3 className="text-xs font-black uppercase tracking-[0.2em]">Cierre de caja</h3>
-              </div>
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 text-[#347048] font-black cursor-pointer group">
-                  <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all ${clubForm.enforceCashShiftCloseWithOpenAccounts ? 'bg-[#347048] border-[#347048] text-white shadow-sm' : 'border-[#347048]/25 bg-white text-transparent'}`}>
-                    {clubForm.enforceCashShiftCloseWithOpenAccounts && <Check size={15} strokeWidth={4} />}
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={clubForm.enforceCashShiftCloseWithOpenAccounts}
-                    onChange={(e) => setClubForm((prev) => ({ ...prev, enforceCashShiftCloseWithOpenAccounts: e.target.checked }))}
-                    className="hidden"
-                  />
-                  <span className="text-sm tracking-wide">Modo estricto: bloquear cierre de caja si hay cuentas abiertas</span>
-                </label>
-                <p className="text-[11px] text-[#347048]/70 font-bold">
-                  Recomendado desactivado. Si está activo, no se podrá cerrar la caja mientras exista al menos una cuenta abierta.
-                </p>
-              </div>
-            </div>
 
-            <div className="mt-3 bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
-              <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-2">Configuración de horarios por actividad</h4>
-              <p className="text-[11px] font-bold text-[#347048]/60 mb-4">
-                Definí acá horario de entrada/salida, duración de turnos y turnos fijos por cada actividad.
-              </p>
-
-              {activityTypes.length === 0 ? (
-                <p className="text-[11px] font-bold text-[#347048]/60">No hay actividades configuradas para este club.</p>
+            <div className="bg-white/40 p-4 rounded-2xl border border-white">
+              <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-2">Historial de cambios recientes</h4>
+              {changeHistory.length === 0 ? (
+                <p className="text-[11px] font-bold text-[#347048]/60">Aun no hay cambios auditados para este club.</p>
               ) : (
-                <div className="space-y-4">
-                  {activityTypes.map((activity) => {
-                    const cfg = activityScheduleForm[activity.id];
-                    if (!cfg) return null;
-                    return (
-                      <div key={activity.id} className="bg-white/40 p-4 rounded-2xl border border-white">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-                          <p className="text-sm font-black text-[#347048] uppercase tracking-wide">{activity.name}</p>
-                          <p className="text-[10px] font-black text-[#347048]/50 uppercase tracking-widest">
-                            Duración por defecto: {activity.defaultDurationMinutes} min
-                          </p>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Modo</label>
-                            <select
-                              value={cfg.scheduleMode}
-                              onChange={(e) => setActivityScheduleForm((prev) => ({
-                                ...prev,
-                                [activity.id]: { ...prev[activity.id], scheduleMode: e.target.value as 'FIXED' | 'RANGE' }
-                              }))}
-                              className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
-                            >
-                              <option value="FIXED">Turnos fijos</option>
-                              <option value="RANGE">Rango horario</option>
-                            </select>
-                          </div>
-
-                          <div className="md:col-span-3">
-                            <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Duraciones (min, separadas por coma)</label>
-                            <input
-                              type="text"
-                              value={cfg.scheduleDurations}
-                              onChange={(e) => setActivityScheduleForm((prev) => ({
-                                ...prev,
-                                [activity.id]: { ...prev[activity.id], scheduleDurations: e.target.value }
-                              }))}
-                              className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm"
-                              placeholder="60, 90"
-                            />
-                          </div>
-
-                          {cfg.scheduleMode === 'RANGE' ? (
-                            <>
-                              <div>
-                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Apertura</label>
-                                <input
-                                  type="time"
-                                  value={cfg.scheduleOpenTime}
-                                  onChange={(e) => setActivityScheduleForm((prev) => ({
-                                    ...prev,
-                                    [activity.id]: { ...prev[activity.id], scheduleOpenTime: e.target.value }
-                                  }))}
-                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Cierre</label>
-                                <input
-                                  type="time"
-                                  value={cfg.scheduleCloseTime}
-                                  onChange={(e) => setActivityScheduleForm((prev) => ({
-                                    ...prev,
-                                    [activity.id]: { ...prev[activity.id], scheduleCloseTime: e.target.value }
-                                  }))}
-                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Intervalo (min)</label>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  step={1}
-                                  value={cfg.scheduleIntervalMinutes}
-                                  onChange={(e) => setActivityScheduleForm((prev) => ({
-                                    ...prev,
-                                    [activity.id]: { ...prev[activity.id], scheduleIntervalMinutes: e.target.value }
-                                  }))}
-                                  className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
-                                />
-                              </div>
-                            </>
-                          ) : (
-                            <div className="md:col-span-4">
-                              <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Turnos fijos (uno por línea: HH:mm-60)</label>
-                              <textarea
-                                rows={4}
-                                value={cfg.scheduleFixedSlots}
-                                onChange={(e) => setActivityScheduleForm((prev) => ({
-                                  ...prev,
-                                  [activity.id]: { ...prev[activity.id], scheduleFixedSlots: e.target.value }
-                                }))}
-                                className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 py-3 text-[#347048] font-black text-sm resize-none"
-                                placeholder={'08:00-60\n09:00-60\n10:30-90'}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="space-y-2 max-h-52 overflow-auto pr-1">
+                  {changeHistory.map((entry) => (
+                    <div key={entry.id} className="bg-[#EBE1D8] rounded-xl border border-white p-3">
+                      <p className="text-[11px] font-black text-[#347048]">
+                        {entry.actor} · {new Date(entry.changedAt).toLocaleString('es-AR')}
+                      </p>
+                      <p className="text-[11px] font-bold text-[#347048]/70 mt-1">
+                        {entry.changes.length} cambios aplicados.
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
-
-            <div className="bg-[#347048]/10 p-6 rounded-[1.5rem] border-2 border-[#347048]/20">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2 bg-white/40 p-4 rounded-2xl border border-white">
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Turnos fijos por actividad</h4>
-                  {activitySettings.length === 0 ? (
-                    <p className="text-[11px] font-bold text-[#347048]/60">
-                      No hay actividades asociadas al club. Asigná actividades a las canchas para configurar turnos fijos por actividad.
-                    </p>
-                  ) : (
-                  <div className="space-y-3">
-                    {activitySettings.map((activity) => (
-                      <div key={activity.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-                        <div>
-                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Actividad</label>
-                          <input
-                            type="text"
-                            value={activity.label}
-                            readOnly
-                            className="w-full h-11 bg-[#EBE1D8] border-2 border-transparent rounded-xl px-4 text-[#347048] font-black text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Días hacia adelante</label>
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={clubForm.fixedBookingSettingsByActivity[activity.key]?.fixedBookingDaysAhead ?? DEFAULT_FIXED_BOOKING_DAYS_AHEAD}
-                            onChange={(e) => setClubForm((prev) => ({
-                              ...prev,
-                              fixedBookingSettingsByActivity: {
-                                ...prev.fixedBookingSettingsByActivity,
-                                [activity.key]: {
-                                  ...(prev.fixedBookingSettingsByActivity[activity.key] || {
-                                    fixedBookingDaysAhead: DEFAULT_FIXED_BOOKING_DAYS_AHEAD,
-                                    fixedBookingGenerationFrequencyDays: DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS
-                                  }),
-                                  fixedBookingDaysAhead: e.target.value
-                                }
-                              }
-                            }))}
-                            className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Frecuencia generación (días)</label>
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={clubForm.fixedBookingSettingsByActivity[activity.key]?.fixedBookingGenerationFrequencyDays ?? DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS}
-                            onChange={(e) => setClubForm((prev) => ({
-                              ...prev,
-                              fixedBookingSettingsByActivity: {
-                                ...prev.fixedBookingSettingsByActivity,
-                                [activity.key]: {
-                                  ...(prev.fixedBookingSettingsByActivity[activity.key] || {
-                                    fixedBookingDaysAhead: DEFAULT_FIXED_BOOKING_DAYS_AHEAD,
-                                    fixedBookingGenerationFrequencyDays: DEFAULT_FIXED_BOOKING_GENERATION_FREQUENCY_DAYS
-                                  }),
-                                  fixedBookingGenerationFrequencyDays: e.target.value
-                                }
-                              }
-                            }))}
-                            className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-black text-sm transition-all"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* REDES SOCIALES */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-1.5">
-                <label className={labelClass}>Instagram URL</label>
-                <div className="relative group">
-                  <input type="url" value={clubForm.instagramUrl} onChange={(e) => setClubForm({ ...clubForm, instagramUrl: e.target.value })} className={`${inputClass} pl-11`} placeholder="https://instagram.com/..." />
-                  <Instagram className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/30 group-focus-within:text-[#926699]" size={16} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className={labelClass}>Facebook URL</label>
-                <div className="relative group">
-                  <input type="url" value={clubForm.facebookUrl} onChange={(e) => setClubForm({ ...clubForm, facebookUrl: e.target.value })} className={`${inputClass} pl-11`} placeholder="https://facebook.com/..." />
-                  <Facebook className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/30 group-focus-within:text-[#347048]" size={16} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className={labelClass}>Sitio Web Propio</label>
-                <div className="relative group">
-                  <input type="url" value={clubForm.websiteUrl} onChange={(e) => setClubForm({ ...clubForm, websiteUrl: e.target.value })} className={`${inputClass} pl-11`} placeholder="https://mi-club.com" />
-                  <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/30 group-focus-within:text-[#B9CF32]" size={16} />
-                </div>
-              </div>
-            </div>
-
-            {/* DESCRIPCIÓN */}
-            <div className="space-y-2">
-              <label className={labelClass}>Descripción del Club / Información Adicional</label>
-              <textarea
-                value={clubForm.description}
-                onChange={(e) => setClubForm({ ...clubForm, description: e.target.value.slice(0, 100) })}
-                maxLength={50}
-                className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-[1.5rem] p-5 text-[#347048] font-bold placeholder-[#347048]/20 focus:outline-none shadow-sm transition-all resize-none"
-                rows={4}
-                placeholder="Escribe aquí las reglas del club, servicios (duchas, buffet, etc) o historia..."
-              />
             </div>
 
             {/* BOTÓN FINAL */}
@@ -1646,9 +2007,43 @@ export default function AdminTabClub() {
         )}
       </div>
 
+      {club ? (
+        <div className="fixed bottom-4 left-1/2 z-[80] w-[calc(100%-1.5rem)] max-w-5xl -translate-x-1/2">
+          <div className="rounded-2xl border-2 border-white bg-[#347048] px-4 py-3 shadow-2xl">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3 text-[#EBE1D8]">
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${hasUnsavedChanges ? 'bg-[#B9CF32]' : 'bg-white/60'}`} />
+                <p className="text-xs font-black uppercase tracking-widest">
+                  {hasUnsavedChanges ? `Cambios pendientes (${configChanges.length})` : 'Sin cambios pendientes'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDiscardChanges}
+                  disabled={!hasUnsavedChanges}
+                  className="h-10 rounded-xl bg-white px-4 text-[11px] font-black uppercase tracking-widest text-[#347048] disabled:opacity-40"
+                >
+                  Descartar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUpdateClub()}
+                  disabled={!hasUnsavedChanges}
+                  className="h-10 rounded-xl bg-[#B9CF32] px-4 text-[11px] font-black uppercase tracking-widest text-[#347048] disabled:opacity-40"
+                >
+                  Guardar cambios
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <AppModal show={modalState.show} onClose={closeModal} onCancel={modalState.onCancel} title={modalState.title} message={modalState.message}
         cancelText={modalState.cancelText} confirmText={modalState.confirmText} isWarning={modalState.isWarning} onConfirm={modalState.onConfirm}
-        closeOnBackdrop={modalState.closeOnBackdrop} closeOnEscape={modalState.closeOnEscape} />
+        closeOnBackdrop={modalState.closeOnBackdrop} closeOnEscape={modalState.closeOnEscape}
+        holdToConfirm={modalState.holdToConfirm} holdDuration={modalState.holdDuration} />
     </>
   );
 }

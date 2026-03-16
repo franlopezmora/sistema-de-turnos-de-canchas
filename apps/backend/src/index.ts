@@ -118,7 +118,7 @@ const startWorker = () => {
 
   const outboxWorker = new OutboxWorker();
 
-  const outboxInterval = setInterval(async () => {
+  setInterval(async () => {
     try {
       await outboxWorker.processPending(25);
     } catch (error) {

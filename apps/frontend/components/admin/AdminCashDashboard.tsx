@@ -5,6 +5,7 @@ import { ClubService } from '../../services/ClubService';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 import { CashService } from '../../services/CashService';
 import { formatDateTime24, formatTime24 } from '../../utils/dateTime';
+import { reportUiError } from '../../utils/uiError';
 import AppModal from '../AppModal';
 
 // Tipos
@@ -214,7 +215,9 @@ const AdminCashDashboard = () => {
         const foundSlug = getActiveClubSlug(user);
         if (foundSlug) return foundSlug;
       }
-    } catch (e) { console.error(e); }
+    } catch (error) {
+      reportUiError({ area: 'AdminCashDashboard', action: 'getClubSlug' }, error);
+    }
     return '';
   }, []);
 
@@ -236,7 +239,7 @@ const AdminCashDashboard = () => {
       if (resolvedSlug) setSearchClubSlug(resolvedSlug);
       return resolvedSlug;
     } catch (error) {
-      console.error('Error resolviendo slug de club para búsqueda de clientes:', error);
+      reportUiError({ area: 'AdminCashDashboard', action: 'resolveClubSlug' }, error);
       return '';
     }
   }, [getClubSlug]);
@@ -347,7 +350,7 @@ const AdminCashDashboard = () => {
       }
 
     } catch (error) {
-      console.error("❌ Error cargando la caja:", error);
+      reportUiError({ area: 'AdminCashDashboard', action: 'fetchCash' }, error);
     } finally {
       setLoading(false);
     }
@@ -378,7 +381,7 @@ const AdminCashDashboard = () => {
         }));
       }
     } catch (error) {
-      console.error('❌ Error cargando turnos/cajas:', error);
+      reportUiError({ area: 'AdminCashDashboard', action: 'fetchShiftContext' }, error);
       setOpenShiftError('No se pudo cargar la configuración de caja.');
     } finally {
       setShiftLoading(false);
@@ -392,7 +395,7 @@ const AdminCashDashboard = () => {
       const data = await CashService.getProducts();
       setProducts(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('❌ Error cargando productos:', error);
+      reportUiError({ area: 'AdminCashDashboard', action: 'fetchProducts' }, error);
     } finally {
       setProductsLoading(false);
     }
@@ -434,7 +437,7 @@ const AdminCashDashboard = () => {
         setSearchResults(results || []);
         setShowDropdown(true);
       } catch (error) {
-        console.error(error);
+        reportUiError({ area: 'AdminCashDashboard', action: 'searchClients' }, error);
       }
     }, 300);
   };
@@ -598,7 +601,7 @@ const AdminCashDashboard = () => {
           setShowLastCloseDetails(false);
         }
       } catch (reportError) {
-        console.error('❌ Error cargando reporte de cierre:', reportError);
+        reportUiError({ area: 'AdminCashDashboard', action: 'loadCloseReport' }, reportError);
         setLastClosedReport(null);
         setShowLastCloseDetails(false);
       }

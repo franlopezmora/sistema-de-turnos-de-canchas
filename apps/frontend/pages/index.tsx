@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
+import { reportUiError } from '../utils/uiError';
 // Importamos los íconos de la librería
 import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Pádel)
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de fútbol limpia
@@ -248,7 +249,7 @@ export default function Home() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.error('Clipboard write failed', err);
+      reportUiError({ area: 'HomePage', action: 'copyContactData' }, err);
     }
     setContactMenu(null);
   };
@@ -326,7 +327,7 @@ export default function Home() {
         const allClubs = await ClubService.getAllClubs();
         setClubs(allClubs);
       } catch (error) {
-        console.error('Error al cargar clubes:', error);
+        reportUiError({ area: 'HomePage', action: 'loadClubs' }, error);
       } finally {
         setLoadingClubs(false);
       }
@@ -336,7 +337,7 @@ export default function Home() {
         const allLocations = await LocationService.getAllLocations();
         setLocations(allLocations);
       } catch (error) {
-        console.error('Error al cargar ubicaciones:', error);
+        reportUiError({ area: 'HomePage', action: 'loadLocations' }, error);
       } finally {
         setLoadingLocations(false);
       }
@@ -358,7 +359,7 @@ export default function Home() {
           : 0;
         setActiveBookingsCount(active);
       } catch (error) {
-        console.error('Error al cargar reservas activas:', error);
+        reportUiError({ area: 'HomePage', action: 'loadActiveBookings' }, error);
       }
     };
 
@@ -571,7 +572,7 @@ export default function Home() {
               const uniqueTimes = Array.from(new Set(times)).sort();
               return { hasSlots: true, times: uniqueTimes };
             } catch (error) {
-              console.error('Error al validar disponibilidad:', error);
+              reportUiError({ area: 'HomePage', action: 'validateClubAvailability' }, error);
             }
             return { hasSlots: false, times: [] };
           })

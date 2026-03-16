@@ -51,6 +51,7 @@ export default function PaymentCalculator({
   const [itemAllocations, setItemAllocations] = useState<Record<string, number>>({});
   const [courtPortion, setCourtPortion] = useState<number>(0);
   const [transferChannel, setTransferChannel] = useState<'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>('BANK_ACCOUNT');
+  const [validationError, setValidationError] = useState('');
 
   const safeCourtPending = Math.max(0, Number(courtPending || 0));
   const safeCourtBaseTotal = Math.max(0, Number(courtBaseTotal ?? courtPending ?? 0));
@@ -150,6 +151,7 @@ export default function PaymentCalculator({
     } else {
       setPaymentAmount('');
     }
+    setValidationError('');
   }, [selectedTotal]);
 
   useEffect(() => {
@@ -202,14 +204,16 @@ export default function PaymentCalculator({
     );
 
     if (!hasSelection) {
-      alert('Seleccioná al menos un concepto para cobrar.');
+      setValidationError('Selecciona al menos un concepto para cobrar.');
       return;
     }
 
     if (hasAmountMismatch) {
-      alert('El monto debe coincidir exactamente con lo seleccionado. Ajustá el monto o la selección.');
+      setValidationError('El monto debe coincidir exactamente con lo seleccionado.');
       return;
     }
+
+    setValidationError('');
 
     await onConfirm({
       method,
@@ -445,6 +449,11 @@ export default function PaymentCalculator({
               Completar total
             </button>
           </div>
+          {validationError && (
+            <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600">
+              {validationError}
+            </p>
+          )}
         </div>
 
         <div className="mb-5 bg-white border-2 border-[#347048]/10 rounded-[1.25rem] p-4">
@@ -562,3 +571,4 @@ export default function PaymentCalculator({
   if (!mounted) return null;
   return createPortal(modal, document.body);
 }
+

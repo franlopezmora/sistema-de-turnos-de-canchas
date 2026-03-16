@@ -7,6 +7,7 @@ import {
 import { DollarSign, Calendar, TrendingUp, CreditCard, Activity, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchWithAuth } from '../../utils/apiClient';
 import { getApiUrl } from '../../utils/apiUrl';
+import { reportUiError } from '../../utils/uiError';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
@@ -62,6 +63,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
   // 2. Estados limpios
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null); 
+  const [errorMessage, setErrorMessage] = useState('');
   const [activePeriod, setActivePeriod] = useState<Period>('mes');
   const [periodOffset, setPeriodOffset] = useState<number>(0);
 
@@ -93,6 +95,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
   const loadStats = useCallback(async () => {
     try {
       setLoading(true); // Prendemos el loader al buscar datos nuevos
+      setErrorMessage('');
       const { startDate, endDate } = getDateRange(activePeriod, periodOffset);
       
       const url = `${apiBase()}/clubs/${finalSlug}/admin/stats/dashboard?startDate=${startDate}&endDate=${endDate}`;
@@ -103,10 +106,12 @@ export default function AdminTabStatistics({ slugProp }: Props) {
         const data = await response.json();
         setStats(data);
       } else {
-        console.error("Error del servidor:", response.status);
+        reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, new Error(`Error del servidor: ${response.status}`));
+        setErrorMessage('No se pudieron cargar las estadisticas para este periodo.');
       }
     } catch (error) {
-      console.error("Error de red al traer estadísticas:", error);
+      reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, error);
+      setErrorMessage('No se pudo conectar para traer estadisticas.');
     } finally {
       setLoading(false); // 🔥 TRAMPA EVITADA: Apagamos el loader falle o no la petición
     }
@@ -162,6 +167,12 @@ export default function AdminTabStatistics({ slugProp }: Props) {
           <RefreshCw size={20} strokeWidth={3} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
+
+      {errorMessage && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">
+          {errorMessage}
+        </div>
+      )}
 
       {/* KPI CARDS (Se mantienen iguales) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -273,3 +284,5 @@ export default function AdminTabStatistics({ slugProp }: Props) {
     </div>
   );
 }
+
+

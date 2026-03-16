@@ -6,6 +6,7 @@ import { getMyBookings } from '../services/BookingService';
 import { ClubService } from '../services/ClubService';
 import { NotificationService, NotificationItem } from '../services/NotificationService';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
+import { reportUiError } from '../utils/uiError';
 import AppModal from './AppModal';
 import { Menu, Home, Calendar, Settings, LogOut, Phone, Mail, Check, Lock, MapPin, Bell } from 'lucide-react'; 
 
@@ -82,7 +83,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
           : 0;
         setActiveBookingsCount(active);
       } catch (error) {
-        console.error('Error al cargar reservas activas:', error);
+        reportUiError({ area: 'NavBar', action: 'loadActiveBookings' }, error);
       }
     };
     loadActiveBookings();

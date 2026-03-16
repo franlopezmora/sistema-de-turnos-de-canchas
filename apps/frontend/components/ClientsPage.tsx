@@ -7,6 +7,7 @@ import { Phone, DollarSign, Users, Trophy, Search, X, CheckCircle, Receipt } fro
 import PaymentCalculator, { type PaymentCalculatorResult } from './PaymentCalculator';
 import AppModal from './AppModal';
 import { getActiveClubSlug, normalizeSessionUser } from '../utils/session';
+import { reportUiError } from '../utils/uiError';
 
 const formatDate = (dateInput: any) => {
   if (!dateInput) return '-';
@@ -170,7 +171,10 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       const data = await ClientService.listDebtors(resolvedSlug);
       setClients(data);
       return data;
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      reportUiError({ area: 'ClientsPage', action: 'loadClients' }, error);
+      showError('No se pudo cargar la lista de clientes.');
+    }
     finally { setLoading(false); }
     return null;
   }, [clubSlug]);
@@ -205,7 +209,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       setAccountBreakdownById((prev) => ({ ...prev, [key]: breakdown }));
       return breakdown;
     } catch (error) {
-      console.error('Error obteniendo detalle de cuenta:', error);
+      reportUiError({ area: 'ClientsPage', action: 'ensureAccountBreakdown' }, error);
       return null;
     } finally {
       setLoadingAccountDetailById((prev) => ({ ...prev, [key]: false }));
@@ -726,4 +730,3 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     </div>
   );
 }
-

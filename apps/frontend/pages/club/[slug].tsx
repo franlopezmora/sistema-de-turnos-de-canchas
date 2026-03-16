@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import BookingGrid from '../../components/BookingGrid';
 import Navbar from '../../components/NavBar';
 import { ClubService, Club } from '../../services/ClubService';
+import { reportUiError } from '../../utils/uiError';
 import { 
   MapPin, 
   Calendar, 
@@ -46,7 +47,7 @@ export default function ClubPage() {
         const clubData = await ClubService.getClubBySlug(slug);
         setClub(clubData);
       } catch (error: any) {
-        console.error('Error al cargar información del club:', error);
+        reportUiError({ area: 'ClubPage', action: 'loadClubBySlug' }, error);
         setError('Club no encontrado');
       } finally {
         setLoadingClub(false);
@@ -64,7 +65,7 @@ export default function ClubPage() {
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
       } catch (err) {
-        console.error('Error al copiar el enlace', err);
+        reportUiError({ area: 'ClubPage', action: 'copyShareLink' }, err);
       }
     }
   };

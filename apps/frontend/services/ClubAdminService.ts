@@ -28,6 +28,23 @@ export type DiscountPolicyScope = 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ALL';
 export type DiscountAmountType = 'PERCENT' | 'FIXED';
 export type DiscountApplyMode = 'INCLUDE_ONLY' | 'EXCLUDE_LIST';
 
+export type AuditLogUser = {
+  id: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  payload?: any;
+  createdAt: string;
+  user?: AuditLogUser | null;
+};
+
 export class ClubAdminService {
   /**
    * Obtener el schedule del admin para un club específico
@@ -508,5 +525,31 @@ export class ClubAdminService {
       throw new Error(error.error || 'Error al actualizar asignación');
     }
     return res.json();
+  }
+
+  static async listAuditLogs(params?: {
+    action?: string;
+    entity?: string;
+    entityId?: string;
+    take?: number;
+  }): Promise<AuditLogEntry[]> {
+    if (!getToken()) throw new Error('No autenticado');
+    const query = new URLSearchParams();
+    if (params?.action) query.set('action', params.action);
+    if (params?.entity) query.set('entity', params.entity);
+    if (params?.entityId) query.set('entityId', params.entityId);
+    if (params?.take != null) query.set('take', String(params.take));
+
+    const url = `${apiBase()}/audit-logs${query.toString() ? `?${query.toString()}` : ''}`;
+    const res = await fetchWithAuth(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al listar auditoria');
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
   }
 }

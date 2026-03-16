@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { ClubAdminService } from '../services/ClubAdminService';
 import { Search, Plus, Edit, Trash2, X, Package, Tag, DollarSign, Box } from 'lucide-react';
+import { extractErrorMessage, reportUiError } from '../utils/uiError';
 import AppModal from './AppModal';
 
 interface ProductsPageProps {
@@ -57,6 +58,12 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    isWarning?: boolean;
+  }>({ show: false, title: 'Información', message: '' });
   const [formData, setFormData] = useState({
     name: '',
     price: '',
@@ -71,7 +78,13 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
       const data = await ClubAdminService.getProducts(slug);
       setProducts(data);
     } catch (error) {
-      console.error(error);
+      reportUiError({ area: 'ProductsPage', action: 'loadProducts' }, error);
+      setFeedbackModal({
+        show: true,
+        title: 'Error',
+        message: 'No se pudieron cargar los productos.',
+        isWarning: true
+      });
     } finally {
       setLoading(false);
     }
@@ -80,6 +93,15 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
   useEffect(() => {
     if (slug) loadProducts();
   }, [slug, loadProducts]);
+
+  const showErrorModal = (message: string) => {
+    setFeedbackModal({
+      show: true,
+      title: 'Error',
+      message,
+      isWarning: true
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,16 +115,16 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
 
       if (formData.isCombo) {
         if (components.length === 0) {
-          alert('Un combo debe tener al menos un componente.');
+          showErrorModal('Un combo debe tener al menos un componente.');
           return;
         }
         const ids = components.map((component) => component.componentProductId);
         if (new Set(ids).size !== ids.length) {
-          alert('No podés repetir el mismo producto en un combo.');
+          showErrorModal('No podés repetir el mismo producto en un combo.');
           return;
         }
         if (editingProduct && ids.includes(Number(editingProduct.id))) {
-          alert('Un producto no puede ser componente de sí mismo.');
+          showErrorModal('Un producto no puede ser componente de sí mismo.');
           return;
         }
       }
@@ -132,7 +154,9 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
       setEditingProduct(null);
       loadProducts();
     } catch (error) {
-      alert('Error al guardar');
+      const message = extractErrorMessage(error, 'No se pudo guardar el producto.');
+      reportUiError({ area: 'ProductsPage', action: 'saveProduct' }, error);
+      showErrorModal(message);
     }
   };
 
@@ -148,7 +172,9 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
       loadProducts();
       setDeleteTarget(null);
     } catch (error) {
-      alert('Error al borrar');
+      const message = extractErrorMessage(error, 'No se pudo dar de baja el producto.');
+      reportUiError({ area: 'ProductsPage', action: 'deleteProduct' }, error);
+      showErrorModal(message);
     } finally {
       setDeleting(false);
     }
@@ -519,6 +545,16 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
         isWarning
         onConfirm={confirmDelete}
         confirmDisabled={deleting}
+      />
+
+      <AppModal
+        show={feedbackModal.show}
+        onClose={() => setFeedbackModal((prev) => ({ ...prev, show: false }))}
+        title={feedbackModal.title}
+        message={feedbackModal.message}
+        cancelText=""
+        confirmText="Aceptar"
+        isWarning={feedbackModal.isWarning}
       />
     </>
   );

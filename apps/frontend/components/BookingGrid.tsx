@@ -9,6 +9,7 @@ import AppModal from './AppModal';
 
 import { getApiUrl } from '../utils/apiUrl';
 import { ClubService, Club } from '../services/ClubService';
+import { extractErrorMessage, reportUiError } from '../utils/uiError';
 import { ChevronDown, Check, Calendar, Clock, MapPin, Zap, MousePointerClick, Hourglass, Moon, Ban, AlertCircle, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const apiBase = () => `${getApiUrl()}/api`;
@@ -380,7 +381,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
         const data = await ClubService.getClubBySlug(clubSlug);
         setClubConfig(data);
       } catch (err) {
-        console.error('Error loading club config', err);
+        reportUiError({ area: 'BookingGrid', action: 'loadClubConfig' }, err);
         setClubConfig(null);
       }
     };
@@ -718,8 +719,10 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
       } catch (_) { /* noop */ }
 
       showInfo(bookingSummaryMessage, 'Reserva confirmada');
-    } catch (error: any) {
-      showError('Ups: ' + error.message);
+    } catch (error) {
+      const message = extractErrorMessage(error, 'No se pudo completar la reserva.');
+      reportUiError({ area: 'BookingGrid', action: 'handleBooking' }, error);
+      showError(message);
     } finally {
       setIsBooking(false);
     }
@@ -791,7 +794,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
         setDisabledSlots((prev) => ({ ...prev, ...parsed }));
       }
     } catch (err) {
-      console.error('Error loading disabled slots from localStorage', err);
+      reportUiError({ area: 'BookingGrid', action: 'loadDisabledSlotsFromStorage' }, err);
     }
   }, [selectedDate]);
 
@@ -806,7 +809,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
       const objForDate = Object.fromEntries(Object.entries(disabledSlots).filter(([k]) => k.startsWith(`${dateString}-`)));
       localStorage.setItem(key, JSON.stringify(objForDate));
     } catch (err) {
-      console.error('Error saving disabled slots to localStorage', err);
+      reportUiError({ area: 'BookingGrid', action: 'saveDisabledSlotsToStorage' }, err);
     }
   }, [disabledSlots, selectedDate]);
 
@@ -843,7 +846,7 @@ const performBooking = async (guestInfo?: { name: string; email?: string; phone?
         const data = await res.json();
         setAllCourts(data);
       } catch (err) {
-        console.error('Error fetching courts:', err);
+        reportUiError({ area: 'BookingGrid', action: 'loadCourts' }, err);
       }
     };
     fetchCourts();

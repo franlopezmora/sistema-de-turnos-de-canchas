@@ -61,7 +61,7 @@ export default function ProductSearch({
     });
 
     return filtered.slice(0, Math.max(1, maxResults));
-  }, [disabled, maxResults, minQueryLength, normalizedQuery, products]);
+  }, [disabled, hasSelection, maxResults, minQueryLength, normalizedQuery, normalizedSelected, products]);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -86,7 +86,7 @@ export default function ProductSearch({
     } else {
       setOpen(false);
     }
-  }, [hasSelection, minQueryLength, normalizedQuery.length, normalizedSelected]);
+  }, [hasSelection, minQueryLength, normalizedQuery, normalizedSelected]);
 
   useEffect(() => {
     if (!hasSelection) return;

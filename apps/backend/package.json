@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "nodemon src/index.ts",
-    "build": "npx prisma generate && tsc -p tsconfig.json",
+    "build": "ts-node src/scripts/prismaGenerateSafe.ts && tsc -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "start": "node dist/index.js",
     "start:all": "PROCESS_ROLE=all node dist/index.js",
@@ -17,6 +17,7 @@
     "start:worker": "PROCESS_ROLE=worker node dist/index.js",
     "start:scheduler": "PROCESS_ROLE=scheduler node dist/index.js",
     "prisma:generate": "prisma generate",
+    "prisma:generate:safe": "ts-node src/scripts/prismaGenerateSafe.ts",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:data:migrate:activity-club": "ts-node prisma/data-migration-activitytype-club.ts",

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Database, Server, Cpu, HardDrive, Clock, AlertTriangle } from 'lucide-react';
 import { getApiUrl } from '../../utils/apiUrl';
+import { reportUiError } from '../../utils/uiError';
 
 const AdminDevDashboard = () => {
   const [metrics, setMetrics] = useState<any>(null);
@@ -15,7 +16,7 @@ const AdminDevDashboard = () => {
       setMetrics(data);
       setError(false);
     } catch (err) {
-      console.error(err);
+      reportUiError({ area: 'AdminDevDashboard', action: 'fetchMetrics' }, err);
       setError(true);
     } finally {
       setLoading(false);

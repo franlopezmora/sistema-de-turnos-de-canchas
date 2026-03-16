@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getApiUrl } from '../utils/apiUrl';
+import { extractErrorMessage, reportUiError } from '../utils/uiError';
 
 interface Court {
   id: number;
@@ -63,9 +64,10 @@ export function useAvailability(date: Date | null, activityId?: number | null, c
       const data: AvailabilityResponse = await res.json();
       setSlotsWithCourts(data.slotsWithCourts);
 
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message);
+    } catch (err) {
+      const message = extractErrorMessage(err, 'Error al cargar turnos');
+      reportUiError({ area: 'useAvailability', action: 'fetchSlots' }, err);
+      setError(message);
     } finally {
       setLoading(false);
     }
