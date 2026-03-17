@@ -48,6 +48,7 @@ router.post('/', bookingLimiter, optionalAuthMiddleware, (req, res) => bookingCo
 // Items y Productos
 router.get('/:id/items', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.getItems(req, res));
 router.post('/:id/items', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.addItem(req, res));
+router.post('/:id/items/quote', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.quoteItem(req, res));
 router.delete('/items/:itemId', authMiddleware, setAdminClubFromUser, requireRole('ADMIN'), (req, res) => bookingController.removeItem(req, res));
 
 // Historial y Estados

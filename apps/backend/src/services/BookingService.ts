@@ -1,4 +1,4 @@
-﻿import { BookingRepository } from '../repositories/BookingRepository';
+import { BookingRepository } from '../repositories/BookingRepository';
 import { ClubRepository } from '../repositories/ClubRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { ActivityTypeRepository } from '../repositories/ActivityTypeRepository';
@@ -2826,6 +2826,75 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             totalPrice: Number(result.total || 0),
             description: result.description
         };
+    }
+
+    async quoteItemForBooking(
+        bookingId: number,
+        productId: number,
+        quantity: number,
+        clubId: number,
+        options?: { applyDiscount?: boolean }
+    ) {
+        const booking = await prisma.booking.findFirst({ where: { id: bookingId, clubId } });
+        const product = await prisma.product.findFirst({ where: { id: productId, clubId } });
+        if (!booking || !product) throw new Error('Datos no encontrados');
+        if (booking.status === 'CANCELLED') throw new Error('Reserva cancelada');
+        if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
+            throw new Error('Solo se pueden cotizar consumos para reservas confirmadas o finalizadas');
+        }
+
+        const normalizedQty = Math.floor(Number(quantity));
+        if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) throw new Error('Cantidad inválida');
+
+        const quote = await prisma.$transaction(async (tx) => {
+            const txProduct = await tx.product.findFirst({
+                where: { id: productId, clubId },
+                select: { id: true, name: true, price: true, category: true }
+            });
+            if (!txProduct) throw new Error('Producto no encontrado');
+
+            const unitListPrice = Number(Number(txProduct.price || 0).toFixed(2));
+            const discountDraft = options?.applyDiscount === false
+                ? { unitPrice: unitListPrice, total: Number((unitListPrice * normalizedQty).toFixed(2)), snapshots: [] }
+                : await this.discountService.computeDraftDiscountTx(tx, {
+                    clubId,
+                    clientId: booking.clientId ?? null,
+                    itemType: 'PRODUCT',
+                    quantity: normalizedQty,
+                    unitPrice: unitListPrice,
+                    productId: txProduct.id,
+                    productCategory: txProduct.category
+                });
+
+            const policyIds = Array.from(new Set((discountDraft.snapshots || []).map((snapshot: any) => snapshot.policyId)));
+            const policies = policyIds.length
+                ? await tx.discountPolicy.findMany({ where: { id: { in: policyIds } }, select: { id: true, name: true } })
+                : [];
+            const policyNameById = new Map(policies.map((policy) => [policy.id, policy.name]));
+
+            const finalTotal = Number(Number(discountDraft.total || unitListPrice * normalizedQty).toFixed(2));
+            const listTotal = Number((unitListPrice * normalizedQty).toFixed(2));
+            const discountAmount = Number(Math.max(0, listTotal - finalTotal).toFixed(2));
+
+            return {
+                productId: txProduct.id,
+                productName: txProduct.name,
+                quantity: normalizedQty,
+                listUnitPrice: unitListPrice,
+                finalUnitPrice: Number(Number(discountDraft.unitPrice || unitListPrice).toFixed(2)),
+                listTotal,
+                finalTotal,
+                discountAmount,
+                hasDiscount: discountAmount > 0.009,
+                appliedPolicies: (discountDraft.snapshots || []).map((snapshot: any) => ({
+                    policyId: snapshot.policyId,
+                    policyName: policyNameById.get(snapshot.policyId) || 'Política sin nombre',
+                    discountAmount: Number(snapshot.discountAmount || 0)
+                }))
+            };
+        });
+
+        return quote;
     }
 
     async removeItemFromBooking(itemId: string, clubId: number) {

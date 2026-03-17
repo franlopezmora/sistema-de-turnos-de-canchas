@@ -473,6 +473,30 @@ export class ClubAdminService {
     }
     return res.json();
   }
+
+  static async quoteBookingItem(
+    bookingId: number,
+    productId: number,
+    quantity: number,
+    options?: { applyDiscount?: boolean }
+  ) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/items/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookingId,
+        productId,
+        quantity,
+        ...(options?.applyDiscount === undefined ? {} : { applyDiscount: options.applyDiscount })
+      })
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Error al cotizar producto');
+    }
+    return res.json();
+  }
   static async removeItemFromBooking(itemId: number | string) {
     if (!getToken()) throw new Error('No autenticado');
     const res = await fetchWithAuth(`${apiBase()}/bookings/items/${itemId}`, {
