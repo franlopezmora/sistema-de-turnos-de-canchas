@@ -333,7 +333,8 @@ async function main() {
     phone?: string,
     email?: string,
     dni?: string,
-    userId?: number
+    userId?: number,
+    isProfessor: boolean = false
   ) => {
     const normalizedPhone = normalizePhone(phone);
     const normalizedDni = normalizeDni(dni);
@@ -366,7 +367,8 @@ async function main() {
       phone: normalizedPhone,
       email: safeEmail,
       dni: normalizedDni,
-      userId: userId ?? null
+      userId: userId ?? null,
+      isProfessor: Boolean(isProfessor)
     };
 
     if (existing) {
@@ -384,10 +386,10 @@ async function main() {
     });
   };
 
-  await upsertClient(club1.id, 'Lionel Messi', '555-101010', 'lio@messi.com', '30123123', lioUser.id);
+  await upsertClient(club1.id, 'Lionel Messi', '555-101010', 'lio@messi.com', '30123123', lioUser.id, true);
   await upsertClient(club1.id, 'Cliente Mostrador Tejas', '+54 9 357 000 0001', 'cliente.tejas@example.com', '30999001');
   await upsertClient(club2.id, 'Juan Perez', '555-202020', 'usuario@clubcentral.com', '30999002', memberCentral.id);
-  await upsertClient(club2.id, 'Cliente Mostrador Central', '+54 9 11 0000 0002', 'cliente.central@example.com', '30999003');
+  await upsertClient(club2.id, 'Cliente Mostrador Central', '+54 9 11 0000 0002', 'cliente.central@example.com', '30999003', undefined, true);
   await upsertClient(club3.id, 'Cliente Mostrador Madrid', '+34 600 111 222', 'cliente.madrid@example.com', '30999004');
   console.log('✅ Clientes creados/actualizados');
 
