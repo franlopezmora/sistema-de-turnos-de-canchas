@@ -189,8 +189,21 @@ export class BookingRepository {
             s?.autoCancelPendingWarningMinutesBefore != null ? Number(s.autoCancelPendingWarningMinutesBefore) : null,
             s?.enforceCashShiftCloseWithOpenAccounts ?? false,
             Array.isArray(s?.openingDays) ? s.openingDays : null,
+            Array.isArray(s?.closureDates)
+                ? s.closureDates
+                    .map((date: unknown) => String(date || '').trim())
+                    .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+                : null,
             c.createdAt,
-            c.updatedAt
+            c.updatedAt,
+            Number.isFinite(Number(s?.bookingSimpleAdvanceDaysUser)) ? Math.max(0, Math.floor(Number(s?.bookingSimpleAdvanceDaysUser))) : 30,
+            Number.isFinite(Number(s?.bookingSimpleAdvanceDaysAdmin)) ? Math.max(0, Math.floor(Number(s?.bookingSimpleAdvanceDaysAdmin))) : 30,
+            s?.allowAdminSkipSimpleAdvanceLimit ?? false,
+            s?.clubOperationalStatus === 'TEMPORARY_CLOSED' || s?.clubOperationalStatus === 'PERMANENTLY_CLOSED'
+                ? s.clubOperationalStatus
+                : 'OPEN',
+            s?.temporaryClosureStartDate ? new Date(s.temporaryClosureStartDate).toISOString().slice(0, 10) : null,
+            s?.temporaryClosureEndDate ? new Date(s.temporaryClosureEndDate).toISOString().slice(0, 10) : null
         );
     const court = new Court(dbItem.court.id, dbItem.court.name, dbItem.court.isIndoor, dbItem.court.surface, club, dbItem.court.isUnderMaintenance, null);
         const activity = new ActivityType(

@@ -38,6 +38,12 @@ enum BookingConfirmationMode {
   DEPOSIT_REQUIRED
 }
 
+enum ClubOperationalStatus {
+  OPEN
+  TEMPORARY_CLOSED
+  PERMANENTLY_CLOSED
+}
+
 enum ScheduleMode {
   FIXED
   RANGE
@@ -847,6 +853,16 @@ model ClubSettings {
   
   // Días de apertura: [0, 1, 2, 3, 4, 5, 6]
   openingDays               Json?    
+
+  // Fechas de cierre excepcionales (YYYY-MM-DD) en horario local del club
+  closureDates              Json?
+
+  // Estado operativo global del club
+  clubOperationalStatus     ClubOperationalStatus @default(OPEN)
+
+  // Cierre temporal continuo (útil para semanas o meses)
+  temporaryClosureStartDate DateTime? @db.Date
+  temporaryClosureEndDate   DateTime? @db.Date
 
   // Configuración de Luces
   lightsEnabled             Boolean  @default(false)

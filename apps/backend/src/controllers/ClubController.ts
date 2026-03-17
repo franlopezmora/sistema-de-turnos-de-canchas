@@ -11,6 +11,85 @@ const fixedBookingActivityConfigSchema = z.object({
     fixedBookingGenerationFrequencyDays: z.union([z.number(), z.string()]).transform((v) => Number(v)).pipe(z.number().int().positive())
 });
 
+const CLOSURE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const CLUB_OPERATIONAL_STATUS_VALUES = ['OPEN', 'TEMPORARY_CLOSED', 'PERMANENTLY_CLOSED'] as const;
+type ClubOperationalStatus = typeof CLUB_OPERATIONAL_STATUS_VALUES[number];
+
+const validateClosureDates = (closureDates: unknown): string[] => {
+    if (closureDates == null) return [];
+    if (!Array.isArray(closureDates)) {
+        return ['closureDates debe ser un array de fechas con formato YYYY-MM-DD'];
+    }
+
+    const seen = new Set<string>();
+    for (const raw of closureDates) {
+        const value = String(raw || '').trim();
+        if (!CLOSURE_DATE_RE.test(value)) {
+            return ['closureDates debe tener formato YYYY-MM-DD'];
+        }
+        if (seen.has(value)) {
+            return ['closureDates no puede contener fechas duplicadas'];
+        }
+        seen.add(value);
+    }
+
+    return [];
+};
+
+const normalizeDateOnly = (value: unknown): string | null => {
+    if (value == null) return null;
+    const normalized = String(value).trim();
+    return CLOSURE_DATE_RE.test(normalized) ? normalized : null;
+};
+
+const isDateWithinRange = (date: string, start: string, end: string): boolean => date >= start && date <= end;
+
+const validateClubClosurePolicy = (params: {
+    clubOperationalStatus: ClubOperationalStatus;
+    temporaryClosureStartDate?: string | null;
+    temporaryClosureEndDate?: string | null;
+    closureDates?: string[] | null;
+}): string[] => {
+    const errors: string[] = [];
+    const status = params.clubOperationalStatus;
+    const startDate = normalizeDateOnly(params.temporaryClosureStartDate);
+    const endDate = normalizeDateOnly(params.temporaryClosureEndDate);
+
+    if (params.temporaryClosureStartDate != null && !startDate) {
+        errors.push('temporaryClosureStartDate debe tener formato YYYY-MM-DD');
+    }
+    if (params.temporaryClosureEndDate != null && !endDate) {
+        errors.push('temporaryClosureEndDate debe tener formato YYYY-MM-DD');
+    }
+
+    if (status === 'TEMPORARY_CLOSED') {
+        if (!startDate || !endDate) {
+            errors.push('TEMPORARY_CLOSED requiere temporaryClosureStartDate y temporaryClosureEndDate');
+        } else if (startDate > endDate) {
+            errors.push('temporaryClosureStartDate no puede ser mayor a temporaryClosureEndDate');
+        }
+    }
+
+    if (status !== 'TEMPORARY_CLOSED' && (startDate || endDate)) {
+        errors.push('temporaryClosureStartDate/temporaryClosureEndDate solo se permiten con clubOperationalStatus=TEMPORARY_CLOSED');
+    }
+
+    if (status === 'PERMANENTLY_CLOSED') {
+        if (Array.isArray(params.closureDates) && params.closureDates.length > 0) {
+            errors.push('No se permiten closureDates cuando el club está PERMANENTLY_CLOSED');
+        }
+    }
+
+    if (status === 'TEMPORARY_CLOSED' && startDate && endDate && Array.isArray(params.closureDates) && params.closureDates.length > 0) {
+        const overlappingDate = params.closureDates.find((date) => isDateWithinRange(date, startDate, endDate));
+        if (overlappingDate) {
+            errors.push(`closureDates contiene ${overlappingDate}, que ya está cubierto por el cierre temporal`);
+        }
+    }
+
+    return errors;
+};
+
 export class ClubController {
     private readonly mediaStorageService = new MediaStorageService();
     private readonly auditLogService = new AuditLogService();
@@ -38,6 +117,10 @@ export class ClubController {
                 lightsExtraAmount: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
                 lightsFromHour: z.string().optional().nullable(),
                 openingDays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
+                closureDates: z.array(z.string().regex(CLOSURE_DATE_RE)).optional().nullable(),
+                clubOperationalStatus: z.enum(CLUB_OPERATIONAL_STATUS_VALUES).optional(),
+                temporaryClosureStartDate: z.string().regex(CLOSURE_DATE_RE).optional().nullable(),
+                temporaryClosureEndDate: z.string().regex(CLOSURE_DATE_RE).optional().nullable(),
                 professorDurationOverrideEnabled: z.boolean().optional(),
                 professorDurationOverrideMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
@@ -59,7 +142,8 @@ export class ClubController {
                 return res.status(400).json({ error: parsed.error.format() });
             }
             const { slug, name, addressLine, city, province, country, contact, phone, logoUrl, clubImageUrl, instagramUrl, facebookUrl, websiteUrl, description, timeZone,
-                lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays,
+                lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays, closureDates,
+                clubOperationalStatus, temporaryClosureStartDate, temporaryClosureEndDate,
                 professorDurationOverrideEnabled, professorDurationOverrideMinutes,
                 fixedBookingSettingsByActivity, bookingConfirmationMode, bookingDepositPercent, allowManualConfirmationOverride,
                 autoCancelPendingBookingsEnabled, autoCancelPendingBookingsMinutesBefore, autoCancelPendingBookingsOnlyIfUnpaid,
@@ -69,6 +153,19 @@ export class ClubController {
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
+            const closureDateErrors = validateClosureDates(closureDates);
+            if (closureDateErrors.length > 0) {
+                return res.status(400).json({ error: closureDateErrors.join(' | ') });
+            }
+            const closurePolicyErrors = validateClubClosurePolicy({
+                clubOperationalStatus: (clubOperationalStatus ?? 'OPEN') as ClubOperationalStatus,
+                temporaryClosureStartDate,
+                temporaryClosureEndDate,
+                closureDates: Array.isArray(closureDates) ? closureDates : null
+            });
+            if (closurePolicyErrors.length > 0) {
+                return res.status(400).json({ error: closurePolicyErrors.join(' | ') });
             }
             if (bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
                 if (!Number.isFinite(Number(bookingDepositPercent)) || Number(bookingDepositPercent) <= 0 || Number(bookingDepositPercent) > 100) {
@@ -138,7 +235,11 @@ export class ClubController {
                 Number(bookingSimpleAdvanceDaysUser ?? 30),
                 Number(bookingSimpleAdvanceDaysAdmin ?? 30),
                 allowAdminSkipSimpleAdvanceLimit ?? false,
-                Array.isArray(openingDays) ? openingDays : null
+                Array.isArray(closureDates) ? closureDates : null,
+                Array.isArray(openingDays) ? openingDays : null,
+                (clubOperationalStatus ?? 'OPEN') as ClubOperationalStatus,
+                normalizeDateOnly(temporaryClosureStartDate),
+                normalizeDateOnly(temporaryClosureEndDate)
             );
             res.status(201).json(club);
         } catch (error: any) {
@@ -212,6 +313,10 @@ export class ClubController {
                 professorDurationOverrideMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
                 openingDays: z.array(z.number().int().min(0).max(6)).optional(),
+                closureDates: z.array(z.string().regex(CLOSURE_DATE_RE)).optional().nullable(),
+                clubOperationalStatus: z.enum(CLUB_OPERATIONAL_STATUS_VALUES).optional(),
+                temporaryClosureStartDate: z.string().regex(CLOSURE_DATE_RE).optional().nullable(),
+                temporaryClosureEndDate: z.string().regex(CLOSURE_DATE_RE).optional().nullable(),
                 bookingConfirmationMode: z.enum(['AUTOMATIC', 'MANUAL', 'DEPOSIT_REQUIRED']).optional(),
                 bookingDepositPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
                 allowManualConfirmationOverride: z.boolean().optional(),
@@ -252,6 +357,10 @@ export class ClubController {
                 professorDurationOverrideMinutes,
                 fixedBookingSettingsByActivity,
                 openingDays,
+                closureDates,
+                clubOperationalStatus,
+                temporaryClosureStartDate,
+                temporaryClosureEndDate,
                 bookingConfirmationMode,
                 bookingDepositPercent,
                 allowManualConfirmationOverride,
@@ -273,6 +382,34 @@ export class ClubController {
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
+            const closureDateErrors = validateClosureDates(closureDates);
+            if (closureDateErrors.length > 0) {
+                return res.status(400).json({ error: closureDateErrors.join(' | ') });
+            }
+            const resolvedClubOperationalStatus =
+                (clubOperationalStatus ?? previousClub.clubOperationalStatus ?? 'OPEN') as ClubOperationalStatus;
+            const resolvedTemporaryClosureStartDate =
+                temporaryClosureStartDate !== undefined
+                    ? temporaryClosureStartDate
+                    : previousClub.temporaryClosureStartDate ?? null;
+            const resolvedTemporaryClosureEndDate =
+                temporaryClosureEndDate !== undefined
+                    ? temporaryClosureEndDate
+                    : previousClub.temporaryClosureEndDate ?? null;
+            const resolvedClosureDates =
+                closureDates !== undefined
+                    ? closureDates
+                    : (Array.isArray(previousClub.closureDates) ? previousClub.closureDates : null);
+
+            const closurePolicyErrors = validateClubClosurePolicy({
+                clubOperationalStatus: resolvedClubOperationalStatus,
+                temporaryClosureStartDate: resolvedTemporaryClosureStartDate,
+                temporaryClosureEndDate: resolvedTemporaryClosureEndDate,
+                closureDates: resolvedClosureDates
+            });
+            if (closurePolicyErrors.length > 0) {
+                return res.status(400).json({ error: closurePolicyErrors.join(' | ') });
             }
             if (bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
                 if (!Number.isFinite(Number(bookingDepositPercent)) || Number(bookingDepositPercent) <= 0 || Number(bookingDepositPercent) > 100) {
@@ -309,6 +446,7 @@ export class ClubController {
             }
 
             const safeDescription = description != null ? sanitizeString(description) : null;
+            const shouldClearTemporaryRange = clubOperationalStatus !== undefined && clubOperationalStatus !== 'TEMPORARY_CLOSED';
             const club = await this.clubService.updateClub(id, {
                 slug,
                 name,
@@ -335,6 +473,18 @@ export class ClubController {
                         : undefined,
                 fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
                 openingDays: Array.isArray(openingDays) ? openingDays : undefined,
+                closureDates: closureDates === null ? null : (Array.isArray(closureDates) ? closureDates : undefined),
+                clubOperationalStatus,
+                temporaryClosureStartDate: shouldClearTemporaryRange
+                    ? null
+                    : (temporaryClosureStartDate === null
+                        ? null
+                        : (temporaryClosureStartDate !== undefined ? normalizeDateOnly(temporaryClosureStartDate) : undefined)),
+                temporaryClosureEndDate: shouldClearTemporaryRange
+                    ? null
+                    : (temporaryClosureEndDate === null
+                        ? null
+                        : (temporaryClosureEndDate !== undefined ? normalizeDateOnly(temporaryClosureEndDate) : undefined)),
                 bookingConfirmationMode,
                 bookingDepositPercent,
                 allowManualConfirmationOverride,

@@ -11,6 +11,7 @@ export type FixedBookingActivityConfig = {
 
 export type FixedBookingSettingsByActivity = Record<string, FixedBookingActivityConfig>;
 export type BookingConfirmationMode = 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
+export type ClubOperationalStatus = 'OPEN' | 'TEMPORARY_CLOSED' | 'PERMANENTLY_CLOSED';
 
 export interface Club {
   id: number;
@@ -48,6 +49,10 @@ export interface Club {
   bookingSimpleAdvanceDaysAdmin?: number;
   allowAdminSkipSimpleAdvanceLimit?: boolean;
   openingDays?: number[] | null;
+  closureDates?: string[] | null;
+  clubOperationalStatus?: ClubOperationalStatus;
+  temporaryClosureStartDate?: string | null;
+  temporaryClosureEndDate?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
