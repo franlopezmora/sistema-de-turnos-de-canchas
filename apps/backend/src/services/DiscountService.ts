@@ -331,6 +331,57 @@ export class DiscountService {
     });
   }
 
+  async updatePolicy(input: {
+    clubId: number;
+    policyId: string;
+    name?: string;
+    description?: string | null;
+    scope?: DiscountScope;
+    amountType?: DiscountAmountType;
+    amountValue?: number;
+    applyMode?: DiscountApplyMode;
+    isStackable?: boolean;
+    priority?: number;
+    isActive?: boolean;
+    startsAt?: Date | null;
+    endsAt?: Date | null;
+  }) {
+    const existing = await prisma.discountPolicy.findFirst({
+      where: { id: input.policyId, clubId: input.clubId }
+    });
+    if (!existing) throw new Error('Política no encontrada para el club');
+
+    const nextAmountType = input.amountType ?? existing.amountType;
+    const nextAmountValue = input.amountValue == null
+      ? Number(existing.amountValue || 0)
+      : Number(input.amountValue);
+
+    if (!Number.isFinite(nextAmountValue) || nextAmountValue <= 0) {
+      throw new Error('amountValue inválido');
+    }
+    if (nextAmountType === 'PERCENT' && nextAmountValue > 100) {
+      throw new Error('El descuento porcentual no puede superar 100');
+    }
+
+    return prisma.discountPolicy.update({
+      where: { id: input.policyId },
+      data: {
+        ...(input.name === undefined ? {} : { name: input.name.trim() }),
+        ...(input.description === undefined ? {} : { description: input.description?.trim() || null }),
+        ...(input.scope === undefined ? {} : { scope: input.scope }),
+        ...(input.amountType === undefined ? {} : { amountType: input.amountType }),
+        ...(input.amountValue === undefined ? {} : { amountValue: round2(nextAmountValue) }),
+        ...(input.applyMode === undefined ? {} : { applyMode: input.applyMode }),
+        ...(input.isStackable === undefined ? {} : { isStackable: Boolean(input.isStackable) }),
+        ...(input.priority === undefined ? {} : { priority: Math.floor(Number(input.priority)) }),
+        ...(input.isActive === undefined ? {} : { isActive: Boolean(input.isActive) }),
+        ...(input.startsAt === undefined ? {} : { startsAt: input.startsAt }),
+        ...(input.endsAt === undefined ? {} : { endsAt: input.endsAt })
+      },
+      include: { targets: true }
+    });
+  }
+
   async assignPolicyToClient(input: {
     clubId: number;
     clientId: string;

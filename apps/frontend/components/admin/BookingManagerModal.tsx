@@ -3,9 +3,11 @@ import { Banknote, Receipt, Trash2, X } from 'lucide-react';
 import { ClubAdminService } from '../../services/ClubAdminService';
 import {
   confirmBooking,
+  getBookingQuote,
   getBookingFinancialSummary,
   registerBookingPartialPayment,
-  type BookingFinancialSummary
+  type BookingFinancialSummary,
+  type BookingQuote
 } from '../../services/BookingService';
 import PaymentCalculator, { type PaymentCalculatorResult } from '../PaymentCalculator';
 import ProductSearch, { type ProductSearchItem } from '../ui/ProductSearch';
@@ -92,8 +94,13 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const paymentInFlightRef = useRef(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductSearchItem | null>(null);
   const [productSearchKey, setProductSearchKey] = useState(0);
+  const [confirmationQuote, setConfirmationQuote] = useState<BookingQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
 
   const isCancelled = booking?.status === 'CANCELLED';
+  const bookingStatus = String(booking?.status || 'PENDING');
+  const canManualConfirm = bookingStatus === 'PENDING';
 
   const loadData = useCallback(async () => {
     if (!clubSlug || !bookingId) return;
@@ -149,6 +156,80 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (!canManualConfirm) {
+      setConfirmationQuote(null);
+      setQuoteError(null);
+      setQuoteLoading(false);
+      return;
+    }
+
+    const courtId = Number(booking?.courtId || booking?.court?.id || 0);
+    const activityId = Number(booking?.activityId || booking?.activityTypeId || booking?.activityType?.id || booking?.activity?.id || 0);
+    const startRaw = booking?.startDateTime;
+    const endRaw = booking?.endDateTime;
+    const startDateTime = startRaw ? new Date(startRaw) : null;
+    const endDateTime = endRaw ? new Date(endRaw) : null;
+    const durationFromRange = startDateTime && endDateTime
+      ? Math.round((endDateTime.getTime() - startDateTime.getTime()) / 60000)
+      : null;
+    const durationMinutes = Number(booking?.durationMinutes || durationFromRange || 0);
+    const safeGuestDni = String(booking?.client?.dni || '').replace(/\D/g, '');
+    const safeGuestPhone = String(booking?.client?.phone || '').trim();
+    const safeGuestEmail = String(booking?.client?.email || '').trim();
+
+    if (!Number.isFinite(courtId) || courtId <= 0 || !Number.isFinite(activityId) || activityId <= 0 || !startDateTime || Number.isNaN(startDateTime.getTime())) {
+      setConfirmationQuote(null);
+      setQuoteError('No se pudo preparar la cotización previa.');
+      setQuoteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setQuoteLoading(true);
+        setQuoteError(null);
+        const quote = await getBookingQuote({
+          courtId,
+          activityId,
+          startDateTime,
+          ...(Number.isFinite(durationMinutes) && durationMinutes > 0 ? { durationMinutes } : {}),
+          ...(safeGuestDni ? { guestDni: safeGuestDni } : {}),
+          ...(safeGuestPhone ? { guestPhone: safeGuestPhone } : {}),
+          ...(safeGuestEmail ? { guestEmail: safeGuestEmail } : {})
+        });
+        if (!cancelled) setConfirmationQuote(quote);
+      } catch (error) {
+        if (!cancelled) {
+          setConfirmationQuote(null);
+          setQuoteError(extractErrorMessage(error, 'No se pudo cotizar el descuento previo a la confirmación.'));
+        }
+      } finally {
+        if (!cancelled) setQuoteLoading(false);
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    canManualConfirm,
+    booking?.courtId,
+    booking?.court?.id,
+    booking?.activityId,
+    booking?.activityTypeId,
+    booking?.activityType?.id,
+    booking?.activity?.id,
+    booking?.startDateTime,
+    booking?.endDateTime,
+    booking?.durationMinutes,
+    booking?.client?.dni,
+    booking?.client?.phone,
+    booking?.client?.email
+  ]);
+
   const draftTotal = useMemo(() => {
     return cartItems
       .filter((i) => i.isNew)
@@ -180,6 +261,20 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
         .map((discount) => String(discount?.policyName || '').trim())
         .filter(Boolean)
     )
+  );
+  const registeredItemsDiscountTotal = Number(
+    cartItems
+      .filter((item) => !item.isNew)
+      .reduce(
+        (sum, item) =>
+          sum +
+          (item.discounts || []).reduce(
+            (acc, discount) => acc + Number(discount?.discountAmount || 0),
+            0
+          ),
+        0
+      )
+      .toFixed(2)
   );
 
   const handleSelectProduct = (product: ProductSearchItem) => {
@@ -350,8 +445,6 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const bookingTitle = courtName || booking?.court?.name || 'Cancha';
   const clientName = booking?.client?.name || 'Sin cliente vinculado';
   const clientPhone = booking?.client?.phone || '';
-  const bookingStatus = String(booking?.status || 'PENDING');
-  const canManualConfirm = bookingStatus === 'PENDING';
 
   const handleManualConfirm = async () => {
     if (!canManualConfirm) return;
@@ -674,6 +767,64 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                 </span>
               </div>
             </div>
+
+            {canManualConfirm ? (
+              <div className="mt-4 rounded-xl bg-white border border-[#347048]/10 px-3 py-3">
+                <p className="text-[9px] font-black uppercase tracking-widest text-[#347048]/45">Previsualización al confirmar</p>
+                {quoteLoading ? (
+                  <p className="text-[11px] font-black uppercase tracking-wide text-[#347048] mt-2">Cotizando descuento...</p>
+                ) : confirmationQuote ? (
+                  <div className="mt-2 space-y-1 text-[11px] font-black uppercase tracking-wide text-[#347048]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#347048]/60">Precio de lista</span>
+                      <span>{formatMoney(Number(confirmationQuote.listPrice || 0))}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#347048]/60">Descuento</span>
+                      <span>{formatMoney(Number(confirmationQuote.discountAmount || 0))}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#347048]/60">Final estimado</span>
+                      <span>{formatMoney(Number(confirmationQuote.finalPrice || 0))}</span>
+                    </div>
+                    <div className="mt-2 border-t border-[#347048]/10 pt-2 flex items-center justify-between">
+                      <span className="text-[#347048]/60">Consumos registrados</span>
+                      <span>{formatMoney(itemsRegisteredTotal)}</span>
+                    </div>
+                    {registeredItemsDiscountTotal > 0.009 ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#347048]/60">Descuento en consumos</span>
+                        <span>{formatMoney(registeredItemsDiscountTotal)}</span>
+                      </div>
+                    ) : null}
+                    {draftTotal > 0.009 ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#347048]/60">Consumos nuevos (pend.)</span>
+                        <span>{formatMoney(draftTotal)}</span>
+                      </div>
+                    ) : null}
+                    <div className="mt-2 border-t border-[#347048]/10 pt-2 flex items-center justify-between text-[#926699]">
+                      <span>Total preliminar cuenta</span>
+                      <span>{formatMoney(Number((Number(confirmationQuote.finalPrice || 0) + itemsRegisteredTotal + draftTotal).toFixed(2)))}</span>
+                    </div>
+                    {Array.isArray(confirmationQuote.appliedPolicies) && confirmationQuote.appliedPolicies.length > 0 ? (
+                      <div className="pt-1 text-[10px] font-black text-emerald-700 normal-case tracking-normal">
+                        Políticas: {confirmationQuote.appliedPolicies.map((policy) => String(policy?.policyName || '').trim()).filter(Boolean).join(', ')}
+                      </div>
+                    ) : null}
+                    {draftTotal > 0.009 ? (
+                      <div className="pt-1 text-[10px] font-black text-[#347048]/60 normal-case tracking-normal">
+                        Los consumos nuevos se calculan como pendientes hasta guardarlos/cobrarlos.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : quoteError ? (
+                  <p className="text-[10px] font-black text-amber-700 mt-2">{quoteError}</p>
+                ) : (
+                  <p className="text-[10px] font-black text-[#347048]/60 mt-2">Sin datos para cotizar.</p>
+                )}
+              </div>
+            ) : null}
 
             <div className="mt-6 space-y-3">
               {canManualConfirm ? (

@@ -306,6 +306,17 @@ export default function AdminTabClub() {
     isStackable: false,
     priority: '100'
   });
+  const [editingDiscountPolicyId, setEditingDiscountPolicyId] = useState<string | null>(null);
+  const [discountPolicyEditForm, setDiscountPolicyEditForm] = useState({
+    name: '',
+    scope: 'BOOKING' as DiscountPolicyScope,
+    amountType: 'PERCENT' as DiscountAmountType,
+    amountValue: '',
+    applyMode: 'INCLUDE_ONLY' as DiscountApplyMode,
+    isStackable: false,
+    priority: '100',
+    isActive: true
+  });
   const [clientSearch, setClientSearch] = useState('');
   const [clientSearchResults, setClientSearchResults] = useState<ClientSearchResult[]>([]);
   const [showClientSearchDropdown, setShowClientSearchDropdown] = useState(false);
@@ -855,6 +866,65 @@ export default function AdminTabClub() {
       showInfo('Política de descuento creada', 'Éxito');
     } catch (error: any) {
       showError(`No se pudo crear la política: ${error.message}`);
+    }
+  };
+
+  const handleStartEditDiscountPolicy = (policy: DiscountPolicyView) => {
+    setEditingDiscountPolicyId(policy.id);
+    setDiscountPolicyEditForm({
+      name: policy.name || '',
+      scope: policy.scope,
+      amountType: policy.amountType,
+      amountValue: String(policy.amountValue ?? ''),
+      applyMode: policy.applyMode,
+      isStackable: Boolean(policy.isStackable),
+      priority: String(policy.priority ?? 100),
+      isActive: Boolean(policy.isActive)
+    });
+  };
+
+  const handleCancelEditDiscountPolicy = () => {
+    setEditingDiscountPolicyId(null);
+  };
+
+  const handleSaveDiscountPolicy = async () => {
+    if (!club || !editingDiscountPolicyId) return;
+    const amountValue = Number(discountPolicyEditForm.amountValue);
+    const priority = Number(discountPolicyEditForm.priority);
+
+    if (!discountPolicyEditForm.name.trim()) {
+      showError('El nombre de la política es obligatorio');
+      return;
+    }
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      showError('El valor del descuento debe ser mayor a 0');
+      return;
+    }
+    if (discountPolicyEditForm.amountType === 'PERCENT' && amountValue > 100) {
+      showError('El porcentaje no puede superar 100');
+      return;
+    }
+    if (!Number.isFinite(priority)) {
+      showError('La prioridad es inválida');
+      return;
+    }
+
+    try {
+      await ClubAdminService.updateDiscountPolicy(club.slug, editingDiscountPolicyId, {
+        name: discountPolicyEditForm.name.trim(),
+        scope: discountPolicyEditForm.scope,
+        amountType: discountPolicyEditForm.amountType,
+        amountValue,
+        applyMode: discountPolicyEditForm.applyMode,
+        isStackable: discountPolicyEditForm.isStackable,
+        priority: Math.floor(priority),
+        isActive: discountPolicyEditForm.isActive
+      });
+      setEditingDiscountPolicyId(null);
+      await loadDiscountPolicies(club.slug);
+      showInfo('Política actualizada', 'Éxito');
+    } catch (error: any) {
+      showError(`No se pudo actualizar la política: ${error.message}`);
     }
   };
 
@@ -1858,13 +1928,110 @@ export default function AdminTabClub() {
                           <div key={policy.id} className="bg-white rounded-xl border border-white/70 p-3 text-[#347048]">
                             <div className="flex items-center justify-between gap-2">
                               <p className="font-black text-sm">{policy.name}</p>
-                              <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${policy.isActive ? 'bg-[#B9CF32]/50' : 'bg-[#926699]/20'}`}>
-                                {policy.isActive ? 'ACTIVA' : 'INACTIVA'}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${policy.isActive ? 'bg-[#B9CF32]/50' : 'bg-[#926699]/20'}`}>
+                                  {policy.isActive ? 'ACTIVA' : 'INACTIVA'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditDiscountPolicy(policy)}
+                                  className="px-2 py-1 rounded-lg bg-[#347048]/10 text-[#347048] text-[10px] font-black uppercase tracking-widest hover:bg-[#347048]/20"
+                                >
+                                  Editar
+                                </button>
+                              </div>
                             </div>
-                            <p className="text-[11px] font-bold opacity-80 mt-1">
-                              {formatDiscountScopeLabel(policy.scope)} · {formatDiscountAmountTypeLabel(policy.amountType)} {Number(policy.amountValue)} · prioridad {policy.priority} · {policy.isStackable ? 'acumulable' : 'no acumulable'}
-                            </p>
+                            {editingDiscountPolicyId === policy.id ? (
+                              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  value={discountPolicyEditForm.name}
+                                  onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                                  className="h-10 bg-white border-2 border-[#347048]/15 focus:border-[#B9CF32] rounded-lg px-3 text-[#347048] font-black text-sm"
+                                  placeholder="Nombre"
+                                />
+                                <select
+                                  value={discountPolicyEditForm.scope}
+                                  onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, scope: e.target.value as DiscountPolicyScope }))}
+                                  className="h-10 bg-white border-2 border-[#347048]/15 focus:border-[#B9CF32] rounded-lg px-3 text-[#347048] font-black text-sm"
+                                >
+                                  <option value="BOOKING">Reserva</option>
+                                  <option value="PRODUCT">Producto</option>
+                                  <option value="SERVICE">Servicio</option>
+                                  <option value="ALL">Todo</option>
+                                </select>
+                                <select
+                                  value={discountPolicyEditForm.amountType}
+                                  onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, amountType: e.target.value as DiscountAmountType }))}
+                                  className="h-10 bg-white border-2 border-[#347048]/15 focus:border-[#B9CF32] rounded-lg px-3 text-[#347048] font-black text-sm"
+                                >
+                                  <option value="PERCENT">Porcentaje</option>
+                                  <option value="FIXED">Monto fijo</option>
+                                </select>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={discountPolicyEditForm.amountValue}
+                                  onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, amountValue: e.target.value }))}
+                                  className="h-10 bg-white border-2 border-[#347048]/15 focus:border-[#B9CF32] rounded-lg px-3 text-[#347048] font-black text-sm"
+                                  placeholder="Valor"
+                                />
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={discountPolicyEditForm.priority}
+                                  onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, priority: e.target.value }))}
+                                  className="h-10 bg-white border-2 border-[#347048]/15 focus:border-[#B9CF32] rounded-lg px-3 text-[#347048] font-black text-sm"
+                                  placeholder="Prioridad"
+                                />
+                                <select
+                                  value={discountPolicyEditForm.applyMode}
+                                  onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, applyMode: e.target.value as DiscountApplyMode }))}
+                                  className="h-10 bg-white border-2 border-[#347048]/15 focus:border-[#B9CF32] rounded-lg px-3 text-[#347048] font-black text-sm"
+                                >
+                                  <option value="INCLUDE_ONLY">Solo incluidos</option>
+                                  <option value="EXCLUDE_LIST">Excluir lista</option>
+                                </select>
+                                <label className="md:col-span-2 flex items-center gap-2 text-xs font-black text-[#347048]">
+                                  <input
+                                    type="checkbox"
+                                    checked={discountPolicyEditForm.isStackable}
+                                    onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, isStackable: e.target.checked }))}
+                                  />
+                                  Acumulable
+                                </label>
+                                <label className="md:col-span-2 flex items-center gap-2 text-xs font-black text-[#347048]">
+                                  <input
+                                    type="checkbox"
+                                    checked={discountPolicyEditForm.isActive}
+                                    onChange={(e) => setDiscountPolicyEditForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                                  />
+                                  Activa
+                                </label>
+                                <div className="md:col-span-2 flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveDiscountPolicy}
+                                    className="flex-1 h-10 bg-[#347048] hover:bg-[#B9CF32] text-[#EBE1D8] hover:text-[#347048] rounded-lg font-black text-[11px] uppercase tracking-widest transition-all"
+                                  >
+                                    Guardar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEditDiscountPolicy}
+                                    className="flex-1 h-10 bg-white border border-[#347048]/20 hover:border-[#347048]/35 text-[#347048] rounded-lg font-black text-[11px] uppercase tracking-widest transition-all"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] font-bold opacity-80 mt-1">
+                                {formatDiscountScopeLabel(policy.scope)} · {formatDiscountAmountTypeLabel(policy.amountType)} {Number(policy.amountValue)} · prioridad {policy.priority} · {policy.isStackable ? 'acumulable' : 'no acumulable'}
+                              </p>
+                            )}
                           </div>
                         ))}
                       </div>

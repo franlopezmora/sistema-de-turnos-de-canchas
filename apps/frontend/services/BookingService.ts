@@ -128,8 +128,9 @@ export const createBooking = async (
 export const getBookingQuote = async (input: {
   courtId: number;
   activityId: number;
-  date: Date;
-  slotTime: string;
+  date?: Date;
+  slotTime?: string;
+  startDateTime?: Date;
   durationMinutes?: number;
   guestEmail?: string;
   guestPhone?: string;
@@ -146,8 +147,14 @@ export const getBookingQuote = async (input: {
     body: JSON.stringify({
       courtId: input.courtId,
       activityId: input.activityId,
-      date: `${input.date.getFullYear()}-${String(input.date.getMonth() + 1).padStart(2, '0')}-${String(input.date.getDate()).padStart(2, '0')}`,
-      slotTime: input.slotTime,
+      ...(input.startDateTime
+        ? { startDateTime: input.startDateTime.toISOString() }
+        : (input.date && input.slotTime
+            ? {
+                date: `${input.date.getFullYear()}-${String(input.date.getMonth() + 1).padStart(2, '0')}-${String(input.date.getDate()).padStart(2, '0')}`,
+                slotTime: input.slotTime
+              }
+            : {})),
       ...(Number.isFinite(input.durationMinutes) ? { durationMinutes: input.durationMinutes } : {}),
       ...(input.guestEmail ? { guestEmail: input.guestEmail } : {}),
       ...(input.guestPhone ? { guestPhone: input.guestPhone } : {}),

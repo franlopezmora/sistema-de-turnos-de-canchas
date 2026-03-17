@@ -140,6 +140,14 @@ export default function AccountManagerModal({
   const showDescriptionField = newItem.type === 'ADJUSTMENT';
   const hasBookingPending = paymentCalculatorCourtPending > 0.009;
   const shouldShowBookingPending = accountSourceType === 'BOOKING' || hasBookingPending;
+  const pendingItemsFromMap = Number(
+    (Array.isArray(detail?.items) ? detail.items : []).reduce((sum: number, item: any) => {
+      const itemType = String(item?.type || '').toUpperCase();
+      if (itemType === 'BOOKING') return sum;
+      const outstanding = Number(itemOutstandingMap.get(String(item?.id || '')) || 0);
+      return sum + Math.max(0, outstanding);
+    }, 0).toFixed(2)
+  );
   const remaining = Number(detail?.remaining || 0);
   const calculatedPending = Number(paymentCalculatorTotalPending || 0);
   const hasPendingDrift = Math.abs(remaining - calculatedPending) > 0.01;
@@ -474,6 +482,10 @@ export default function AccountManagerModal({
                         <span>${paymentCalculatorCourtPending.toLocaleString()}</span>
                       </div>
                     )}
+                    <div className="flex items-center justify-between text-[#347048]/60">
+                      <span>Pendiente consumos</span>
+                      <span>${pendingItemsFromMap.toLocaleString()}</span>
+                    </div>
                     {hasPendingDrift && (
                       <div className="flex items-center justify-between text-amber-700">
                         <span>Pendiente calculado</span>
@@ -610,4 +622,3 @@ export default function AccountManagerModal({
   if (!mounted || typeof document === 'undefined') return null;
   return createPortal(modalContent, document.body);
 }
-

@@ -64,6 +64,47 @@ export class DiscountController {
     }
   };
 
+  updatePolicy = async (req: Request, res: Response) => {
+    try {
+      const paramsSchema = z.object({
+        policyId: z.string().trim().min(1)
+      });
+      const bodySchema = z.object({
+        name: z.string().trim().min(2).max(120).optional(),
+        description: z.string().trim().max(500).nullable().optional(),
+        scope: z.enum(['BOOKING', 'PRODUCT', 'SERVICE', 'ALL']).optional(),
+        amountType: z.enum(['PERCENT', 'FIXED']).optional(),
+        amountValue: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().positive().optional()),
+        applyMode: z.enum(['INCLUDE_ONLY', 'EXCLUDE_LIST']).optional(),
+        isStackable: z.boolean().optional(),
+        priority: z.preprocess((v) => (v == null || v === '' ? undefined : Number(v)), z.number().int().optional()),
+        isActive: z.boolean().optional(),
+        startsAt: z.preprocess((v) => (v == null || v === '' ? undefined : (v === null ? null : new Date(String(v)))), z.union([z.date(), z.null()]).optional()),
+        endsAt: z.preprocess((v) => (v == null || v === '' ? undefined : (v === null ? null : new Date(String(v)))), z.union([z.date(), z.null()]).optional())
+      });
+
+      const parsedParams = paramsSchema.safeParse(req.params);
+      const parsedBody = bodySchema.safeParse(req.body);
+      if (!parsedParams.success) return res.status(400).json({ error: parsedParams.error.format() });
+      if (!parsedBody.success) return res.status(400).json({ error: parsedBody.error.format() });
+
+      const body = parsedBody.data;
+      if (Object.keys(body).length === 0) {
+        return res.status(400).json({ error: 'No se enviaron cambios para actualizar' });
+      }
+
+      const clubId = this.resolveClubId(req);
+      const updated = await this.discountService.updatePolicy({
+        clubId,
+        policyId: parsedParams.data.policyId,
+        ...body
+      });
+      return res.json(updated);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'No se pudo actualizar la política' });
+    }
+  };
+
   listClientAssignments = async (req: Request, res: Response) => {
     try {
       const paramsSchema = z.object({ clientId: z.string().trim().min(1) });

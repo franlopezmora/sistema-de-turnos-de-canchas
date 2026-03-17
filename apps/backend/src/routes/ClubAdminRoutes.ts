@@ -314,6 +314,13 @@ router.post('/:slug/admin/discount-policies',
     discountController.createPolicy
 );
 
+router.patch('/:slug/admin/discount-policies/:policyId',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    discountController.updatePolicy
+);
+
 router.get('/:slug/admin/clients/:clientId/discount-assignments',
     authMiddleware,
     verifyClubAccess,

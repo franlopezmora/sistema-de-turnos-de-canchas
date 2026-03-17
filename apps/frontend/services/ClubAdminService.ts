@@ -560,6 +560,32 @@ export class ClubAdminService {
     return res.json();
   }
 
+  static async updateDiscountPolicy(slug: string, policyId: string, body: {
+    name?: string;
+    description?: string | null;
+    scope?: DiscountPolicyScope;
+    amountType?: DiscountAmountType;
+    amountValue?: number;
+    applyMode?: DiscountApplyMode;
+    isStackable?: boolean;
+    priority?: number;
+    isActive?: boolean;
+    startsAt?: string | null;
+    endsAt?: string | null;
+  }) {
+    if (!getToken()) throw new Error('No autenticado');
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/discount-policies/${policyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al actualizar política de descuento');
+    }
+    return res.json();
+  }
+
   static async listClientDiscountAssignments(slug: string, clientId: string) {
     if (!getToken()) throw new Error('No autenticado');
     const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/clients/${clientId}/discount-assignments`, {
