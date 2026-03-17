@@ -19,6 +19,12 @@ export class CashService {
 
     constructor(private cashRepository: CashRepository) {}
 
+    private mapPaymentMethodToMovementMethod(method?: PaymentMethod | null): 'CASH' | 'TRANSFER' | 'CARD' {
+        if (method === 'CASH') return 'CASH';
+        if (method === 'CARD') return 'CARD';
+        return 'TRANSFER';
+    }
+
     private async resolveClubId(clubId?: number, userId?: number, preferredClubId?: number) {
         if (clubId && Number.isInteger(clubId) && clubId > 0) {
             return clubId;
@@ -51,7 +57,63 @@ export class CashService {
 
         const movementsRaw = await this.cashRepository.findAllByDateRange(start, end, resolvedClubId);
 
-        const paymentIds = (movementsRaw || [])
+        // Devoluciones ejecutadas que no generan CashMovement (ej: transferencia/tarjeta)
+        // también deben aparecer en "movimientos".
+        const standaloneExecutedRefunds = await prisma.refund.findMany({
+            where: {
+                status: 'EXECUTED',
+                executedAt: {
+                    gte: start,
+                    lte: end
+                },
+                cashMovement: { is: null },
+                ...(resolvedClubId ? { clubId: resolvedClubId } : {})
+            },
+            include: {
+                account: {
+                    select: {
+                        id: true,
+                        sourceType: true,
+                        sourceId: true
+                    }
+                },
+                payment: {
+                    select: {
+                        id: true,
+                        method: true,
+                        channel: true
+                    }
+                }
+            },
+            orderBy: { executedAt: 'desc' }
+        });
+
+        const syntheticRefundMovements = standaloneExecutedRefunds.map((refund, index) => ({
+            id: -1 * (Number(new Date(refund.executedAt || refund.createdAt).getTime()) + index + 1),
+            createdAt: refund.executedAt || refund.createdAt,
+            type: 'REFUND',
+            method: this.mapPaymentMethodToMovementMethod(refund.payment?.method),
+            amount: refund.amount,
+            concept: `Devolucion pago ${String(refund.payment?.id || '')}`.trim(),
+            clubId: refund.clubId,
+            refundId: refund.id,
+            paymentId: refund.payment?.id || null,
+            payment: refund.payment ? { id: refund.payment.id, channel: refund.payment.channel } : null,
+            refund: {
+                id: refund.id,
+                paymentId: refund.payment?.id || null,
+                payment: refund.payment ? { id: refund.payment.id, channel: refund.payment.channel } : null,
+                account: refund.account
+            }
+        }));
+
+        const allMovementsRaw = [...(movementsRaw || []), ...syntheticRefundMovements].sort((a: any, b: any) => {
+            const ta = new Date(a?.createdAt || 0).getTime();
+            const tb = new Date(b?.createdAt || 0).getTime();
+            return tb - ta;
+        });
+
+        const paymentIds = (allMovementsRaw || [])
             .map((movement: any) => movement?.paymentId ?? movement?.refund?.payment?.id ?? movement?.refund?.paymentId)
             .filter((id: any) => typeof id === 'string' && id.trim().length > 0);
 
@@ -79,7 +141,7 @@ export class CashService {
             allocationMap.get(paymentId)!.push({ type, amount });
         }
 
-        const bookingIds = (movementsRaw || [])
+        const bookingIds = (allMovementsRaw || [])
             .map((movement: any) => {
                 const sourceType = movement?.payment?.account?.sourceType ?? movement?.refund?.account?.sourceType ?? null;
                 const sourceId = movement?.payment?.account?.sourceId ?? movement?.refund?.account?.sourceId ?? null;
@@ -109,7 +171,7 @@ export class CashService {
             }
         }
 
-        const movements = (movementsRaw || []).map((movement: any) => {
+        const movements = (allMovementsRaw || []).map((movement: any) => {
             const sourceType = movement?.payment?.account?.sourceType ?? movement?.refund?.account?.sourceType ?? null;
             const sourceId = movement?.payment?.account?.sourceId ?? movement?.refund?.account?.sourceId ?? null;
             const accountId = movement?.payment?.account?.id ?? movement?.refund?.account?.id ?? null;
