@@ -663,6 +663,43 @@ export class BookingController {
     }
 }
 
+    // COTIZAR CONSUMO (POST) - sin persistir
+    quoteItem = async (req: Request, res: Response) => {
+        try {
+            const schema = z.object({
+                productId: z.preprocess((v) => Number(v), z.number().int().positive()),
+                quantity: z.preprocess((v) => Number(v), z.number().int().positive()),
+                applyDiscount: z.preprocess((v) => v === undefined ? undefined : (v === true || v === 'true'), z.boolean().optional())
+            });
+            const paramId = req.params.id || req.params.bookingId;
+            const bodyParsed = schema.safeParse(req.body);
+            if (!bodyParsed.success) {
+                return res.status(400).json({ error: bodyParsed.error.format() });
+            }
+            const rawBookingId = paramId;
+            const bookingId = Number(rawBookingId);
+            if (!Number.isInteger(bookingId) || bookingId < 1) {
+                return res.status(400).json({ error: "bookingId inválido" });
+            }
+            const clubId = Number((req as any).clubId);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return res.status(400).json({ error: "Club inválido" });
+            }
+
+            const result = await this.bookingService.quoteItemForBooking(
+                bookingId,
+                Number(bodyParsed.data.productId),
+                Number(bodyParsed.data.quantity),
+                clubId,
+                { applyDiscount: bodyParsed.data.applyDiscount }
+            );
+            return res.json(result);
+        } catch (error: any) {
+            const message = String(error?.message || 'Error al cotizar consumo');
+            return res.status(400).json({ error: message });
+        }
+    }
+
     //  ELIMINAR CONSUMO (DELETE)
     removeItem = async (req: Request, res: Response) => {
         try {

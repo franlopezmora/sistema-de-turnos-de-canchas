@@ -30,6 +30,8 @@ type CartItem = {
   productName: string;
   quantity: number;
   price: number;
+  listUnitPrice?: number;
+  discountAmount?: number;
   paidAmount?: number;
   remainingAmount?: number;
   type?: 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT';
@@ -101,6 +103,7 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const isCancelled = booking?.status === 'CANCELLED';
   const bookingStatus = String(booking?.status || 'PENDING');
   const canManualConfirm = bookingStatus === 'PENDING';
+  const canManageConsumptions = bookingStatus !== 'PENDING' && !isCancelled;
 
   const loadData = useCallback(async () => {
     if (!clubSlug || !bookingId) return;
@@ -236,6 +239,10 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       .reduce((sum, i) => sum + Number(i.price || 0) * Number(i.quantity || 0), 0);
   }, [cartItems]);
 
+  const hasDraftItems = useMemo(() => {
+    return cartItems.some((item) => item.isNew);
+  }, [cartItems]);
+
   const registeredItemsPendingTotal = useMemo(() => {
     return cartItems
       .filter((i) => !i.isNew)
@@ -279,31 +286,57 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
 
   const handleSelectProduct = (product: ProductSearchItem) => {
     if (!product?.id) return;
+    if (!canManageConsumptions) return;
     const outOfStock = Number((product as any)?.stock ?? 1) <= 0;
     if (outOfStock) return;
     setSelectedProduct(product);
   };
 
-  const handleAddSelectedProduct = () => {
+  const handleAddSelectedProduct = async () => {
     if (!selectedProduct?.id) return;
+    if (!canManageConsumptions) return;
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) return;
     const outOfStock = Number((selectedProduct as any)?.stock ?? 1) <= 0;
     if (outOfStock) return;
 
-    const tempId = `new-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const newItem: CartItem = {
-      tempId,
-      productId: selectedProduct.id,
-      productName: selectedProduct.name,
-      quantity: qty,
-      price: Number(selectedProduct.price || 0),
-      isNew: true
-    };
-    setCartItems((prev) => [...prev, newItem]);
-    setSelectedProduct(null);
-    setQuantity(1);
-    setProductSearchKey((prev) => prev + 1);
+    try {
+      setSaving(true);
+      setActionError(null);
+      const quote = await ClubAdminService.quoteBookingItem(bookingId, selectedProduct.id, qty);
+      const tempId = `new-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const unitPrice = Number(quote?.finalUnitPrice ?? selectedProduct.price ?? 0);
+      const listUnitPrice = Number(quote?.listUnitPrice ?? selectedProduct.price ?? unitPrice);
+      const discountAmount = Number(quote?.discountAmount ?? 0);
+      const newItem: CartItem = {
+        tempId,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        quantity: qty,
+        price: unitPrice,
+        listUnitPrice,
+        discountAmount,
+        discounts: Array.isArray(quote?.appliedPolicies)
+          ? quote.appliedPolicies.map((p: any) => ({
+              id: String(p.policyId || p.policyName || 'policy'),
+              policyId: String(p.policyId || ''),
+              policyName: String(p.policyName || ''),
+              discountAmount: Number(p.discountAmount || 0)
+            }))
+          : [],
+        isNew: true
+      };
+      setCartItems((prev) => [...prev, newItem]);
+      setSelectedProduct(null);
+      setQuantity(1);
+      setProductSearchKey((prev) => prev + 1);
+    } catch (error) {
+      const message = extractErrorMessage(error, 'No se pudo cotizar el producto con descuento.');
+      reportUiError({ area: 'BookingManagerModal', action: 'quoteBookingItem' }, error);
+      setActionError(message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRemove = async (item: CartItem) => {
@@ -420,6 +453,10 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
 
   const handleSaveDraftItems = async () => {
     if (saving || isCancelled) return;
+    if (!canManageConsumptions) {
+      setActionError('No se pueden cargar consumos mientras la reserva está pendiente. Confirmala primero.');
+      return;
+    }
     const draftItems = cartItems.filter((item) => item.isNew);
     if (draftItems.length === 0) return;
 
@@ -488,46 +525,52 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
             {clientPhone ? <p className="text-xs font-bold text-[#347048]/60 mt-1">{clientPhone}</p> : null}
           </div>
 
-          <div className="bg-white/40 p-4 rounded-2xl border border-white/60">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/60 mb-3">
-              Agregar consumos / extras
-            </p>
-            <div className="flex gap-3 items-center">
-              <div className="flex-1">
-                <ProductSearch
-                  key={`product-search-${productSearchKey}`}
-                  products={products}
-                  autoFocus
-                  disabled={loading || saving || isCancelled}
-                  placeholder={loading ? 'Cargando productos...' : 'Agregar producto (ej: Gatorade)...'}
-                  onSelect={handleSelectProduct}
-                  selectedName={selectedProduct?.name}
-                  onInputChange={(value) => {
-                    if (!selectedProduct) return;
-                    if (value.trim().toLowerCase() !== selectedProduct.name.toLowerCase()) {
-                      setSelectedProduct(null);
-                    }
-                  }}
+          {canManageConsumptions ? (
+            <div className="bg-white/40 p-4 rounded-2xl border border-white/60">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/60 mb-3">
+                Agregar consumos / extras
+              </p>
+              <div className="flex gap-3 items-center">
+                <div className="flex-1">
+                  <ProductSearch
+                    key={`product-search-${productSearchKey}`}
+                    products={products}
+                    autoFocus
+                    disabled={loading || saving || isCancelled}
+                    placeholder={loading ? 'Cargando productos...' : 'Agregar producto (ej: Gatorade)...'}
+                    onSelect={handleSelectProduct}
+                    selectedName={selectedProduct?.name}
+                    onInputChange={(value) => {
+                      if (!selectedProduct) return;
+                      if (value.trim().toLowerCase() !== selectedProduct.name.toLowerCase()) {
+                        setSelectedProduct(null);
+                      }
+                    }}
+                  />
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  value={quantity}
+                  onChange={(e) => setQuantity(Number(e.target.value))}
+                  className="w-20 h-12 bg-white border-2 border-[#347048]/10 focus:border-[#B9CF32] rounded-xl px-2 text-center text-[#347048] font-black shadow-sm outline-none"
+                  disabled={saving || isCancelled}
                 />
-              </div>
-              <input
-                type="number"
-                min={1}
-                value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
-                className="w-20 h-12 bg-white border-2 border-[#347048]/10 focus:border-[#B9CF32] rounded-xl px-2 text-center text-[#347048] font-black shadow-sm outline-none"
-                disabled={saving || isCancelled}
-              />
               <button
                 type="button"
-                onClick={handleAddSelectedProduct}
+                onClick={() => void handleAddSelectedProduct()}
                 disabled={saving || isCancelled || !selectedProduct}
-                className="h-12 px-4 rounded-xl bg-[#347048] text-white font-black uppercase tracking-widest text-[10px] shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#B9CF32] hover:text-[#347048]"
-              >
-                Agregar
-              </button>
+                  className="h-12 px-4 rounded-xl bg-[#347048] text-white font-black uppercase tracking-widest text-[10px] shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#B9CF32] hover:text-[#347048]"
+                >
+                  Agregar
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
+              Esta reserva está <span className="font-black">pendiente</span>. Para evitar inconsistencias, los consumos/extras se cargan recién cuando la confirmás.
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-[#347048]/10 overflow-hidden">
             <div className="p-4 flex items-center justify-between bg-[#347048]/5">
@@ -595,7 +638,12 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                       <p className="text-sm font-black truncate">
                         {item.quantity}x {item.productName}
                       </p>
-                      {itemDiscountTotal > 0.009 ? (
+                      {item.isNew && Number(item.discountAmount || 0) > 0.009 ? (
+                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700 mt-1">
+                          Descuento aplicado: -{formatMoney(Number(item.discountAmount || 0))}
+                        </p>
+                      ) : null}
+                      {!item.isNew && itemDiscountTotal > 0.009 ? (
                         <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700 mt-1">
                           Descuento aplicado: -{formatMoney(itemDiscountTotal)}
                         </p>
@@ -756,10 +804,12 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                 <span>Extras pendientes</span>
                 <span>{formatMoney(registeredItemsPendingTotal)}</span>
               </div>
-              <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#926699]">
-                <span>Extras nuevos</span>
-                <span>{formatMoney(draftTotal)}</span>
-              </div>
+              {canManageConsumptions ? (
+                <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#926699]">
+                  <span>Extras nuevos</span>
+                  <span>{formatMoney(draftTotal)}</span>
+                </div>
+              ) : null}
               <div className="mt-4 pt-4 border-t border-[#347048]/10 flex items-end justify-between">
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Total a registrar</span>
                 <span className="text-4xl font-black italic tracking-tighter text-[#347048]">
@@ -787,17 +837,25 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                       <span className="text-[#347048]/60">Final estimado</span>
                       <span>{formatMoney(Number(confirmationQuote.finalPrice || 0))}</span>
                     </div>
-                    <div className="mt-2 border-t border-[#347048]/10 pt-2 flex items-center justify-between">
-                      <span className="text-[#347048]/60">Consumos registrados</span>
-                      <span>{formatMoney(itemsRegisteredTotal)}</span>
-                    </div>
-                    {registeredItemsDiscountTotal > 0.009 ? (
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#347048]/60">Descuento en consumos</span>
-                        <span>{formatMoney(registeredItemsDiscountTotal)}</span>
-                      </div>
+                    {itemsRegisteredTotal > 0.009 ? (
+                      <>
+                        <div className="mt-2 border-t border-[#347048]/10 pt-2 flex items-center justify-between">
+                          <span className="text-[#347048]/60">
+                            {canManageConsumptions ? 'Consumos registrados' : 'Extras ya registrados'}
+                          </span>
+                          <span>{formatMoney(itemsRegisteredTotal)}</span>
+                        </div>
+                        {registeredItemsDiscountTotal > 0.009 ? (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[#347048]/60">
+                              {canManageConsumptions ? 'Descuento en consumos' : 'Descuento en extras'}
+                            </span>
+                            <span>{formatMoney(registeredItemsDiscountTotal)}</span>
+                          </div>
+                        ) : null}
+                      </>
                     ) : null}
-                    {draftTotal > 0.009 ? (
+                    {canManageConsumptions && draftTotal > 0.009 ? (
                       <div className="flex items-center justify-between">
                         <span className="text-[#347048]/60">Consumos nuevos (pend.)</span>
                         <span>{formatMoney(draftTotal)}</span>
@@ -805,14 +863,14 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                     ) : null}
                     <div className="mt-2 border-t border-[#347048]/10 pt-2 flex items-center justify-between text-[#926699]">
                       <span>Total preliminar cuenta</span>
-                      <span>{formatMoney(Number((Number(confirmationQuote.finalPrice || 0) + itemsRegisteredTotal + draftTotal).toFixed(2)))}</span>
+                      <span>{formatMoney(Number((Number(confirmationQuote.finalPrice || 0) + itemsRegisteredTotal + (canManageConsumptions ? draftTotal : 0)).toFixed(2)))}</span>
                     </div>
                     {Array.isArray(confirmationQuote.appliedPolicies) && confirmationQuote.appliedPolicies.length > 0 ? (
                       <div className="pt-1 text-[10px] font-black text-emerald-700 normal-case tracking-normal">
                         Políticas: {confirmationQuote.appliedPolicies.map((policy) => String(policy?.policyName || '').trim()).filter(Boolean).join(', ')}
                       </div>
                     ) : null}
-                    {draftTotal > 0.009 ? (
+                    {canManageConsumptions && draftTotal > 0.009 ? (
                       <div className="pt-1 text-[10px] font-black text-[#347048]/60 normal-case tracking-normal">
                         Los consumos nuevos se calculan como pendientes hasta guardarlos/cobrarlos.
                       </div>
@@ -841,7 +899,7 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
               <button
                 type="button"
                 onClick={handleSaveDraftItems}
-                disabled={saving || isCancelled || draftTotal <= 0.009}
+                disabled={saving || isCancelled || !canManageConsumptions || !hasDraftItems}
                 className="w-full flex items-center justify-center gap-2 bg-white border border-[#347048]/20 hover:border-[#347048]/35 text-[#347048] py-3 rounded-2xl font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Guardar consumos
