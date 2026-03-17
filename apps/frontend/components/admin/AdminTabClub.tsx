@@ -10,6 +10,8 @@ import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, I
 import { normalizeSessionUser } from '../../utils/session';
 import { useRouter } from 'next/router';
 
+type ClubOperationalStatus = 'OPEN' | 'TEMPORARY_CLOSED' | 'PERMANENTLY_CLOSED';
+
 type FixedBookingActivitySetting = {
   key: string;
   label: string;
@@ -38,6 +40,24 @@ const BOOKING_CONFIRMATION_MODES: Array<{ value: BookingConfirmationMode; label:
     value: 'DEPOSIT_REQUIRED',
     label: 'Con seña',
     helper: 'Las reservas nacen pendientes y se confirman cuando cubren la seña mínima.'
+  }
+];
+
+const CLUB_OPERATIONAL_STATUS_OPTIONS: Array<{ value: ClubOperationalStatus; label: string; helper: string }> = [
+  {
+    value: 'OPEN',
+    label: 'Abierto',
+    helper: 'El club opera normalmente y solo aplican cierres puntuales por fecha.'
+  },
+  {
+    value: 'TEMPORARY_CLOSED',
+    label: 'Cierre temporal',
+    helper: 'Bloquea un rango continuo de fechas (días, semanas o meses).'
+  },
+  {
+    value: 'PERMANENTLY_CLOSED',
+    label: 'Cierre permanente',
+    helper: 'El club queda no operable para nuevas reservas en cualquier fecha.'
   }
 ];
 
@@ -289,8 +309,11 @@ export default function AdminTabClub() {
     bookingSimpleAdvanceDaysUser: '30',
     bookingSimpleAdvanceDaysAdmin: '30',
     allowAdminSkipSimpleAdvanceLimit: false,
-       openingDays: '',
-        fixedBookingSettingsByActivity: {} as FixedBookingSettingsForm
+    openingDays: '',
+    clubOperationalStatus: 'OPEN' as ClubOperationalStatus,
+    temporaryClosureStartDate: '',
+    temporaryClosureEndDate: '',
+    fixedBookingSettingsByActivity: {} as FixedBookingSettingsForm
   });
       const [activitySettings, setActivitySettings] = useState<FixedBookingActivitySetting[]>([]);
      const [openingDaysSet, setOpeningDaysSet] = useState<number[]>([]);
@@ -467,6 +490,9 @@ export default function AdminTabClub() {
           bookingSimpleAdvanceDaysAdmin: clubData.bookingSimpleAdvanceDaysAdmin != null ? String(clubData.bookingSimpleAdvanceDaysAdmin) : '30',
           allowAdminSkipSimpleAdvanceLimit: clubData.allowAdminSkipSimpleAdvanceLimit ?? false,
           openingDays: Array.isArray(clubData.openingDays) ? clubData.openingDays.join(',') : '',
+          clubOperationalStatus: ((clubData.clubOperationalStatus || 'OPEN') as ClubOperationalStatus),
+          temporaryClosureStartDate: clubData.temporaryClosureStartDate || '',
+          temporaryClosureEndDate: clubData.temporaryClosureEndDate || '',
           fixedBookingSettingsByActivity: buildFixedBookingSettingsForm(nextActivitySettings, clubData.fixedBookingSettingsByActivity)
         };
         setClub(clubData);
@@ -515,7 +541,10 @@ export default function AdminTabClub() {
       'bookingSimpleAdvanceDaysUser',
       'bookingSimpleAdvanceDaysAdmin',
       'enforceCashShiftCloseWithOpenAccounts',
-      'allowAdminSkipSimpleAdvanceLimit'
+      'allowAdminSkipSimpleAdvanceLimit',
+      'clubOperationalStatus',
+      'temporaryClosureStartDate',
+      'temporaryClosureEndDate'
     ]);
     const labels: Record<string, string> = {
       bookingConfirmationMode: 'Modo de confirmacion',
@@ -526,6 +555,9 @@ export default function AdminTabClub() {
       bookingSimpleAdvanceDaysAdmin: 'Anticipacion admins',
       enforceCashShiftCloseWithOpenAccounts: 'Bloqueo cierre de caja',
       allowAdminSkipSimpleAdvanceLimit: 'Bypass de anticipacion admin',
+      clubOperationalStatus: 'Estado operativo del club',
+      temporaryClosureStartDate: 'Inicio de cierre temporal',
+      temporaryClosureEndDate: 'Fin de cierre temporal',
       openingDaysSet: 'Dias de apertura',
       closureDatesSet: 'Fechas de cierre',
       activityScheduleForm: 'Horarios por actividad'
@@ -803,6 +835,28 @@ export default function AdminTabClub() {
         }
       }
 
+      const normalizedClosureStartDate = String(clubForm.temporaryClosureStartDate || '').trim();
+      const normalizedClosureEndDate = String(clubForm.temporaryClosureEndDate || '').trim();
+      if (clubForm.clubOperationalStatus === 'TEMPORARY_CLOSED') {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedClosureStartDate) || !/^\d{4}-\d{2}-\d{2}$/.test(normalizedClosureEndDate)) {
+          showError('En cierre temporal debés completar fecha de inicio y fin con formato válido.');
+          return;
+        }
+        if (normalizedClosureStartDate > normalizedClosureEndDate) {
+          showError('La fecha de inicio del cierre temporal no puede ser mayor a la fecha de fin.');
+          return;
+        }
+        const overlapsExceptionalDates = closureDatesSet.some((date) => date >= normalizedClosureStartDate && date <= normalizedClosureEndDate);
+        if (overlapsExceptionalDates) {
+          showError('Hay fechas de cierre puntual que se superponen con el cierre temporal. Eliminá las superpuestas para continuar.');
+          return;
+        }
+      }
+      if (clubForm.clubOperationalStatus === 'PERMANENTLY_CLOSED' && closureDatesSet.length > 0) {
+        showError('No podés guardar fechas de cierre puntual cuando el club está en cierre permanente.');
+        return;
+      }
+
         const payload: any = {
         ...clubForm,
         lightsEnabled: !!clubForm.lightsEnabled,
@@ -827,7 +881,10 @@ export default function AdminTabClub() {
         bookingSimpleAdvanceDaysAdmin: Math.floor(simpleAdvanceAdminRaw),
         allowAdminSkipSimpleAdvanceLimit: !!clubForm.allowAdminSkipSimpleAdvanceLimit,
         openingDays: openingDaysSet,
-        closureDates: closureDatesSet,
+        closureDates: clubForm.clubOperationalStatus === 'PERMANENTLY_CLOSED' ? [] : closureDatesSet,
+        clubOperationalStatus: clubForm.clubOperationalStatus,
+        temporaryClosureStartDate: clubForm.clubOperationalStatus === 'TEMPORARY_CLOSED' ? normalizedClosureStartDate : null,
+        temporaryClosureEndDate: clubForm.clubOperationalStatus === 'TEMPORARY_CLOSED' ? normalizedClosureEndDate : null,
         fixedBookingSettingsByActivity
       };
       const updatedClub = await ClubService.updateClub(club.id, payload);
@@ -1112,9 +1169,23 @@ export default function AdminTabClub() {
   };
 
   const addClosureDate = () => {
+    if (clubForm.clubOperationalStatus === 'PERMANENTLY_CLOSED') {
+      showError('No podés agregar cierres puntuales cuando el club está en cierre permanente.');
+      return;
+    }
     const value = String(closureDateInput || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       showError('La fecha de cierre debe tener formato YYYY-MM-DD.');
+      return;
+    }
+    if (
+      clubForm.clubOperationalStatus === 'TEMPORARY_CLOSED' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(clubForm.temporaryClosureStartDate) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(clubForm.temporaryClosureEndDate) &&
+      value >= clubForm.temporaryClosureStartDate &&
+      value <= clubForm.temporaryClosureEndDate
+    ) {
+      showError('Esa fecha ya está cubierta por el cierre temporal.');
       return;
     }
     setClosureDatesSet((prev) => Array.from(new Set([...prev, value])).sort());
@@ -1126,6 +1197,14 @@ export default function AdminTabClub() {
   };
 
   const isDepositMode = clubForm.bookingConfirmationMode === 'DEPOSIT_REQUIRED';
+  const hasTemporaryClosureRange =
+    clubForm.clubOperationalStatus === 'TEMPORARY_CLOSED' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(clubForm.temporaryClosureStartDate) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(clubForm.temporaryClosureEndDate) &&
+    clubForm.temporaryClosureStartDate <= clubForm.temporaryClosureEndDate;
+  const temporaryClosureOverlappingDates = hasTemporaryClosureRange
+    ? closureDatesSet.filter((date) => date >= clubForm.temporaryClosureStartDate && date <= clubForm.temporaryClosureEndDate)
+    : [];
 
   const inputClass = "w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/20 focus:outline-none shadow-sm transition-all";
   const labelClass = "block text-[10px] font-black text-[#347048]/60 mb-1.5 uppercase tracking-widest ml-1";
@@ -1167,8 +1246,8 @@ export default function AdminTabClub() {
           <form onSubmit={handleUpdateClub} className="space-y-8 relative z-10 pb-24">
             <div className="space-y-6 rounded-[1.75rem] border-2 border-[#347048]/20 bg-white/30 p-5">
               <div className="rounded-2xl border border-[#347048]/15 bg-white/40 p-4">
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048]/70">Bloque de bajo riesgo</p>
-                <p className="text-[12px] font-bold text-[#347048]/70 mt-1">Identidad del club y datos visibles para clientes.</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#347048]/70">Bloque de identidad (bajo riesgo)</p>
+                <p className="text-[12px] font-bold text-[#347048]/70 mt-1">Datos públicos del club: slug, nombre, ubicación y contacto.</p>
               </div>
             {/* GRID DE DATOS BÁSICOS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1198,68 +1277,6 @@ export default function AdminTabClub() {
                 </div>
               </div>
 
-                {/* DIAS DE APERTURA */}
-                <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Días de apertura</h3>
-                  <p className="text-[12px] text-[#347048]/70 mb-3">Seleccioná los días en los que el club está abierto (si no se selecciona ninguno, se entiende &quot;abre todos los días&quot;).</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map((label, idx) => {
-                      const day = idx % 7; // 0..6
-                      const active = openingDaysSet.includes(day);
-                      return (
-                        <button key={label} type="button" onClick={() => toggleOpeningDay(day)} className={`px-3 py-2 rounded-lg font-bold text-sm transition-all ${active ? 'bg-[#B9CF32] text-[#347048]' : 'bg-white text-[#347048]/90 border border-white/10'}`}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Fechas de cierre</h3>
-                  <p className="text-[12px] text-[#347048]/70 mb-3">Bloqueá días puntuales (feriados, eventos o mantenimiento). Formato local del club: YYYY-MM-DD.</p>
-                  <div className="flex flex-col md:flex-row gap-3 mb-3">
-                    <div className="relative flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px] min-w-[260px]">
-                      <span className="text-[14px] font-bold text-[#347048] min-w-[120px] text-center whitespace-nowrap pointer-events-none">
-                        {parseLocalDate(closureDateInput)
-                          ? parseLocalDate(closureDateInput)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : 'Seleccionar fecha'}
-                      </span>
-                      <div className="absolute inset-y-0 left-3 right-3 z-10">
-                        <DatePickerDark
-                          selected={parseLocalDate(closureDateInput)}
-                          onChange={(date: Date | null) => setClosureDateInput(date ? formatLocalDate(date) : '')}
-                          showIcon={false}
-                          variant="light"
-                          popperPlacement="bottom"
-                          inputClassName="w-full h-[46px] opacity-0 cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={addClosureDate}
-                      className="h-11 px-5 rounded-xl text-xs font-black bg-[#347048] text-[#EBE1D8] hover:bg-[#B9CF32] hover:text-[#347048] transition-all uppercase tracking-widest"
-                    >
-                      Agregar cierre
-                    </button>
-                  </div>
-                  {closureDatesSet.length === 0 ? (
-                    <p className="text-[11px] font-bold text-[#347048]/60">No hay fechas cerradas configuradas.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {closureDatesSet.map((date) => (
-                        <span key={date} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#926699]/10 text-[#347048] font-black text-xs border border-[#926699]/20">
-                          {date}
-                          <button type="button" onClick={() => removeClosureDate(date)} className="text-red-600 hover:text-red-700" aria-label={`Quitar ${date}`}>
-                            <Trash2 size={14} />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
               <div>
                 <label className={labelClass}>Email Administrativo</label>
                 <div className="relative">
@@ -1281,6 +1298,7 @@ export default function AdminTabClub() {
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/30" size={16} />
                 </div>
               </div>
+
             </div>
 
             {/* SECCIÓN DE LOGO */}
@@ -1410,6 +1428,147 @@ export default function AdminTabClub() {
                   </button>
                 </div>
               </div>
+
+            <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Días de apertura</h3>
+              <p className="text-[12px] text-[#347048]/70 mb-3">Seleccioná los días en los que el club está abierto (si no se selecciona ninguno, se entiende &quot;abre todos los días&quot;).</p>
+              <div className="flex gap-2 flex-wrap">
+                {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map((label, idx) => {
+                  const day = idx % 7;
+                  const active = openingDaysSet.includes(day);
+                  return (
+                    <button key={label} type="button" onClick={() => toggleOpeningDay(day)} className={`px-3 py-2 rounded-lg font-bold text-sm transition-all ${active ? 'bg-[#B9CF32] text-[#347048]' : 'bg-white text-[#347048]/90 border border-white/10'}`}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10 space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048]">Estado operativo</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {CLUB_OPERATIONAL_STATUS_OPTIONS.map((option) => {
+                  const active = clubForm.clubOperationalStatus === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setClubForm((prev) => ({
+                        ...prev,
+                        clubOperationalStatus: option.value,
+                        ...(option.value !== 'TEMPORARY_CLOSED'
+                          ? { temporaryClosureStartDate: '', temporaryClosureEndDate: '' }
+                          : {})
+                      }))}
+                      className={`text-left rounded-xl border px-4 py-3 transition-all ${active ? 'border-[#B9CF32] bg-[#B9CF32]/20' : 'border-white/20 bg-white/40 hover:bg-white/70'}`}
+                    >
+                      <p className="text-xs font-black uppercase tracking-wider text-[#347048]">{option.label}</p>
+                      <p className="text-[11px] text-[#347048]/70 mt-1 leading-relaxed">{option.helper}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {clubForm.clubOperationalStatus === 'TEMPORARY_CLOSED' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Inicio del cierre temporal</p>
+                    <div className="relative flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px]">
+                      <span className="text-[14px] font-bold text-[#347048] min-w-[120px] text-center whitespace-nowrap pointer-events-none">
+                        {parseLocalDate(clubForm.temporaryClosureStartDate)
+                          ? parseLocalDate(clubForm.temporaryClosureStartDate)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : 'Seleccionar fecha'}
+                      </span>
+                      <div className="absolute inset-y-0 left-3 right-3 z-10">
+                        <DatePickerDark
+                          selected={parseLocalDate(clubForm.temporaryClosureStartDate)}
+                          onChange={(date: Date | null) => setClubForm((prev) => ({ ...prev, temporaryClosureStartDate: date ? formatLocalDate(date) : '' }))}
+                          showIcon={false}
+                          variant="light"
+                          popperPlacement="bottom"
+                          inputClassName="w-full h-[46px] opacity-0 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Fin del cierre temporal</p>
+                    <div className="relative flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px]">
+                      <span className="text-[14px] font-bold text-[#347048] min-w-[120px] text-center whitespace-nowrap pointer-events-none">
+                        {parseLocalDate(clubForm.temporaryClosureEndDate)
+                          ? parseLocalDate(clubForm.temporaryClosureEndDate)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : 'Seleccionar fecha'}
+                      </span>
+                      <div className="absolute inset-y-0 left-3 right-3 z-10">
+                        <DatePickerDark
+                          selected={parseLocalDate(clubForm.temporaryClosureEndDate)}
+                          onChange={(date: Date | null) => setClubForm((prev) => ({ ...prev, temporaryClosureEndDate: date ? formatLocalDate(date) : '' }))}
+                          showIcon={false}
+                          variant="light"
+                          popperPlacement="bottom"
+                          inputClassName="w-full h-[46px] opacity-0 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Fechas de cierre</h3>
+              <p className="text-[12px] text-[#347048]/70 mb-3">Bloqueá días puntuales (feriados, eventos o mantenimiento). Formato local del club: YYYY-MM-DD.</p>
+              {clubForm.clubOperationalStatus === 'PERMANENTLY_CLOSED' ? (
+                <p className="text-[11px] font-black text-[#B1423B] mb-3">En cierre permanente no se permiten fechas de cierre puntual.</p>
+              ) : null}
+              {clubForm.clubOperationalStatus === 'TEMPORARY_CLOSED' && temporaryClosureOverlappingDates.length > 0 ? (
+                <p className="text-[11px] font-black text-[#B1423B] mb-3">
+                  En cierre temporal no se permiten fechas de cierre puntual dentro del rango configurado.
+                </p>
+              ) : null}
+              <div className="flex flex-col md:flex-row gap-3 mb-3">
+                <div className="relative flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px] min-w-[260px]">
+                  <span className="text-[14px] font-bold text-[#347048] min-w-[120px] text-center whitespace-nowrap pointer-events-none">
+                    {parseLocalDate(closureDateInput)
+                      ? parseLocalDate(closureDateInput)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+                      : 'Seleccionar fecha'}
+                  </span>
+                  <div className="absolute inset-y-0 left-3 right-3 z-10">
+                    <DatePickerDark
+                      selected={parseLocalDate(closureDateInput)}
+                      onChange={(date: Date | null) => setClosureDateInput(date ? formatLocalDate(date) : '')}
+                      showIcon={false}
+                      variant="light"
+                      popperPlacement="bottom"
+                      inputClassName="w-full h-[46px] opacity-0 cursor-pointer"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={addClosureDate}
+                  disabled={clubForm.clubOperationalStatus === 'PERMANENTLY_CLOSED'}
+                  className="h-11 px-5 rounded-xl text-xs font-black bg-[#347048] text-[#EBE1D8] hover:bg-[#B9CF32] hover:text-[#347048] transition-all uppercase tracking-widest"
+                >
+                  Agregar cierre
+                </button>
+              </div>
+              {closureDatesSet.length === 0 ? (
+                <p className="text-[11px] font-bold text-[#347048]/60">No hay fechas cerradas configuradas.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {closureDatesSet.map((date) => (
+                    <span key={date} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#926699]/10 text-[#347048] font-black text-xs border border-[#926699]/20">
+                      {date}
+                      <button type="button" onClick={() => removeClosureDate(date)} className="text-red-600 hover:text-red-700" aria-label={`Quitar ${date}`}>
+                        <Trash2 size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* LUCES Y HORARIOS (LIMA ACCENT) */}
             <div className="bg-[#B9CF32]/10 p-6 rounded-[1.5rem] border-2 border-[#B9CF32]/20">

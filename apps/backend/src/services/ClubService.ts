@@ -1,7 +1,7 @@
 import { ClubRepository } from '../repositories/ClubRepository';
 import { ActivityTypeRepository } from '../repositories/ActivityTypeRepository';
 import { Club } from '../entities/Club';
-import type { FixedBookingSettingsByActivity } from '../entities/Club';
+import type { ClubOperationalStatus, FixedBookingSettingsByActivity } from '../entities/Club';
 import { Court } from '../entities/Court';
 import { Prisma } from '@prisma/client';
 
@@ -49,7 +49,10 @@ export class ClubService {
         bookingSimpleAdvanceDaysAdmin: number = 30,
         allowAdminSkipSimpleAdvanceLimit: boolean = false,
         closureDates?: string[] | null,
-        openingDays?: number[] | null
+        openingDays?: number[] | null,
+        clubOperationalStatus: ClubOperationalStatus = 'OPEN',
+        temporaryClosureStartDate?: string | null,
+        temporaryClosureEndDate?: string | null
     ) {
         return await this.clubRepo.createClub(
             slug,
@@ -86,7 +89,10 @@ export class ClubService {
             bookingSimpleAdvanceDaysAdmin,
             allowAdminSkipSimpleAdvanceLimit,
             closureDates,
-            openingDays
+            openingDays,
+            clubOperationalStatus,
+            temporaryClosureStartDate,
+            temporaryClosureEndDate
         );
     }
 
@@ -144,6 +150,9 @@ export class ClubService {
             allowAdminSkipSimpleAdvanceLimit?: boolean;
             closureDates?: string[] | null;
             openingDays?: number[] | null;
+            clubOperationalStatus?: ClubOperationalStatus;
+            temporaryClosureStartDate?: string | null;
+            temporaryClosureEndDate?: string | null;
         }
     ): Promise<Club> {
         const club = await this.clubRepo.findClubById(id);

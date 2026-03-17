@@ -1,4 +1,4 @@
-import { BookingRepository } from '../repositories/BookingRepository';
+﻿import { BookingRepository } from '../repositories/BookingRepository';
 import { ClubRepository } from '../repositories/ClubRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { ActivityTypeRepository } from '../repositories/ActivityTypeRepository';
@@ -173,6 +173,14 @@ export class BookingService {
                     .map((date: unknown) => String(date || '').trim())
                     .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
                 : null,
+            clubOperationalStatus:
+                settings?.clubOperationalStatus === 'TEMPORARY_CLOSED' || settings?.clubOperationalStatus === 'PERMANENTLY_CLOSED'
+                    ? settings.clubOperationalStatus
+                    : 'OPEN',
+            temporaryClosureStartDate:
+                settings?.temporaryClosureStartDate ? this.formatLocalDateKey(new Date(settings.temporaryClosureStartDate), 'UTC') : null,
+            temporaryClosureEndDate:
+                settings?.temporaryClosureEndDate ? this.formatLocalDateKey(new Date(settings.temporaryClosureEndDate), 'UTC') : null,
             lightsEnabled: settings?.lightsEnabled ?? false,
             lightsExtraAmount: settings?.lightsExtraAmount ?? null,
             lightsFromHour: normalizedLightsFromHour,
@@ -265,6 +273,20 @@ export class BookingService {
 
     private isClubOpenOnLocalDate(clubConfig: any, date: Date, timeZone: string) {
         const localDateKey = this.formatLocalDateKey(date, timeZone);
+        if (clubConfig?.clubOperationalStatus === 'PERMANENTLY_CLOSED') {
+            return false;
+        }
+
+        if (
+            clubConfig?.clubOperationalStatus === 'TEMPORARY_CLOSED' &&
+            typeof clubConfig?.temporaryClosureStartDate === 'string' &&
+            typeof clubConfig?.temporaryClosureEndDate === 'string' &&
+            localDateKey >= clubConfig.temporaryClosureStartDate &&
+            localDateKey <= clubConfig.temporaryClosureEndDate
+        ) {
+            return false;
+        }
+
         if (Array.isArray(clubConfig?.closureDates) && clubConfig.closureDates.includes(localDateKey)) {
             return false;
         }

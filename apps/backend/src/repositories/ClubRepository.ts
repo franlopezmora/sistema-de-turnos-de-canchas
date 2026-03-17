@@ -1,16 +1,30 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 import { Club } from '../entities/Club';
-import type { FixedBookingSettingsByActivity } from '../entities/Club';
+import type { ClubOperationalStatus, FixedBookingSettingsByActivity } from '../entities/Club';
 import { Court } from '../entities/Court';
 import { ActivityType } from '../entities/ActivityType';
 
 export class ClubRepository {
+    private readonly CLOSURE_STATUS_DEFAULT: ClubOperationalStatus = 'OPEN';
+
     private supportsClosureDatesField(): boolean {
         const models = ((Prisma as any)?.dmmf?.datamodel?.models ?? []) as Array<{ name?: string; fields?: Array<{ name?: string }> }>;
         const clubSettingsModel = models.find((model) => model?.name === 'ClubSettings');
         const fields = Array.isArray(clubSettingsModel?.fields) ? clubSettingsModel!.fields : [];
         return fields.some((field) => field?.name === 'closureDates');
+    }
+
+    private supportsClosureLifecycleFields(): boolean {
+        const models = ((Prisma as any)?.dmmf?.datamodel?.models ?? []) as Array<{ name?: string; fields?: Array<{ name?: string }> }>;
+        const clubSettingsModel = models.find((model) => model?.name === 'ClubSettings');
+        const fields = new Set(
+            (Array.isArray(clubSettingsModel?.fields) ? clubSettingsModel!.fields : [])
+                .map((field) => field?.name)
+                .filter((name): name is string => Boolean(name))
+        );
+
+        return fields.has('clubOperationalStatus') && fields.has('temporaryClosureStartDate') && fields.has('temporaryClosureEndDate');
     }
 
     private assertClosureDatesSupport(closureDates: string[] | null | undefined) {
@@ -21,6 +35,35 @@ export class ClubRepository {
         throw new Error(
             'La versión actual de Prisma Client no soporta closureDates. Ejecutá "npx prisma generate" en apps/backend y reiniciá el backend.'
         );
+    }
+
+    private assertClosureLifecycleSupport(
+        clubOperationalStatus: ClubOperationalStatus | undefined,
+        temporaryClosureStartDate: string | null | undefined,
+        temporaryClosureEndDate: string | null | undefined
+    ) {
+        const requestedStatus = clubOperationalStatus && clubOperationalStatus !== this.CLOSURE_STATUS_DEFAULT;
+        const requestedTemporaryRange = temporaryClosureStartDate != null || temporaryClosureEndDate != null;
+        if (!requestedStatus && !requestedTemporaryRange) return;
+        if (this.supportsClosureLifecycleFields()) return;
+
+        throw new Error(
+            'La versión actual de Prisma Client no soporta reglas de cierre temporal/permanente. Ejecutá "npx prisma generate" en apps/backend y reiniciá el backend.'
+        );
+    }
+
+    private parseDateOnly(value: string | null | undefined): Date | null {
+        if (!value) return null;
+        const normalized = String(value).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+        return new Date(`${normalized}T00:00:00.000Z`);
+    }
+
+    private formatDateOnly(value: unknown): string | null {
+        if (!value) return null;
+        const date = value instanceof Date ? value : new Date(String(value));
+        if (Number.isNaN(date.getTime())) return null;
+        return date.toISOString().slice(0, 10);
     }
 
     async createClub(
@@ -58,9 +101,13 @@ export class ClubRepository {
         bookingSimpleAdvanceDaysAdmin: number = 30,
         allowAdminSkipSimpleAdvanceLimit: boolean = false,
         closureDates?: string[] | null,
-        openingDays?: number[] | null
+        openingDays?: number[] | null,
+        clubOperationalStatus: ClubOperationalStatus = 'OPEN',
+        temporaryClosureStartDate?: string | null,
+        temporaryClosureEndDate?: string | null
     ): Promise<Club> {
         this.assertClosureDatesSupport(closureDates);
+        this.assertClosureLifecycleSupport(clubOperationalStatus, temporaryClosureStartDate, temporaryClosureEndDate);
         const location = await this.ensureLocation(city, province, country);
         const settingsCreateData: any = {
             timeZone,
@@ -90,6 +137,11 @@ export class ClubRepository {
         };
         if (this.supportsClosureDatesField()) {
             settingsCreateData.closureDates = closureDates ?? undefined;
+        }
+        if (this.supportsClosureLifecycleFields()) {
+            settingsCreateData.clubOperationalStatus = clubOperationalStatus;
+            settingsCreateData.temporaryClosureStartDate = this.parseDateOnly(temporaryClosureStartDate);
+            settingsCreateData.temporaryClosureEndDate = this.parseDateOnly(temporaryClosureEndDate);
         }
 
         const clubData = {
@@ -213,7 +265,10 @@ export class ClubRepository {
             Number.isFinite(Number(club.bookingSimpleAdvanceDaysAdmin)) ? Number(club.bookingSimpleAdvanceDaysAdmin) : 30,
             Boolean(club.allowAdminSkipSimpleAdvanceLimit),
             club.closureDates ?? null,
-            club.openingDays ?? null
+            club.openingDays ?? null,
+            club.clubOperationalStatus ?? 'OPEN',
+            club.temporaryClosureStartDate ?? null,
+            club.temporaryClosureEndDate ?? null
         );
     }
     
@@ -277,8 +332,12 @@ export class ClubRepository {
         allowAdminSkipSimpleAdvanceLimit?: boolean;
         closureDates?: string[] | null;
         openingDays?: number[] | null;
+        clubOperationalStatus?: ClubOperationalStatus;
+        temporaryClosureStartDate?: string | null;
+        temporaryClosureEndDate?: string | null;
     }): Promise<Club> {
         this.assertClosureDatesSupport(data.closureDates);
+        this.assertClosureLifecycleSupport(data.clubOperationalStatus, data.temporaryClosureStartDate, data.temporaryClosureEndDate);
         const clubFields = {
             slug: data.slug,
             name: data.name,
@@ -336,6 +395,11 @@ export class ClubRepository {
         };
         if (this.supportsClosureDatesField()) {
             settingsUpsertCreate.closureDates = data.closureDates === null ? Prisma.JsonNull : (data.closureDates ?? undefined);
+        }
+        if (this.supportsClosureLifecycleFields()) {
+            settingsUpsertCreate.clubOperationalStatus = data.clubOperationalStatus ?? this.CLOSURE_STATUS_DEFAULT;
+            settingsUpsertCreate.temporaryClosureStartDate = this.parseDateOnly(data.temporaryClosureStartDate);
+            settingsUpsertCreate.temporaryClosureEndDate = this.parseDateOnly(data.temporaryClosureEndDate);
         }
 
         const settingsUpsertUpdate: any = {
@@ -397,6 +461,17 @@ export class ClubRepository {
         if (this.supportsClosureDatesField() && data.closureDates !== undefined) {
             settingsUpsertUpdate.closureDates = data.closureDates === null ? Prisma.JsonNull : data.closureDates;
         }
+        if (this.supportsClosureLifecycleFields()) {
+            if (data.clubOperationalStatus !== undefined) {
+                settingsUpsertUpdate.clubOperationalStatus = data.clubOperationalStatus;
+            }
+            if (data.temporaryClosureStartDate !== undefined) {
+                settingsUpsertUpdate.temporaryClosureStartDate = this.parseDateOnly(data.temporaryClosureStartDate);
+            }
+            if (data.temporaryClosureEndDate !== undefined) {
+                settingsUpsertUpdate.temporaryClosureEndDate = this.parseDateOnly(data.temporaryClosureEndDate);
+            }
+        }
 
         const updated = await prisma.club.update({
             where: { id },
@@ -423,6 +498,12 @@ export class ClubRepository {
                 .map((date: unknown) => String(date || '').trim())
                 .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
             : null;
+        const resolvedClubOperationalStatus =
+            settings?.clubOperationalStatus === 'TEMPORARY_CLOSED' || settings?.clubOperationalStatus === 'PERMANENTLY_CLOSED'
+                ? settings.clubOperationalStatus
+                : this.CLOSURE_STATUS_DEFAULT;
+        const resolvedTemporaryClosureStartDate = this.formatDateOnly(settings?.temporaryClosureStartDate);
+        const resolvedTemporaryClosureEndDate = this.formatDateOnly(settings?.temporaryClosureEndDate);
         const resolvedLightsEnabled = settings?.lightsEnabled ?? false;
         const resolvedLightsExtraAmountRaw = settings?.lightsExtraAmount ?? null;
         const resolvedLightsFromHour = this.formatLightsFromHour(settings?.lightsFromHour) ?? null;
@@ -493,7 +574,10 @@ export class ClubRepository {
             dbClub.updatedAt,
             bookingSimpleAdvanceDaysUser,
             bookingSimpleAdvanceDaysAdmin,
-            allowAdminSkipSimpleAdvanceLimit
+            allowAdminSkipSimpleAdvanceLimit,
+            resolvedClubOperationalStatus,
+            resolvedTemporaryClosureStartDate,
+            resolvedTemporaryClosureEndDate
         );
     }
 

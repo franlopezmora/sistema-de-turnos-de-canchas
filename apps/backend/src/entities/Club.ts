@@ -7,6 +7,7 @@ export type FixedBookingActivityConfig = {
 
 export type FixedBookingSettingsByActivity = Record<string, FixedBookingActivityConfig>;
 export type BookingConfirmationMode = 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
+export type ClubOperationalStatus = 'OPEN' | 'TEMPORARY_CLOSED' | 'PERMANENTLY_CLOSED';
 
 export class Club {
     public courts: Court[] = [];
@@ -50,6 +51,9 @@ export class Club {
         public updatedAt?: Date,
         public bookingSimpleAdvanceDaysUser: number = 30,
         public bookingSimpleAdvanceDaysAdmin: number = 30,
-        public allowAdminSkipSimpleAdvanceLimit: boolean = false
+        public allowAdminSkipSimpleAdvanceLimit: boolean = false,
+        public clubOperationalStatus: ClubOperationalStatus = 'OPEN',
+        public temporaryClosureStartDate?: string | null,
+        public temporaryClosureEndDate?: string | null
     ) {}
 }

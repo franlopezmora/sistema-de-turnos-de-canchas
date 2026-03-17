@@ -526,6 +526,21 @@ export default function Home() {
               const closureDates = Array.isArray((club as any).closureDates)
                 ? (club as any).closureDates.map((value: unknown) => String(value || '').trim())
                 : [];
+              const clubOperationalStatus = String((club as any).clubOperationalStatus || 'OPEN');
+              const temporaryClosureStartDate = String((club as any).temporaryClosureStartDate || '').trim();
+              const temporaryClosureEndDate = String((club as any).temporaryClosureEndDate || '').trim();
+
+              if (clubOperationalStatus === 'PERMANENTLY_CLOSED') return false;
+              if (
+                clubOperationalStatus === 'TEMPORARY_CLOSED' &&
+                /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureStartDate) &&
+                /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureEndDate) &&
+                searchDate >= temporaryClosureStartDate &&
+                searchDate <= temporaryClosureEndDate
+              ) {
+                return false;
+              }
+
               if (closureDates.includes(searchDate)) return false;
               if (!Array.isArray(club.openingDays) || club.openingDays.length === 0) return true; // no config => open all days
               return club.openingDays.includes(dayOfWeek);
