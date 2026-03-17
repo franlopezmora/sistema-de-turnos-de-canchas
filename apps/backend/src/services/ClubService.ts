@@ -48,6 +48,7 @@ export class ClubService {
         bookingSimpleAdvanceDaysUser: number = 30,
         bookingSimpleAdvanceDaysAdmin: number = 30,
         allowAdminSkipSimpleAdvanceLimit: boolean = false,
+        closureDates?: string[] | null,
         openingDays?: number[] | null
     ) {
         return await this.clubRepo.createClub(
@@ -84,6 +85,7 @@ export class ClubService {
             bookingSimpleAdvanceDaysUser,
             bookingSimpleAdvanceDaysAdmin,
             allowAdminSkipSimpleAdvanceLimit,
+            closureDates,
             openingDays
         );
     }
@@ -140,6 +142,7 @@ export class ClubService {
             bookingSimpleAdvanceDaysUser?: number;
             bookingSimpleAdvanceDaysAdmin?: number;
             allowAdminSkipSimpleAdvanceLimit?: boolean;
+            closureDates?: string[] | null;
             openingDays?: number[] | null;
         }
     ): Promise<Club> {

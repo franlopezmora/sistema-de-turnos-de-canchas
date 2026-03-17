@@ -48,6 +48,7 @@ export interface Club {
   bookingSimpleAdvanceDaysAdmin?: number;
   allowAdminSkipSimpleAdvanceLimit?: boolean;
   openingDays?: number[] | null;
+  closureDates?: string[] | null;
   createdAt?: string;
   updatedAt?: string;
 }

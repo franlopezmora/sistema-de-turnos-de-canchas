@@ -11,6 +11,29 @@ const fixedBookingActivityConfigSchema = z.object({
     fixedBookingGenerationFrequencyDays: z.union([z.number(), z.string()]).transform((v) => Number(v)).pipe(z.number().int().positive())
 });
 
+const CLOSURE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const validateClosureDates = (closureDates: unknown): string[] => {
+    if (closureDates == null) return [];
+    if (!Array.isArray(closureDates)) {
+        return ['closureDates debe ser un array de fechas con formato YYYY-MM-DD'];
+    }
+
+    const seen = new Set<string>();
+    for (const raw of closureDates) {
+        const value = String(raw || '').trim();
+        if (!CLOSURE_DATE_RE.test(value)) {
+            return ['closureDates debe tener formato YYYY-MM-DD'];
+        }
+        if (seen.has(value)) {
+            return ['closureDates no puede contener fechas duplicadas'];
+        }
+        seen.add(value);
+    }
+
+    return [];
+};
+
 export class ClubController {
     private readonly mediaStorageService = new MediaStorageService();
     private readonly auditLogService = new AuditLogService();
@@ -38,6 +61,7 @@ export class ClubController {
                 lightsExtraAmount: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
                 lightsFromHour: z.string().optional().nullable(),
                 openingDays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
+                closureDates: z.array(z.string().regex(CLOSURE_DATE_RE)).optional().nullable(),
                 professorDurationOverrideEnabled: z.boolean().optional(),
                 professorDurationOverrideMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? null : Number(v))),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
@@ -59,7 +83,7 @@ export class ClubController {
                 return res.status(400).json({ error: parsed.error.format() });
             }
             const { slug, name, addressLine, city, province, country, contact, phone, logoUrl, clubImageUrl, instagramUrl, facebookUrl, websiteUrl, description, timeZone,
-                lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays,
+                lightsEnabled, lightsExtraAmount, lightsFromHour, openingDays, closureDates,
                 professorDurationOverrideEnabled, professorDurationOverrideMinutes,
                 fixedBookingSettingsByActivity, bookingConfirmationMode, bookingDepositPercent, allowManualConfirmationOverride,
                 autoCancelPendingBookingsEnabled, autoCancelPendingBookingsMinutesBefore, autoCancelPendingBookingsOnlyIfUnpaid,
@@ -69,6 +93,10 @@ export class ClubController {
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
+            const closureDateErrors = validateClosureDates(closureDates);
+            if (closureDateErrors.length > 0) {
+                return res.status(400).json({ error: closureDateErrors.join(' | ') });
             }
             if (bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
                 if (!Number.isFinite(Number(bookingDepositPercent)) || Number(bookingDepositPercent) <= 0 || Number(bookingDepositPercent) > 100) {
@@ -138,6 +166,7 @@ export class ClubController {
                 Number(bookingSimpleAdvanceDaysUser ?? 30),
                 Number(bookingSimpleAdvanceDaysAdmin ?? 30),
                 allowAdminSkipSimpleAdvanceLimit ?? false,
+                Array.isArray(closureDates) ? closureDates : null,
                 Array.isArray(openingDays) ? openingDays : null
             );
             res.status(201).json(club);
@@ -212,6 +241,7 @@ export class ClubController {
                 professorDurationOverrideMinutes: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
                 fixedBookingSettingsByActivity: z.record(fixedBookingActivityConfigSchema).optional().nullable(),
                 openingDays: z.array(z.number().int().min(0).max(6)).optional(),
+                closureDates: z.array(z.string().regex(CLOSURE_DATE_RE)).optional().nullable(),
                 bookingConfirmationMode: z.enum(['AUTOMATIC', 'MANUAL', 'DEPOSIT_REQUIRED']).optional(),
                 bookingDepositPercent: z.union([z.number(), z.string()]).optional().nullable().transform((v) => (v === '' || v === undefined || v === null ? undefined : Number(v))),
                 allowManualConfirmationOverride: z.boolean().optional(),
@@ -252,6 +282,7 @@ export class ClubController {
                 professorDurationOverrideMinutes,
                 fixedBookingSettingsByActivity,
                 openingDays,
+                closureDates,
                 bookingConfirmationMode,
                 bookingDepositPercent,
                 allowManualConfirmationOverride,
@@ -273,6 +304,10 @@ export class ClubController {
             const openingDaysErrors = validateOpeningDays(openingDays);
             if (openingDaysErrors.length > 0) {
                 return res.status(400).json({ error: openingDaysErrors.join(' | ') });
+            }
+            const closureDateErrors = validateClosureDates(closureDates);
+            if (closureDateErrors.length > 0) {
+                return res.status(400).json({ error: closureDateErrors.join(' | ') });
             }
             if (bookingConfirmationMode === 'DEPOSIT_REQUIRED') {
                 if (!Number.isFinite(Number(bookingDepositPercent)) || Number(bookingDepositPercent) <= 0 || Number(bookingDepositPercent) > 100) {
@@ -335,6 +370,7 @@ export class ClubController {
                         : undefined,
                 fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
                 openingDays: Array.isArray(openingDays) ? openingDays : undefined,
+                closureDates: closureDates === null ? null : (Array.isArray(closureDates) ? closureDates : undefined),
                 bookingConfirmationMode,
                 bookingDepositPercent,
                 allowManualConfirmationOverride,

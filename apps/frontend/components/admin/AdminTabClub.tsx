@@ -5,6 +5,7 @@ import { getCourts } from '../../services/CourtService';
 import { ClubAdminService, ClubActivityType, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope, type AuditLogEntry } from '../../services/ClubAdminService';
 import { searchClients } from '../../services/BookingService';
 import AppModal from '../AppModal';
+import DatePickerDark from '../ui/DatePickerDark';
 import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle, Check } from 'lucide-react';
 import { normalizeSessionUser } from '../../utils/session';
 import { useRouter } from 'next/router';
@@ -73,6 +74,7 @@ type ClientSearchResult = {
 type ClubConfigSnapshot = {
   clubForm: any;
   openingDaysSet: number[];
+  closureDatesSet: string[];
   activityScheduleForm: Record<number, ActivityScheduleFormValue>;
 };
 
@@ -151,6 +153,21 @@ const parseFixedSlotsInput = (raw: string): Array<{ start: string; duration: num
   }
 
   return slots;
+};
+
+const parseLocalDate = (value: string): Date | null => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const formatLocalDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const buildScheduleFormFromActivities = (activities: ClubActivityType[]): Record<number, ActivityScheduleFormValue> => {
@@ -277,6 +294,8 @@ export default function AdminTabClub() {
   });
       const [activitySettings, setActivitySettings] = useState<FixedBookingActivitySetting[]>([]);
      const [openingDaysSet, setOpeningDaysSet] = useState<number[]>([]);
+  const [closureDatesSet, setClosureDatesSet] = useState<string[]>([]);
+  const [closureDateInput, setClosureDateInput] = useState('');
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -335,6 +354,7 @@ export default function AdminTabClub() {
   const cloneSnapshot = (snapshot: ClubConfigSnapshot): ClubConfigSnapshot => ({
     clubForm: JSON.parse(JSON.stringify(snapshot.clubForm)),
     openingDaysSet: [...snapshot.openingDaysSet],
+    closureDatesSet: [...snapshot.closureDatesSet],
     activityScheduleForm: JSON.parse(JSON.stringify(snapshot.activityScheduleForm))
   });
 
@@ -420,6 +440,9 @@ export default function AdminTabClub() {
         const nextActivityTypes = Array.isArray(activityTypesData) ? activityTypesData : [];
         const nextActivityScheduleForm = buildScheduleFormFromActivities(nextActivityTypes);
         const nextOpeningDays = Array.isArray(clubData.openingDays) ? clubData.openingDays : [];
+        const nextClosureDates = Array.isArray(clubData.closureDates)
+          ? Array.from(new Set(clubData.closureDates.map((date) => String(date || '').trim()).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))).sort()
+          : [];
         const nextClubForm = {
           slug: clubData.slug || '', name: clubData.name || '',
           addressLine: clubData.addressLine || '', city: clubData.city || '', province: clubData.province || '', country: clubData.country || '',
@@ -459,11 +482,14 @@ export default function AdminTabClub() {
         setAssignmentNotes('');
         setClubForm(nextClubForm);
         setOpeningDaysSet(nextOpeningDays);
+        setClosureDatesSet(nextClosureDates);
+        setClosureDateInput('');
         setLogoPreview(clubData.logoUrl || null);
         setClubImagePreview(clubData.clubImageUrl || null);
         initialConfigRef.current = cloneSnapshot({
           clubForm: nextClubForm,
           openingDaysSet: nextOpeningDays,
+          closureDatesSet: nextClosureDates,
           activityScheduleForm: nextActivityScheduleForm
         });
         await loadPersistentConfigHistory(clubData.id);
@@ -501,6 +527,7 @@ export default function AdminTabClub() {
       enforceCashShiftCloseWithOpenAccounts: 'Bloqueo cierre de caja',
       allowAdminSkipSimpleAdvanceLimit: 'Bypass de anticipacion admin',
       openingDaysSet: 'Dias de apertura',
+      closureDatesSet: 'Fechas de cierre',
       activityScheduleForm: 'Horarios por actividad'
     };
 
@@ -529,6 +556,17 @@ export default function AdminTabClub() {
       });
     }
 
+    const beforeClosureDates = [...(base.closureDatesSet || [])].sort();
+    const afterClosureDates = [...(closureDatesSet || [])].sort();
+    if (JSON.stringify(beforeClosureDates) !== JSON.stringify(afterClosureDates)) {
+      changes.push({
+        label: labels.closureDatesSet,
+        before: beforeClosureDates.join(', ') || 'Sin cierres',
+        after: afterClosureDates.join(', ') || 'Sin cierres',
+        critical: true
+      });
+    }
+
     const beforeSchedule = JSON.stringify(base.activityScheduleForm || {});
     const afterSchedule = JSON.stringify(activityScheduleForm || {});
     if (beforeSchedule !== afterSchedule) {
@@ -552,6 +590,8 @@ export default function AdminTabClub() {
     const clone = cloneSnapshot(base);
     setClubForm(clone.clubForm);
     setOpeningDaysSet(clone.openingDaysSet);
+    setClosureDatesSet(clone.closureDatesSet);
+    setClosureDateInput('');
     setActivityScheduleForm(clone.activityScheduleForm);
     setLogoPreview(clone.clubForm.logoUrl || null);
     setClubImagePreview(clone.clubForm.clubImageUrl || null);
@@ -787,6 +827,7 @@ export default function AdminTabClub() {
         bookingSimpleAdvanceDaysAdmin: Math.floor(simpleAdvanceAdminRaw),
         allowAdminSkipSimpleAdvanceLimit: !!clubForm.allowAdminSkipSimpleAdvanceLimit,
         openingDays: openingDaysSet,
+        closureDates: closureDatesSet,
         fixedBookingSettingsByActivity
       };
       const updatedClub = await ClubService.updateClub(club.id, payload);
@@ -814,6 +855,7 @@ export default function AdminTabClub() {
       initialConfigRef.current = cloneSnapshot({
         clubForm,
         openingDaysSet,
+        closureDatesSet,
         activityScheduleForm
       });
       await loadPersistentConfigHistory(updatedClub.id);
@@ -1069,6 +1111,20 @@ export default function AdminTabClub() {
     });
   };
 
+  const addClosureDate = () => {
+    const value = String(closureDateInput || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      showError('La fecha de cierre debe tener formato YYYY-MM-DD.');
+      return;
+    }
+    setClosureDatesSet((prev) => Array.from(new Set([...prev, value])).sort());
+    setClosureDateInput('');
+  };
+
+  const removeClosureDate = (date: string) => {
+    setClosureDatesSet((prev) => prev.filter((item) => item !== date));
+  };
+
   const isDepositMode = clubForm.bookingConfirmationMode === 'DEPOSIT_REQUIRED';
 
   const inputClass = "w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/20 focus:outline-none shadow-sm transition-all";
@@ -1157,6 +1213,51 @@ export default function AdminTabClub() {
                       );
                     })}
                   </div>
+                </div>
+
+                <div className="bg-white/10 p-6 rounded-[1.5rem] border-2 border-white/10">
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-[#347048] mb-3">Fechas de cierre</h3>
+                  <p className="text-[12px] text-[#347048]/70 mb-3">Bloqueá días puntuales (feriados, eventos o mantenimiento). Formato local del club: YYYY-MM-DD.</p>
+                  <div className="flex flex-col md:flex-row gap-3 mb-3">
+                    <div className="relative flex items-center justify-between bg-white rounded-xl px-2 py-2.5 border border-transparent shadow-sm h-[46px] min-w-[260px]">
+                      <span className="text-[14px] font-bold text-[#347048] min-w-[120px] text-center whitespace-nowrap pointer-events-none">
+                        {parseLocalDate(closureDateInput)
+                          ? parseLocalDate(closureDateInput)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : 'Seleccionar fecha'}
+                      </span>
+                      <div className="absolute inset-y-0 left-3 right-3 z-10">
+                        <DatePickerDark
+                          selected={parseLocalDate(closureDateInput)}
+                          onChange={(date: Date | null) => setClosureDateInput(date ? formatLocalDate(date) : '')}
+                          showIcon={false}
+                          variant="light"
+                          popperPlacement="bottom"
+                          inputClassName="w-full h-[46px] opacity-0 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addClosureDate}
+                      className="h-11 px-5 rounded-xl text-xs font-black bg-[#347048] text-[#EBE1D8] hover:bg-[#B9CF32] hover:text-[#347048] transition-all uppercase tracking-widest"
+                    >
+                      Agregar cierre
+                    </button>
+                  </div>
+                  {closureDatesSet.length === 0 ? (
+                    <p className="text-[11px] font-bold text-[#347048]/60">No hay fechas cerradas configuradas.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {closureDatesSet.map((date) => (
+                        <span key={date} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#926699]/10 text-[#347048] font-black text-xs border border-[#926699]/20">
+                          {date}
+                          <button type="button" onClick={() => removeClosureDate(date)} className="text-red-600 hover:text-red-700" aria-label={`Quitar ${date}`}>
+                            <Trash2 size={14} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
               <div>

@@ -517,13 +517,20 @@ export default function Home() {
 
     if (searchDate) {
       try {
-        const parsed = new Date(searchDate);
-        if (!isNaN(parsed.getTime())) {
-          const dayOfWeek = parsed.getDay(); // 0 (Dom) .. 6 (Sab)
-          finalClubs = finalClubs.filter((club) => {
-            if (!Array.isArray(club.openingDays) || club.openingDays.length === 0) return true; // no config => open all days
-            return club.openingDays.includes(dayOfWeek);
-          });
+        if (/^\d{4}-\d{2}-\d{2}$/.test(searchDate)) {
+          const [year, month, day] = searchDate.split('-').map(Number);
+          const parsed = new Date(year, month - 1, day);
+          if (!isNaN(parsed.getTime())) {
+            const dayOfWeek = parsed.getDay(); // 0 (Dom) .. 6 (Sab)
+            finalClubs = finalClubs.filter((club) => {
+              const closureDates = Array.isArray((club as any).closureDates)
+                ? (club as any).closureDates.map((value: unknown) => String(value || '').trim())
+                : [];
+              if (closureDates.includes(searchDate)) return false;
+              if (!Array.isArray(club.openingDays) || club.openingDays.length === 0) return true; // no config => open all days
+              return club.openingDays.includes(dayOfWeek);
+            });
+          }
         }
       } catch (e) { /* noop */ }
 

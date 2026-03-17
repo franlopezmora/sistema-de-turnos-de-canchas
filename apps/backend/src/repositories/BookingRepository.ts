@@ -189,6 +189,11 @@ export class BookingRepository {
             s?.autoCancelPendingWarningMinutesBefore != null ? Number(s.autoCancelPendingWarningMinutesBefore) : null,
             s?.enforceCashShiftCloseWithOpenAccounts ?? false,
             Array.isArray(s?.openingDays) ? s.openingDays : null,
+            Array.isArray(s?.closureDates)
+                ? s.closureDates
+                    .map((date: unknown) => String(date || '').trim())
+                    .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+                : null,
             c.createdAt,
             c.updatedAt
         );

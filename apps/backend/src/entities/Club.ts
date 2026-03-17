@@ -45,6 +45,7 @@ export class Club {
         public autoCancelPendingWarningMinutesBefore?: number | null,
         public enforceCashShiftCloseWithOpenAccounts: boolean = false,
         public openingDays?: number[] | null,
+        public closureDates?: string[] | null,
         public createdAt?: Date,
         public updatedAt?: Date,
         public bookingSimpleAdvanceDaysUser: number = 30,

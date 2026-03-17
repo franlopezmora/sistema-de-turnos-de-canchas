@@ -168,6 +168,11 @@ export class BookingService {
             ...club,
             timeZone: settings?.timeZone ?? 'America/Argentina/Buenos_Aires',
             openingDays: Array.isArray(settings?.openingDays) ? settings.openingDays : null,
+            closureDates: Array.isArray(settings?.closureDates)
+                ? settings.closureDates
+                    .map((date: unknown) => String(date || '').trim())
+                    .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+                : null,
             lightsEnabled: settings?.lightsEnabled ?? false,
             lightsExtraAmount: settings?.lightsExtraAmount ?? null,
             lightsFromHour: normalizedLightsFromHour,
@@ -188,6 +193,14 @@ export class BookingService {
                 : 30,
             allowAdminSkipSimpleAdvanceLimit: settings?.allowAdminSkipSimpleAdvanceLimit ?? false
         };
+    }
+
+    private formatLocalDateKey(date: Date, timeZone: string) {
+        const localDate = TimeHelper.utcToLocal(date, timeZone);
+        const yyyy = localDate.getFullYear();
+        const mm = String(localDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(localDate.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
     }
 
     private getLocalDayStart(date: Date, timeZone: string) {
@@ -251,6 +264,11 @@ export class BookingService {
     }
 
     private isClubOpenOnLocalDate(clubConfig: any, date: Date, timeZone: string) {
+        const localDateKey = this.formatLocalDateKey(date, timeZone);
+        if (Array.isArray(clubConfig?.closureDates) && clubConfig.closureDates.includes(localDateKey)) {
+            return false;
+        }
+
         if (!clubConfig || !Array.isArray(clubConfig.openingDays) || clubConfig.openingDays.length === 0) return true;
         try {
             // Construir la medianoche local para la fecha dada y obtener el día de la semana en la zona del club

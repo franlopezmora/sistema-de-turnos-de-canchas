@@ -848,6 +848,9 @@ model ClubSettings {
   // Días de apertura: [0, 1, 2, 3, 4, 5, 6]
   openingDays               Json?    
 
+  // Fechas de cierre excepcionales (YYYY-MM-DD) en horario local del club
+  closureDates              Json?
+
   // Configuración de Luces
   lightsEnabled             Boolean  @default(false)
   lightsExtraAmount         Decimal? @db.Decimal(10, 2)

@@ -6,6 +6,22 @@ import { Court } from '../entities/Court';
 import { ActivityType } from '../entities/ActivityType';
 
 export class ClubRepository {
+    private supportsClosureDatesField(): boolean {
+        const models = ((Prisma as any)?.dmmf?.datamodel?.models ?? []) as Array<{ name?: string; fields?: Array<{ name?: string }> }>;
+        const clubSettingsModel = models.find((model) => model?.name === 'ClubSettings');
+        const fields = Array.isArray(clubSettingsModel?.fields) ? clubSettingsModel!.fields : [];
+        return fields.some((field) => field?.name === 'closureDates');
+    }
+
+    private assertClosureDatesSupport(closureDates: string[] | null | undefined) {
+        const hasRequestedClosureDates = Array.isArray(closureDates) && closureDates.length > 0;
+        if (!hasRequestedClosureDates) return;
+        if (this.supportsClosureDatesField()) return;
+
+        throw new Error(
+            'La versión actual de Prisma Client no soporta closureDates. Ejecutá "npx prisma generate" en apps/backend y reiniciá el backend.'
+        );
+    }
 
     async createClub(
         slug: string,
@@ -41,9 +57,41 @@ export class ClubRepository {
         bookingSimpleAdvanceDaysUser: number = 30,
         bookingSimpleAdvanceDaysAdmin: number = 30,
         allowAdminSkipSimpleAdvanceLimit: boolean = false,
+        closureDates?: string[] | null,
         openingDays?: number[] | null
     ): Promise<Club> {
+        this.assertClosureDatesSupport(closureDates);
         const location = await this.ensureLocation(city, province, country);
+        const settingsCreateData: any = {
+            timeZone,
+            openingDays: openingDays ?? undefined,
+            lightsEnabled,
+            lightsExtraAmount,
+            lightsFromHour: lightsFromHour ?? null,
+            professorDurationOverrideEnabled,
+            professorDurationOverrideMinutes,
+            fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
+            bookingConfirmationMode,
+            bookingDepositPercent,
+            allowManualConfirmationOverride,
+            autoCancelPendingBookingsEnabled,
+            autoCancelPendingBookingsMinutesBefore: autoCancelPendingBookingsMinutesBefore ?? null,
+            autoCancelPendingBookingsOnlyIfUnpaid,
+            autoCancelPendingWarningEnabled,
+            autoCancelPendingWarningMinutesBefore: autoCancelPendingWarningMinutesBefore ?? null,
+            enforceCashShiftCloseWithOpenAccounts,
+            bookingSimpleAdvanceDaysUser: Number.isFinite(Number(bookingSimpleAdvanceDaysUser))
+                ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysUser)))
+                : 30,
+            bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(bookingSimpleAdvanceDaysAdmin))
+                ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysAdmin)))
+                : 30,
+            allowAdminSkipSimpleAdvanceLimit
+        };
+        if (this.supportsClosureDatesField()) {
+            settingsCreateData.closureDates = closureDates ?? undefined;
+        }
+
         const clubData = {
             slug,
             name,
@@ -66,32 +114,7 @@ export class ClubRepository {
             data: {
                 ...clubData,
                 settings: {
-                    create: {
-                        timeZone,
-                        openingDays: openingDays ?? undefined,
-                        lightsEnabled,
-                        lightsExtraAmount,
-                        lightsFromHour: lightsFromHour ?? null,
-                        professorDurationOverrideEnabled,
-                        professorDurationOverrideMinutes,
-                        fixedBookingSettingsByActivity: fixedBookingSettingsByActivity ?? undefined,
-                        bookingConfirmationMode,
-                        bookingDepositPercent,
-                        allowManualConfirmationOverride,
-                        autoCancelPendingBookingsEnabled,
-                        autoCancelPendingBookingsMinutesBefore: autoCancelPendingBookingsMinutesBefore ?? null,
-                        autoCancelPendingBookingsOnlyIfUnpaid,
-                        autoCancelPendingWarningEnabled,
-                        autoCancelPendingWarningMinutesBefore: autoCancelPendingWarningMinutesBefore ?? null,
-                        enforceCashShiftCloseWithOpenAccounts,
-                        bookingSimpleAdvanceDaysUser: Number.isFinite(Number(bookingSimpleAdvanceDaysUser))
-                            ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysUser)))
-                            : 30,
-                        bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(bookingSimpleAdvanceDaysAdmin))
-                            ? Math.max(0, Math.floor(Number(bookingSimpleAdvanceDaysAdmin)))
-                            : 30,
-                        allowAdminSkipSimpleAdvanceLimit
-                    }
+                    create: settingsCreateData
                 }
             },
             include: { settings: true }
@@ -189,6 +212,7 @@ export class ClubRepository {
             Number.isFinite(Number(club.bookingSimpleAdvanceDaysUser)) ? Number(club.bookingSimpleAdvanceDaysUser) : 30,
             Number.isFinite(Number(club.bookingSimpleAdvanceDaysAdmin)) ? Number(club.bookingSimpleAdvanceDaysAdmin) : 30,
             Boolean(club.allowAdminSkipSimpleAdvanceLimit),
+            club.closureDates ?? null,
             club.openingDays ?? null
         );
     }
@@ -251,8 +275,10 @@ export class ClubRepository {
         bookingSimpleAdvanceDaysUser?: number;
         bookingSimpleAdvanceDaysAdmin?: number;
         allowAdminSkipSimpleAdvanceLimit?: boolean;
+        closureDates?: string[] | null;
         openingDays?: number[] | null;
     }): Promise<Club> {
+        this.assertClosureDatesSupport(data.closureDates);
         const clubFields = {
             slug: data.slug,
             name: data.name,
@@ -280,96 +306,106 @@ export class ClubRepository {
             cleanClubData.locationId = location.id;
         }
 
+        const settingsUpsertCreate: any = {
+            timeZone: data.timeZone ?? 'America/Argentina/Buenos_Aires',
+            openingDays: data.openingDays === null ? Prisma.JsonNull : (data.openingDays ?? undefined),
+            lightsEnabled: data.lightsEnabled ?? false,
+            lightsExtraAmount: data.lightsExtraAmount ?? null,
+            lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : (data.lightsFromHour ?? null),
+            professorDurationOverrideEnabled: data.professorDurationOverrideEnabled ?? true,
+            professorDurationOverrideMinutes: Number.isFinite(Number(data.professorDurationOverrideMinutes))
+                ? Math.max(1, Math.floor(Number(data.professorDurationOverrideMinutes)))
+                : 60,
+            fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : (data.fixedBookingSettingsByActivity ?? undefined),
+            bookingConfirmationMode: data.bookingConfirmationMode ?? 'MANUAL',
+            bookingDepositPercent: data.bookingDepositPercent ?? null,
+            allowManualConfirmationOverride: data.allowManualConfirmationOverride ?? true,
+            autoCancelPendingBookingsEnabled: data.autoCancelPendingBookingsEnabled ?? false,
+            autoCancelPendingBookingsMinutesBefore: data.autoCancelPendingBookingsMinutesBefore ?? null,
+            autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
+            autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled ?? false,
+            autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore ?? null,
+            enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts ?? false,
+            bookingSimpleAdvanceDaysUser: Number.isFinite(Number(data.bookingSimpleAdvanceDaysUser))
+                ? Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysUser)))
+                : 30,
+            bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(data.bookingSimpleAdvanceDaysAdmin))
+                ? Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysAdmin)))
+                : 30,
+            allowAdminSkipSimpleAdvanceLimit: data.allowAdminSkipSimpleAdvanceLimit ?? false
+        };
+        if (this.supportsClosureDatesField()) {
+            settingsUpsertCreate.closureDates = data.closureDates === null ? Prisma.JsonNull : (data.closureDates ?? undefined);
+        }
+
+        const settingsUpsertUpdate: any = {
+            ...(data.timeZone !== undefined ? { timeZone: data.timeZone } : {}),
+            ...(data.openingDays !== undefined ? { openingDays: data.openingDays === null ? Prisma.JsonNull : data.openingDays } : {}),
+            ...(data.lightsEnabled !== undefined ? { lightsEnabled: data.lightsEnabled } : {}),
+            ...(data.lightsExtraAmount !== undefined ? { lightsExtraAmount: data.lightsExtraAmount } : {}),
+            ...(data.lightsFromHour !== undefined
+                ? { lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : null }
+                : {}),
+            ...(data.professorDurationOverrideEnabled !== undefined
+                ? { professorDurationOverrideEnabled: data.professorDurationOverrideEnabled }
+                : {}),
+            ...(data.professorDurationOverrideMinutes !== undefined
+                ? { professorDurationOverrideMinutes: Math.max(1, Math.floor(Number(data.professorDurationOverrideMinutes))) }
+                : {}),
+            ...(data.fixedBookingSettingsByActivity !== undefined
+                ? { fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : data.fixedBookingSettingsByActivity }
+                : {}),
+            ...(data.bookingConfirmationMode !== undefined
+                ? { bookingConfirmationMode: data.bookingConfirmationMode }
+                : {}),
+            ...(data.bookingDepositPercent !== undefined
+                ? { bookingDepositPercent: data.bookingDepositPercent }
+                : {}),
+            ...(data.allowManualConfirmationOverride !== undefined
+                ? { allowManualConfirmationOverride: data.allowManualConfirmationOverride }
+                : {}),
+            ...(data.autoCancelPendingBookingsEnabled !== undefined
+                ? { autoCancelPendingBookingsEnabled: data.autoCancelPendingBookingsEnabled }
+                : {}),
+            ...(data.autoCancelPendingBookingsMinutesBefore !== undefined
+                ? { autoCancelPendingBookingsMinutesBefore: data.autoCancelPendingBookingsMinutesBefore }
+                : {}),
+            ...(data.autoCancelPendingBookingsOnlyIfUnpaid !== undefined
+                ? { autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid }
+                : {}),
+            ...(data.autoCancelPendingWarningEnabled !== undefined
+                ? { autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled }
+                : {}),
+            ...(data.autoCancelPendingWarningMinutesBefore !== undefined
+                ? { autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore }
+                : {})
+            ,
+            ...(data.enforceCashShiftCloseWithOpenAccounts !== undefined
+                ? { enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts }
+                : {})
+            ,
+            ...(data.bookingSimpleAdvanceDaysUser !== undefined
+                ? { bookingSimpleAdvanceDaysUser: Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysUser))) }
+                : {}),
+            ...(data.bookingSimpleAdvanceDaysAdmin !== undefined
+                ? { bookingSimpleAdvanceDaysAdmin: Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysAdmin))) }
+                : {}),
+            ...(data.allowAdminSkipSimpleAdvanceLimit !== undefined
+                ? { allowAdminSkipSimpleAdvanceLimit: data.allowAdminSkipSimpleAdvanceLimit }
+                : {})
+        };
+        if (this.supportsClosureDatesField() && data.closureDates !== undefined) {
+            settingsUpsertUpdate.closureDates = data.closureDates === null ? Prisma.JsonNull : data.closureDates;
+        }
+
         const updated = await prisma.club.update({
             where: { id },
             data: {
                 ...cleanClubData,
                 settings: {
                     upsert: {
-                        create: {
-                            timeZone: data.timeZone ?? 'America/Argentina/Buenos_Aires',
-                            openingDays: data.openingDays === null ? Prisma.JsonNull : (data.openingDays ?? undefined),
-                            lightsEnabled: data.lightsEnabled ?? false,
-                            lightsExtraAmount: data.lightsExtraAmount ?? null,
-                            lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : (data.lightsFromHour ?? null),
-                            professorDurationOverrideEnabled: data.professorDurationOverrideEnabled ?? true,
-                            professorDurationOverrideMinutes: Number.isFinite(Number(data.professorDurationOverrideMinutes))
-                                ? Math.max(1, Math.floor(Number(data.professorDurationOverrideMinutes)))
-                                : 60,
-                            fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : (data.fixedBookingSettingsByActivity ?? undefined),
-                            bookingConfirmationMode: data.bookingConfirmationMode ?? 'MANUAL',
-                            bookingDepositPercent: data.bookingDepositPercent ?? null,
-                            allowManualConfirmationOverride: data.allowManualConfirmationOverride ?? true,
-                            autoCancelPendingBookingsEnabled: data.autoCancelPendingBookingsEnabled ?? false,
-                            autoCancelPendingBookingsMinutesBefore: data.autoCancelPendingBookingsMinutesBefore ?? null,
-                            autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid ?? true,
-                            autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled ?? false,
-                            autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore ?? null,
-                            enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts ?? false,
-                            bookingSimpleAdvanceDaysUser: Number.isFinite(Number(data.bookingSimpleAdvanceDaysUser))
-                                ? Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysUser)))
-                                : 30,
-                            bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(data.bookingSimpleAdvanceDaysAdmin))
-                                ? Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysAdmin)))
-                                : 30,
-                            allowAdminSkipSimpleAdvanceLimit: data.allowAdminSkipSimpleAdvanceLimit ?? false
-                        },
-                        update: {
-                            ...(data.timeZone !== undefined ? { timeZone: data.timeZone } : {}),
-                            ...(data.openingDays !== undefined ? { openingDays: data.openingDays === null ? Prisma.JsonNull : data.openingDays } : {}),
-                            ...(data.lightsEnabled !== undefined ? { lightsEnabled: data.lightsEnabled } : {}),
-                            ...(data.lightsExtraAmount !== undefined ? { lightsExtraAmount: data.lightsExtraAmount } : {}),
-                            ...(data.lightsFromHour !== undefined
-                                ? { lightsFromHour: typeof data.lightsFromHour === 'string' ? data.lightsFromHour : null }
-                                : {}),
-                            ...(data.professorDurationOverrideEnabled !== undefined
-                                ? { professorDurationOverrideEnabled: data.professorDurationOverrideEnabled }
-                                : {}),
-                            ...(data.professorDurationOverrideMinutes !== undefined
-                                ? { professorDurationOverrideMinutes: Math.max(1, Math.floor(Number(data.professorDurationOverrideMinutes))) }
-                                : {}),
-                            ...(data.fixedBookingSettingsByActivity !== undefined
-                                ? { fixedBookingSettingsByActivity: data.fixedBookingSettingsByActivity === null ? Prisma.JsonNull : data.fixedBookingSettingsByActivity }
-                                : {}),
-                            ...(data.bookingConfirmationMode !== undefined
-                                ? { bookingConfirmationMode: data.bookingConfirmationMode }
-                                : {}),
-                            ...(data.bookingDepositPercent !== undefined
-                                ? { bookingDepositPercent: data.bookingDepositPercent }
-                                : {}),
-                            ...(data.allowManualConfirmationOverride !== undefined
-                                ? { allowManualConfirmationOverride: data.allowManualConfirmationOverride }
-                                : {}),
-                            ...(data.autoCancelPendingBookingsEnabled !== undefined
-                                ? { autoCancelPendingBookingsEnabled: data.autoCancelPendingBookingsEnabled }
-                                : {}),
-                            ...(data.autoCancelPendingBookingsMinutesBefore !== undefined
-                                ? { autoCancelPendingBookingsMinutesBefore: data.autoCancelPendingBookingsMinutesBefore }
-                                : {}),
-                            ...(data.autoCancelPendingBookingsOnlyIfUnpaid !== undefined
-                                ? { autoCancelPendingBookingsOnlyIfUnpaid: data.autoCancelPendingBookingsOnlyIfUnpaid }
-                                : {}),
-                            ...(data.autoCancelPendingWarningEnabled !== undefined
-                                ? { autoCancelPendingWarningEnabled: data.autoCancelPendingWarningEnabled }
-                                : {}),
-                            ...(data.autoCancelPendingWarningMinutesBefore !== undefined
-                                ? { autoCancelPendingWarningMinutesBefore: data.autoCancelPendingWarningMinutesBefore }
-                                : {})
-                            ,
-                            ...(data.enforceCashShiftCloseWithOpenAccounts !== undefined
-                                ? { enforceCashShiftCloseWithOpenAccounts: data.enforceCashShiftCloseWithOpenAccounts }
-                                : {})
-                            ,
-                            ...(data.bookingSimpleAdvanceDaysUser !== undefined
-                                ? { bookingSimpleAdvanceDaysUser: Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysUser))) }
-                                : {}),
-                            ...(data.bookingSimpleAdvanceDaysAdmin !== undefined
-                                ? { bookingSimpleAdvanceDaysAdmin: Math.max(0, Math.floor(Number(data.bookingSimpleAdvanceDaysAdmin))) }
-                                : {}),
-                            ...(data.allowAdminSkipSimpleAdvanceLimit !== undefined
-                                ? { allowAdminSkipSimpleAdvanceLimit: data.allowAdminSkipSimpleAdvanceLimit }
-                                : {})
-                        }
+                        create: settingsUpsertCreate,
+                        update: settingsUpsertUpdate
                     }
                 }
             },
@@ -382,6 +418,11 @@ export class ClubRepository {
         const settings = dbClub.settings ?? null;
         const resolvedTimeZone = settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
         const resolvedOpeningDays = Array.isArray(settings?.openingDays) ? settings.openingDays : null;
+        const resolvedClosureDates = Array.isArray(settings?.closureDates)
+            ? settings.closureDates
+                .map((date: unknown) => String(date || '').trim())
+                .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+            : null;
         const resolvedLightsEnabled = settings?.lightsEnabled ?? false;
         const resolvedLightsExtraAmountRaw = settings?.lightsExtraAmount ?? null;
         const resolvedLightsFromHour = this.formatLightsFromHour(settings?.lightsFromHour) ?? null;
@@ -447,6 +488,7 @@ export class ClubRepository {
             autoCancelPendingWarningMinutesBefore,
             enforceCashShiftCloseWithOpenAccounts,
             resolvedOpeningDays,
+            resolvedClosureDates,
             dbClub.createdAt,
             dbClub.updatedAt,
             bookingSimpleAdvanceDaysUser,
