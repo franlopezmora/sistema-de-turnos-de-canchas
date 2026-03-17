@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Banknote, CreditCard, Plus, Receipt, History, ChevronDown, Check, Phone, IdCard, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Banknote, CreditCard, Plus, Receipt, History, ChevronDown, Check, Phone, IdCard, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { searchClients } from '../../services/BookingService';
 import { ClubService } from '../../services/ClubService';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
@@ -8,6 +8,7 @@ import { formatDateTime24, formatTime24 } from '../../utils/dateTime';
 import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 import AppModal from '../AppModal';
 import PaymentCalculator, { type PaymentCalculatorResult } from '../PaymentCalculator';
+import ProductSearch, { type ProductSearchItem } from '../ui/ProductSearch';
 
 // Tipos
 interface Movement {
@@ -102,10 +103,26 @@ interface CashShiftCloseReport {
   };
 }
 
+type SalePaymentAllocation = {
+  itemKey: string;
+  amount: number;
+};
+
 type SalePayment = {
   method: 'CASH' | 'TRANSFER' | 'CARD';
   channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
   amount: number;
+  allocations: SalePaymentAllocation[];
+};
+
+type SaleCartItem = {
+  itemKey: string;
+  productId?: number;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  isCustom: boolean;
+  stock?: number | null;
 };
 
 type CashPeriod = 'hoy' | 'semana' | 'mes';
@@ -141,6 +158,8 @@ const getCashDateRange = (period: CashPeriod, offset: number = 0) => {
     rawEnd: end
   };
 };
+
+const normalizeSaleItemName = (value: string) => String(value || '').trim().toLowerCase();
 
 // --- COMPONENTE DROPDOWN CUSTOM (ESTILO WIMBLEDON) ---
 const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
@@ -265,10 +284,23 @@ const AdminCashDashboard = () => {
   const [newMove, setNewMove] = useState({ description: '', amount: '', type: 'INCOME' });
   const [showMovementMethodPicker, setShowMovementMethodPicker] = useState(false);
   const [movementSubmitting, setMovementSubmitting] = useState(false);
-  const [productSale, setProductSale] = useState({ productId: '', quantity: '1', clientQuery: '', guestPhone: '', guestDni: '', guestEmail: '', guestIsProfessor: false });
+  const [productSale, setProductSale] = useState({
+    productQuery: '',
+    manualUnitPrice: '',
+    quantity: '1',
+    clientQuery: '',
+    guestPhone: '',
+    guestDni: '',
+    guestEmail: '',
+    guestIsProfessor: false
+  });
   const [createClientIfMissing, setCreateClientIfMissing] = useState(false);
+  const [saleCart, setSaleCart] = useState<SaleCartItem[]>([]);
+  const [saleQuote, setSaleQuote] = useState<any | null>(null);
   const [salePayments, setSalePayments] = useState<SalePayment[]>([]);
   const [showSalePaymentCalculator, setShowSalePaymentCalculator] = useState(false);
+  const [selectedSaleProduct, setSelectedSaleProduct] = useState<ProductSearchItem | null>(null);
+  const [saleProductSearchKey, setSaleProductSearchKey] = useState(0);
 
   const getClubSlug = useCallback(() => {
     try {
@@ -620,6 +652,23 @@ const AdminCashDashboard = () => {
     }
   };
 
+  const buildSaleItemPayload = useCallback((item: SaleCartItem) => {
+    if (item.productId) {
+      return {
+        itemKey: item.itemKey,
+        productId: Number(item.productId),
+        quantity: Number(item.quantity)
+      };
+    }
+
+    return {
+      itemKey: item.itemKey,
+      customName: String(item.productName || '').trim(),
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice || 0)
+    };
+  }, []);
+
   const handleProductSale = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaleError('');
@@ -629,24 +678,25 @@ const AdminCashDashboard = () => {
       return;
     }
 
-    const qty = Number(productSale.quantity);
-    if (!productSale.productId || !Number.isFinite(qty) || qty <= 0) {
-      setSaleError('Seleccioná un producto y cantidad válida.');
+    if (!Array.isArray(saleCart) || saleCart.length === 0) {
+      setSaleError('Agregá al menos un producto al carrito.');
       return;
     }
 
-    const selectedProduct = products.find((product) => Number(product.id) === Number(productSale.productId));
-    if (!selectedProduct) {
-      setSaleError('El producto seleccionado no es válido.');
+    const totalAmount = Number(saleQuote?.finalTotal || 0);
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      setSaleError('No se pudo cotizar el total de la venta. Reintentá.');
       return;
     }
-
-    const totalAmount = Number(selectedProduct.price) * qty;
     const configuredPayments = salePayments
       .map((payment) => ({
         method: payment.method,
         channel: payment.method === 'TRANSFER' ? (payment.channel || 'BANK_ACCOUNT') : undefined,
-        amount: Number(payment.amount || 0)
+        amount: Number(payment.amount || 0),
+        allocations: (payment.allocations || []).map((allocation) => ({
+          itemKey: String(allocation.itemKey || ''),
+          amount: Number(allocation.amount || 0)
+        }))
       }))
       .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
 
@@ -693,8 +743,7 @@ const AdminCashDashboard = () => {
 
     try {
       await CashService.createProductSale({
-        productId: Number(productSale.productId),
-        quantity: qty,
+        items: saleCart.map(buildSaleItemPayload),
         method: configuredPayments[0].method,
         channel: configuredPayments[0].method === 'TRANSFER' ? configuredPayments[0].channel : undefined,
         payments: configuredPayments,
@@ -709,10 +758,23 @@ const AdminCashDashboard = () => {
         guestIsProfessor: createClientIfMissing ? fallbackGuestIsProfessor : undefined
       });
 
-      setProductSale({ productId: '', quantity: '1', clientQuery: '', guestPhone: '', guestDni: '', guestEmail: '', guestIsProfessor: false });
+      setProductSale({
+        productQuery: '',
+        manualUnitPrice: '',
+        quantity: '1',
+        clientQuery: '',
+        guestPhone: '',
+        guestDni: '',
+        guestEmail: '',
+        guestIsProfessor: false
+      });
       setCreateClientIfMissing(false);
+      setSaleCart([]);
+      setSaleQuote(null);
       setSalePayments([]);
       setSelectedClient(null);
+      setSelectedSaleProduct(null);
+      setSaleProductSearchKey((prev) => prev + 1);
       setActionFeedback({
         show: true,
         title: 'Venta registrada',
@@ -731,14 +793,13 @@ const AdminCashDashboard = () => {
       setSaleError('Primero tenés que abrir la caja para registrar ventas.');
       return;
     }
-    const qty = Number(productSale.quantity);
-    if (!productSale.productId || !Number.isFinite(qty) || qty <= 0) {
-      setSaleError('Seleccioná un producto y cantidad válida antes de cobrar.');
+    if (!Array.isArray(saleCart) || saleCart.length === 0) {
+      setSaleError('Agregá al menos un producto al carrito antes de cobrar.');
       return;
     }
-    const selectedProduct = products.find((product) => Number(product.id) === Number(productSale.productId));
-    if (!selectedProduct) {
-      setSaleError('El producto seleccionado no es válido.');
+    const totalAmount = Number(saleQuote?.finalTotal || 0);
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+      setSaleError('No se pudo cotizar el total de la venta. Reintentá.');
       return;
     }
     setShowSalePaymentCalculator(true);
@@ -748,14 +809,184 @@ const AdminCashDashboard = () => {
     const amount = Number(result.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) return;
     const method = result.method === 'OTHER' ? 'CASH' : result.method;
+    const allocations = (result.itemAllocations || [])
+      .map((entry) => ({
+        itemKey: String(entry.key || '').trim(),
+        amount: Number(entry.amount || 0)
+      }))
+      .filter((entry) => entry.itemKey.length > 0 && Number.isFinite(entry.amount) && entry.amount > 0.009)
+      .map((entry) => ({
+        itemKey: entry.itemKey,
+        amount: Number(entry.amount.toFixed(2))
+      }));
     const nextPayment: SalePayment = {
       method,
       channel: method === 'TRANSFER' ? (result.channel || 'BANK_ACCOUNT') : undefined,
-      amount: Number(amount.toFixed(2))
+      amount: Number(amount.toFixed(2)),
+      allocations
     };
     setSalePayments((prev) => [...prev, nextPayment]);
     setShowSalePaymentCalculator(false);
   };
+
+  const handleAddProductToSaleCart = () => {
+    setSaleError('');
+    const qty = Number(productSale.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setSaleError('Seleccioná una cantidad válida.');
+      return;
+    }
+
+    if (selectedSaleProduct?.id) {
+      const currentQuantityInCart = Number(
+        saleCart.find((item) => Number(item.productId) === Number(selectedSaleProduct.id))?.quantity || 0
+      );
+      const nextQuantityInCart = currentQuantityInCart + qty;
+      if (Number(selectedSaleProduct.stock || 0) < nextQuantityInCart) {
+        setSaleError(
+          currentQuantityInCart > 0
+            ? `Stock insuficiente. Ya tenés ${currentQuantityInCart} unidad(es) en el carrito y el stock disponible es ${Number(selectedSaleProduct.stock || 0)}.`
+            : 'Stock insuficiente.'
+        );
+        return;
+      }
+
+      setSaleCart((prev) => {
+        const next = [...prev];
+        const idx = next.findIndex((item) => Number(item.productId) === Number(selectedSaleProduct.id));
+        if (idx === -1) {
+          next.push({
+            itemKey: `product:${Number(selectedSaleProduct.id)}`,
+            productId: Number(selectedSaleProduct.id),
+            productName: selectedSaleProduct.name,
+            quantity: qty,
+            unitPrice: Number(selectedSaleProduct.price || 0),
+            isCustom: false,
+            stock: selectedSaleProduct.stock ?? null
+          });
+        } else {
+          next[idx] = {
+            ...next[idx],
+            quantity: Number(next[idx].quantity) + qty,
+            unitPrice: Number(selectedSaleProduct.price || next[idx].unitPrice || 0),
+            stock: selectedSaleProduct.stock ?? next[idx].stock ?? null
+          };
+        }
+        return next;
+      });
+      setSelectedSaleProduct(null);
+      setSaleProductSearchKey((prev) => prev + 1);
+      setProductSale((prev) => ({ ...prev, productQuery: '', manualUnitPrice: '', quantity: '1' }));
+      return;
+    }
+
+    const manualName = String(productSale.productQuery || '').trim();
+    const manualUnitPrice = Number(productSale.manualUnitPrice);
+    if (manualName.length < 2) {
+      setSaleError('Escribí un producto o detalle válido.');
+      return;
+    }
+    const existingProduct = products.find((product) => normalizeSaleItemName(product.name) === normalizeSaleItemName(manualName));
+    if (existingProduct) {
+      setSaleError('Ese producto ya existe en catálogo. Seleccionalo del listado para respetar stock y descuentos.');
+      return;
+    }
+    if (!Number.isFinite(manualUnitPrice) || manualUnitPrice <= 0) {
+      setSaleError('Cargá un precio unitario válido para el item manual.');
+      return;
+    }
+
+    setSaleCart((prev) => {
+      const next = [...prev];
+      const roundedUnitPrice = Number(manualUnitPrice.toFixed(2));
+      const idx = next.findIndex((item) =>
+        item.isCustom &&
+        normalizeSaleItemName(item.productName) === normalizeSaleItemName(manualName) &&
+        Math.abs(Number(item.unitPrice || 0) - roundedUnitPrice) <= 0.01
+      );
+      if (idx === -1) {
+        next.push({
+          itemKey: `custom:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          productName: manualName,
+          quantity: qty,
+          unitPrice: roundedUnitPrice,
+          isCustom: true
+        });
+      } else {
+        next[idx] = {
+          ...next[idx],
+          quantity: Number(next[idx].quantity) + qty
+        };
+      }
+      return next;
+    });
+    setSaleProductSearchKey((prev) => prev + 1);
+    setProductSale((prev) => ({ ...prev, productQuery: '', manualUnitPrice: '', quantity: '1' }));
+  };
+
+  const handleRemoveSaleCartItem = (itemKey: string) => {
+    setSaleCart((prev) => prev.filter((item) => String(item.itemKey) !== String(itemKey)));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        if (!currentShift) {
+          setSaleQuote(null);
+          setSaleError('');
+          return;
+        }
+        if (!saleCart || saleCart.length === 0) {
+          setSaleQuote(null);
+          setSaleError('');
+          return;
+        }
+        const fallbackGuestName = productSale.clientQuery.trim();
+        const fallbackGuestPhone = String(productSale.guestPhone || '').trim();
+        const fallbackGuestDni = String(productSale.guestDni || '').trim();
+        const fallbackGuestEmail = String(productSale.guestEmail || '').trim();
+        const fallbackGuestIsProfessor = Boolean(productSale.guestIsProfessor);
+
+        const quote = await CashService.quoteProductSale({
+          items: saleCart.map(buildSaleItemPayload),
+          clientId: selectedClient?.id ? String(selectedClient.id) : undefined,
+          createClientIfMissing: !selectedClient && createClientIfMissing,
+          guestName: selectedClient
+            ? `${selectedClient.firstName || ''} ${selectedClient.lastName || ''}`.trim()
+            : (createClientIfMissing ? fallbackGuestName : undefined),
+          guestPhone: selectedClient?.phoneNumber || selectedClient?.phone || (createClientIfMissing ? fallbackGuestPhone : undefined),
+          guestDni: selectedClient?.dni || selectedClient?.dniNumber || selectedClient?.document || (createClientIfMissing ? fallbackGuestDni : undefined),
+          guestEmail: selectedClient?.email || (createClientIfMissing ? fallbackGuestEmail : undefined),
+          guestIsProfessor: createClientIfMissing ? fallbackGuestIsProfessor : undefined
+        });
+        if (!cancelled) {
+          setSaleQuote(quote);
+          setSaleError('');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSaleQuote(null);
+          setSaleError(extractErrorMessage(error, 'No se pudo cotizar la venta.'));
+        }
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    buildSaleItemPayload,
+    currentShift,
+    saleCart,
+    selectedClient,
+    createClientIfMissing,
+    productSale.clientQuery,
+    productSale.guestPhone,
+    productSale.guestDni,
+    productSale.guestEmail,
+    productSale.guestIsProfessor
+  ]);
 
   const handleOpenShift = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -828,17 +1059,55 @@ const AdminCashDashboard = () => {
     }
   };
 
+  const saleClientQueryResetDependency = createClientIfMissing ? productSale.clientQuery : '';
+
   useEffect(() => {
     setSalePayments([]);
-  }, [productSale.productId, productSale.quantity]);
+  }, [
+    saleCart,
+    selectedClient?.id,
+    createClientIfMissing,
+    productSale.guestPhone,
+    productSale.guestDni,
+    productSale.guestEmail,
+    productSale.guestIsProfessor,
+    saleClientQueryResetDependency
+  ]);
 
-  const saleSelectedProduct = products.find((product) => Number(product.id) === Number(productSale.productId));
-  const saleQuantity = Number(productSale.quantity);
-  const saleTotalAmount = saleSelectedProduct && Number.isFinite(saleQuantity) && saleQuantity > 0
-    ? Number(saleSelectedProduct.price || 0) * saleQuantity
-    : 0;
+  const saleItemPaidMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const payment of salePayments) {
+      for (const allocation of payment.allocations || []) {
+        const itemKey = String(allocation.itemKey || '').trim();
+        const amount = Number(allocation.amount || 0);
+        if (!itemKey || !Number.isFinite(amount) || amount <= 0) continue;
+        map.set(itemKey, Number(((map.get(itemKey) || 0) + amount).toFixed(2)));
+      }
+    }
+    return map;
+  }, [salePayments]);
+
+  const saleRemainingItems = useMemo(() => {
+    const quotedItems = Array.isArray(saleQuote?.items) ? saleQuote.items : [];
+    return quotedItems.map((item: any) => {
+      const itemKey = String(item.itemKey || '');
+      const itemTotal = Number(item.finalTotal || 0);
+      const paidAmount = Number((saleItemPaidMap.get(itemKey) || 0).toFixed(2));
+      const remainingAmount = Math.max(0, Number((itemTotal - paidAmount).toFixed(2)));
+      return {
+        ...item,
+        itemKey,
+        paidAmount,
+        remainingAmount
+      };
+    });
+  }, [saleQuote, saleItemPaidMap]);
+
+  const saleTotalAmount = Number(saleQuote?.finalTotal || 0);
   const saleConfiguredTotal = salePayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const saleRemaining = Math.max(0, Number((saleTotalAmount - saleConfiguredTotal).toFixed(2)));
+  const saleRemaining = Number(
+    saleRemainingItems.reduce((sum, item: any) => sum + Number(item.remainingAmount || 0), 0).toFixed(2)
+  );
   const moveAmount = Number(newMove.amount);
   const canSubmitMovement = Boolean(
     currentShift &&
@@ -849,9 +1118,7 @@ const AdminCashDashboard = () => {
   );
   const canSubmitSale = Boolean(
     currentShift &&
-    productSale.productId &&
-    Number.isFinite(saleQuantity) &&
-    saleQuantity > 0 &&
+    saleCart.length > 0 &&
     saleTotalAmount > 0 &&
     salePayments.length > 0 &&
     Math.abs(saleConfiguredTotal - saleTotalAmount) <= 0.01 &&
@@ -1285,7 +1552,7 @@ const AdminCashDashboard = () => {
 
         <div className="space-y-6">
   {/* FORMULARIO AGREGAR RÁPIDO */}
-        <div className="bg-[#EBE1D8] border-4 border-white p-8 rounded-[2.5rem] shadow-2xl h-fit">
+        <div className="bg-[#EBE1D8] border-4 border-white p-6 rounded-[2.5rem] shadow-2xl h-fit">
           <h3 className="text-xl font-black text-[#926699] mb-8 flex items-center gap-3 uppercase italic tracking-tight">
             <Plus size={24} strokeWidth={3} className="bg-[#926699] text-[#EBE1D8] rounded-lg p-1" /> Nuevo Registro
           </h3>
@@ -1344,7 +1611,7 @@ const AdminCashDashboard = () => {
         </div>
 
         {/* FORMULARIO VENTA DE PRODUCTOS */}
-        <div className="bg-[#EBE1D8] border-4 border-white p-8 rounded-[2.5rem] shadow-2xl h-fit">
+        <div className="bg-[#EBE1D8] border-4 border-white p-6 rounded-[2.5rem] shadow-2xl h-fit">
           <h3 className="text-xl font-black text-[#347048] mb-8 flex items-center gap-3 uppercase italic tracking-tight">
             <Receipt size={22} strokeWidth={3} className="text-[#B9CF32]" /> Venta de productos
           </h3>
@@ -1419,9 +1686,11 @@ const AdminCashDashboard = () => {
                             setCreateClientIfMissing(false);
                             setProductSale((prev) => ({ ...prev, guestPhone: '', guestDni: '', guestEmail: '', guestIsProfessor: false }));
                           }}
-                          className="px-2 py-1 rounded-lg bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-widest border border-red-200"
+                          className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-red-50 text-red-600 border border-red-200"
+                          title="Quitar"
+                          aria-label="Quitar"
                         >
-                          Quitar
+                          <Trash2 size={14} strokeWidth={2.6} />
                         </button>
                       </div>
                     </div>
@@ -1432,21 +1701,49 @@ const AdminCashDashboard = () => {
 
             <div className="relative z-20">
               <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Producto</label>
-              <CustomSelect
-                value={productSale.productId}
-                onChange={(val: string) => setProductSale({ ...productSale, productId: val })}
-                placeholder={productsLoading ? 'Cargando productos...' : 'Seleccionar producto'}
-                options={products.map((product) => ({
-                  value: String(product.id),
-                  label: `${product.name} (${product.stock})`,
-                  disabled: product.stock <= 0
-                }))}
+              <ProductSearch
+                key={`sale-product-search-${saleProductSearchKey}`}
+                products={products}
+                disabled={!currentShift || productsLoading}
+                placeholder={productsLoading ? 'Cargando productos...' : 'Buscá o escribí un producto / detalle'}
+                onSelect={(product) => {
+                  if (Number(product.stock ?? 0) <= 0) {
+                    setSaleError('Ese producto no tiene stock disponible.');
+                    return;
+                  }
+                  setSaleError('');
+                  setSelectedSaleProduct(product);
+                  setProductSale((prev) => ({
+                    ...prev,
+                    productQuery: product.name,
+                    manualUnitPrice: String(Number(product.price || 0))
+                  }));
+                }}
+                selectedName={selectedSaleProduct?.name}
+                onInputChange={(value) => {
+                  setProductSale((prev) => ({ ...prev, productQuery: value }));
+                  if (!selectedSaleProduct) return;
+                  if (value.trim().toLowerCase() !== selectedSaleProduct.name.trim().toLowerCase()) {
+                    setSelectedSaleProduct(null);
+                  }
+                }}
               />
+              {selectedSaleProduct ? (
+                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#347048]/60">
+                  Producto seleccionado: {selectedSaleProduct.name} · stock {Number(selectedSaleProduct.stock ?? 0)} · ${Number(selectedSaleProduct.price || 0).toLocaleString()}
+                </p>
+              ) : (
+                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#347048]/45">
+                  Si no existe en catálogo, escribilo igual y cargá un precio manual.
+                </p>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-[0.85fr_1.15fr_1fr] gap-4 items-end">
               <div>
-                <label className="block text-[10px] font-black text-[#347048]/60 uppercase tracking-widest mb-2 ml-1">Cantidad</label>
+                <label className="mb-2 ml-1 flex min-h-[2.25rem] items-end text-[10px] font-black uppercase tracking-widest text-[#347048]/60 leading-tight">
+                  Cantidad
+                </label>
                 <input
                   type="number"
                   min={1}
@@ -1454,12 +1751,130 @@ const AdminCashDashboard = () => {
                   onWheel={(event) => {
                     event.currentTarget.blur();
                   }}
-                  className="w-full h-14 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl px-4 text-[#347048] font-black focus:outline-none shadow-sm transition-all"
+                  className="no-spinner w-full h-14 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl px-3 text-[#347048] text-base font-black tabular-nums focus:outline-none shadow-sm transition-all"
                   value={productSale.quantity}
                   onChange={(e) => setProductSale({ ...productSale, quantity: e.target.value })}
                 />
               </div>
-              <div className="col-span-2 rounded-2xl border border-[#347048]/15 bg-white/60 p-4 space-y-3">
+              <div>
+                <label className="mb-2 ml-1 flex min-h-[2.25rem] items-end text-[10px] font-black uppercase tracking-widest text-[#347048]/60 leading-tight">
+                  {selectedSaleProduct ? 'Precio catálogo' : 'Precio manual'}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="0"
+                  onWheel={(event) => {
+                    event.currentTarget.blur();
+                  }}
+                  className="no-spinner w-full h-14 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl px-3 text-[#347048] text-base text-right font-black tabular-nums focus:outline-none shadow-sm transition-all disabled:opacity-60"
+                  value={selectedSaleProduct ? String(Number(selectedSaleProduct.price || 0)) : productSale.manualUnitPrice}
+                  onChange={(e) => {
+                    if (selectedSaleProduct) return;
+                    setProductSale({ ...productSale, manualUnitPrice: e.target.value });
+                  }}
+                  disabled={Boolean(selectedSaleProduct)}
+                />
+              </div>
+              <div>
+                <div className="mb-2 min-h-[2.25rem]" aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={handleAddProductToSaleCart}
+                  disabled={!currentShift}
+                  className="w-full h-14 rounded-2xl bg-[#347048] text-[#EBE1D8] font-black text-[10px] uppercase tracking-widest hover:bg-[#B9CF32] hover:text-[#347048] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Agregar al carrito
+                </button>
+              </div>
+              {saleCart.length > 0 ? (
+                <div className="col-span-3 rounded-2xl border border-[#347048]/15 bg-white p-4 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60">Carrito</p>
+                  <div className="space-y-2 max-h-44 overflow-y-auto">
+                    {saleRemainingItems.length > 0 ? (
+                      saleRemainingItems.map((item: any) => (
+                        <div key={String(item.itemKey)} className="flex items-center justify-between gap-3 rounded-xl border border-[#347048]/10 bg-white/60 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-[#347048] truncate">
+                              {Number(item.quantity || 0)}x {String(item.productName || 'Producto')}
+                            </p>
+                            {Boolean(item.isCustom) ? (
+                              <p className="text-[10px] font-black text-[#926699] uppercase tracking-widest">
+                                Item manual
+                              </p>
+                            ) : null}
+                            {Number(item.discountAmount || 0) > 0.009 ? (
+                              <p className="text-[10px] font-black text-emerald-700">
+                                Descuento: -${Number(item.discountAmount || 0).toLocaleString()}
+                              </p>
+                            ) : null}
+                            {Number(item.remainingAmount || 0) <= 0.009 ? (
+                              <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                                Pagado
+                              </p>
+                            ) : Number(item.paidAmount || 0) > 0.009 ? (
+                              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">
+                                Parcial · resta ${Number(item.remainingAmount || 0).toLocaleString()}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] font-black text-[#347048]/60 uppercase tracking-widest">
+                                Pendiente
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-[#347048]">
+                              ${Number(item.finalTotal || 0).toLocaleString()}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSaleCartItem(String(item.itemKey))}
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-red-50 text-red-600 border border-red-200"
+                              title="Quitar"
+                              aria-label="Quitar"
+                            >
+                              <Trash2 size={14} strokeWidth={2.6} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      saleCart.map((entry) => {
+                        return (
+                          <div key={String(entry.itemKey)} className="flex items-center justify-between gap-3 rounded-xl border border-[#347048]/10 bg-white/60 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-black text-[#347048] truncate">
+                                {Number(entry.quantity || 0)}x {String(entry.productName || 'Producto')}
+                              </p>
+                              {entry.isCustom ? (
+                                <p className="text-[10px] font-black text-[#926699] uppercase tracking-widest">
+                                  Item manual
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-[#347048]">
+                                ${Number((Number(entry.unitPrice || 0) * Number(entry.quantity || 0)).toFixed(2)).toLocaleString()}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSaleCartItem(String(entry.itemKey))}
+                                className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-red-50 text-red-600 border border-red-200"
+                                title="Quitar"
+                                aria-label="Quitar"
+                              >
+                                <Trash2 size={14} strokeWidth={2.6} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              <div className="col-span-3 rounded-2xl border border-[#347048]/15 bg-white/60 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-black text-[#347048]/60 uppercase tracking-widest">Cobro de la venta</p>
                   <span className="text-[10px] font-black uppercase tracking-widest text-[#347048]/70">
@@ -1471,26 +1886,41 @@ const AdminCashDashboard = () => {
                 ) : (
                   <div className="space-y-2 max-h-36 overflow-y-auto">
                     {salePayments.map((payment, index) => (
-                      <div key={`sale-payment-${index}`} className="flex items-center justify-between rounded-xl border border-[#347048]/10 bg-white px-3 py-2 text-[11px] font-black text-[#347048]">
-                        <span>
-                          {payment.method === 'CASH'
-                            ? 'Efectivo'
-                            : payment.method === 'CARD'
-                              ? 'Tarjeta'
-                              : payment.channel === 'VIRTUAL_WALLET'
-                                ? 'QR / Billetera'
-                                : 'Transferencia'}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <span>${Number(payment.amount || 0).toLocaleString()}</span>
-                          <button
-                            type="button"
-                            onClick={() => setSalePayments((prev) => prev.filter((_, idx) => idx !== index))}
-                            className="text-red-500 text-[10px] uppercase tracking-widest"
-                          >
-                            Quitar
-                          </button>
+                      <div key={`sale-payment-${index}`} className="rounded-xl border border-[#347048]/10 bg-white px-3 py-2 text-[11px] font-black text-[#347048]">
+                        <div className="flex items-center justify-between">
+                          <span>
+                            {payment.method === 'CASH'
+                              ? 'Efectivo'
+                              : payment.method === 'CARD'
+                                ? 'Tarjeta'
+                                : payment.channel === 'VIRTUAL_WALLET'
+                                  ? 'QR / Billetera'
+                                  : 'Transferencia'}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span>${Number(payment.amount || 0).toLocaleString()}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSalePayments((prev) => prev.filter((_, idx) => idx !== index))}
+                              className="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-red-50 text-red-600 border border-red-200"
+                              title="Quitar"
+                              aria-label="Quitar"
+                            >
+                              <Trash2 size={14} strokeWidth={2.6} />
+                            </button>
+                          </div>
                         </div>
+                        {Array.isArray(payment.allocations) && payment.allocations.length > 0 ? (
+                          <p className="mt-1 text-[10px] font-black text-[#347048]/60">
+                            {payment.allocations
+                              .map((allocation) => {
+                                const item = saleRemainingItems.find((entry: any) => String(entry.itemKey) === String(allocation.itemKey))
+                                  || (saleQuote?.items || []).find((entry: any) => String(entry.itemKey) === String(allocation.itemKey));
+                                return `${item ? `${Number(item.quantity || 0)}x ${String(item.productName || 'Producto')}` : `Item ${allocation.itemKey}`}: $${Number(allocation.amount || 0).toLocaleString()}`;
+                              })
+                              .join(' · ')}
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -1508,7 +1938,7 @@ const AdminCashDashboard = () => {
                 <button
                   type="button"
                   onClick={handleOpenSalePaymentCalculator}
-                  disabled={!currentShift || !productSale.productId || !Number.isFinite(saleQuantity) || saleQuantity <= 0 || saleRemaining <= 0.01}
+                  disabled={!currentShift || saleCart.length === 0 || saleRemaining <= 0.01}
                   className="w-full h-11 rounded-xl bg-[#347048] text-[#EBE1D8] hover:bg-[#B9CF32] hover:text-[#347048] text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Abrir payment calculator
@@ -1680,16 +2110,18 @@ const AdminCashDashboard = () => {
         )}
       />
 
-      {showSalePaymentCalculator && saleSelectedProduct && saleTotalAmount > 0 && (
+      {showSalePaymentCalculator && saleTotalAmount > 0 && saleQuote && Array.isArray(saleQuote.items) && (
         <PaymentCalculator
           courtPending={0}
           courtBaseTotal={0}
-          cartItems={[{
-            id: String(saleSelectedProduct.id),
-            productName: `${Math.max(1, Number(saleQuantity || 1))}x ${saleSelectedProduct.name} (restante)`,
-            quantity: 1,
-            price: Math.max(0, Number(saleRemaining || 0))
-          }]}
+          cartItems={saleRemainingItems
+            .filter((item: any) => Number(item.remainingAmount || 0) > 0.009)
+            .map((item: any) => ({
+              id: String(item.itemKey),
+              productName: `${Number(item.quantity || 0)}x ${String(item.productName || 'Producto')}`,
+              quantity: 1,
+              price: Math.max(0, Number(item.remainingAmount || 0))
+            }))}
           alreadyPaid={0}
           grandTotal={Math.max(0, Number(saleRemaining || 0))}
           onClose={() => setShowSalePaymentCalculator(false)}

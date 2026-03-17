@@ -53,4 +53,12 @@ router.post(
     cashController.createProductSale
 );
 
+router.post(
+    '/product-sale/quote',
+    authMiddleware,
+    setAdminClubFromUser,
+    requireRole('ADMIN'),
+    cashController.quoteProductSale
+);
+
 export default router;

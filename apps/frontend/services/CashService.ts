@@ -95,11 +95,23 @@ export class CashService {
   }
 
   static async createProductSale(payload: {
-    productId: number;
-    quantity: number;
+    productId?: number;
+    quantity?: number;
+    items?: Array<{
+      itemKey?: string;
+      productId?: number;
+      quantity: number;
+      customName?: string;
+      unitPrice?: number;
+    }>;
     method: 'CASH' | 'TRANSFER' | 'CARD';
     channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
-    payments?: Array<{ method: 'CASH' | 'TRANSFER' | 'CARD'; channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET'; amount: number }>;
+    payments?: Array<{
+      method: 'CASH' | 'TRANSFER' | 'CARD';
+      channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET';
+      amount: number;
+      allocations?: Array<{ itemKey?: string; productId?: number; amount: number }>;
+    }>;
     userId?: number;
     clientId?: string;
     createClientIfMissing?: boolean;
@@ -125,6 +137,36 @@ export class CashService {
     if (!res.ok) {
       const error = await res.json();
       throw new Error(error.error || 'Error al registrar venta');
+    }
+    return res.json();
+  }
+
+  static async quoteProductSale(payload: {
+    productId?: number;
+    quantity?: number;
+    items?: Array<{
+      itemKey?: string;
+      productId?: number;
+      quantity: number;
+      customName?: string;
+      unitPrice?: number;
+    }>;
+    clientId?: string;
+    createClientIfMissing?: boolean;
+    guestName?: string;
+    guestPhone?: string;
+    guestDni?: string;
+    guestEmail?: string;
+    guestIsProfessor?: boolean;
+  }) {
+    const res = await fetchWithAuth(`${apiBase()}/cash/product-sale/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'Error al cotizar venta');
     }
     return res.json();
   }
