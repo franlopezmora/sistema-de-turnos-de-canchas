@@ -130,6 +130,7 @@ export class BookingService {
                 scheduleOpenTime: activity?.scheduleOpenTime,
                 scheduleCloseTime: activity?.scheduleCloseTime,
                 scheduleIntervalMinutes: activity?.scheduleIntervalMinutes,
+                scheduleWindows: activity?.scheduleWindows,
                 scheduleDurations: activity?.scheduleDurations,
                 scheduleFixedSlots: activity?.scheduleFixedSlots
             },
@@ -310,6 +311,7 @@ export class BookingService {
                 scheduleOpenTime: activity.scheduleOpenTime,
                 scheduleCloseTime: activity.scheduleCloseTime,
                 scheduleIntervalMinutes: activity.scheduleIntervalMinutes,
+                scheduleWindows: activity.scheduleWindows,
                 scheduleDurations: activity.scheduleDurations,
                 scheduleFixedSlots: activity.scheduleFixedSlots
             },
@@ -371,6 +373,7 @@ export class BookingService {
             activity.scheduleOpenTime,
             activity.scheduleCloseTime,
             activity.scheduleIntervalMinutes,
+            Array.isArray((activity as any).scheduleWindows) ? (activity as any).scheduleWindows : null,
             Array.isArray(activity.scheduleDurations) ? activity.scheduleDurations : null,
             Array.isArray(activity.scheduleFixedSlots) ? activity.scheduleFixedSlots : null
         );

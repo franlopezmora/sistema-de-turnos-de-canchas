@@ -166,6 +166,10 @@ router.put('/:slug/admin/activity-types/:id/schedule',
                     if (v === '' || v === undefined || v === null) return null;
                     return Number(v);
                 }),
+                scheduleWindows: z.array(z.object({
+                    start: z.string(),
+                    end: z.string()
+                })).nullable().optional(),
                 scheduleDurations: z.array(z.union([z.number(), z.string()])).optional(),
                 scheduleFixedSlots: z.array(z.object({
                     start: z.string(),

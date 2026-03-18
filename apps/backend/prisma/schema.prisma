@@ -367,6 +367,7 @@ model ActivityType {
   scheduleOpenTime       String?
   scheduleCloseTime      String?
   scheduleIntervalMinutes Int?
+  scheduleWindows        Json?
   scheduleDurations      Json?
   scheduleFixedSlots     Json?
 

@@ -66,6 +66,7 @@ type ActivityScheduleFormValue = {
   scheduleOpenTime: string;
   scheduleCloseTime: string;
   scheduleIntervalMinutes: string;
+  scheduleWindows: string;
   scheduleDurations: string;
   scheduleFixedSlots: string;
 };
@@ -175,6 +176,39 @@ const parseFixedSlotsInput = (raw: string): Array<{ start: string; duration: num
   return slots;
 };
 
+const parseRangeWindowsInput = (raw: string): Array<{ start: string; end: string }> => {
+  const lines = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const windows: Array<{ start: string; end: string }> = [];
+
+  for (const line of lines) {
+    const normalized = line.replace(' - ', '-').replace('|', '-').replace(',', '-');
+    const [startRaw, endRaw] = normalized.split('-').map((part) => part.trim());
+    if (!startRaw || !endRaw) {
+      throw new Error(`Formato de franja inválido: "${line}". Usá HH:mm-HH:mm`);
+    }
+    if (!/^\d{2}:\d{2}$/.test(startRaw) || !/^\d{2}:\d{2}$/.test(endRaw)) {
+      throw new Error(`Hora inválida en franja: "${line}"`);
+    }
+    if (startRaw >= endRaw) {
+      throw new Error(`La franja debe tener fin mayor al inicio: "${line}"`);
+    }
+    windows.push({ start: startRaw, end: endRaw });
+  }
+
+  windows.sort((a, b) => a.start.localeCompare(b.start));
+  for (let i = 1; i < windows.length; i += 1) {
+    if (windows[i].start < windows[i - 1].end) {
+      throw new Error(`Franja superpuesta: ${windows[i - 1].start}-${windows[i - 1].end} y ${windows[i].start}-${windows[i].end}`);
+    }
+  }
+
+  return windows;
+};
+
 const parseLocalDate = (value: string): Date | null => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [year, month, day] = value.split('-').map(Number);
@@ -195,12 +229,14 @@ const buildScheduleFormFromActivities = (activities: ClubActivityType[]): Record
     const safeDefault = Number(activity.defaultDurationMinutes) > 0 ? Number(activity.defaultDurationMinutes) : 60;
     const durations = normalizeDurations(activity.scheduleDurations, safeDefault);
     const fixedSlots = Array.isArray(activity.scheduleFixedSlots) ? activity.scheduleFixedSlots : [];
+    const rangeWindows = Array.isArray((activity as any).scheduleWindows) ? (activity as any).scheduleWindows : [];
 
     acc[activity.id] = {
       scheduleMode: activity.scheduleMode === 'RANGE' ? 'RANGE' : 'FIXED',
       scheduleOpenTime: activity.scheduleOpenTime || '08:00',
       scheduleCloseTime: activity.scheduleCloseTime || '22:00',
       scheduleIntervalMinutes: activity.scheduleIntervalMinutes != null ? String(activity.scheduleIntervalMinutes) : '30',
+      scheduleWindows: rangeWindows.map((window: any) => `${String(window?.start || '').trim()}-${String(window?.end || '').trim()}`).filter((line: string) => /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(line)).join('\n'),
       scheduleDurations: durations.join(', '),
       scheduleFixedSlots: fixedSlots.map((slot) => `${slot.start}-${slot.duration}`).join('\n')
     };
@@ -897,12 +933,16 @@ export default function AdminTabClub() {
         const fixedSlots = formConfig.scheduleMode === 'FIXED'
           ? parseFixedSlotsInput(formConfig.scheduleFixedSlots)
           : [];
+        const scheduleWindows = formConfig.scheduleMode === 'RANGE'
+          ? parseRangeWindowsInput(formConfig.scheduleWindows)
+          : [];
 
         await ClubAdminService.updateActivityTypeSchedule(updatedClub.slug, activity.id, {
           scheduleMode: formConfig.scheduleMode,
           scheduleOpenTime: formConfig.scheduleMode === 'RANGE' ? formConfig.scheduleOpenTime : null,
           scheduleCloseTime: formConfig.scheduleMode === 'RANGE' ? formConfig.scheduleCloseTime : null,
           scheduleIntervalMinutes: formConfig.scheduleMode === 'RANGE' ? Number(formConfig.scheduleIntervalMinutes || 0) : null,
+          scheduleWindows: formConfig.scheduleMode === 'RANGE' ? scheduleWindows : null,
           scheduleDurations: durations,
           scheduleFixedSlots: fixedSlots
         });
@@ -1972,6 +2012,22 @@ export default function AdminTabClub() {
                                   }))}
                                   className="w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-black text-sm"
                                 />
+                              </div>
+                              <div className="md:col-span-3">
+                                <label className="block text-[10px] font-black text-[#347048]/40 mb-1 uppercase tracking-widest">Franjas cortadas (opcional, una por línea: HH:mm-HH:mm)</label>
+                                <textarea
+                                  rows={3}
+                                  value={cfg.scheduleWindows}
+                                  onChange={(e) => setActivityScheduleForm((prev) => ({
+                                    ...prev,
+                                    [activity.id]: { ...prev[activity.id], scheduleWindows: e.target.value }
+                                  }))}
+                                  className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 py-3 text-[#347048] font-black text-sm resize-none"
+                                  placeholder={'08:00-12:00\n16:00-23:00'}
+                                />
+                                <p className="text-[10px] font-bold text-[#347048]/55 mt-1">
+                                  Si cargás franjas, tienen prioridad sobre apertura/cierre continuo para generar los slots.
+                                </p>
                               </div>
                             </>
                           ) : (

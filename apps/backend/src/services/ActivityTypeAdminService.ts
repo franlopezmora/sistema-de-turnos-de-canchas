@@ -7,6 +7,7 @@ type UpdateScheduleInput = {
   scheduleOpenTime?: string | null;
   scheduleCloseTime?: string | null;
   scheduleIntervalMinutes?: number | null;
+  scheduleWindows?: Array<{ start: string; end: string }> | null;
   scheduleDurations?: Array<number | string>;
   scheduleFixedSlots?: Array<{ start: string; duration: number | string }>;
 };
@@ -36,6 +37,7 @@ export class ActivityTypeAdminService {
         scheduleOpenTime: input.scheduleOpenTime ?? null,
         scheduleCloseTime: input.scheduleCloseTime ?? null,
         scheduleIntervalMinutes: input.scheduleIntervalMinutes ?? null,
+        scheduleWindows: input.scheduleWindows ?? null,
         scheduleDurations: input.scheduleDurations,
         scheduleFixedSlots: input.scheduleFixedSlots
       },
@@ -51,6 +53,7 @@ export class ActivityTypeAdminService {
         scheduleOpenTime: normalized.openTime,
         scheduleCloseTime: normalized.closeTime,
         scheduleIntervalMinutes: normalized.intervalMinutes,
+        scheduleWindows: normalized.rangeWindows as unknown as Prisma.InputJsonValue,
         scheduleDurations: normalized.durations as unknown as Prisma.InputJsonValue,
         scheduleFixedSlots: normalized.fixedSlots as unknown as Prisma.InputJsonValue
       }

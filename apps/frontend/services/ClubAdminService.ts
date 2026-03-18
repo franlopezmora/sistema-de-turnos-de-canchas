@@ -11,6 +11,11 @@ export type ActivityFixedSlot = {
   duration: number;
 };
 
+export type ActivityRangeWindow = {
+  start: string;
+  end: string;
+};
+
 export type ClubActivityType = {
   id: number;
   name: string;
@@ -20,6 +25,7 @@ export type ClubActivityType = {
   scheduleOpenTime?: string | null;
   scheduleCloseTime?: string | null;
   scheduleIntervalMinutes?: number | null;
+  scheduleWindows?: ActivityRangeWindow[] | null;
   scheduleDurations?: number[] | null;
   scheduleFixedSlots?: ActivityFixedSlot[] | null;
 };
@@ -189,6 +195,7 @@ export class ClubAdminService {
       scheduleOpenTime?: string | null;
       scheduleCloseTime?: string | null;
       scheduleIntervalMinutes?: number | null;
+      scheduleWindows?: ActivityRangeWindow[] | null;
       scheduleDurations?: number[];
       scheduleFixedSlots?: ActivityFixedSlot[];
     }
