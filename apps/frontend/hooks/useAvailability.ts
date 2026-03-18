@@ -17,6 +17,8 @@ interface SlotWithCourts {
 interface AvailabilityResponse {
   date: string;
   slotsWithCourts: SlotWithCourts[];
+  professorOverrideAvailable?: boolean;
+  professorDurationOverrideMinutes?: number | null;
 }
 
 export function useAvailability(
@@ -31,6 +33,8 @@ export function useAvailability(
   }
 ) {
   const [slotsWithCourts, setSlotsWithCourts] = useState<SlotWithCourts[]>([]);
+  const [professorOverrideAvailable, setProfessorOverrideAvailable] = useState(false);
+  const [professorDurationOverrideMinutes, setProfessorDurationOverrideMinutes] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +86,12 @@ export function useAvailability(
 
       const data: AvailabilityResponse = await res.json();
       setSlotsWithCourts(data.slotsWithCourts);
+      setProfessorOverrideAvailable(Boolean(data.professorOverrideAvailable));
+      setProfessorDurationOverrideMinutes(
+        Number.isFinite(Number(data.professorDurationOverrideMinutes))
+          ? Number(data.professorDurationOverrideMinutes)
+          : null
+      );
 
     } catch (err) {
       const message = extractErrorMessage(err, 'Error al cargar turnos');
@@ -96,5 +106,12 @@ export function useAvailability(
     fetchSlots();
   }, [fetchSlots]);
 
-  return { slotsWithCourts, loading, error, refresh: fetchSlots };
+  return {
+    slotsWithCourts,
+    professorOverrideAvailable,
+    professorDurationOverrideMinutes,
+    loading,
+    error,
+    refresh: fetchSlots
+  };
 }

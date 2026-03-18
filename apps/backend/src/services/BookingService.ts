@@ -1992,7 +1992,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         }
         const bookings = await prisma.booking.findMany({
             where: {
-                userId: requestedUserId,
+                OR: [
+                    { userId: requestedUserId },
+                    { client: { userId: requestedUserId } }
+                ],
                 ...(requestUser.clubId ? { clubId: requestUser.clubId } : {})
             },
             include: {
@@ -2279,14 +2282,18 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             guestPhone?: string;
             guestDni?: string;
         }
-    ): Promise<Array<{
-        slotTime: string;
-        availableCourts: Array<{
-            id: number;
-            name: string;
-            price?: number | null;
+    ): Promise<{
+        slotsWithCourts: Array<{
+            slotTime: string;
+            availableCourts: Array<{
+                id: number;
+                name: string;
+                price?: number | null;
+            }>;
         }>;
-    }>> {
+        professorOverrideAvailable: boolean;
+        professorDurationOverrideMinutes: number | null;
+    }> {
         const allCourts = await this.courtRepo.findAll(clubId);
         const activeCourts = allCourts.filter(court => !court.isUnderMaintenance);
         const activityCourts = activeCourts.filter((court: any) => Number(court.activityTypeId) === Number(activityId));
@@ -2307,7 +2314,11 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         });
 
         if (activityCourts.length === 0) {
-            return [];
+            return {
+                slotsWithCourts: [],
+                professorOverrideAvailable: false,
+                professorDurationOverrideMinutes: null
+            };
         }
 
         const activity = this.mapActivityType((activityCourts[0] as any).activityType)
@@ -2316,12 +2327,20 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         // Si el club (si se indicó) está cerrado ese día, no devolvemos horarios
         if (clubId && !this.isClubOpenOnLocalDate(normalizedClubConfig, date, timeZone)) {
-            return [];
+            return {
+                slotsWithCourts: [],
+                professorOverrideAvailable: false,
+                professorDurationOverrideMinutes: null
+            };
         }
 
         const resolvedSchedule = await this.resolveActivityScheduleForDate(activity, date, timeZone);
         if (resolvedSchedule.isClosed) {
-            return [];
+            return {
+                slotsWithCourts: [],
+                professorOverrideAvailable: false,
+                professorDurationOverrideMinutes: null
+            };
         }
         const activitySchedule = resolvedSchedule.schedule;
         const professorOverrideMinutes = Number(normalizedClubConfig?.professorDurationOverrideMinutes ?? 60);
@@ -2455,7 +2474,11 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
         }
 
-        return slotsWithCourts;
+        return {
+            slotsWithCourts,
+            professorOverrideAvailable: Boolean(canProfessorDurationOverride),
+            professorDurationOverrideMinutes: canProfessorDurationOverride ? professorOverrideMinutes : null
+        };
     }
 
     async createFixedBooking(

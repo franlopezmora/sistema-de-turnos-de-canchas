@@ -294,12 +294,6 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     return normalizeActivityDurations(matchedCourt?.activityType?.scheduleDurations, safeFallback);
   }, [activeCourts, selectedActivityId]);
 
-  const professorDurationOverride = useMemo(() => {
-    const raw = Number(clubConfig?.professorDurationOverrideMinutes);
-    if (!Number.isFinite(raw) || raw <= 0) return null;
-    return Math.floor(raw);
-  }, [clubConfig?.professorDurationOverrideMinutes]);
-
   const availabilityIdentity = useMemo(() => {
     const trimmedEmail = guestEmail.trim();
     const trimmedDni = guestDni.trim().replace(/\./g, '');
@@ -312,39 +306,24 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     };
   }, [guestEmail, guestPhone, guestDni]);
 
-  const canOfferProfessorOverride = useMemo(() => {
-    const hasIdentity =
-      isAuthenticated ||
-      Boolean(availabilityIdentity.guestEmail) ||
-      Boolean(availabilityIdentity.guestPhone) ||
-      Boolean(availabilityIdentity.guestDni);
-    return Boolean(clubConfig?.professorDurationOverrideEnabled) && Boolean(professorDurationOverride) && hasIdentity;
-  }, [
-    isAuthenticated,
-    availabilityIdentity.guestEmail,
-    availabilityIdentity.guestPhone,
-    availabilityIdentity.guestDni,
-    clubConfig?.professorDurationOverrideEnabled,
-    professorDurationOverride
-  ]);
-
-  const durationOptions = useMemo(() => {
-    if (!canOfferProfessorOverride || !professorDurationOverride) {
-      return selectedActivityDurations;
-    }
-    if (selectedActivityDurations.includes(professorDurationOverride)) {
-      return selectedActivityDurations;
-    }
-    return [professorDurationOverride, ...selectedActivityDurations];
-  }, [selectedActivityDurations, canOfferProfessorOverride, professorDurationOverride]);
-
-  const { slotsWithCourts, loading, error, refresh } = useAvailability(
+  const { slotsWithCourts, professorOverrideAvailable, professorDurationOverrideMinutes, loading, error, refresh } = useAvailability(
     selectedDate,
     selectedActivityId,
     clubSlug,
     selectedDuration,
     availabilityIdentity
   );
+
+  const durationOptions = useMemo(() => {
+    const professorDuration = Number(professorDurationOverrideMinutes);
+    if (!professorOverrideAvailable || !Number.isFinite(professorDuration) || professorDuration <= 0) {
+      return selectedActivityDurations;
+    }
+    if (selectedActivityDurations.includes(professorDuration)) {
+      return selectedActivityDurations;
+    }
+    return [professorDuration, ...selectedActivityDurations];
+  }, [selectedActivityDurations, professorOverrideAvailable, professorDurationOverrideMinutes]);
   const getTrimmedGuestInfo = () => {
     const trimmedPhone = guestPhone.replace(/\D/g, '');
     const firstName = guestFirstName.trim();

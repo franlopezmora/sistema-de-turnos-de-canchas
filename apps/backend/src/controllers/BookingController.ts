@@ -493,7 +493,7 @@ export class BookingController {
                 if (club) clubId = club.id;
             }
 
-            const slotsWithCourts = await this.bookingService.getAvailableSlotsWithCourts(
+            const availability = await this.bookingService.getAvailableSlotsWithCourts(
                 searchDate,
                 Number(activityId),
                 clubId,
@@ -506,7 +506,12 @@ export class BookingController {
                 }
             );
 
-            res.json({ date: date, slotsWithCourts });
+            res.json({
+                date: date,
+                slotsWithCourts: availability.slotsWithCourts,
+                professorOverrideAvailable: availability.professorOverrideAvailable,
+                professorDurationOverrideMinutes: availability.professorDurationOverrideMinutes
+            });
         } catch (error: any) {
             res.status(400).json({ error: error.message });
         }
