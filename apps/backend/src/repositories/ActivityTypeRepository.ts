@@ -19,31 +19,35 @@ export class ActivityTypeRepository {
         );
         assertValidScheduleMode(normalized);
 
+        const scheduleUpdateData: any = {
+            ...(activity.clubId ? { clubId: activity.clubId } : {}),
+            scheduleMode: normalized.mode,
+            scheduleOpenTime: normalized.openTime,
+            scheduleCloseTime: normalized.closeTime,
+            scheduleIntervalMinutes: normalized.intervalMinutes,
+            scheduleWindows: normalized.rangeWindows as any,
+            scheduleDurations: normalized.durations as any,
+            scheduleFixedSlots: normalized.fixedSlots as any
+        };
+
+        const scheduleCreateData: any = {
+            name: activity.name,
+            description: activity.description,
+            defaultDurationMinutes: activity.defaultDurationMinutes,
+            clubId: Number(activity.clubId),
+            scheduleMode: normalized.mode,
+            scheduleOpenTime: normalized.openTime,
+            scheduleCloseTime: normalized.closeTime,
+            scheduleIntervalMinutes: normalized.intervalMinutes,
+            scheduleWindows: normalized.rangeWindows as any,
+            scheduleDurations: normalized.durations as any,
+            scheduleFixedSlots: normalized.fixedSlots as any
+        };
+
         const saved = await prisma.activityType.upsert({
             where: { id: activity.id === 0 ? -1 : activity.id },
-            update: {
-                ...(activity.clubId ? { clubId: activity.clubId } : {}),
-                scheduleMode: normalized.mode,
-                scheduleOpenTime: normalized.openTime,
-                scheduleCloseTime: normalized.closeTime,
-                scheduleIntervalMinutes: normalized.intervalMinutes,
-                scheduleWindows: normalized.rangeWindows as any,
-                scheduleDurations: normalized.durations as any,
-                scheduleFixedSlots: normalized.fixedSlots as any
-            },
-            create: {
-                name: activity.name,
-                description: activity.description,
-                defaultDurationMinutes: activity.defaultDurationMinutes,
-                clubId: Number(activity.clubId),
-                scheduleMode: normalized.mode,
-                scheduleOpenTime: normalized.openTime,
-                scheduleCloseTime: normalized.closeTime,
-                scheduleIntervalMinutes: normalized.intervalMinutes,
-                scheduleWindows: normalized.rangeWindows as any,
-                scheduleDurations: normalized.durations as any,
-                scheduleFixedSlots: normalized.fixedSlots as any
-            }
+            update: scheduleUpdateData,
+            create: scheduleCreateData
         });
 
         return new ActivityType(

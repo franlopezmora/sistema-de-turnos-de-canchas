@@ -146,6 +146,44 @@ export class BookingService {
         return normalized;
     }
 
+    private async resolveActivityScheduleForDate(activity: ActivityType, date: Date, timeZone: string) {
+        const baseSchedule = this.resolveActivitySchedule(activity);
+        const localDateKey = this.formatLocalDateKey(date, timeZone);
+        const prismaAny = prisma as any;
+
+        const exception = await prismaAny.activityScheduleException?.findUnique?.({
+            where: {
+                activityTypeId_localDate: {
+                    activityTypeId: activity.id,
+                    localDate: new Date(`${localDateKey}T00:00:00.000Z`)
+                }
+            }
+        });
+
+        if (!exception) {
+            return { isClosed: false, schedule: baseSchedule };
+        }
+
+        if (Boolean(exception.isClosed)) {
+            return { isClosed: true, schedule: baseSchedule };
+        }
+
+        const normalizedException = normalizeSchedule(
+            {
+                scheduleMode: exception.scheduleMode,
+                scheduleOpenTime: exception.scheduleOpenTime,
+                scheduleCloseTime: exception.scheduleCloseTime,
+                scheduleIntervalMinutes: exception.scheduleIntervalMinutes,
+                scheduleWindows: exception.scheduleWindows,
+                scheduleDurations: exception.scheduleDurations,
+                scheduleFixedSlots: exception.scheduleFixedSlots
+            },
+            activity.defaultDurationMinutes
+        );
+
+        return { isClosed: false, schedule: normalizedException };
+    }
+
     private normalizeActivityKey(name: string | null | undefined) {
         if (!name) return '';
         return name
@@ -532,7 +570,12 @@ export class BookingService {
         }
 
         const clubConfig = this.resolveClubConfig((court as any)?.club);
-        const activitySchedule = this.resolveActivitySchedule(activity);
+        const clubTimeZone = clubConfig?.timeZone ?? 'America/Argentina/Buenos_Aires';
+        const resolvedSchedule = await this.resolveActivityScheduleForDate(activity, input.startDateTime, clubTimeZone);
+        if (resolvedSchedule.isClosed) {
+            throw new Error('La actividad está cerrada para la fecha solicitada');
+        }
+        const activitySchedule = resolvedSchedule.schedule;
         const allowedDurations = activitySchedule.durations;
         const effectiveDuration = input.durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
         this.assertValidDuration(effectiveDuration);
@@ -549,7 +592,6 @@ export class BookingService {
         }
 
         let listPrice = Number(basePrice);
-        const clubTimeZone = clubConfig?.timeZone ?? 'America/Argentina/Buenos_Aires';
         if (clubConfig && clubConfig.lightsEnabled && clubConfig.lightsExtraAmount && clubConfig.lightsFromHour) {
             try {
                 const [lh, lm] = String(clubConfig.lightsFromHour).split(':').map((n: string) => parseInt(n, 10));
@@ -1167,7 +1209,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             guestDni
         });
         const clubConfig = this.resolveClubConfig((court as any)?.club);
-        const activitySchedule = this.resolveActivitySchedule(activity);
+        const clubTimeZone = (clubConfig && clubConfig.timeZone) ? clubConfig.timeZone : 'America/Argentina/Buenos_Aires';
+        const resolvedSchedule = await this.resolveActivityScheduleForDate(activity, startDateTime, clubTimeZone);
+        if (resolvedSchedule.isClosed) {
+            throw new Error('La actividad está cerrada para la fecha seleccionada');
+        }
+        const activitySchedule = resolvedSchedule.schedule;
         const professorOverrideMinutes = Number(clubConfig?.professorDurationOverrideMinutes ?? 60);
         const canProfessorDurationOverride =
             Boolean(isProfessorClient) &&
@@ -1190,11 +1237,22 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
         }
 
-                // Determinar slotTime en la zona horaria del club
-                const clubTimeZone = (clubConfig && clubConfig.timeZone) ? clubConfig.timeZone : 'America/Argentina/Buenos_Aires';
-                const localForSlot = TimeHelper.utcToLocal(startDateTime, clubTimeZone);
-                const slotTime = `${String(localForSlot.getHours()).padStart(2, '0')}:${String(localForSlot.getMinutes()).padStart(2, '0')}`;
-        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
+        // Determinar slotTime en la zona horaria del club
+        const localForSlot = TimeHelper.utcToLocal(startDateTime, clubTimeZone);
+        const slotTime = `${String(localForSlot.getHours()).padStart(2, '0')}:${String(localForSlot.getMinutes()).padStart(2, '0')}`;
+        const possibleSlots = buildSlotsFromSchedule(
+            {
+                scheduleMode: activitySchedule.mode,
+                scheduleOpenTime: activitySchedule.openTime,
+                scheduleCloseTime: activitySchedule.closeTime,
+                scheduleIntervalMinutes: activitySchedule.intervalMinutes,
+                scheduleWindows: activitySchedule.rangeWindows,
+                scheduleDurations: activitySchedule.durations,
+                scheduleFixedSlots: activitySchedule.fixedSlots
+            },
+            activity.defaultDurationMinutes,
+            effectiveDuration
+        ) as Array<{ slotTime: string; dayOffset: number }>;
         const possibleSlotTimes = possibleSlots.map(s => s.slotTime);
         const hasExactSlot = possibleSlotTimes.includes(slotTime);
 
@@ -1239,9 +1297,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         // Validar que la reserva quede dentro del horario de apertura/cierre si el club lo define
         try {
+            const hasSplitWindows = activitySchedule.mode === 'RANGE' && Array.isArray(activitySchedule.rangeWindows) && activitySchedule.rangeWindows.length > 0;
             const openStr = activitySchedule.mode === 'RANGE' ? activitySchedule.openTime : null;
             const closeStr = activitySchedule.mode === 'RANGE' ? activitySchedule.closeTime : null;
-            if (openStr && closeStr) {
+            if (!hasSplitWindows && openStr && closeStr) {
                 const localStart = TimeHelper.utcToLocal(startDateTime, clubTimeZone);
                 const localEnd = TimeHelper.utcToLocal(endDateTime, clubTimeZone);
                 const startMinutes = localStart.getHours() * 60 + localStart.getMinutes();
@@ -1456,10 +1515,15 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         const activity = await this.activityRepo.findById(activityId);
         if (!activity) throw new Error("Actividad no encontrada");
-        const activitySchedule = this.resolveActivitySchedule(activity);
 
         const clubConfig = this.resolveClubConfig((court as any)?.club);
         const clubTimeZone = clubConfig.timeZone ?? 'America/Argentina/Buenos_Aires';
+
+        const resolvedSchedule = await this.resolveActivityScheduleForDate(activity, date, clubTimeZone);
+        if (resolvedSchedule.isClosed) {
+            return [];
+        }
+        const activitySchedule = resolvedSchedule.schedule;
 
         // Si el club está cerrado ese día, retornamos vacío
         if (!this.isClubOpenOnLocalDate(clubConfig, date, clubTimeZone)) {
@@ -1481,7 +1545,19 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             throw new Error("Duración no permitida por el club");
         }
 
-        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
+        const possibleSlots = buildSlotsFromSchedule(
+            {
+                scheduleMode: activitySchedule.mode,
+                scheduleOpenTime: activitySchedule.openTime,
+                scheduleCloseTime: activitySchedule.closeTime,
+                scheduleIntervalMinutes: activitySchedule.intervalMinutes,
+                scheduleWindows: activitySchedule.rangeWindows,
+                scheduleDurations: activitySchedule.durations,
+                scheduleFixedSlots: activitySchedule.fixedSlots
+            },
+            activity.defaultDurationMinutes,
+            effectiveDuration
+        ) as Array<{ slotTime: string; dayOffset: number }>;
 
         const anchors = [
             (() => { const d = new Date(date); d.setDate(d.getDate() - 1); return d; })(),
@@ -2088,12 +2164,33 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             new Date(date)
         ];
 
+        const scheduleByActivityId = new Map<number, { isClosed: boolean; schedule: any }>();
+
         for (const court of activeCourts) {
             const courtActivity = this.mapActivityType((court as any).activityType);
             if (!courtActivity) continue;
-            const courtSchedule = this.resolveActivitySchedule(courtActivity);
+            let resolvedSchedule = scheduleByActivityId.get(courtActivity.id);
+            if (!resolvedSchedule) {
+                resolvedSchedule = await this.resolveActivityScheduleForDate(courtActivity, date, timeZone);
+                scheduleByActivityId.set(courtActivity.id, resolvedSchedule);
+            }
+            if (resolvedSchedule.isClosed) continue;
+
+            const courtSchedule = resolvedSchedule.schedule;
             const courtDuration = courtSchedule.durations[0] ?? courtActivity.defaultDurationMinutes;
-            const possibleSlots = this.resolveScheduleSlots(courtActivity, courtDuration);
+            const possibleSlots = buildSlotsFromSchedule(
+                {
+                    scheduleMode: courtSchedule.mode,
+                    scheduleOpenTime: courtSchedule.openTime,
+                    scheduleCloseTime: courtSchedule.closeTime,
+                    scheduleIntervalMinutes: courtSchedule.intervalMinutes,
+                    scheduleWindows: courtSchedule.rangeWindows,
+                    scheduleDurations: courtSchedule.durations,
+                    scheduleFixedSlots: courtSchedule.fixedSlots
+                },
+                courtActivity.defaultDurationMinutes,
+                courtDuration
+            );
 
             const seen = new Set<string>();
             for (const anchor of anchors) {
@@ -2196,14 +2293,30 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             return [];
         }
 
-        const activitySchedule = this.resolveActivitySchedule(activity);
+        const resolvedSchedule = await this.resolveActivityScheduleForDate(activity, date, timeZone);
+        if (resolvedSchedule.isClosed) {
+            return [];
+        }
+        const activitySchedule = resolvedSchedule.schedule;
         const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
         if (!allowedDurations.includes(effectiveDuration)) {
             throw new Error("Duración no permitida por el club");
         }
 
-        const possibleSlots = this.resolveScheduleSlots(activity, effectiveDuration) as Array<{ slotTime: string; dayOffset: number }>;
+        const possibleSlots = buildSlotsFromSchedule(
+            {
+                scheduleMode: activitySchedule.mode,
+                scheduleOpenTime: activitySchedule.openTime,
+                scheduleCloseTime: activitySchedule.closeTime,
+                scheduleIntervalMinutes: activitySchedule.intervalMinutes,
+                scheduleWindows: activitySchedule.rangeWindows,
+                scheduleDurations: activitySchedule.durations,
+                scheduleFixedSlots: activitySchedule.fixedSlots
+            },
+            activity.defaultDurationMinutes,
+            effectiveDuration
+        ) as Array<{ slotTime: string; dayOffset: number }>;
 
         const now = new Date();
 
