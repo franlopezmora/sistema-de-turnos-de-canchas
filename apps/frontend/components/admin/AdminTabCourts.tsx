@@ -75,6 +75,31 @@ export default function AdminTabCourts() {
     }
   };
 
+  const getCourtTypeLabel = (court: any) => {
+    const activityName = String(court?.activityType?.name || '').trim();
+    if (activityName) return activityName;
+    return String(court?.sport || court?.surface || '-');
+  };
+
+  const getPriceReferenceMinutes = (court: any) => {
+    const activityName = String(court?.activityType?.name || court?.sport || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .trim();
+
+    if (activityName === 'FUTBOL' || activityName === 'TENIS') {
+      return 60;
+    }
+
+    const rawDefault = Number(court?.activityType?.defaultDurationMinutes);
+    if (Number.isFinite(rawDefault) && rawDefault > 0) {
+      return rawDefault;
+    }
+
+    return 90;
+  };
+
   return (
     <>
       {/* --- ALTA DESHABILITADA (SE GESTIONA POR DB) --- */}
@@ -103,6 +128,16 @@ export default function AdminTabCourts() {
         </div>
 
         <div className="overflow-x-auto -mx-8 sm:mx-0">
+          <div className="mx-8 sm:mx-0 mb-4 rounded-2xl border border-[#347048]/15 bg-white/60 p-4">
+            <p className="text-[11px] font-black uppercase tracking-wider text-[#347048]">Cómo se calcula el precio</p>
+            <p className="text-[11px] text-[#347048]/75 font-bold mt-1">
+              El precio que definís en cada cancha se toma como precio base para la duración por defecto de su actividad.
+              Si la reserva es más corta o más larga, el sistema lo ajusta de forma proporcional.
+            </p>
+            <p className="text-[10px] text-[#347048]/60 font-bold mt-2">
+              Regla actual: para Fútbol y Tenis la base de cálculo es siempre 60 min.
+            </p>
+          </div>
           <table className="w-full text-left border-separate border-spacing-y-2">
             <thead>
               <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/40">
@@ -121,7 +156,7 @@ export default function AdminTabCourts() {
                   <td className="px-6 py-5 font-black text-[#347048] uppercase tracking-tight">{c.name}</td>
                   <td className="px-6 py-5">
                     <span className="text-[10px] font-black bg-[#926699]/10 text-[#926699] px-3 py-1 rounded-full border border-[#926699]/20 uppercase tracking-widest">
-                        {c.sport || c.surface || '-'}
+                        {getCourtTypeLabel(c)}
                     </span>
                   </td>
                   <td className="px-6 py-5">
@@ -141,6 +176,9 @@ export default function AdminTabCourts() {
                         Guardar
                       </button>
                     </div>
+                    <p className="text-[10px] font-bold text-[#347048]/55 mt-1">
+                      Base para {getPriceReferenceMinutes(c)} min
+                    </p>
                   </td>
                   <td className="px-6 py-5 text-center">
                     {c.isUnderMaintenance ? (

@@ -373,6 +373,46 @@ export class BookingService {
         }
     }
 
+    private calculateDurationAdjustedPrice(
+        basePrice: number,
+        effectiveDurationMinutes: number,
+        referenceDurationMinutes: number
+    ) {
+        const safeBase = Number(basePrice || 0);
+        const safeEffective = Number(effectiveDurationMinutes || 0);
+        const safeReference = Number(referenceDurationMinutes || 0);
+
+        if (!Number.isFinite(safeBase) || safeBase <= 0) return 0;
+        if (!Number.isFinite(safeEffective) || safeEffective <= 0) return Number(safeBase.toFixed(2));
+        if (!Number.isFinite(safeReference) || safeReference <= 0) return Number(safeBase.toFixed(2));
+
+        const proportional = safeBase * (safeEffective / safeReference);
+        return Number(proportional.toFixed(2));
+    }
+
+    private resolvePriceReferenceDuration(
+        activity: ActivityType,
+        allowedDurations: number[],
+        effectiveDuration: number
+    ) {
+        const activityKey = this.normalizeActivityKey(activity?.name);
+        if (activityKey === 'FUTBOL' || activityKey === 'TENIS') {
+            return 60;
+        }
+
+        const defaultDuration = Number(activity?.defaultDurationMinutes);
+        if (Number.isFinite(defaultDuration) && defaultDuration > 0) {
+            return defaultDuration;
+        }
+
+        const firstAllowed = Number(allowedDurations?.[0]);
+        if (Number.isFinite(firstAllowed) && firstAllowed > 0) {
+            return firstAllowed;
+        }
+
+        return effectiveDuration;
+    }
+
     private isOverlapConstraintError(error: unknown) {
         const knownError = error as { code?: string; message?: string; meta?: { database_error?: string } };
         const message = String(knownError?.message || '');
@@ -606,7 +646,8 @@ export class BookingService {
             throw new Error('Precio de cancha no configurado.');
         }
 
-        let listPrice = Number(basePrice);
+        const referenceDuration = this.resolvePriceReferenceDuration(activity, allowedDurations, effectiveDuration);
+        let listPrice = this.calculateDurationAdjustedPrice(Number(basePrice), effectiveDuration, referenceDuration);
         if (clubConfig && clubConfig.lightsEnabled && clubConfig.lightsExtraAmount && clubConfig.lightsFromHour) {
             try {
                 const [lh, lm] = String(clubConfig.lightsFromHour).split(':').map((n: string) => parseInt(n, 10));
@@ -1339,7 +1380,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             throw new Error('Precio de cancha no configurado.');
         }
         const clubPricingConfig = this.resolveClubConfig((court as any)?.club);
-        let finalPrice = BASE_PRICE;
+        const referenceDuration = this.resolvePriceReferenceDuration(activity, allowedDurations, effectiveDuration);
+        let finalPrice = this.calculateDurationAdjustedPrice(BASE_PRICE, effectiveDuration, referenceDuration);
         // El descuento económico no se calcula acá: se unifica en DiscountPolicy sobre AccountItem.
         if (clubPricingConfig && clubPricingConfig.lightsEnabled && clubPricingConfig.lightsExtraAmount && clubPricingConfig.lightsFromHour) {
                 try {
