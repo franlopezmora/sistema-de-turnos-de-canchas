@@ -499,7 +499,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                   <th className="px-6 py-2">Cliente</th>
                   <th className="px-6 py-2">DNI</th>
                   <th className="px-6 py-2">Contacto</th>
-                  <th className="px-6 py-2">Historial</th>
+                  <th className="px-6 py-2">Historial (Cuentas)</th>
                   <th className="px-6 py-2">Saldo</th>
                   <th className="px-6 py-2 text-right">Acciones</th>
                 </tr>
@@ -509,6 +509,9 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                     filteredClients.map((client) => {
                       
                       const dniFinal = (client.dni && client.dni !== '-') ? client.dni : null;
+                      const historyCount = Array.isArray(client.history) ? client.history.length : 0;
+                      const totalBookings = Number(client.totalBookings || 0);
+                      const bookingsWithoutAccount = Math.max(0, totalBookings - historyCount);
 
                       return (
                         <tr key={client.id} className="bg-white/80 hover:bg-white transition-all shadow-sm group">
@@ -540,7 +543,16 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                             </td>
                             
                             <td className="px-6 py-4">
-                               <span className="inline-flex whitespace-nowrap text-[10px] font-black bg-[#926699]/10 text-[#926699] px-3 py-1 rounded-full border border-[#926699]/20 uppercase tracking-widest">{client.totalBookings} Reservas</span>
+                              <div className="flex flex-wrap gap-2">
+                                <span className="inline-flex whitespace-nowrap text-[10px] font-black bg-[#926699]/10 text-[#926699] px-3 py-1 rounded-full border border-[#926699]/20 uppercase tracking-widest">
+                                  {historyCount} Cuentas
+                                </span>
+                                {bookingsWithoutAccount > 0 ? (
+                                  <span className="inline-flex whitespace-nowrap text-[10px] font-black bg-amber-50 text-amber-700 px-3 py-1 rounded-full border border-amber-200 uppercase tracking-widest">
+                                    {bookingsWithoutAccount} sin cuenta
+                                  </span>
+                                ) : null}
+                              </div>
                             </td>
                             
                             <td className="px-6 py-4">
@@ -620,7 +632,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
             }
           }}
         >
-            <div className="bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
                 <div className="p-8 border-b border-[#347048]/10 bg-[#EBE1D8] flex justify-between items-center">
                     <div>
                         <h3 className="text-2xl font-black text-[#347048] flex items-center gap-3 uppercase italic tracking-tighter">Deuda de {selectedDebtor.name}</h3>
@@ -635,7 +647,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
                     </button>
                 </div>
 
-                <div className="p-8 overflow-y-auto custom-scrollbar space-y-4 bg-white/40">
+                <div className="p-8 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-4 bg-white/40">
                   {selectedDebtorPendingEntries.length > 0 ? selectedDebtorPendingEntries.map((account: any) => {
                       const paymentStatus = String(account.paymentStatus || '');
                       const accountStatus = String(account.accountStatus || account.status || '');
@@ -754,7 +766,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
           <div className="bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
             <div className="p-8 border-b border-[#347048]/10 flex items-center justify-between bg-[#EBE1D8]">
               <div>
-                <h3 className="text-2xl font-black text-[#347048] flex items-center gap-3 uppercase italic tracking-tighter">Historial: {selectedClientHistory.name}</h3>
+                <h3 className="text-2xl font-black text-[#347048] flex items-center gap-3 uppercase italic tracking-tighter">Historial de cuentas: {selectedClientHistory.name}</h3>
                 <p className="text-[10px] font-black text-[#347048]/40 mt-1 uppercase tracking-widest">DNI: {selectedClientHistory.dni || '-'} · Tel: {selectedClientHistory.phone || '-'}</p>
               </div>
               <button
@@ -823,7 +835,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
         cancelText=""
         zIndexClass="z-[100004]"
         message={selectedAccountDetail ? (
-          <div className="space-y-4 text-sm text-[#347048]">
+          <div className="space-y-4 text-sm text-[#347048] max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
             <div className="space-y-1">
               <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Referencia</div>
               <div className="text-base font-black text-[#347048]">{getEntryReference(selectedAccountDetail)}</div>
