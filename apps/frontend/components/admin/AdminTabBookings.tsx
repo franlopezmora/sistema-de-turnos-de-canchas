@@ -1530,7 +1530,7 @@ export default function AdminTabBookings() {
         <form onSubmit={handleCreateBooking} className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           
           {/* BUSCADOR CLIENTE (Usa focus-within para saltar al frente al escribir) */}
-          <div className="relative focus-within:z-[100] z-20" ref={wrapperRef}>
+          <div className={`relative ${showDropdown ? 'z-[300]' : 'z-20'}`} ref={wrapperRef}>
               <label className="block text-xs font-black text-[#347048]/60 uppercase tracking-wider mb-2 ml-1">Nombre (Buscar Cliente)</label>
               <input 
                   type="text" 
@@ -1541,7 +1541,7 @@ export default function AdminTabBookings() {
                   required autoComplete="off"
               />
               {showDropdown && searchResults.length > 0 && (
-                  <ul className="absolute z-[110] w-full mt-2 bg-white border-2 border-[#347048]/10 rounded-2xl shadow-2xl max-h-60 overflow-y-auto">
+                  <ul className="absolute z-[320] w-full mt-2 bg-white border-2 border-[#347048]/10 rounded-2xl shadow-2xl max-h-60 overflow-y-auto">
                       {searchResults.map((client) => (
                           <li key={client.id} onClick={() => selectClient(client)}
                               className="px-4 py-3 hover:bg-[#B9CF32]/20 cursor-pointer text-[#347048] border-b border-[#347048]/5 last:border-0 transition-colors">
