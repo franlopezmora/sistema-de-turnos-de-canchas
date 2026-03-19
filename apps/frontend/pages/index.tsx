@@ -707,7 +707,7 @@ export default function Home() {
                   </button>
 
                   {showUserMenu && (
-                    <div className="absolute right-0 mt-4 w-[280px] md:w-[320px] bg-[#EBE1D8] rounded-3xl shadow-2xl shadow-[#347048]/50 border border-[#347048]/10 overflow-hidden z-[120]" onClick={(e) => e.stopPropagation()}>
+                    <div className="absolute right-0 mt-4 w-[280px] md:w-[320px] bg-[#EBE1D8] rounded-3xl shadow-2xl shadow-[#347048]/50 border border-[#347048]/10 overflow-hidden z-[120] max-[767px]:fixed max-[767px]:top-[74px] max-[767px]:right-6 max-[767px]:!left-auto max-[767px]:mt-0 max-[767px]:w-[min(320px,calc(100vw-3rem))]" onClick={(e) => e.stopPropagation()}>
                       <div className="p-6 flex flex-col items-center text-center">
                         <div className="relative mb-4">
                           <div className="h-20 w-20 rounded-full bg-[#347048] flex items-center justify-center text-[#EBE1D8] text-xl font-black shadow-inner">
