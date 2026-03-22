@@ -5,6 +5,9 @@ import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 
 const handleClubContextError = (error: unknown, res: Response, fallbackMessage: string) => {
     const message = error instanceof Error ? error.message : fallbackMessage;
+    if (message.includes('x-active-club-id')) {
+        return res.status(400).json({ error: message });
+    }
     if (message.includes('Debe seleccionar un club activo')) {
         return res.status(400).json({ error: message });
     }

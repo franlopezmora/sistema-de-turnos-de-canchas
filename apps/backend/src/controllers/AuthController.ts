@@ -175,7 +175,12 @@ export class AuthController {
             }
 
             const memberships = await getMembershipsForUser(user.id);
-            const preferredClubId = getPreferredClubIdFromRequest(req);
+            let preferredClubId: number | undefined;
+            try {
+                preferredClubId = getPreferredClubIdFromRequest(req);
+            } catch (error: any) {
+                return res.status(400).json({ error: error?.message || 'Contexto de club inválido' });
+            }
             const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
             const clubId = activeMembership?.clubId ?? null;
             const club = activeMembership?.club ?? null;

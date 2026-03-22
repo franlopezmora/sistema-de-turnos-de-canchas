@@ -247,6 +247,9 @@ export class AccountController {
       const bodyParsed = bodySchema.safeParse(req.body);
       if (!paramsParsed.success) return res.status(400).json({ error: paramsParsed.error.format() });
       if (!bodyParsed.success) return res.status(400).json({ error: bodyParsed.error.format() });
+      if (bodyParsed.data.method === 'TRANSFER' && !bodyParsed.data.channel) {
+        return res.status(400).json({ error: 'El canal es obligatorio para pagos por transferencia' });
+      }
 
       const actorUserId = this.resolveActorUserId(req);
       const clubId = this.resolveClubId(req);

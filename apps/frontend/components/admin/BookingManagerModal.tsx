@@ -330,7 +330,19 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const courtTotal = Number(summary?.courtTotal || booking?.price || 0);
   const itemsRegisteredTotal = Number(summary?.itemsTotal || 0);
   const paidTotal = Number(summary?.paid || 0);
-  const remainingCourt = Math.max(0, Number(bookingChargeRemaining || 0));
+  const hasPricingBreakdown = Boolean(summary?.pricingBreakdown);
+  const lightsEnabled = Boolean(summary?.pricingBreakdown?.lightsEnabled);
+  const summaryLightsApplies = Boolean(summary?.pricingBreakdown?.lightsApplies);
+  const lightsFromHourLabel = summary?.pricingBreakdown?.lightsFromHour
+    ? String(summary.pricingBreakdown.lightsFromHour)
+    : null;
+  const lightsSurchargeAmount = Number(summary?.pricingBreakdown?.lightsExtraAmount || 0);
+  const courtBaseWithoutLights = Number(summary?.pricingBreakdown?.courtBaseAmount || 0);
+  const lightsDetailVisible = hasPricingBreakdown && (lightsEnabled || lightsSurchargeAmount > 0.009);
+  const hasBookingChargeItem = Boolean(bookingChargeItemId);
+  const remainingCourt = hasBookingChargeItem
+    ? Math.max(0, Number(bookingChargeRemaining || 0))
+    : Math.max(0, Number(courtTotal || 0));
   const courtPaidNow = Math.max(0, Number((courtTotal - remainingCourt).toFixed(2)));
   const grandTotalToRegister = remainingCourt + registeredItemsPendingTotal + draftTotal;
   const bookingDiscountTotal = Number(
@@ -711,10 +723,16 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                       Políticas: {bookingDiscountPolicies.join(', ')}
                     </p>
                   ) : null}
-                  {bookingNightSurcharge.applied ? (
-                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 mt-1">
-                      Recargo nocturno aplicado: +{formatMoney(bookingNightSurcharge.amount)}
-                      {bookingNightSurcharge.fromHour ? ` (desde ${bookingNightSurcharge.fromHour})` : ''}
+                  {lightsDetailVisible ? (
+                    <p className={`text-[9px] font-black uppercase tracking-widest mt-1 ${summaryLightsApplies ? 'text-amber-700' : 'text-[#347048]/55'}`}>
+                      {lightsSurchargeAmount > 0.009
+                        ? `Recargo luces aplicado: +${formatMoney(lightsSurchargeAmount)}${lightsFromHourLabel ? ` (desde ${lightsFromHourLabel})` : ''}`
+                        : `Luces configuradas${lightsFromHourLabel ? ` desde ${lightsFromHourLabel}` : ''}: este turno no aplica recargo`}
+                    </p>
+                  ) : null}
+                  {lightsSurchargeAmount > 0.009 ? (
+                    <p className="text-[9px] font-black uppercase tracking-widest text-[#347048]/55 mt-1">
+                      Base {formatMoney(courtBaseWithoutLights)} + luces {formatMoney(lightsSurchargeAmount)} = {formatMoney(courtTotal)}
                     </p>
                   ) : null}
                   {remainingCourt <= 0.009 ? (
@@ -909,19 +927,31 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                 ) : null}
               </div>
 
-              <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#347048]/70">
-                <span>Cancha</span>
-                <span>{formatMoney(courtTotal)}</span>
-              </div>
-              {bookingNightSurcharge.applied ? (
-                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-amber-700">
-                  <span>Recargo nocturno</span>
-                  <span>
-                    +{formatMoney(bookingNightSurcharge.amount)}
-                    {bookingNightSurcharge.fromHour ? ` (desde ${bookingNightSurcharge.fromHour})` : ''}
-                  </span>
+              {lightsDetailVisible ? (
+                <>
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#347048]/70">
+                    <span>Cancha base</span>
+                    <span>{formatMoney(lightsSurchargeAmount > 0.009 ? courtBaseWithoutLights : courtTotal)}</span>
+                  </div>
+                  <div className={`flex items-center justify-between text-[10px] font-black uppercase tracking-widest ${lightsSurchargeAmount > 0.009 ? 'text-amber-700' : 'text-[#347048]/55'}`}>
+                    <span>Recargo luces</span>
+                    <span>
+                      {lightsSurchargeAmount > 0.009 ? `+${formatMoney(lightsSurchargeAmount)}` : formatMoney(0)}
+                      {lightsFromHourLabel ? ` (desde ${lightsFromHourLabel})` : ''}
+                      {lightsSurchargeAmount <= 0.009 ? ' - no aplica' : ''}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#347048]/70">
+                    <span>Cancha total</span>
+                    <span>{formatMoney(courtTotal)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#347048]/70">
+                  <span>Cancha</span>
+                  <span>{formatMoney(courtTotal)}</span>
                 </div>
-              ) : null}
+              )}
               <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-[#347048]/70">
                 <span>Extras (registrados)</span>
                 <span>{formatMoney(itemsRegisteredTotal)}</span>
@@ -971,12 +1001,13 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
                       <span className="text-[#347048]/60">Final estimado</span>
                       <span>{formatMoney(Number(confirmationQuote.finalPrice || 0))}</span>
                     </div>
-                    {bookingNightSurcharge.applied ? (
-                      <div className="flex items-center justify-between text-amber-700">
-                        <span>Recargo nocturno</span>
+                    {lightsDetailVisible ? (
+                      <div className={`flex items-center justify-between ${summaryLightsApplies ? 'text-amber-700' : 'text-[#347048]/55'}`}>
+                        <span>Recargo luces</span>
                         <span>
-                          +{formatMoney(bookingNightSurcharge.amount)}
-                          {bookingNightSurcharge.fromHour ? ` (desde ${bookingNightSurcharge.fromHour})` : ''}
+                          {lightsSurchargeAmount > 0.009 ? `+${formatMoney(lightsSurchargeAmount)}` : formatMoney(0)}
+                          {lightsFromHourLabel ? ` (desde ${lightsFromHourLabel})` : ''}
+                          {lightsSurchargeAmount <= 0.009 ? ' - no aplica' : ''}
                         </span>
                       </div>
                     ) : null}

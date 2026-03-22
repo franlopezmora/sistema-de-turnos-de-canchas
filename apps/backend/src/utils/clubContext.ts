@@ -20,11 +20,12 @@ export const getPreferredClubIdFromRequest = (req: Request): number | undefined 
   const queryClub = (req.query as any)?.clubId;
   const queryActiveClub = (req.query as any)?.activeClubId;
 
+  if (headerClub != null || queryClub != null || queryActiveClub != null) {
+    throw new Error('Contexto de club inválido: use solo el header x-active-club-id');
+  }
+
   const rawValue =
-    (Array.isArray(headerActive) ? headerActive[0] : headerActive) ??
-    (Array.isArray(headerClub) ? headerClub[0] : headerClub) ??
-    (Array.isArray(queryClub) ? queryClub[0] : queryClub) ??
-    (Array.isArray(queryActiveClub) ? queryActiveClub[0] : queryActiveClub);
+    (Array.isArray(headerActive) ? headerActive[0] : headerActive);
 
   return parseNumericClubId(rawValue);
 };

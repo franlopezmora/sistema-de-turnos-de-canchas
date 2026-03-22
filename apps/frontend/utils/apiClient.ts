@@ -30,7 +30,6 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
     const activeClubId = getActiveClubId();
     if (activeClubId) {
       headers.set('x-active-club-id', String(activeClubId));
-      headers.set('x-club-id', String(activeClubId));
     }
   }
 

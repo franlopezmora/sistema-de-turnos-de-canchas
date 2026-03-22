@@ -61,7 +61,7 @@ export default function RefundList({
                   {formatRefundCode(refund.id, (refund as any)?.displayCode)} · ${Number(refund.amount || 0).toLocaleString()} · {formatRefundStatus(refund.status)}
                 </p>
                 <p className="text-[10px] font-bold text-[#347048]/60 truncate">
-                  {formatRefundExecutionMethod(refund.executionMethod) || 'Sin método'} · pago {formatPaymentCode(refund.paymentId)}
+                  {formatRefundExecutionMethod(refund.executionMethod, (refund as any)?.paymentChannel) || 'Sin método'} · pago {formatPaymentCode(refund.paymentId)}
                 </p>
                 <p className="text-[10px] font-semibold text-[#347048]/55 truncate">
                   Cuenta: {refund.accountId ? formatAccountCode(refund.accountId) : 'sin cuenta'}
@@ -86,4 +86,3 @@ export default function RefundList({
     </div>
   );
 }
-

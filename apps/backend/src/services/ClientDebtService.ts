@@ -1,7 +1,13 @@
 import { prisma } from '../prisma';
 
 export class ClientDebtService {
-  async listByClub(clubId: number) {
+  async listByClub(
+    clubId: number,
+    options?: {
+      scope?: 'all' | 'debt_open';
+    }
+  ) {
+    const scope = options?.scope === 'debt_open' ? 'debt_open' : 'all';
     const clients = await prisma.client.findMany({
       where: { clubId },
       orderBy: { createdAt: 'desc' },
@@ -13,6 +19,7 @@ export class ClientDebtService {
         }
       }
     });
+    const clientIds = clients.map((client) => String(client.id));
 
     const bookingAccounts = await prisma.account.findMany({
       where: {
@@ -48,6 +55,22 @@ export class ClientDebtService {
                 name: true
               }
             }
+          }
+        })
+      : [];
+    const allClientBookings = clientIds.length > 0
+      ? await prisma.booking.findMany({
+          where: {
+            clubId,
+            clientId: { in: clientIds }
+          },
+          select: {
+            clientId: true,
+            startDateTime: true,
+            status: true
+          },
+          orderBy: {
+            startDateTime: 'asc'
           }
         })
       : [];
@@ -135,24 +158,73 @@ export class ClientDebtService {
       accountsByClient.set(clientId, existing);
     }
 
-    return clients.map((client) => ({
-      history: (accountsByClient.get(client.id) || [])
+    const bookingTimelineByClient = new Map<
+      string,
+      {
+        lastBookingAt: string | null;
+        nextBookingAt: string | null;
+      }
+    >();
+    const bookingsByClient = new Map<string, Array<{ startDateTime: Date; status: string }>>();
+    for (const booking of allClientBookings) {
+      const clientId = String(booking.clientId || '').trim();
+      if (!clientId) continue;
+      const existing = bookingsByClient.get(clientId) || [];
+      existing.push({
+        startDateTime: booking.startDateTime,
+        status: String(booking.status || '')
+      });
+      bookingsByClient.set(clientId, existing);
+    }
+    const nowTs = Date.now();
+    for (const [clientId, bookingRows] of bookingsByClient.entries()) {
+      const ordered = bookingRows
+        .slice()
+        .sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
+      const pastBookings = ordered.filter((row) => row.startDateTime.getTime() <= nowTs);
+      const upcomingBookings = ordered.filter((row) => row.startDateTime.getTime() > nowTs && row.status !== 'CANCELLED');
+      bookingTimelineByClient.set(clientId, {
+        lastBookingAt: pastBookings.length > 0 ? pastBookings[pastBookings.length - 1].startDateTime.toISOString() : null,
+        nextBookingAt: upcomingBookings.length > 0 ? upcomingBookings[0].startDateTime.toISOString() : null
+      });
+    }
+
+    const rows = clients.map((client) => {
+      const history = (accountsByClient.get(client.id) || [])
         .slice()
         .sort((a, b) => {
           const aTs = new Date(a.createdAt).getTime();
           const bTs = new Date(b.createdAt).getTime();
           if (aTs !== bTs) return bTs - aTs;
           return a.id < b.id ? 1 : -1;
-        }),
-      id: client.id,
-      firstName: client.name,
-      lastName: '',
-      dni: client.dni || null,
-      email: client.email,
-      phoneNumber: client.phone,
-      isProfessor: Boolean((client as any).isProfessor),
-      totalBookings: client._count.bookings,
-      totalDebt: (accountsByClient.get(client.id) || []).reduce((sum, account) => sum + Number(account.amount || 0), 0)
-    }));
+        });
+      const totalDebt = history.reduce((sum, account) => sum + Number(account.amount || 0), 0);
+      const hasOpenAccount = history.some((account) => String(account.accountStatus || '').toUpperCase() === 'OPEN');
+      const timeline = bookingTimelineByClient.get(String(client.id)) || {
+        lastBookingAt: null,
+        nextBookingAt: null
+      };
+      return {
+        history,
+        id: client.id,
+        firstName: client.name,
+        lastName: '',
+        dni: client.dni || null,
+        email: client.email,
+        phoneNumber: client.phone,
+        isProfessor: Boolean((client as any).isProfessor),
+        totalBookings: client._count.bookings,
+        totalDebt,
+        hasOpenAccount,
+        lastBookingAt: timeline.lastBookingAt,
+        nextBookingAt: timeline.nextBookingAt
+      };
+    });
+
+    if (scope === 'debt_open') {
+      return rows.filter((client) => client.totalDebt > 0.009 || client.hasOpenAccount);
+    }
+
+    return rows.map(({ hasOpenAccount: _hasOpenAccount, ...client }) => client);
   }
 }

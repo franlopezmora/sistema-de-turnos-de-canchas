@@ -48,6 +48,13 @@ export type BookingFinancialSummary = {
     autoCancelAt: string | null;
     label: string;
   };
+  pricingBreakdown?: {
+    courtBaseAmount: number;
+    lightsExtraAmount: number;
+    lightsEnabled: boolean;
+    lightsApplies: boolean;
+    lightsFromHour: string | null;
+  };
 };
 
 export type BookingQuote = {
@@ -226,7 +233,7 @@ export const cancelBooking = async (
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (rawUser) {
     const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
-    const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+    const adminClubId = Number(parsed?.activeClubId);
     if (hasAdminAccess(parsed) && Number.isFinite(adminClubId) && adminClubId > 0) {
       const club = await ClubService.getClubById(adminClubId);
       return await ClubAdminService.cancelBooking(club.slug, bookingId, options);
@@ -254,7 +261,7 @@ export const confirmBooking = async (bookingId: number) => {
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
-  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  const adminClubId = Number(parsed?.activeClubId);
   if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
     throw new Error('No se pudo resolver el club activo del administrador.');
   }
@@ -268,7 +275,7 @@ export const completeBooking = async (bookingId: number) => {
   const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   if (!rawUser) throw new Error('No se pudo resolver el club activo del administrador.');
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
-  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  const adminClubId = Number(parsed?.activeClubId);
   if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
     throw new Error('No se pudo resolver el club activo del administrador.');
   }
@@ -290,6 +297,9 @@ export const splitBookingPayment = async (
 
   if (Math.abs(totalRequested - remaining) > 0.009) {
     throw new Error('La suma de pagos debe coincidir con el saldo pendiente');
+  }
+  if (payments.some((payment) => payment.method === 'TRANSFER' && !payment.channel)) {
+    throw new Error('El canal es obligatorio para pagos por transferencia');
   }
 
   const results = [];
@@ -313,6 +323,9 @@ export const registerBookingPartialPayment = async (
   allocations?: Array<{ accountItemId: string; amount: number }>
 ) => {
   if (!getToken()) throw new Error('Debes iniciar sesión como administrador.');
+  if (method === 'TRANSFER' && !channel) {
+    throw new Error('El canal es obligatorio para pagos por transferencia');
+  }
   const account = await getOrCreateBookingAccount(bookingId);
   return registerPayment({
     accountId: account.id,
@@ -362,7 +375,18 @@ export const getBookingFinancialSummary = async (bookingId: number) => {
       eligibleNow: Boolean(summary.autoCancelStatus?.eligibleNow),
       autoCancelAt: summary.autoCancelStatus?.autoCancelAt || null,
       label: String(summary.autoCancelStatus?.label || 'No aplica')
-    }
+    },
+    pricingBreakdown: summary?.pricingBreakdown
+      ? {
+          courtBaseAmount: Number(summary.pricingBreakdown.courtBaseAmount || 0),
+          lightsExtraAmount: Number(summary.pricingBreakdown.lightsExtraAmount || 0),
+          lightsEnabled: Boolean(summary.pricingBreakdown.lightsEnabled),
+          lightsApplies: Boolean(summary.pricingBreakdown.lightsApplies),
+          lightsFromHour: summary.pricingBreakdown.lightsFromHour
+            ? String(summary.pricingBreakdown.lightsFromHour)
+            : null
+        }
+      : undefined
   } satisfies BookingFinancialSummary;
 };
 
@@ -376,7 +400,7 @@ export const getAdminSchedule = async (date: string) => {
     }
 
     const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
-    const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+    const adminClubId = Number(parsed?.activeClubId);
     if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
       throw new Error('No se pudo resolver el club activo del administrador.');
     }
@@ -407,7 +431,7 @@ export const createFixedBooking = async (
   }
 
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
-  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  const adminClubId = Number(parsed?.activeClubId);
   if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
     throw new Error('No se pudo resolver el club activo del administrador.');
   }
@@ -436,7 +460,7 @@ export const cancelFixedBooking = async (fixedBookingId: number) => {
   }
 
   const parsed = normalizeSessionUser(JSON.parse(rawUser || '{}'));
-  const adminClubId = Number(parsed?.activeClubId || parsed?.clubId || parsed?.club?.id);
+  const adminClubId = Number(parsed?.activeClubId);
   if (!hasAdminAccess(parsed) || !Number.isFinite(adminClubId) || adminClubId <= 0) {
     throw new Error('No se pudo resolver el club activo del administrador.');
   }

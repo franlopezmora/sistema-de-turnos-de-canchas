@@ -164,6 +164,7 @@ export default function BookingConsumption(
   const isCourtOnlyInAccount = false;
   const basePrice = Number(baseCourtPrice ?? 0);
   const lightsExtra = basePrice > 0 ? Math.max(courtTotal - basePrice, 0) : 0;
+  const courtBaseWithoutLights = lightsExtra > 0 ? Math.max(0, Number((courtTotal - lightsExtra).toFixed(2))) : courtTotal;
   const courtPayments: Array<{ id: number; amount: number; method: string; description?: string; date: string }> = [];
 
   const formatMethodLabel = (method?: string) => {
@@ -426,6 +427,18 @@ export default function BookingConsumption(
               </span>
             </div>
           </div>
+          {lightsExtra > 0 && (
+            <>
+              <div className="flex justify-between text-[10px] font-black text-[#347048]/70 uppercase tracking-widest">
+                <span>Cancha base</span>
+                <span>${courtBaseWithoutLights.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-[10px] font-black text-[#926699] uppercase tracking-widest">
+                <span>Recargo por luces</span>
+                <span>+${lightsExtra.toLocaleString()}</span>
+              </div>
+            </>
+          )}
           <div className="flex justify-between text-[10px] font-black text-[#347048]/70 uppercase tracking-widest">
             <span>Cancha pagado</span>
             <span>${paidTotal.toLocaleString()}</span>
@@ -447,13 +460,6 @@ export default function BookingConsumption(
                   <span>${Number(payment.amount || 0).toLocaleString()}</span>
                 </div>
               ))}
-            </div>
-          )}
-          
-          {lightsExtra > 0 && (
-            <div className="flex justify-between text-[10px] font-black text-[#926699] uppercase tracking-widest">
-              <span>+ Extra por luces</span>
-              <span>${lightsExtra.toLocaleString()}</span>
             </div>
           )}
           
@@ -516,4 +522,3 @@ export default function BookingConsumption(
     </div>
   );
 }
-

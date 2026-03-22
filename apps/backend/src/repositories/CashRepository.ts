@@ -75,7 +75,9 @@ export class CashRepository {
             },
             payment: {
               select: {
-                id: true
+                id: true,
+                channel: true,
+                method: true
               }
             }
           }

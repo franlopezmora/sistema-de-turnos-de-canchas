@@ -15,12 +15,18 @@ export class ClientService {
     return res.json();
   }
 
-  static async listDebtors(clubSlug?: string) {
+  static async listDebtors(
+    clubSlug?: string,
+    options?: {
+      scope?: 'all' | 'debt_open';
+    }
+  ) {
     const slug = clubSlug || getActiveClubSlug(normalizeSessionUser(null));
     if (!slug) return [];
+    const scope = options?.scope === 'debt_open' ? 'debt_open' : 'all';
 
     const res = await fetchWithAuth(
-      `${apiBase()}/clients/${encodeURIComponent(slug)}`,
+      `${apiBase()}/clients/${encodeURIComponent(slug)}?scope=${encodeURIComponent(scope)}`,
       { method: 'GET' }
     );
 
@@ -38,6 +44,8 @@ export class ClientService {
       isProfessor: Boolean(client.isProfessor),
       totalBookings: Number(client.totalBookings || 0),
       totalDebt: Number(client.totalDebt || 0),
+      lastBookingAt: client.lastBookingAt ? String(client.lastBookingAt) : null,
+      nextBookingAt: client.nextBookingAt ? String(client.nextBookingAt) : null,
       history: Array.isArray(client.history) ? client.history : [],
       bookings: Array.isArray(client.bookings)
         ? client.bookings

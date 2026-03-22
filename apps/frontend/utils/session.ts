@@ -79,24 +79,22 @@ export const normalizeSessionUser = (user: SessionUser | null): SessionUser | nu
         .filter((membership): membership is MembershipLite => Boolean(membership))
     : [];
 
-  const legacyClubId = toPositiveInt(user.clubId ?? user.club?.id);
-  if (legacyClubId && !memberships.some((membership) => membership.clubId === legacyClubId)) {
-    memberships.unshift({
-      clubId: legacyClubId,
-      role: user.role,
-      club: {
-        id: legacyClubId,
-        slug: user.club?.slug || user.clubSlug || user.slug || null
-      }
-    });
-  }
-
   memberships.sort((left, right) => {
     const leftPriority = membershipPriority(left.role);
     const rightPriority = membershipPriority(right.role);
     if (leftPriority !== rightPriority) return leftPriority - rightPriority;
     return left.clubId - right.clubId;
   });
+
+  if (memberships.length === 0) {
+    return {
+      ...user,
+      clubId: null,
+      memberships: [],
+      activeClubId: null,
+      activeMembership: null
+    };
+  }
 
   const preferredMembership =
     memberships.find((membership) => membership.role === 'OWNER' || membership.role === 'ADMIN') ||
@@ -109,20 +107,19 @@ export const normalizeSessionUser = (user: SessionUser | null): SessionUser | nu
     getStoredActiveClubId() ||
     preferredMembership?.clubId ||
     memberships[0]?.clubId ||
-    legacyClubId ||
     null;
 
   const normalizedActiveClubId =
     preferredActiveClubId && memberships.some((membership) => membership.clubId === preferredActiveClubId)
       ? preferredActiveClubId
-      : memberships[0]?.clubId || legacyClubId || null;
+      : memberships[0]?.clubId || null;
 
   const activeMembership =
     memberships.find((membership) => membership.clubId === normalizedActiveClubId) || null;
 
   return {
     ...user,
-    clubId: legacyClubId,
+    clubId: normalizedActiveClubId,
     memberships,
     activeClubId: normalizedActiveClubId,
     activeMembership
@@ -174,9 +171,6 @@ export const getActiveClubSlug = (user?: SessionUser | null): string | null => {
   const normalized = normalizeSessionUser(user ?? getStoredUser());
   if (!normalized) return null;
 
-  const directSlug = normalized.slug || normalized.clubSlug || normalized.club?.slug;
-  if (typeof directSlug === 'string' && directSlug.trim()) return directSlug.trim();
-
   const activeClubId = normalized.activeClubId;
   if (!activeClubId) return null;
 
@@ -195,7 +189,6 @@ export const getActiveMembershipRole = (user?: SessionUser | null): string | nul
 export const hasAdminAccess = (user?: SessionUser | null): boolean => {
   const normalized = normalizeSessionUser(user ?? getStoredUser());
   if (!normalized) return false;
-  if (normalized.role === 'ADMIN') return true;
   const activeRole = normalized.activeMembership?.role;
   return activeRole === 'OWNER' || activeRole === 'ADMIN';
 };

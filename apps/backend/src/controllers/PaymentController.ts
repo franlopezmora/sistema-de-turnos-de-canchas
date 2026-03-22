@@ -62,6 +62,9 @@ export class PaymentController {
 
       const parsed = bodySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.format() });
+      if (parsed.data.method === 'TRANSFER' && !parsed.data.channel) {
+        return res.status(400).json({ error: 'El canal es obligatorio para pagos por transferencia' });
+      }
 
       const clubId = Number((req as any).clubId);
       const headerValue = req.headers['idempotency-key'];

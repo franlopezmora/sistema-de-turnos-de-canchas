@@ -24,6 +24,20 @@ const formatDate = (dateInput: any) => {
   });
 };
 
+const formatDateTime = (dateInput: any) => {
+  if (!dateInput) return '-';
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+};
+
 const bookingStatusLabel: Record<string, string> = {
   PENDING: 'Pendiente',
   CONFIRMED: 'Confirmado',
@@ -120,6 +134,8 @@ type PendingAccountBreakdown = {
   totalPending: number;
 };
 
+type ClientViewScope = 'all' | 'debt_open';
+
 const buildPendingBreakdown = (detail: any): PendingAccountBreakdown => {
   const items = Array.isArray(detail?.items) ? detail.items : [];
   const payments = Array.isArray(detail?.payments) ? detail.payments : [];
@@ -176,6 +192,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const [selectedDebtor, setSelectedDebtor] = useState<any>(null);
   const [selectedClientHistory, setSelectedClientHistory] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewScope, setViewScope] = useState<ClientViewScope>('all');
   const [showPayMethodModal, setShowPayMethodModal] = useState(false);
   const [debtTarget, setDebtTarget] = useState<{ accountId: string } | null>(null);
   const [submittingCalculator, setSubmittingCalculator] = useState(false);
@@ -214,7 +231,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     try {
       setLoading(true);
       const resolvedSlug = resolveClubSlug() || undefined;
-      const data = await ClientService.listDebtors(resolvedSlug);
+      const data = await ClientService.listDebtors(resolvedSlug, { scope: viewScope });
       setClients(data);
       return data;
     } catch (error) {
@@ -223,7 +240,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     }
     finally { setLoading(false); }
     return null;
-  }, [resolveClubSlug]);
+  }, [resolveClubSlug, viewScope]);
 
   const openCreateClientModal = () => {
     setClientToEdit(null);
@@ -317,6 +334,13 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   useEffect(() => {
     loadClients();
   }, [loadClients]);
+
+  useEffect(() => {
+    setSelectedDebtor(null);
+    setSelectedClientHistory(null);
+    setShowPayMethodModal(false);
+    setDebtTarget(null);
+  }, [viewScope]);
 
   useEffect(() => {
     setMounted(true);
@@ -463,10 +487,34 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       {/* TABLA + BUSCADOR */}
       <div className="bg-white/40 backdrop-blur-sm border-2 border-white rounded-[2rem] p-6 overflow-hidden shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 px-2">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-xl font-black text-[#347048] flex items-center gap-3 uppercase italic tracking-tight">
                 <Receipt className="text-[#B9CF32]" /> Directorio de Clientes
               </h2>
+              <div className="inline-flex rounded-xl border border-[#347048]/15 bg-white p-1 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setViewScope('all')}
+                  className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition ${
+                    viewScope === 'all'
+                      ? 'bg-[#347048] text-white'
+                      : 'text-[#347048]/65 hover:text-[#347048]'
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewScope('debt_open')}
+                  className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition ${
+                    viewScope === 'debt_open'
+                      ? 'bg-[#347048] text-white'
+                      : 'text-[#347048]/65 hover:text-[#347048]'
+                  }`}
+                >
+                  Con deuda/cuenta abierta
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={openCreateClientModal}
@@ -778,6 +826,32 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
               </button>
             </div>
             <div className="p-8 overflow-y-auto space-y-4 custom-scrollbar bg-white/40">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-[#347048]/10 bg-white/80 p-3">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#347048]/45">Próxima reserva</div>
+                  <div className="mt-1 text-[12px] font-black uppercase tracking-wide text-[#347048]">
+                    {selectedClientHistory.nextBookingAt ? formatDateTime(selectedClientHistory.nextBookingAt) : 'Sin próxima reserva'}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[#347048]/10 bg-white/80 p-3">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#347048]/45">Última reserva</div>
+                  <div className="mt-1 text-[12px] font-black uppercase tracking-wide text-[#347048]">
+                    {selectedClientHistory.lastBookingAt ? formatDateTime(selectedClientHistory.lastBookingAt) : 'Sin historial de reservas'}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[#347048]/10 bg-white/80 p-3">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#347048]/45">Total reservas</div>
+                  <div className="mt-1 text-[18px] font-black italic tracking-tight text-[#347048]">
+                    {Number(selectedClientHistory.totalBookings || 0)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[#347048]/10 bg-white/80 p-3">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-[#347048]/45">Saldo actual</div>
+                  <div className={`mt-1 text-[18px] font-black italic tracking-tight ${Number(selectedClientHistory.totalDebt || 0) > 0.009 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    ${Number(selectedClientHistory.totalDebt || 0).toLocaleString()}
+                  </div>
+                </div>
+              </div>
               {selectedClientHistory.history?.length > 0 ? (
                 selectedClientHistory.history
                   .slice()

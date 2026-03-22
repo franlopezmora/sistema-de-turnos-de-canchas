@@ -9,6 +9,8 @@ import { BookingDomainService } from './BookingDomainService';
 import { AccountService } from './AccountService';
 import { generateDisplayCode } from '../utils/displayCode';
 
+const EPSILON = 0.009;
+
 type ListPaymentsFilters = {
   clubId?: number;
   accountId?: string;
@@ -61,7 +63,8 @@ export class PaymentService {
     if (method === 'CARD') return 'CARD_TERMINAL';
     if (method === 'TRANSFER') {
       if (channel === 'VIRTUAL_WALLET') return 'VIRTUAL_WALLET';
-      return 'BANK_ACCOUNT';
+      if (channel === 'BANK_ACCOUNT') return 'BANK_ACCOUNT';
+      throw new Error('El canal es obligatorio para pagos por transferencia');
     }
     if (channel && channel !== 'AUTO') return channel;
     return 'OTHER';
@@ -116,7 +119,7 @@ export class PaymentService {
       }
 
       const totalRequested = this.roundMoney(resolved.reduce((sum, allocation) => sum + allocation.amount, 0));
-      if (Math.abs(totalRequested - paymentAmount) > 0.009) {
+      if (Math.abs(totalRequested - paymentAmount) > EPSILON) {
         throw new Error('La suma de asignaciones debe coincidir con el monto del pago');
       }
 
@@ -143,7 +146,7 @@ export class PaymentService {
         const currentAllocated = allocatedByItem.get(allocation.accountItemId) || 0;
         const itemTotal = itemTotals.get(allocation.accountItemId) || 0;
         const remaining = this.roundMoney(Math.max(0, itemTotal - currentAllocated));
-        if (allocation.amount > remaining + 0.009) {
+        if (allocation.amount > remaining + EPSILON) {
           throw new Error('Una asignación supera el saldo pendiente del item');
         }
       }
@@ -168,11 +171,11 @@ export class PaymentService {
     const generated: Array<{ accountItemId: string; amount: number }> = [];
 
     for (const item of items) {
-      if (remainingToAssign <= 0.009) break;
+      if (remainingToAssign <= EPSILON) break;
       const total = this.roundMoney(Number(item.total || 0));
       const allocated = allocatedByItem.get(item.id) || 0;
       const outstanding = this.roundMoney(Math.max(0, total - allocated));
-      if (outstanding <= 0.009) continue;
+      if (outstanding <= EPSILON) continue;
 
       const chunk = this.roundMoney(Math.min(outstanding, remainingToAssign));
       if (chunk <= 0) continue;
@@ -180,23 +183,12 @@ export class PaymentService {
       remainingToAssign = this.roundMoney(remainingToAssign - chunk);
     }
 
-    if (remainingToAssign > 0.009) {
-      // Fallback defensivo para casos legacy (p.ej. refunds sin deasignación por item).
-      const targetItemId = generated[0]?.accountItemId || items[0].id;
-      const target = generated.find((entry) => entry.accountItemId === targetItemId);
-      if (target) {
-        target.amount = this.roundMoney(target.amount + remainingToAssign);
-      } else {
-        generated.push({
-          accountItemId: targetItemId,
-          amount: this.roundMoney(remainingToAssign)
-        });
-      }
-      remainingToAssign = 0;
+    if (remainingToAssign > EPSILON) {
+      throw new Error('No se puede registrar el pago: el monto excede el saldo pendiente de los items de la cuenta');
     }
 
     const generatedTotal = this.roundMoney(generated.reduce((sum, entry) => sum + entry.amount, 0));
-    if (Math.abs(generatedTotal - paymentAmount) > 0.009) {
+    if (Math.abs(generatedTotal - paymentAmount) > EPSILON) {
       throw new Error('No se pudo asignar correctamente el pago a los items');
     }
 
@@ -301,7 +293,7 @@ export class PaymentService {
       const { netPaid: paidTotal } = await this.accountService.reconcilePaidAmountTx(tx, account.id);
       const remaining = Math.max(0, accountTotal - paidTotal);
 
-      if (input.amount > remaining + 0.009) {
+      if (input.amount > remaining + EPSILON) {
         throw new Error('El pago supera el saldo pendiente de la cuenta');
       }
 

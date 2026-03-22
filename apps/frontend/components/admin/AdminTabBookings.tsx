@@ -302,7 +302,7 @@ export default function AdminTabBookings() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'single' | 'split'>('single');
   const [splitPayments, setSplitPayments] = useState<SplitPaymentDraft[]>([{ method: 'CASH', amount: '' }]);
-  const [singleTransferChannel, setSingleTransferChannel] = useState<'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>('BANK_ACCOUNT');
+  const [singleTransferChannel, setSingleTransferChannel] = useState<'BANK_ACCOUNT' | 'VIRTUAL_WALLET' | null>(null);
   const [selectedBookingId, setSelectedBookingId] = useState<number | null>(null);
   const [selectedPaymentAccountId, setSelectedPaymentAccountId] = useState<string | null>(null);
   const [paymentRemainingTarget, setPaymentRemainingTarget] = useState(0);
@@ -330,7 +330,7 @@ export default function AdminTabBookings() {
     setSelectedBookingId(bookingId);
     setPaymentMode('single');
     setSplitPayments([{ method: 'CASH', amount: '' }]);
-    setSingleTransferChannel('BANK_ACCOUNT');
+    setSingleTransferChannel(null);
     try {
       const account = await getOrCreateBookingAccount(bookingId);
       const summary = await getAccountSummary(account.id);
@@ -1421,6 +1421,11 @@ export default function AdminTabBookings() {
 
   const handleConfirmBooking = async (method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER', forcedChannel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET') => {
     if (!selectedBookingId || !selectedPaymentAccountId) return;
+    const resolvedChannel = method === 'TRANSFER' ? (forcedChannel || singleTransferChannel) : undefined;
+    if (method === 'TRANSFER' && !resolvedChannel) {
+      showError('Para pagos por transferencia debés seleccionar un canal.');
+      return;
+    }
     try {
         const summary = await getAccountSummary(selectedPaymentAccountId);
         const remaining = Math.max(0, Number(summary?.remaining || 0));
@@ -1434,7 +1439,7 @@ export default function AdminTabBookings() {
           accountId: selectedPaymentAccountId,
           amount: remaining,
           method,
-          ...(method === 'TRANSFER' ? { channel: forcedChannel || singleTransferChannel } : {})
+          ...(method === 'TRANSFER' ? { channel: resolvedChannel } : {})
         });
         setShowPaymentModal(false);
         loadSchedule(); 
@@ -1451,7 +1456,7 @@ export default function AdminTabBookings() {
   };
 
   const addSplitPaymentRow = () => {
-    setSplitPayments((prev) => [...prev, { method: 'TRANSFER', channel: 'BANK_ACCOUNT', amount: '' }]);
+    setSplitPayments((prev) => [...prev, { method: 'TRANSFER', amount: '' }]);
   };
 
   const removeSplitPaymentRow = (index: number) => {
@@ -1475,13 +1480,17 @@ export default function AdminTabBookings() {
     const parsedPayments = splitPayments
       .map((payment) => ({
         method: payment.method,
-        channel: payment.method === 'TRANSFER' ? (payment.channel || 'BANK_ACCOUNT') : undefined,
+        channel: payment.method === 'TRANSFER' ? payment.channel : undefined,
         amount: Number(payment.amount)
       }))
       .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
 
     if (parsedPayments.length === 0) {
       showError('Ingresá al menos un monto válido para registrar el pago dividido.');
+      return;
+    }
+    if (parsedPayments.some((payment) => payment.method === 'TRANSFER' && !payment.channel)) {
+      showError('Todos los pagos por transferencia deben indicar canal.');
       return;
     }
 
@@ -2050,7 +2059,7 @@ export default function AdminTabBookings() {
                         const method = e.target.value as 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
                         updateSplitPayment(index, {
                           method,
-                          channel: method === 'TRANSFER' ? (payment.channel || 'BANK_ACCOUNT') : undefined
+                          channel: method === 'TRANSFER' ? payment.channel : undefined
                         });
                       }}
                       className="col-span-5 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-xs font-black uppercase tracking-wider"
@@ -2062,10 +2071,11 @@ export default function AdminTabBookings() {
                     </select>
                     {payment.method === 'TRANSFER' ? (
                       <select
-                        value={payment.channel || 'BANK_ACCOUNT'}
-                        onChange={(e) => updateSplitPayment(index, { channel: e.target.value as 'BANK_ACCOUNT' | 'VIRTUAL_WALLET' })}
+                        value={payment.channel || ''}
+                        onChange={(e) => updateSplitPayment(index, { channel: (e.target.value || undefined) as 'BANK_ACCOUNT' | 'VIRTUAL_WALLET' | undefined })}
                         className="col-span-3 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-2 text-[10px] font-black uppercase tracking-wider"
                       >
+                        <option value="">Canal</option>
                         <option value="BANK_ACCOUNT">Banco</option>
                         <option value="VIRTUAL_WALLET">Billetera</option>
                       </select>

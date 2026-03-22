@@ -274,7 +274,10 @@ export default function AdminTabRefunds() {
                 <DetailItem label="Estado" value={formatRefundStatus(selectedRefund.status)} />
                 <DetailItem label="Monto" value={formatMoney(selectedRefund.amount)} />
                 <DetailItem label="Tipo motivo" value={selectedRefund.reasonType || '-'} />
-                <DetailItem label="Método ejecución" value={formatRefundExecutionMethod(selectedRefund.executionMethod) || 'Sin método'} />
+                <DetailItem
+                  label="Método ejecución"
+                  value={formatRefundExecutionMethod(selectedRefund.executionMethod, (selectedRefund as any)?.paymentChannel) || 'Sin método'}
+                />
                 <DetailItem label="Turno caja" value={selectedRefund.cashShiftId || '-'} mono />
                 <DetailItem label="Código pago" value={selectedRefund.paymentId ? formatPaymentCode(selectedRefund.paymentId) : '-'} />
                 <DetailItem label="Código cuenta" value={selectedRefund.accountId ? formatAccountCode(selectedRefund.accountId) : '-'} />

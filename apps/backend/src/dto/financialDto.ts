@@ -1,4 +1,10 @@
 const toNumber = (value: unknown) => Number(value || 0);
+const requireDefined = <T>(value: T | null | undefined, message: string): T => {
+  if (value === null || value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+};
 
 export const mapPaymentDto = (payment: any) => ({
   id: payment.id,
@@ -6,7 +12,7 @@ export const mapPaymentDto = (payment: any) => ({
   createdAt: payment.createdAt,
   amount: toNumber(payment.amount),
   method: payment.method,
-  channel: payment.channel ?? 'AUTO',
+  channel: requireDefined(payment.channel, 'Payment.channel es obligatorio'),
   collectorAccountLabel: payment.collectorAccountLabel ?? null,
   externalReference: payment.externalReference ?? null,
   source: payment.source,
@@ -27,8 +33,8 @@ export const mapRefundDto = (refund: any) => ({
   createdAt: refund.createdAt,
   amount: toNumber(refund.amount),
   reason: refund.reason ?? null,
-  reasonType: refund.reasonType ?? 'OTHER',
-  status: refund.status ?? 'EXECUTED',
+  reasonType: requireDefined(refund.reasonType, 'Refund.reasonType es obligatorio'),
+  status: requireDefined(refund.status, 'Refund.status es obligatorio'),
   executionMethod: refund.executionMethod ?? null,
   paymentId: refund.paymentId,
   accountId: refund.accountId,
@@ -45,7 +51,8 @@ export const mapRefundDto = (refund: any) => ({
   executionReference: refund.executionReference ?? null,
   executionNotes: refund.executionNotes ?? null,
   failedAt: refund.failedAt ?? null,
-  failedReason: refund.failedReason ?? null
+  failedReason: refund.failedReason ?? null,
+  paymentChannel: refund.payment?.channel ?? null
 });
 
 export const mapAccountItemDto = (item: any) => ({

@@ -196,6 +196,62 @@ export class BookingService {
 
     private resolveClubConfig(club: any) {
         const settings = club?.settings ?? null;
+        if (!settings) {
+            throw new Error('Configuración de club incompleta: faltan ClubSettings');
+        }
+
+        const timeZone = String(settings.timeZone || '').trim();
+        if (!timeZone) {
+            throw new Error('Configuración de club inválida: timeZone es obligatorio');
+        }
+
+        if (!Array.isArray(settings.openingDays) || settings.openingDays.length === 0) {
+            throw new Error('Configuración de club inválida: openingDays es obligatorio');
+        }
+
+        const closureDates = Array.isArray(settings.closureDates)
+            ? settings.closureDates
+                .map((date: unknown) => String(date || '').trim())
+                .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+            : [];
+
+        const bookingSimpleAdvanceDaysUser = Number(settings.bookingSimpleAdvanceDaysUser);
+        const bookingSimpleAdvanceDaysAdmin = Number(settings.bookingSimpleAdvanceDaysAdmin);
+        if (!Number.isFinite(bookingSimpleAdvanceDaysUser) || bookingSimpleAdvanceDaysUser < 0) {
+            throw new Error('Configuración de club inválida: bookingSimpleAdvanceDaysUser es obligatorio y debe ser >= 0');
+        }
+        if (!Number.isFinite(bookingSimpleAdvanceDaysAdmin) || bookingSimpleAdvanceDaysAdmin < 0) {
+            throw new Error('Configuración de club inválida: bookingSimpleAdvanceDaysAdmin es obligatorio y debe ser >= 0');
+        }
+
+        const professorDurationOverrideEnabled = settings.professorDurationOverrideEnabled;
+        const professorDurationOverrideMinutes = Number(settings.professorDurationOverrideMinutes);
+        if (typeof professorDurationOverrideEnabled !== 'boolean') {
+            throw new Error('Configuración de club inválida: professorDurationOverrideEnabled es obligatorio');
+        }
+        if (!Number.isFinite(professorDurationOverrideMinutes) || professorDurationOverrideMinutes <= 0) {
+            throw new Error('Configuración de club inválida: professorDurationOverrideMinutes es obligatorio y debe ser > 0');
+        }
+
+        const allowManualConfirmationOverride = settings.allowManualConfirmationOverride;
+        if (typeof allowManualConfirmationOverride !== 'boolean') {
+            throw new Error('Configuración de club inválida: allowManualConfirmationOverride es obligatorio');
+        }
+
+        const bookingConfirmationMode = settings.bookingConfirmationMode;
+        if (
+            bookingConfirmationMode !== 'AUTOMATIC' &&
+            bookingConfirmationMode !== 'MANUAL' &&
+            bookingConfirmationMode !== 'DEPOSIT_REQUIRED'
+        ) {
+            throw new Error('Configuración de club inválida: bookingConfirmationMode es obligatorio');
+        }
+
+        const lightsEnabled = settings.lightsEnabled;
+        if (typeof lightsEnabled !== 'boolean') {
+            throw new Error('Configuración de club inválida: lightsEnabled es obligatorio');
+        }
+
         const lightsFromHourRaw = settings?.lightsFromHour;
         const normalizedLightsFromHour =
             typeof lightsFromHourRaw === 'string'
@@ -204,15 +260,21 @@ export class BookingService {
                     ? this.fromMinutes(Number(lightsFromHourRaw))
                     : null;
 
+        const lightsExtraAmount = settings?.lightsExtraAmount != null ? Number(settings.lightsExtraAmount) : null;
+        if (lightsEnabled) {
+            if (!Number.isFinite(lightsExtraAmount) || Number(lightsExtraAmount) <= 0) {
+                throw new Error('Configuración de club inválida: lightsExtraAmount es obligatorio cuando lightsEnabled=true');
+            }
+            if (!normalizedLightsFromHour || !/^\d{2}:\d{2}$/.test(String(normalizedLightsFromHour))) {
+                throw new Error('Configuración de club inválida: lightsFromHour debe tener formato HH:MM cuando lightsEnabled=true');
+            }
+        }
+
         return {
             ...club,
-            timeZone: settings?.timeZone ?? 'America/Argentina/Buenos_Aires',
-            openingDays: Array.isArray(settings?.openingDays) ? settings.openingDays : null,
-            closureDates: Array.isArray(settings?.closureDates)
-                ? settings.closureDates
-                    .map((date: unknown) => String(date || '').trim())
-                    .filter((date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date))
-                : null,
+            timeZone,
+            openingDays: settings.openingDays,
+            closureDates,
             clubOperationalStatus:
                 settings?.clubOperationalStatus === 'TEMPORARY_CLOSED' || settings?.clubOperationalStatus === 'PERMANENTLY_CLOSED'
                     ? settings.clubOperationalStatus
@@ -221,25 +283,19 @@ export class BookingService {
                 settings?.temporaryClosureStartDate ? this.formatLocalDateKey(new Date(settings.temporaryClosureStartDate), 'UTC') : null,
             temporaryClosureEndDate:
                 settings?.temporaryClosureEndDate ? this.formatLocalDateKey(new Date(settings.temporaryClosureEndDate), 'UTC') : null,
-            lightsEnabled: settings?.lightsEnabled ?? false,
-            lightsExtraAmount: settings?.lightsExtraAmount ?? null,
+            lightsEnabled,
+            lightsExtraAmount,
             lightsFromHour: normalizedLightsFromHour,
             // Regla operativa explícita separada del descuento económico
-            professorDurationOverrideEnabled: settings?.professorDurationOverrideEnabled ?? true,
-            professorDurationOverrideMinutes: Number.isFinite(Number(settings?.professorDurationOverrideMinutes))
-                ? Math.max(1, Math.floor(Number(settings?.professorDurationOverrideMinutes)))
-                : 60,
+            professorDurationOverrideEnabled,
+            professorDurationOverrideMinutes: Math.max(1, Math.floor(professorDurationOverrideMinutes)),
             fixedBookingSettingsByActivity: settings?.fixedBookingSettingsByActivity ?? null,
-            bookingConfirmationMode: settings?.bookingConfirmationMode ?? 'MANUAL',
+            bookingConfirmationMode,
             bookingDepositPercent: settings?.bookingDepositPercent != null ? Number(settings.bookingDepositPercent) : null,
-            allowManualConfirmationOverride: settings?.allowManualConfirmationOverride ?? true,
-            bookingSimpleAdvanceDaysUser: Number.isFinite(Number(settings?.bookingSimpleAdvanceDaysUser))
-                ? Math.max(0, Math.floor(Number(settings?.bookingSimpleAdvanceDaysUser)))
-                : 30,
-            bookingSimpleAdvanceDaysAdmin: Number.isFinite(Number(settings?.bookingSimpleAdvanceDaysAdmin))
-                ? Math.max(0, Math.floor(Number(settings?.bookingSimpleAdvanceDaysAdmin)))
-                : 30,
-            allowAdminSkipSimpleAdvanceLimit: settings?.allowAdminSkipSimpleAdvanceLimit ?? false
+            allowManualConfirmationOverride,
+            bookingSimpleAdvanceDaysUser: Math.max(0, Math.floor(bookingSimpleAdvanceDaysUser)),
+            bookingSimpleAdvanceDaysAdmin: Math.max(0, Math.floor(bookingSimpleAdvanceDaysAdmin)),
+            allowAdminSkipSimpleAdvanceLimit: Boolean(settings?.allowAdminSkipSimpleAdvanceLimit)
         };
     }
 
@@ -257,14 +313,9 @@ export class BookingService {
     }
 
     private resolveFixedBookingConfig(clubConfig: any, activity: ActivityType | null | undefined) {
-        const fallback = {
-            fixedBookingDaysAhead: 24 * 7,
-            fixedBookingGenerationFrequencyDays: 7
-        };
-
         const raw = clubConfig?.fixedBookingSettingsByActivity;
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-            return fallback;
+            throw new Error('Configuración de club inválida: fixedBookingSettingsByActivity es obligatorio');
         }
 
         const byActivity = raw as Record<string, any>;
@@ -272,15 +323,21 @@ export class BookingService {
         const selected = activityKey ? byActivity[activityKey] : undefined;
 
         if (!selected || typeof selected !== 'object') {
-            return fallback;
+            throw new Error(`Configuración de club inválida: faltan reglas de turnos fijos para la actividad ${activity?.name || 'desconocida'}`);
         }
 
         const daysAhead = Number(selected.fixedBookingDaysAhead);
         const generationFrequencyDays = Number(selected.fixedBookingGenerationFrequencyDays);
+        if (!Number.isFinite(daysAhead) || daysAhead <= 0) {
+            throw new Error('Configuración de club inválida: fixedBookingDaysAhead debe ser > 0');
+        }
+        if (!Number.isFinite(generationFrequencyDays) || generationFrequencyDays <= 0) {
+            throw new Error('Configuración de club inválida: fixedBookingGenerationFrequencyDays debe ser > 0');
+        }
 
         return {
-            fixedBookingDaysAhead: Number.isFinite(daysAhead) && daysAhead > 0 ? Math.floor(daysAhead) : fallback.fixedBookingDaysAhead,
-            fixedBookingGenerationFrequencyDays: Number.isFinite(generationFrequencyDays) && generationFrequencyDays > 0 ? Math.floor(generationFrequencyDays) : fallback.fixedBookingGenerationFrequencyDays
+            fixedBookingDaysAhead: Math.floor(daysAhead),
+            fixedBookingGenerationFrequencyDays: Math.floor(generationFrequencyDays)
         };
     }
 
@@ -653,18 +710,15 @@ export class BookingService {
         const referenceDuration = this.resolvePriceReferenceDuration(activity, allowedDurations, effectiveDuration);
         let listPrice = this.calculateDurationAdjustedPrice(Number(basePrice), effectiveDuration, referenceDuration);
         if (clubConfig && clubConfig.lightsEnabled && clubConfig.lightsExtraAmount && clubConfig.lightsFromHour) {
-            try {
-                const [lh, lm] = String(clubConfig.lightsFromHour).split(':').map((n: string) => parseInt(n, 10));
-                if (!Number.isNaN(lh) && !Number.isNaN(lm)) {
-                    const localStart = TimeHelper.utcToLocal(input.startDateTime, clubTimeZone);
-                    const bookingTotalMinutes = localStart.getHours() * 60 + localStart.getMinutes();
-                    const lightsTotalMinutes = lh * 60 + lm;
-                    if (bookingTotalMinutes >= lightsTotalMinutes) {
-                        listPrice += Number(clubConfig.lightsExtraAmount);
-                    }
-                }
-            } catch {
-                // noop: ante error de parseo devolvemos precio base sin extra.
+            const [lh, lm] = String(clubConfig.lightsFromHour).split(':').map((n: string) => parseInt(n, 10));
+            if (Number.isNaN(lh) || Number.isNaN(lm)) {
+                throw new Error('Configuración de club inválida: lightsFromHour debe tener formato HH:MM');
+            }
+            const localStart = TimeHelper.utcToLocal(input.startDateTime, clubTimeZone);
+            const bookingTotalMinutes = localStart.getHours() * 60 + localStart.getMinutes();
+            const lightsTotalMinutes = lh * 60 + lm;
+            if (bookingTotalMinutes >= lightsTotalMinutes) {
+                listPrice += Number(clubConfig.lightsExtraAmount);
             }
         }
 
@@ -1190,6 +1244,47 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             autoCancelStatusLabel = 'Se cancelara automaticamente al llegar la hora';
         }
 
+        let lightsEnabled = false;
+        let lightsApplies = false;
+        let lightsFromHour: string | null = null;
+        let lightsExtraAmount = 0;
+        let courtBaseAmount = Number(courtTotal || 0);
+
+        const clubWithSettings = await prisma.club.findUnique({
+            where: { id: summary.booking.clubId },
+            include: { settings: true }
+        });
+        const settings = clubWithSettings?.settings;
+        if (settings) {
+            lightsEnabled = Boolean(settings.lightsEnabled);
+            lightsFromHour = settings.lightsFromHour ? String(settings.lightsFromHour) : null;
+            const configuredLightsExtra = settings.lightsExtraAmount == null ? null : Number(settings.lightsExtraAmount);
+            const clubTimeZone = String(settings.timeZone || 'America/Argentina/Buenos_Aires');
+            const localStart = TimeHelper.utcToLocal(summary.booking.startDateTime, clubTimeZone);
+
+            if (
+                lightsEnabled &&
+                Number.isFinite(Number(configuredLightsExtra)) &&
+                Number(configuredLightsExtra) > 0 &&
+                lightsFromHour &&
+                /^\d{2}:\d{2}$/.test(lightsFromHour)
+            ) {
+                const [lh, lm] = lightsFromHour.split(':').map((n) => Number.parseInt(n, 10));
+                if (!Number.isNaN(lh) && !Number.isNaN(lm)) {
+                    const bookingTotalMinutes = localStart.getHours() * 60 + localStart.getMinutes();
+                    const lightsTotalMinutes = lh * 60 + lm;
+                    if (bookingTotalMinutes >= lightsTotalMinutes) {
+                        lightsApplies = true;
+                        lightsExtraAmount = Number(Number(configuredLightsExtra).toFixed(2));
+                    }
+                }
+            }
+        }
+
+        if (lightsExtraAmount > 0.009) {
+            courtBaseAmount = Number(Math.max(0, Number(courtTotal || 0) - lightsExtraAmount).toFixed(2));
+        }
+
         return {
             courtTotal,
             itemsTotal,
@@ -1215,6 +1310,13 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 eligibleNow: autoCancelEligibleNow,
                 autoCancelAt: autoCancelAt ? autoCancelAt.toISOString() : null,
                 label: autoCancelStatusLabel
+            },
+            pricingBreakdown: {
+                courtBaseAmount,
+                lightsExtraAmount,
+                lightsEnabled,
+                lightsApplies,
+                lightsFromHour
             }
         };
     }

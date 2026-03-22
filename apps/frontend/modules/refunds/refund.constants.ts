@@ -40,7 +40,10 @@ export function formatRefundReasonType(reasonType?: string | null): string {
   return found?.label || reasonType;
 }
 
-export function formatRefundExecutionMethod(method?: string | null): string {
+export function formatRefundExecutionMethod(method?: string | null, paymentChannel?: string | null): string {
   if (!method) return '-';
+  if (method === 'TRANSFER' && paymentChannel === 'VIRTUAL_WALLET') {
+    return 'Billetera virtual';
+  }
   return REFUND_EXECUTION_METHOD_LABELS[method as keyof typeof REFUND_EXECUTION_METHOD_LABELS] || method;
 }

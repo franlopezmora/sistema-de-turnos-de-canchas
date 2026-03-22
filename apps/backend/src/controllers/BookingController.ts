@@ -78,7 +78,10 @@ export class BookingController {
                 // Need club timezone: fetch court->club to get timeZone
                 try {
                     const court = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: { include: { settings: true } } } });
-                    const tz = court?.club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
+                    const tz = String(court?.club?.settings?.timeZone || '').trim();
+                    if (!tz) {
+                        return res.status(400).json({ error: 'Configuración de club inválida: timeZone es obligatorio' });
+                    }
                     startDate = TimeHelper.localSlotToUtc(dateStr, slotTime, tz);
                 } catch (e) {
                     return res.status(400).json({ error: 'Combinación fecha/horario inválida o zona horaria del club faltante' });
@@ -141,7 +144,10 @@ export class BookingController {
             );
 
             const courtWithClub = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: { include: { settings: true } } } });
-            const clubTimeZone = courtWithClub?.club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
+            const clubTimeZone = String(courtWithClub?.club?.settings?.timeZone || '').trim();
+            if (!clubTimeZone) {
+                return res.status(400).json({ error: 'Configuración de club inválida: timeZone es obligatorio' });
+            }
 
             // Retornamos la respuesta al cliente
             const localForRefresh = TimeHelper.utcToLocal(startDate, clubTimeZone);
@@ -220,7 +226,10 @@ export class BookingController {
             let resolvedStart: Date;
             if (dateStr && slotTime) {
                 const court = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: { include: { settings: true } } } });
-                const tz = court?.club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
+                const tz = String(court?.club?.settings?.timeZone || '').trim();
+                if (!tz) {
+                    return res.status(400).json({ error: 'Configuración de club inválida: timeZone es obligatorio' });
+                }
                 resolvedStart = TimeHelper.localSlotToUtc(dateStr, slotTime, tz);
             } else if (startDateTime) {
                 resolvedStart = new Date(String(startDateTime));
@@ -378,9 +387,15 @@ export class BookingController {
             if (!user?.userId) {
                 return res.status(401).json({ error: 'No autorizado' });
             }
+            let preferredClubId: number | undefined;
+            try {
+                preferredClubId = getPreferredClubIdFromRequest(req);
+            } catch (error: any) {
+                return res.status(400).json({ error: error?.message || 'Contexto de club inválido' });
+            }
             let clubContext: { clubId: number } | null = null;
             try {
-                clubContext = await getUserClubContext(Number(user.userId), getPreferredClubIdFromRequest(req));
+                clubContext = await getUserClubContext(Number(user.userId), preferredClubId);
             } catch {
                 clubContext = null;
             }
@@ -755,7 +770,10 @@ export class BookingController {
         const { startDate, endDate } = req.query;
 
         const club = await prisma.club.findUnique({ where: { id: clubId }, include: { settings: true } });
-        const timeZone = club?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires';
+        const timeZone = String(club?.settings?.timeZone || '').trim();
+        if (!timeZone) {
+            return res.status(400).json({ error: 'Configuración de club inválida: timeZone es obligatorio' });
+        }
 
         const parseLocalDate = (value: string) => {
             const [y, m, d] = String(value).split('-').map(Number);

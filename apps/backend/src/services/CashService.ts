@@ -47,12 +47,6 @@ export class CashService {
         return Number((Number(value || 0)).toFixed(2));
     }
 
-    private mapPaymentMethodToMovementMethod(method?: PaymentMethod | null): 'CASH' | 'TRANSFER' | 'CARD' {
-        if (method === 'CASH') return 'CASH';
-        if (method === 'CARD') return 'CARD';
-        return 'TRANSFER';
-    }
-
     private async resolveClubId(clubId?: number, userId?: number, preferredClubId?: number) {
         if (clubId && Number.isInteger(clubId) && clubId > 0) {
             return clubId;
@@ -72,9 +66,14 @@ export class CashService {
 
     async getSummaryByDate(clubId: number | undefined, dateStr: string, userId?: number, preferredClubId?: number) {
         const resolvedClubId = await this.resolveClubId(clubId, userId, preferredClubId);
-        const timeZone = resolvedClubId
-            ? ((await prisma.club.findUnique({ where: { id: resolvedClubId }, include: { settings: true } }))?.settings?.timeZone ?? 'America/Argentina/Buenos_Aires')
-            : 'America/Argentina/Buenos_Aires';
+        if (!resolvedClubId) {
+            throw new Error('Club inválido para resumen de caja');
+        }
+        const club = await prisma.club.findUnique({ where: { id: resolvedClubId }, include: { settings: true } });
+        const timeZone = String(club?.settings?.timeZone || '').trim();
+        if (!timeZone) {
+            throw new Error('Configuración de club inválida: timeZone es obligatorio para caja');
+        }
 
         const [y, m, d] = String(dateStr).split('-').map((part) => Number(part));
         const localDate = Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)
@@ -85,57 +84,7 @@ export class CashService {
 
         const movementsRaw = await this.cashRepository.findAllByDateRange(start, end, resolvedClubId);
 
-        // Devoluciones ejecutadas que no generan CashMovement (ej: transferencia/tarjeta)
-        // también deben aparecer en "movimientos".
-        const standaloneExecutedRefunds = await prisma.refund.findMany({
-            where: {
-                status: 'EXECUTED',
-                executedAt: {
-                    gte: start,
-                    lte: end
-                },
-                cashMovement: { is: null },
-                ...(resolvedClubId ? { clubId: resolvedClubId } : {})
-            },
-            include: {
-                account: {
-                    select: {
-                        id: true,
-                        sourceType: true,
-                        sourceId: true
-                    }
-                },
-                payment: {
-                    select: {
-                        id: true,
-                        method: true,
-                        channel: true
-                    }
-                }
-            },
-            orderBy: { executedAt: 'desc' }
-        });
-
-        const syntheticRefundMovements = standaloneExecutedRefunds.map((refund, index) => ({
-            id: -1 * (Number(new Date(refund.executedAt || refund.createdAt).getTime()) + index + 1),
-            createdAt: refund.executedAt || refund.createdAt,
-            type: 'REFUND',
-            method: this.mapPaymentMethodToMovementMethod(refund.payment?.method),
-            amount: refund.amount,
-            concept: `Devolucion pago ${String(refund.payment?.id || '')}`.trim(),
-            clubId: refund.clubId,
-            refundId: refund.id,
-            paymentId: refund.payment?.id || null,
-            payment: refund.payment ? { id: refund.payment.id, channel: refund.payment.channel } : null,
-            refund: {
-                id: refund.id,
-                paymentId: refund.payment?.id || null,
-                payment: refund.payment ? { id: refund.payment.id, channel: refund.payment.channel } : null,
-                account: refund.account
-            }
-        }));
-
-        const allMovementsRaw = [...(movementsRaw || []), ...syntheticRefundMovements].sort((a: any, b: any) => {
+        const allMovementsRaw = [...(movementsRaw || [])].sort((a: any, b: any) => {
             const ta = new Date(a?.createdAt || 0).getTime();
             const tb = new Date(b?.createdAt || 0).getTime();
             return tb - ta;
@@ -154,9 +103,10 @@ export class CashService {
                 });
             } catch (error: any) {
                 const message = String(error?.message || '');
-                if (!message.includes('PaymentAllocation') && !message.includes('42P01')) {
-                    throw error;
+                if (message.includes('PaymentAllocation') || message.includes('42P01')) {
+                    throw new Error('Inconsistencia de esquema: PaymentAllocation es obligatorio para el resumen de caja.');
                 }
+                throw error;
             }
         }
 
@@ -167,6 +117,16 @@ export class CashService {
             const amount = Number(allocation.amount || 0);
             if (!allocationMap.has(paymentId)) allocationMap.set(paymentId, []);
             allocationMap.get(paymentId)!.push({ type, amount });
+        }
+
+        for (const movement of allMovementsRaw || []) {
+            if (movement?.type !== 'PAYMENT_IN') continue;
+            const paymentId = movement?.paymentId ?? movement?.payment?.id ?? null;
+            if (!paymentId) continue;
+            const perPaymentAllocations = allocationMap.get(paymentId) || [];
+            if (perPaymentAllocations.length === 0) {
+                throw new Error(`Inconsistencia financiera: el pago ${paymentId} no tiene PaymentAllocation.`);
+            }
         }
 
         const bookingIds = (allMovementsRaw || [])
@@ -216,10 +176,6 @@ export class CashService {
                     if (item.type === 'BOOKING') bookingAmount += item.amount;
                     else barAmount += item.amount;
                 }
-            } else if (movement?.type === 'PAYMENT_IN') {
-                const amount = Number(movement?.amount || 0);
-                if (sourceType === 'BOOKING') bookingAmount = amount;
-                else if (sourceType === 'BAR') barAmount = amount;
             }
 
             return {

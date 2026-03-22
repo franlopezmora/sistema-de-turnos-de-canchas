@@ -6,6 +6,7 @@ const apiBase = () => `${getApiUrl()}/api`;
 export type RefundStatus = 'REQUESTED' | 'APPROVED' | 'READY_TO_EXECUTE' | 'EXECUTED' | 'FAILED' | 'CANCELLED';
 export type RefundExecutionMethod = 'CASH' | 'TRANSFER' | 'CARD_REVERSAL' | 'CREDIT_NOTE' | 'OTHER';
 export type RefundReasonType = 'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_FAILURE' | 'PARTIAL_PRICING_ERROR' | 'OTHER';
+export type PaymentChannel = 'AUTO' | 'CASH_DRAWER' | 'BANK_ACCOUNT' | 'CARD_TERMINAL' | 'VIRTUAL_WALLET' | 'OTHER';
 
 export type RefundRecord = {
   id: string;
@@ -32,6 +33,7 @@ export type RefundRecord = {
   executionNotes: string | null;
   failedAt: string | null;
   failedReason: string | null;
+  paymentChannel?: PaymentChannel | null;
 };
 
 async function parseError(res: Response, fallback: string) {

@@ -225,7 +225,7 @@ export class RefundService {
     });
 
     if (!openShift) {
-      throw new Error('No hay turno de caja abierto para ejecutar la devolucion en efectivo');
+      throw new Error('No hay turno de caja abierto para registrar la devolucion');
     }
     return openShift.id;
   }
@@ -279,13 +279,10 @@ export class RefundService {
       throw new Error('El metodo de ejecucion no coincide con el metodo de pago original');
     }
 
-    let resolvedCashShiftId: string | null = null;
-    if (executionMethod === 'CASH') {
-      resolvedCashShiftId = await this.resolveOpenCashShiftTx(tx, {
-        clubId: refund.clubId,
-        cashShiftId: input.cashShiftId ?? refund.cashShiftId ?? undefined
-      });
-    }
+    const resolvedCashShiftId = await this.resolveOpenCashShiftTx(tx, {
+      clubId: refund.clubId,
+      cashShiftId: input.cashShiftId ?? refund.cashShiftId ?? undefined
+    });
 
     await this.accountingService.createRefundTransaction(tx, {
       clubId: refund.clubId,
@@ -306,27 +303,25 @@ export class RefundService {
       reopenIfRemaining: false
     });
 
-    if (resolvedCashShiftId) {
-      await tx.cashMovement.create({
-        data: {
-          type: 'REFUND',
-          amount: new Prisma.Decimal(refund.amount),
-          method: this.mapPaymentMethodToCashMovement(refund.payment.method),
-          concept: `Refund pago ${refund.payment.id}`,
-          clubId: refund.clubId,
-          refundId: refund.id,
-          cashShiftId: resolvedCashShiftId,
-          createdByUserId: input.executedByUserId ?? refund.createdByUserId ?? null
-        }
-      });
-    }
+    await tx.cashMovement.create({
+      data: {
+        type: 'REFUND',
+        amount: new Prisma.Decimal(refund.amount),
+        method: this.mapPaymentMethodToCashMovement(refund.payment.method),
+        concept: `Refund pago ${refund.payment.id}`,
+        clubId: refund.clubId,
+        refundId: refund.id,
+        cashShiftId: resolvedCashShiftId,
+        createdByUserId: input.executedByUserId ?? refund.createdByUserId ?? null
+      }
+    });
 
     const executedAt = new Date();
     await tx.refund.update({
       where: { id: refund.id },
       data: {
         status: 'EXECUTED',
-        cashShiftId: resolvedCashShiftId ?? refund.cashShiftId,
+        cashShiftId: resolvedCashShiftId,
         executedAt,
         executedByUserId: input.executedByUserId ?? refund.executedByUserId ?? refund.createdByUserId ?? null,
         executionReference: input.executionReference ?? refund.executionReference,
@@ -352,10 +347,8 @@ export class RefundService {
     });
 
     await this.projectionService.refreshAccountSummary(refund.accountId, tx);
-    if (resolvedCashShiftId) {
-      await this.projectionService.refreshCashShiftSummary(resolvedCashShiftId, tx);
-      await this.projectionService.refreshDailyCashSummary(refund.clubId, executedAt, tx);
-    }
+    await this.projectionService.refreshCashShiftSummary(resolvedCashShiftId, tx);
+    await this.projectionService.refreshDailyCashSummary(refund.clubId, executedAt, tx);
 
     return tx.refund.findUnique({
       where: { id: refund.id },

@@ -141,6 +141,10 @@ export const registerPayment = async (body: {
   cashShiftId?: string;
   allocations?: Array<{ accountItemId: string; amount: number }>;
 }) => {
+  if (body.method === 'TRANSFER' && body.channel !== 'BANK_ACCOUNT' && body.channel !== 'VIRTUAL_WALLET') {
+    throw new Error('El canal es obligatorio para pagos por transferencia');
+  }
+
   const idempotencyKey = getPaymentIdempotencyKey({
     accountId: body.accountId,
     amount: body.amount,
