@@ -6,6 +6,12 @@ import { ClientDebtService } from '../services/ClientDebtService';
 
 const router = Router();
 const clientDebtService = new ClientDebtService();
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && String(error.message || '').trim().length > 0
+    ? error.message
+    : fallback;
+const isIntegrityInconsistencyError = (error: unknown) =>
+  getErrorMessage(error, '').includes('Inconsistencia de integridad');
 
 // GET /api/clients/:slug — solo el admin de ese club puede ver la lista
 router.get('/:slug', authMiddleware, verifyClubAccess, requireRole('ADMIN'), async (req, res) => {
@@ -23,7 +29,10 @@ router.get('/:slug', authMiddleware, verifyClubAccess, requireRole('ADMIN'), asy
 
   } catch (error) {
     console.error('Error getting clients:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+    if (isIntegrityInconsistencyError(error)) {
+      return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en clientes/deuda') });
+    }
+    res.status(500).json({ error: getErrorMessage(error, 'Error interno del servidor') });
   }
 });
 

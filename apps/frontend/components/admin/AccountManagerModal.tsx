@@ -5,6 +5,7 @@ import ClubProductSearch, { type ClubProductSearchItem } from '../ui/ClubProduct
 import ClubServiceSearch, { type ClubServiceSearchItem } from '../ui/ClubServiceSearch';
 import type { PaymentChannel, PaymentSource } from '../../services/AccountService';
 import { formatAccountCode, formatPaymentCode } from '../../utils/displayCode';
+import { lockBodyScroll } from '../../utils/bodyScrollLock';
 
 type NewItemForm = {
   description: string;
@@ -101,11 +102,10 @@ export default function AccountManagerModal({
       }
     };
     document.addEventListener('keydown', onKeyDown);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseBodyScrollLock = lockBodyScroll();
     return () => {
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      releaseBodyScrollLock();
     };
   }, [show, onClose]);
 
@@ -177,7 +177,7 @@ export default function AccountManagerModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[100000] bg-black/60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[2147483000] bg-black/60 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div

@@ -8,6 +8,14 @@ import { getUserClubContext } from '../utils/getUserClubContext';
 import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 import { sanitizeString } from '../utils/sanitize';
 
+const getErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error && String(error.message || '').trim().length > 0
+        ? error.message
+        : fallback;
+
+const isIntegrityInconsistencyError = (error: unknown) =>
+    getErrorMessage(error, '').includes('Inconsistencia de integridad');
+
 export class BookingController {
     private productService = new ProductService();
 
@@ -331,6 +339,9 @@ export class BookingController {
             if (error.message === "No tienes acceso a esta reserva") {
                 return res.status(403).json({ error: error.message });
             }
+            if (isIntegrityInconsistencyError(error)) {
+                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en reserva') });
+            }
             res.status(400).json({ error: error.message });
         }
     }
@@ -369,6 +380,9 @@ export class BookingController {
             const booking = await this.bookingService.completeBooking(bookingId, actorUserId, clubId);
             return res.json({ message: 'Reserva completada', booking });
         } catch (error: any) {
+            if (isIntegrityInconsistencyError(error)) {
+                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en reserva') });
+            }
             return res.status(400).json({ error: error.message || 'No se pudo completar la reserva' });
         }
     }
@@ -548,7 +562,10 @@ export class BookingController {
             res.json(bookings);
         } catch (error: any) {
             console.error('Error en getAdminSchedule:', error);
-            res.status(500).json({ error: error.message });
+            if (isIntegrityInconsistencyError(error)) {
+                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en agenda') });
+            }
+            res.status(500).json({ error: getErrorMessage(error, 'Error interno al cargar agenda') });
         }
     }
     
@@ -649,7 +666,10 @@ export class BookingController {
             res.json(items);
         } catch (error) {
             console.error(error);
-            res.status(500).json({ error: 'Error al obtener los consumos' });
+            if (isIntegrityInconsistencyError(error)) {
+                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en consumos') });
+            }
+            res.status(500).json({ error: getErrorMessage(error, 'Error al obtener los consumos') });
         }
     }
 

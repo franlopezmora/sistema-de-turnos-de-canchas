@@ -221,9 +221,9 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       setActionError(null);
       setSelectedProduct(null);
       setProductSearchKey((prev) => prev + 1);
-    } catch (error) {
+    } catch (error: any) {
       reportUiError({ area: 'BookingManagerModal', action: 'loadData' }, error);
-      setActionError('No se pudo cargar la información del turno.');
+      setActionError(error?.message || 'No se pudo cargar la información del turno.');
     } finally {
       setLoading(false);
     }
@@ -345,6 +345,9 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
     : Math.max(0, Number(courtTotal || 0));
   const courtPaidNow = Math.max(0, Number((courtTotal - remainingCourt).toFixed(2)));
   const grandTotalToRegister = remainingCourt + registeredItemsPendingTotal + draftTotal;
+  const confirmationMode = summary?.confirmationMode || 'MANUAL';
+  const isPendingManualWithoutPayment = bookingStatus === 'PENDING' && confirmationMode === 'MANUAL';
+  const canRegisterPayment = !isPendingManualWithoutPayment && !isCancelled && grandTotalToRegister > 0.009;
   const bookingDiscountTotal = Number(
     (bookingChargeDiscounts || []).reduce((sum, discount) => sum + Number(discount?.discountAmount || 0), 0).toFixed(2)
   );
@@ -1078,11 +1081,16 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
               <button
                 type="button"
                 onClick={() => setShowPaymentCalculator(true)}
-                disabled={saving || isCancelled || grandTotalToRegister <= 0.009}
+                disabled={saving || !canRegisterPayment}
                 className="w-full flex items-center justify-center gap-2 bg-[#347048] hover:bg-[#B9CF32] text-white hover:text-[#347048] py-4 rounded-2xl font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Banknote size={18} strokeWidth={2.5} /> Registrar pago
               </button>
+              {isPendingManualWithoutPayment ? (
+                <p className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                  En modo MANUAL no se puede cobrar una reserva pendiente. Primero debe confirmarse.
+                </p>
+              ) : null}
 
               <button
                 type="button"
@@ -1145,6 +1153,7 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
           onClose={() => setShowPaymentCalculator(false)}
           onConfirm={handlePaymentConfirm}
           submitting={saving}
+          zIndexClass="z-[2147483300]"
         />
       )}
     </div>

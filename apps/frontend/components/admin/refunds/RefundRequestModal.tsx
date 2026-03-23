@@ -14,6 +14,7 @@ type RefundRequestModalProps = {
   submitting?: boolean;
   closeLabel?: string;
   submitLabel?: string;
+  zIndexClass?: string;
   onClose: () => void;
   onSubmit: () => void;
   onChangeDraft: (next: RefundDraft) => void;
@@ -28,6 +29,7 @@ export default function RefundRequestModal({
   submitting = false,
   closeLabel = 'Cancelar',
   submitLabel = 'Confirmar devolucion',
+  zIndexClass = 'z-[2147483400]',
   onClose,
   onSubmit,
   onChangeDraft
@@ -41,7 +43,7 @@ export default function RefundRequestModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100200] bg-black/60 flex items-center justify-center p-4"
+      className={`fixed inset-0 ${zIndexClass} bg-black/60 flex items-center justify-center p-4`}
       onClick={onClose}
     >
       <div

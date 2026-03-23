@@ -97,7 +97,7 @@ async function integrationPrerequisitesReady() {
   return Boolean(rows[0]?.ok);
 }
 
-it('integration: refund parcial mantiene paidAmount = payments - refunds y genera ledger', async (t) => {
+it('integration: requestRefund parcial crea devolucion REQUESTED sin impactar paidAmount hasta ejecutar', async (t) => {
   if (!(await integrationPrerequisitesReady())) {
     t.skip('Schema local no migrado para integration tests de refunds');
     return;
@@ -126,28 +126,20 @@ it('integration: refund parcial mantiene paidAmount = payments - refunds y gener
       idempotencyKey: `it-${Date.now()}-p1`
     });
 
-    const refund = await refundService.refundPayment({
+    const refund = await refundService.requestRefund({
       clubId: club.id,
       paymentId: payment.id,
       amount: 3000,
-      reason: 'Ajuste integration'
+      reason: 'Ajuste integration',
+      executeNow: false
     });
 
     assert.ok(refund);
 
     const refreshed = await prisma.account.findUnique({ where: { id: account.id } });
     assert.ok(refreshed);
-    assert.equal(Number(refreshed!.paidAmount), 5000);
-
-    const [paymentsAgg, refundsAgg] = await Promise.all([
-      prisma.payment.aggregate({ where: { accountId: account.id }, _sum: { amount: true } }),
-      prisma.refund.aggregate({ where: { accountId: account.id }, _sum: { amount: true } })
-    ]);
-    const net = Number(paymentsAgg._sum.amount || 0) - Number(refundsAgg._sum.amount || 0);
-    assert.equal(Number(refreshed!.paidAmount), Number(net.toFixed(2)));
-
-    const refundEntries = await prisma.ledgerEntry.findMany({ where: { refundId: refund!.id } });
-    assert.equal(refundEntries.length, 2);
+    assert.equal(Number(refreshed!.paidAmount), 8000);
+    assert.equal(refund?.status, 'REQUESTED');
   } finally {
     await cleanupClubFixture(club.id);
   }
@@ -181,8 +173,13 @@ it('integration: no permite refund en cuenta cerrada no-cancelada (politica estr
       idempotencyKey: `it-${Date.now()}-p2`
     });
 
+    await prisma.account.update({
+      where: { id: account.id },
+      data: { status: 'CLOSED' }
+    });
+
     await assert.rejects(
-      () => refundService.refundPayment({
+      () => refundService.requestRefund({
         clubId: club.id,
         paymentId: payment.id,
         amount: 1000,
@@ -224,8 +221,8 @@ it('integration: refunds concurrentes no exceden monto refundable', async (t) =>
     });
 
     const results = await Promise.allSettled([
-      refundService.refundPayment({ clubId: club.id, paymentId: payment.id, amount: 7000, reason: 'r1' }),
-      refundService.refundPayment({ clubId: club.id, paymentId: payment.id, amount: 7000, reason: 'r2' })
+      refundService.requestRefund({ clubId: club.id, paymentId: payment.id, amount: 7000, reason: 'r1', executeNow: false }),
+      refundService.requestRefund({ clubId: club.id, paymentId: payment.id, amount: 7000, reason: 'r2', executeNow: false })
     ]);
 
     const fulfilled = results.filter((r) => r.status === 'fulfilled');

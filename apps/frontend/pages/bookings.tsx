@@ -545,7 +545,7 @@ export default function MyBookingsPage() {
 
       {reviewModalOpen && (
         <div
-          className="fixed inset-0 z-[120] bg-[#347048]/60 p-4 flex items-center justify-center"
+          className="fixed inset-0 z-[2147483300] bg-[#347048]/60 p-4 flex items-center justify-center"
           onMouseDown={(event) => {
             reviewBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}

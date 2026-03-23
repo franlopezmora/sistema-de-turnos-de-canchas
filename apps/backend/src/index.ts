@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import { BookingStatus } from '@prisma/client';
 import { createApp } from './app';
 import { prisma } from './prisma';
 import { metricsService } from './services/MetricsService';
@@ -7,6 +6,13 @@ import { OutboxWorker } from './services/OutboxWorker';
 import { acquireDistributedLock } from './utils/distributedLock';
 import { featureFlags } from './config/featureFlags';
 import { PendingBookingAutoCancelService } from './services/PendingBookingAutoCancelService';
+import { BookingService } from './services/BookingService';
+import { BookingRepository } from './repositories/BookingRepository';
+import { CourtRepository } from './repositories/CourtRepository';
+import { UserRepository } from './repositories/UserRepository';
+import { ActivityTypeRepository } from './repositories/ActivityTypeRepository';
+import { CashRepository } from './repositories/CashRepository';
+import { ProductRepository } from './repositories/ProductRepository';
 
 const PORT = Number(process.env.PORT) || 3000;
 const BOOKINGS_COMPLETION_INTERVAL_MS = Number(process.env.BOOKINGS_COMPLETION_INTERVAL_MS) || 60_000;
@@ -38,6 +44,15 @@ const shouldRunScheduler = () => {
   return PROCESS_ROLE === 'all' || PROCESS_ROLE === 'scheduler';
 };
 
+const bookingService = new BookingService(
+  new BookingRepository(),
+  new CourtRepository(),
+  new UserRepository(),
+  new ActivityTypeRepository(),
+  new CashRepository(),
+  new ProductRepository()
+);
+
 const completePastBookings = async () => {
   const lock = await acquireDistributedLock(
     'scheduler:complete-past-bookings',
@@ -51,25 +66,16 @@ const completePastBookings = async () => {
 
   try {
     const now = new Date();
+    const result = await bookingService.completeExpiredConfirmedBookings(now, 0);
 
-    const candidates = await prisma.booking.findMany({
-      where: {
-        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
-        startDateTime: { lt: now }
-      },
-      select: { id: true, endDateTime: true }
-    });
-
-    const toComplete = candidates
-      .filter((booking) => booking.endDateTime.getTime() <= now.getTime())
-      .map((booking) => booking.id);
-
-    if (toComplete.length > 0) {
-      await prisma.booking.updateMany({
-        where: { id: { in: toComplete } },
-        data: { status: BookingStatus.COMPLETED }
+    if (result.failed.length > 0) {
+      console.error('[BOOKING_SCHEDULER] Se detectaron reservas inconsistentes/no completables', {
+        failed: result.failed
       });
+      metricsService.recordSchedulerRun('complete_past_bookings', 'error');
+      return;
     }
+
     metricsService.recordSchedulerRun('complete_past_bookings', 'success');
   } catch (error) {
     console.error('❌ Error completando turnos:', error);

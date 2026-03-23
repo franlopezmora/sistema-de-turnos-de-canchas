@@ -772,7 +772,7 @@ export default function AdminAccountsPage() {
           }}
           onConfirm={handleCalculatorPaymentConfirm}
           submitting={submittingCalculator}
-          zIndexClass="z-[100005]"
+          zIndexClass="z-[2147483300]"
         />
       )}
 
@@ -791,7 +791,7 @@ export default function AdminAccountsPage() {
 
       <AppModal
         show={showClosedAccountModal}
-        zIndexClass="z-[100010]"
+        zIndexClass="z-[2147483500]"
         title="Detalle de cuenta cerrada"
         message={
           loadingClosedAccountDetail ? (
@@ -865,7 +865,7 @@ export default function AdminAccountsPage() {
 
       <AppModal
         show={showCloseAccountConfirm}
-        zIndexClass="z-[100010]"
+        zIndexClass="z-[2147483500]"
         title="Cerrar cuenta"
         message="Vas a cerrar la cuenta seleccionada. No vas a poder agregar consumos ni pagos después."
         confirmText={closingAccount ? 'Cerrando...' : 'Sí, cerrar cuenta'}
@@ -913,7 +913,7 @@ export default function AdminAccountsPage() {
 
       <AppModal
         show={closeBlockedModal.show}
-        zIndexClass="z-[100010]"
+        zIndexClass="z-[2147483500]"
         title="No se pudo cerrar la cuenta"
         message={closeBlockedModal.message}
         isWarning

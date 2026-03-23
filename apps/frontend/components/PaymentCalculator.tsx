@@ -48,7 +48,7 @@ export default function PaymentCalculator({
   onClose,
   onConfirm,
   submitting = false,
-  zIndexClass = 'z-[9999]'
+  zIndexClass = 'z-[2147483300]'
 }: PaymentCalculatorProps) {
   const formatItemLabel = (item: PaymentCalculatorItem) => {
     const rawName = String(item.productName || '').trim();

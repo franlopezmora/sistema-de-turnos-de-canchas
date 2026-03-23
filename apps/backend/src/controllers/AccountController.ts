@@ -275,7 +275,11 @@ export class AccountController {
 
       return res.status(201).json(mapPaymentDto(payment));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'No se pudo registrar el pago';
+      const knownError = error as Error & { code?: string };
+      const message = knownError?.message || 'No se pudo registrar el pago';
+      if (knownError?.code === 'BOOKING_PENDING_MANUAL_PAYMENT_FORBIDDEN') {
+        return res.status(409).json({ error: message, code: knownError.code });
+      }
       return res.status(400).json({ error: message });
     }
   };

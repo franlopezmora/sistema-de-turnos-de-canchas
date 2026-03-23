@@ -1565,6 +1565,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     dni: dniForClient
                 });
 
+                const initialStatus = resolveInitialBookingStatus(
+                    (clubConfig?.bookingConfirmationMode ?? 'MANUAL') as 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED'
+                );
+
                 saved = await tx.booking.create({
                     data: {
                         displayCode: generateDisplayCode('RES'),
@@ -1572,9 +1576,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         endDateTime,
                         listPrice: finalPrice,
                         price: finalPrice,
-                        status: resolveInitialBookingStatus(
-                            (clubConfig?.bookingConfirmationMode ?? 'MANUAL') as 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED'
-                        ),
+                        status: initialStatus,
                         userId: user ? user.id : null,
                         clientId: resolvedClient.id,
                         guestIdentifier: guestIdentifier,
@@ -1587,7 +1589,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
                 // Estrategia lazy: para turnos simples no abrimos cuenta al crear.
                 // Solo se crea al confirmar, agregar consumos o registrar pagos.
-                if (options?.skipAccountCreation === false) {
+                if (initialStatus === 'CONFIRMED' || options?.skipAccountCreation === false) {
                     await this.ensureBookingAccountWithChargeTx(tx, {
                         bookingId: saved.id,
                         clubId: bookingClubId,
@@ -1879,6 +1881,11 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 },
                 select: { id: true, totalAmount: true }
             });
+            if (currentBooking.status === 'CONFIRMED' && !account) {
+                throw new Error(
+                    `Inconsistencia de integridad: la reserva ${bookingId} está CONFIRMED pero no tiene Account BOOKING y no puede cancelarse`
+                );
+            }
             const totalAmount = account ? Number(account.totalAmount || 0) : 0;
             const paidAmount = account ? await this.accountService.calculateNetPaidAmountTx(tx, account.id) : 0;
 
@@ -2062,22 +2069,27 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
     async confirmBooking(bookingId: number, actorUserId: number, clubId: number) {
         const updatedStatus = await prisma.$transaction(async (tx) => {
-            const status = await this.bookingDomainService.confirmBookingManuallyTx(tx, { bookingId, clubId });
             const booking = await tx.booking.findFirst({
                 where: { id: bookingId, clubId },
-                select: { id: true, clubId: true, price: true, activityId: true, clientId: true }
+                select: { id: true, clubId: true, price: true, activityId: true, clientId: true, status: true }
             });
-            if (booking) {
-                await this.ensureBookingAccountWithChargeTx(tx, {
-                    bookingId: booking.id,
-                    clubId: booking.clubId,
-                    bookingPrice: Number(booking.price || 0),
-                    activityTypeId: booking.activityId,
-                    clientId: booking.clientId,
-                    actorUserId
-                });
+            if (!booking) {
+                throw new Error('Reserva no encontrada');
             }
-            return status;
+            if (!isBookingTransitionAllowed(booking.status as any, 'CONFIRMED')) {
+                throw new Error('Solo se puede confirmar una reserva pendiente');
+            }
+
+            await this.ensureBookingAccountWithChargeTx(tx, {
+                bookingId: booking.id,
+                clubId: booking.clubId,
+                bookingPrice: Number(booking.price || 0),
+                activityTypeId: booking.activityId,
+                clientId: booking.clientId,
+                actorUserId
+            });
+
+            return this.bookingDomainService.confirmBookingManuallyTx(tx, { bookingId, clubId });
         });
 
         await this.auditLogService.create({
@@ -2106,20 +2118,23 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 throw new Error('No se puede completar una reserva antes de su horario de finalización');
             }
 
-            const updatedBooking = await tx.booking.update({
-                where: { id: bookingId },
-                data: { status: 'COMPLETED' }
-            });
-
             const account = await tx.account.findFirst({
                 where: { sourceType: 'BOOKING', sourceId: String(bookingId), clubId },
                 select: { id: true }
             });
-            if (account) {
-                // Mantener la cuenta abierta tras finalizar la reserva permite
-                // seguir cargando consumos post-cancha (ej. bar) hasta cierre manual.
-                await this.projectionService.refreshAccountSummary(account.id, tx);
+            if (!account) {
+                throw new Error(
+                    `Inconsistencia de integridad: la reserva ${bookingId} no tiene Account BOOKING y no puede completarse`
+                );
             }
+
+            const updatedBooking = await tx.booking.update({
+                where: { id: bookingId },
+                data: { status: 'COMPLETED' }
+            });
+            // Mantener la cuenta abierta tras finalizar la reserva permite
+            // seguir cargando consumos post-cancha (ej. bar) hasta cierre manual.
+            await this.projectionService.refreshAccountSummary(account.id, tx);
 
             return updatedBooking;
         });
@@ -2134,6 +2149,44 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         });
 
         return this.getBookingById(bookingId, clubId);
+    }
+
+    async completeExpiredConfirmedBookings(now: Date = new Date(), actorUserId: number = 0) {
+        const candidates = await prisma.booking.findMany({
+            where: {
+                status: 'CONFIRMED',
+                endDateTime: { lte: now }
+            },
+            select: { id: true, clubId: true }
+        });
+
+        let completed = 0;
+        const failed: Array<{ bookingId: number; clubId: number; error: string }> = [];
+
+        for (const candidate of candidates) {
+            try {
+                await this.completeBooking(candidate.id, actorUserId, candidate.clubId);
+                completed += 1;
+            } catch (error: any) {
+                const message = String(error?.message || 'Error desconocido al completar reserva');
+                failed.push({
+                    bookingId: candidate.id,
+                    clubId: candidate.clubId,
+                    error: message
+                });
+                console.error('[BOOKING_SCHEDULER] No se pudo completar reserva confirmada', {
+                    bookingId: candidate.id,
+                    clubId: candidate.clubId,
+                    error: message
+                });
+            }
+        }
+
+        return {
+            candidates: candidates.length,
+            completed,
+            failed
+        };
     }
     
     async getUserHistory(
@@ -2315,6 +2368,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const bookingWithContextById = new Map<number, any>();
         for (const booking of bookings) {
             const accountRef = accountByBookingId.get(booking.id);
+            const bookingStatus = String(booking.status || '').toUpperCase();
+            if (!accountRef && (bookingStatus === 'CONFIRMED' || bookingStatus === 'COMPLETED')) {
+                throw new Error(
+                    `Inconsistencia de integridad: la reserva ${booking.id} está ${bookingStatus} pero no tiene Account BOOKING`
+                );
+            }
             const paidAmount = accountRef
                 ? Math.max(0, Number((paymentByAccountId.get(accountRef.id) || 0) - (refundByAccountId.get(accountRef.id) || 0)))
                 : 0;
@@ -3081,7 +3140,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
     async getBookingItems(bookingId: number, clubId: number) {
         const booking = await prisma.booking.findFirst({
             where: { id: bookingId, clubId },
-            select: { id: true }
+            select: { id: true, status: true }
         });
         if (!booking) {
             throw new Error('Reserva no encontrada para el club indicado');
@@ -3103,7 +3162,15 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
         });
 
-        if (!account) return [];
+        if (!account) {
+            const status = String(booking.status || '').toUpperCase();
+            if (status === 'CONFIRMED' || status === 'COMPLETED') {
+                throw new Error(
+                    `Inconsistencia de integridad: la reserva ${bookingId} está ${status} pero no tiene Account BOOKING`
+                );
+            }
+            return [];
+        }
 
         const itemIds = account.items.map((item) => item.id);
         const paidByItem = new Map<string, number>();

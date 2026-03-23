@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
+import { lockBodyScroll } from '../utils/bodyScrollLock';
 
 type AppModalProps = {
   show: boolean;
@@ -47,7 +48,7 @@ export default function AppModal({
   confirmDisabled = false,
   closeOnBackdrop = true,
   closeOnEscape = true,
-  zIndexClass = 'z-[99999]'
+  zIndexClass = 'z-[2147483200]'
 }: AppModalProps) {
   const [mounted, setMounted] = useState(false);
   const [inputText, setInputText] = useState(inputValue);
@@ -77,11 +78,10 @@ export default function AppModal({
       }
     };
     document.addEventListener('keydown', onKeyDown);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseBodyScrollLock = lockBodyScroll();
     return () => {
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      releaseBodyScrollLock();
     };
   }, [show, onClose, closeOnEscape]);
 

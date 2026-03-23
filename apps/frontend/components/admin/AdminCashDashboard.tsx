@@ -2158,7 +2158,7 @@ const AdminCashDashboard = () => {
           onClose={() => setShowSalePaymentCalculator(false)}
           onConfirm={handleSalePaymentConfirm}
           submitting={false}
-          zIndexClass="z-[100001]"
+          zIndexClass="z-[2147483300]"
         />
       )}
 

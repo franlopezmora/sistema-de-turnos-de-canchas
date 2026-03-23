@@ -272,9 +272,9 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       const data = await ClientService.listDebtors(resolvedSlug, { scope: viewScope });
       setClients(data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
       reportUiError({ area: 'ClientsPage', action: 'loadClients' }, error);
-      showError('No se pudo cargar la lista de clientes.');
+      showError(error?.message || 'No se pudo cargar la lista de clientes.');
     }
     finally { setLoading(false); }
     return null;
@@ -468,7 +468,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   }, [accountBreakdownById, loadingAccountDetailById]);
 
   const handleOpenPayModal = async (target: { accountId: string }) => {
-    const selectedEntry = selectedDebtor?.bookings?.find((entry: any) => entry.id === target.accountId);
+    const selectedEntry = selectedDebtorPendingEntries.find((entry: any) => String(entry.id) === String(target.accountId));
 
     if (!selectedEntry || Number(selectedEntry.amount || 0) <= 0.01) {
       showInfo('Este registro ya no tiene deuda pendiente.', 'Sin deuda');
@@ -484,7 +484,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     if (!debtTarget) return;
     try {
       setSubmittingCalculator(true);
-      const bookingInfo = selectedDebtorPendingEntries.find((entry: any) => entry.id === debtTarget.accountId);
+      const bookingInfo = selectedDebtorPendingEntries.find((entry: any) => String(entry.id) === String(debtTarget.accountId));
 
       if (!bookingInfo || Number(bookingInfo.amount || 0) <= 0.01) {
         showInfo('Este registro ya no tiene deuda pendiente.', 'Sin deuda');
@@ -543,7 +543,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
     }
   };
 
-  const selectedDebtorPendingEntries = (selectedDebtor?.bookings || [])
+  const selectedDebtorPendingEntries = (selectedDebtor?.history || [])
     .slice()
     .sort(sortByCreationDesc)
     .filter((entry: any) => Number(entry.amount || 0) > 0.01);
@@ -788,7 +788,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       {/* MODAL DETALLE DE CLIENTE */}
       {mounted && selectedClientDetail && createPortal(
         <div
-          className="fixed inset-0 bg-[#347048]/60 flex items-center justify-center z-[100000] p-4 animate-in fade-in"
+          className="fixed inset-0 bg-[#347048]/60 flex items-center justify-center z-[2147483000] p-4 animate-in fade-in"
           onMouseDown={(event) => {
             clientDetailBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -945,7 +945,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       {/* MODAL DETALLE DE DEUDA */}
       {mounted && selectedDebtor && createPortal(
         <div
-          className="fixed inset-0 bg-[#347048]/60 flex items-center justify-center z-[100001] p-4 animate-in fade-in"
+          className="fixed inset-0 bg-[#347048]/60 flex items-center justify-center z-[2147483100] p-4 animate-in fade-in"
           onMouseDown={(event) => {
             debtBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -1069,14 +1069,14 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
           }}
           onConfirm={processDebtPayment}
           submitting={submittingCalculator}
-          zIndexClass="z-[100003]"
+          zIndexClass="z-[2147483300]"
         />
       )}
 
       {/* HISTORIAL COMPLETO */}
       {mounted && selectedClientHistory && createPortal(
         <div
-          className="fixed inset-0 bg-[#347048]/60 flex items-center justify-center z-[100002] p-4 animate-in fade-in"
+          className="fixed inset-0 bg-[#347048]/60 flex items-center justify-center z-[2147483200] p-4 animate-in fade-in"
           onMouseDown={(event) => {
             historyBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -1215,7 +1215,7 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
         onConfirm={() => setShowAccountDetailModal(false)}
         confirmText="Cerrar"
         cancelText=""
-        zIndexClass="z-[100004]"
+        zIndexClass="z-[2147483500]"
         message={selectedAccountDetail ? (
           <div className="space-y-4 text-sm text-[#347048] max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
             <div className="space-y-1">

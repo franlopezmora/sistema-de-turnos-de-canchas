@@ -70,6 +70,12 @@ export class PaymentService {
     return 'OTHER';
   }
 
+  private buildDomainError(message: string, code: string) {
+    const error = new Error(message) as Error & { code?: string };
+    error.code = code;
+    return error;
+  }
+
   private async getAllocatedByItemTx(
     tx: Prisma.TransactionClient,
     accountId: string,
@@ -287,6 +293,19 @@ export class PaymentService {
         });
         if (!booking) throw new Error('La reserva asociada a la cuenta no existe');
         if (booking.status === 'CANCELLED') throw new Error('No se pueden registrar pagos sobre una reserva cancelada');
+        if (booking.status === 'PENDING') {
+          const clubSettings = await tx.clubSettings.findUnique({
+            where: { clubId: account.clubId },
+            select: { bookingConfirmationMode: true }
+          });
+          const confirmationMode = String(clubSettings?.bookingConfirmationMode || 'MANUAL');
+          if (confirmationMode === 'MANUAL') {
+            throw this.buildDomainError(
+              'No se puede registrar un pago sobre una reserva pendiente en modo MANUAL. Primero debe confirmarse.',
+              'BOOKING_PENDING_MANUAL_PAYMENT_FORBIDDEN'
+            );
+          }
+        }
       }
 
       const accountTotal = Number(account.totalAmount || 0);

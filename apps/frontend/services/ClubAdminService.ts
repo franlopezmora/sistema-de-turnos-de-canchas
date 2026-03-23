@@ -567,7 +567,10 @@ export class ClubAdminService {
   static async getBookingItems(bookingId: number) {
     if (!getToken()) throw new Error('No autenticado');
     const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/items`);
-    if (!res.ok) throw new Error('Error al cargar consumos');
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || error.message || 'Error al cargar consumos');
+    }
     return res.json();
   }
 

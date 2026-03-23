@@ -105,7 +105,7 @@ export default function BookingConsumption(
       setItemsToDelete([]); 
     } catch (error) {
       reportUiError({ area: 'BookingConsumption', action: 'loadData' }, error);
-      showErrorModal('No se pudo cargar la información del turno.');
+      showErrorModal(extractErrorMessage(error, 'No se pudo cargar la información del turno.'));
     } finally {
       setLoading(false);
     }

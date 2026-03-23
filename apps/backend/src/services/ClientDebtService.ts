@@ -35,6 +35,36 @@ export class ClientDebtService {
       }
     });
 
+    const accountedBookingIds = new Set(
+      bookingAccounts
+        .map((account) => Number(account.sourceId))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+
+    const confirmedOrCompletedBookings = await prisma.booking.findMany({
+      where: {
+        clubId,
+        status: { in: ['CONFIRMED', 'COMPLETED'] }
+      },
+      select: {
+        id: true,
+        status: true
+      }
+    });
+
+    const inconsistentBookings = confirmedOrCompletedBookings.filter(
+      (booking) => !accountedBookingIds.has(Number(booking.id))
+    );
+    if (inconsistentBookings.length > 0) {
+      const preview = inconsistentBookings
+        .slice(0, 10)
+        .map((booking) => `${booking.id}:${booking.status}`)
+        .join(', ');
+      throw new Error(
+        `Inconsistencia de integridad: hay reservas CONFIRMED/COMPLETED sin Account BOOKING en club ${clubId}. Ejemplos: ${preview}`
+      );
+    }
+
     const bookingIds = bookingAccounts
       .map((account) => Number(account.sourceId))
       .filter((id) => Number.isInteger(id) && id > 0);

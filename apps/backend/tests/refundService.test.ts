@@ -194,7 +194,13 @@ test('refund total', async () => {
     refunds: []
   });
 
-  await service.refundPaymentTx(tx, { paymentId: 'p1', amount: 20000, clubId: 1, createdByUserId: 7 });
+  await (service as any).requestRefundTx(tx, {
+    paymentId: 'p1',
+    amount: 20000,
+    clubId: 1,
+    createdByUserId: 7,
+    executeNow: true
+  });
 
   assert.equal(state.paidAmount, 0);
   assert.equal(state.refunds.length, 1);
@@ -211,7 +217,12 @@ test('refund parcial', async () => {
     refunds: []
   });
 
-  await service.refundPaymentTx(tx, { paymentId: 'p1', amount: 5000, clubId: 1 });
+  await (service as any).requestRefundTx(tx, {
+    paymentId: 'p1',
+    amount: 5000,
+    clubId: 1,
+    executeNow: true
+  });
 
   assert.equal(state.paidAmount, 15000);
   assert.equal(state.refunds[0].amount, 5000);
@@ -226,8 +237,18 @@ test('multiples refunds parciales sin exceder', async () => {
     refunds: []
   });
 
-  await service.refundPaymentTx(tx, { paymentId: 'p1', amount: 5000, clubId: 1 });
-  await service.refundPaymentTx(tx, { paymentId: 'p1', amount: 7000, clubId: 1 });
+  await (service as any).requestRefundTx(tx, {
+    paymentId: 'p1',
+    amount: 5000,
+    clubId: 1,
+    executeNow: true
+  });
+  await (service as any).requestRefundTx(tx, {
+    paymentId: 'p1',
+    amount: 7000,
+    clubId: 1,
+    executeNow: true
+  });
 
   assert.equal(state.refunds.length, 2);
   assert.equal(state.refunds[0].amount + state.refunds[1].amount, 12000);
@@ -243,7 +264,13 @@ test('bloquea refund por exceso', async () => {
   });
 
   await assert.rejects(
-    () => service.refundPaymentTx(tx, { paymentId: 'p1', amount: 3000, clubId: 1 }),
+    () =>
+      (service as any).requestRefundTx(tx, {
+        paymentId: 'p1',
+        amount: 3000,
+        clubId: 1,
+        executeNow: true
+      }),
     /saldo refundable/
   );
 });
@@ -257,7 +284,12 @@ test('refund genera ledger', async () => {
     refunds: []
   });
 
-  await service.refundPaymentTx(tx, { paymentId: 'p1', amount: 1000, clubId: 1 });
+  await (service as any).requestRefundTx(tx, {
+    paymentId: 'p1',
+    amount: 1000,
+    clubId: 1,
+    executeNow: true
+  });
   assert.equal(calls.ledger, 1);
 });
 
@@ -271,7 +303,12 @@ test('refund pos genera cash movement', async () => {
     cashShiftOpen: true
   });
 
-  await service.refundPaymentTx(tx, { paymentId: 'p1', amount: 1200, clubId: 1 });
+  await (service as any).requestRefundTx(tx, {
+    paymentId: 'p1',
+    amount: 1200,
+    clubId: 1,
+    executeNow: true
+  });
   assert.equal(calls.cashMovement, 1);
 });
 
@@ -303,7 +340,13 @@ test('bloquea refund en cuenta cerrada no-cancelada', async () => {
   });
 
   await assert.rejects(
-    () => service.refundPaymentTx(tx, { paymentId: 'p1', amount: 1000, clubId: 1 }),
+    () =>
+      (service as any).requestRefundTx(tx, {
+        paymentId: 'p1',
+        amount: 1000,
+        clubId: 1,
+        executeNow: true
+      }),
     /cuenta cerrada/
   );
 });

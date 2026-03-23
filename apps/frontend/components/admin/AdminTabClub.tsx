@@ -10,6 +10,7 @@ import DatePickerDark from '../ui/DatePickerDark';
 import { Settings, Globe, Instagram, Facebook, MapPin, Phone, Mail, Lightbulb, Image as ImageIcon, Trash2, Save, AlertTriangle, Check, X } from 'lucide-react';
 import { normalizeSessionUser } from '../../utils/session';
 import { useRouter } from 'next/router';
+import { lockBodyScroll } from '../../utils/bodyScrollLock';
 
 type ClubOperationalStatus = 'OPEN' | 'TEMPORARY_CLOSED' | 'PERMANENTLY_CLOSED';
 
@@ -615,11 +616,10 @@ export default function AdminTabClub() {
         }
       }
     };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseBodyScrollLock = lockBodyScroll();
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      releaseBodyScrollLock();
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [exceptionModalActivityId, showDiscountsConfigModal, closeExceptionModal, closeDiscountsConfigModal]);
@@ -2885,7 +2885,7 @@ export default function AdminTabClub() {
       {exceptionModalActivity && typeof document !== 'undefined'
         ? createPortal(
         <div
-          className="fixed inset-0 z-[100200] bg-[#347048]/60 p-4 flex items-center justify-center animate-in fade-in duration-200"
+          className="fixed inset-0 z-[2147483000] bg-[#347048]/60 p-4 flex items-center justify-center animate-in fade-in duration-200"
           onMouseDown={(event) => {
             exceptionBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -3107,7 +3107,7 @@ export default function AdminTabClub() {
       {showDiscountsConfigModal && typeof document !== 'undefined'
         ? createPortal(
         <div
-          className="fixed inset-0 z-[100200] bg-[#347048]/60 p-4 flex items-center justify-center"
+          className="fixed inset-0 z-[2147483000] bg-[#347048]/60 p-4 flex items-center justify-center"
           onMouseDown={(event) => {
             exceptionBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}

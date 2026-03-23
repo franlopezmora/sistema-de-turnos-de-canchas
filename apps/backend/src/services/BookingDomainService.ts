@@ -88,6 +88,12 @@ export class BookingDomainService {
       }
     });
     const confirmationSettings = await this.getClubConfirmationSettingsTx(tx, booking.clubId);
+    const bookingStatus = String(booking.status || '').toUpperCase();
+    if (!account && (bookingStatus === 'CONFIRMED' || bookingStatus === 'COMPLETED')) {
+      throw new Error(
+        `Inconsistencia de integridad: la reserva ${booking.id} está ${bookingStatus} pero no tiene Account BOOKING`
+      );
+    }
 
     const bookingBaseAmount = roundMoney(
       (account?.items || [])
@@ -160,6 +166,8 @@ export class BookingDomainService {
     if (!shouldConfirm) {
       return summary.booking.status;
     }
+
+    await this.getBookingAccountTx(tx, bookingId, summary.booking.clubId);
 
     await tx.booking.update({
       where: { id: bookingId },
