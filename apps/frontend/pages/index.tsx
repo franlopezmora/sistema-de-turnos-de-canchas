@@ -157,6 +157,7 @@ export default function Home() {
     return () => document.removeEventListener('click', handler);
   }, [openFaqIndex]);
   const resultsRef = useRef<HTMLElement>(null);
+  const searchBarRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement | null>(null);
   const apiBase = useMemo(() => `${getApiUrl()}/api`, []);
 
@@ -167,6 +168,7 @@ export default function Home() {
   const [selectedLocation, setSelectedLocation] = useState<LocationSuggestion | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [displayedClubs, setDisplayedClubs] = useState<Club[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [clubCoords, setClubCoords] = useState<Record<number, { lat: number; lon: number } | null>>({});
 
   const [searchSport, setSearchSport] = useState('padel');
@@ -180,6 +182,7 @@ export default function Home() {
   const [searchDate, setSearchDate] = useState(() => formatLocalDate(getEffectiveToday()));
   const [lastSearchLabel, setLastSearchLabel] = useState<string>('');
   const [availableTimesByClub, setAvailableTimesByClub] = useState<Record<number, string[]>>({});
+  const searchRequestIdRef = useRef(0);
 
   // Menú de acciones para contactos (abrir / copiar)
   const [contactMenu, setContactMenu] = useState<{
@@ -390,6 +393,9 @@ export default function Home() {
   useEffect(() => {
     if (!searchCity.trim()) {
       setLocationSuggestions([]);
+      if (selectedLocation) {
+        setSelectedLocation(null);
+      }
       return;
     }
 
@@ -451,176 +457,200 @@ export default function Home() {
     return prev >= min;
   };
 
+  const scrollToSearchBarTop = () => {
+    if (!searchBarRef.current) return;
+    const top = window.scrollY + searchBarRef.current.getBoundingClientRect().top;
+    const navbarOffset = 18;
+    window.scrollTo({ top: Math.max(top - navbarOffset, 0), behavior: 'smooth' });
+  };
+
   const handleSearch = async () => {
+    const requestId = ++searchRequestIdRef.current;
+    const isCurrentRequest = () => searchRequestIdRef.current === requestId;
+
+    scrollToSearchBarTop();
+    setIsSearching(true);
     setShowCityDropdown(false);
     setSearchError(null);
+    setDisplayedClubs([]);
+    setAvailableTimesByClub({});
 
-    if (locationOptions.length === 0 && searchCity.trim()) {
-      setSearchError('No hay ubicaciones cargadas para validar la búsqueda.');
-      setLastSearchLabel('');
-      setDisplayedClubs([]);
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: 'smooth' });
+    try {
+      if (locationOptions.length === 0 && searchCity.trim()) {
+        if (!isCurrentRequest()) return;
+        setSearchError('No hay ubicaciones cargadas para validar la búsqueda.');
+        setLastSearchLabel('');
+        scrollToSearchBarTop();
+        return;
       }
-      return;
-    }
 
-    let location = selectedLocation;
-    if (!location && searchCity.trim()) {
-      const normalized = normalizeText(searchCity);
-      const exact = locationOptions.find(
-        (option) => normalizeText(option.label) === normalized || normalizeText(option.query) === normalized
-      );
-      if (exact) {
-        location = exact;
-        setSelectedLocation(exact);
-        setSearchCity(exact.label);
-      }
-    }
-
-    if (!location) {
-      setDisplayedClubs(clubs);
-      if (searchCity.trim()) {
-        setSearchError('Seleccioná una ubicación del listado para buscar clubes cercanos.');
-      }
-      setLastSearchLabel('');
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-      return;
-    }
-
-    const coordsResults = await fetchLocations(location.query, 1);
-    const locationCoords = coordsResults[0];
-    if (!locationCoords) {
-      setSearchError('No pudimos ubicar esa ciudad. Probá con otra.');
-      setDisplayedClubs([]);
-      setLastSearchLabel('');
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-      return;
-    }
-
-    const filtered: { club: Club; distance: number }[] = (await Promise.all(
-      clubs.map(async (club) => {
-        const coords = await resolveClubCoords(club);
-        if (!coords) return null;
-        const distance = calculateDistanceKm({ lat: locationCoords.lat, lon: locationCoords.lon }, coords);
-        if (distance > DEFAULT_RADIUS_KM) return null;
-        return { club, distance };
-      })
-    )).filter((row): row is { club: Club; distance: number } => Boolean(row));
-
-    filtered.sort((a, b) => a.distance - b.distance);
-    let finalClubs = filtered.map(item => item.club);
-
-    if (searchDate) {
-      try {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(searchDate)) {
-          const [year, month, day] = searchDate.split('-').map(Number);
-          const parsed = new Date(year, month - 1, day);
-          if (!isNaN(parsed.getTime())) {
-            const dayOfWeek = parsed.getDay(); // 0 (Dom) .. 6 (Sab)
-            finalClubs = finalClubs.filter((club) => {
-              const closureDates = Array.isArray((club as any).closureDates)
-                ? (club as any).closureDates.map((value: unknown) => String(value || '').trim())
-                : [];
-              const clubOperationalStatus = String((club as any).clubOperationalStatus || 'OPEN');
-              const temporaryClosureStartDate = String((club as any).temporaryClosureStartDate || '').trim();
-              const temporaryClosureEndDate = String((club as any).temporaryClosureEndDate || '').trim();
-
-              if (clubOperationalStatus === 'PERMANENTLY_CLOSED') return false;
-              if (
-                clubOperationalStatus === 'TEMPORARY_CLOSED' &&
-                /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureStartDate) &&
-                /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureEndDate) &&
-                searchDate >= temporaryClosureStartDate &&
-                searchDate <= temporaryClosureEndDate
-              ) {
-                return false;
-              }
-
-              if (closureDates.includes(searchDate)) return false;
-              if (!Array.isArray(club.openingDays) || club.openingDays.length === 0) return true; // no config => open all days
-              return club.openingDays.includes(dayOfWeek);
-            });
-          }
-        }
-      } catch (e) { /* noop */ }
-
-      if (searchSport) {
-        const availabilityChecks = await Promise.all(
-          finalClubs.map(async (club) => {
-            try {
-              const courtsRes = await fetch(`${apiBase}/courts?clubSlug=${encodeURIComponent(club.slug)}`, {
-                cache: 'no-store'
-              });
-              if (!courtsRes.ok) return { hasSlots: false, times: [] };
-
-              const courts = await courtsRes.json();
-              const activityIds = Array.from(
-                new Set(
-                  (Array.isArray(courts) ? courts : [])
-                    .filter((court: any) => matchesSport(String(court?.activityType?.name || ''), searchSport))
-                    .map((court: any) => Number(court?.activityType?.id))
-                    .filter((activityId: number) => Number.isFinite(activityId) && activityId > 0)
-                )
-              );
-
-              if (activityIds.length === 0) return { hasSlots: false, times: [] };
-
-              const times: string[] = [];
-              const results = await Promise.all(
-                activityIds.map(async (activityId) => {
-                  const res = await fetch(
-                    `${apiBase}/bookings/availability-with-courts?activityId=${activityId}&date=${searchDate}&clubSlug=${encodeURIComponent(club.slug)}&t=${Date.now()}`,
-                    { cache: 'no-store' }
-                  );
-                  if (!res.ok) return [];
-                  const data = await res.json();
-                  const slots = Array.isArray(data?.slotsWithCourts)
-                    ? data.slotsWithCourts.filter((slot: any) => Array.isArray(slot.availableCourts) && slot.availableCourts.length > 0)
-                    : [];
-                  return slots
-                    .map((slot: any) => (slot?.slotTime ? String(slot.slotTime) : null))
-                    .filter((slotTime: string | null): slotTime is string => Boolean(slotTime));
-                })
-              );
-
-              results.forEach((slotTimes) => times.push(...slotTimes));
-              const hasSlots = times.length > 0;
-              if (!hasSlots) return { hasSlots: false, times: [] };
-              const uniqueTimes = Array.from(new Set(times)).sort();
-              return { hasSlots: true, times: uniqueTimes };
-            } catch (error) {
-              reportUiError({ area: 'HomePage', action: 'validateClubAvailability' }, error);
-            }
-            return { hasSlots: false, times: [] };
-          })
+      let location = searchCity.trim() ? selectedLocation : null;
+      if (!location && searchCity.trim()) {
+        const normalized = normalizeText(searchCity);
+        const exact = locationOptions.find(
+          (option) => normalizeText(option.label) === normalized || normalizeText(option.query) === normalized
         );
-
-        const filteredClubs: Club[] = [];
-        const timesMap: Record<number, string[]> = {};
-        availabilityChecks.forEach((result, index) => {
-          if (result.hasSlots) {
-            const club = finalClubs[index];
-            filteredClubs.push(club);
-            timesMap[club.id] = result.times;
-          }
-        });
-        finalClubs = filteredClubs;
-        setAvailableTimesByClub(timesMap);
+        if (exact) {
+          location = exact;
+          setSelectedLocation(exact);
+          setSearchCity(exact.label);
+        }
       }
-    } else {
+
+      if (!location) {
+        if (!isCurrentRequest()) return;
+        setDisplayedClubs(clubs);
+        if (searchCity.trim()) {
+          setSearchError('Seleccioná una ubicación del listado para buscar clubes cercanos.');
+        }
+        setLastSearchLabel('');
+        scrollToSearchBarTop();
+        return;
+      }
+
+      const coordsResults = await fetchLocations(location.query, 1);
+      const locationCoords = coordsResults[0];
+      if (!locationCoords) {
+        if (!isCurrentRequest()) return;
+        setSearchError('No pudimos ubicar esa ciudad. Probá con otra.');
+        setDisplayedClubs([]);
+        setLastSearchLabel('');
+        scrollToSearchBarTop();
+        return;
+      }
+
+      const filtered: { club: Club; distance: number }[] = (await Promise.all(
+        clubs.map(async (club) => {
+          const coords = await resolveClubCoords(club);
+          if (!coords) return null;
+          const distance = calculateDistanceKm({ lat: locationCoords.lat, lon: locationCoords.lon }, coords);
+          if (distance > DEFAULT_RADIUS_KM) return null;
+          return { club, distance };
+        })
+      )).filter((row): row is { club: Club; distance: number } => Boolean(row));
+
+      filtered.sort((a, b) => a.distance - b.distance);
+      let finalClubs = filtered.map(item => item.club);
+
+      if (searchDate) {
+        try {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(searchDate)) {
+            const [year, month, day] = searchDate.split('-').map(Number);
+            const parsed = new Date(year, month - 1, day);
+            if (!isNaN(parsed.getTime())) {
+              const dayOfWeek = parsed.getDay(); // 0 (Dom) .. 6 (Sab)
+              finalClubs = finalClubs.filter((club) => {
+                const closureDates = Array.isArray((club as any).closureDates)
+                  ? (club as any).closureDates.map((value: unknown) => String(value || '').trim())
+                  : [];
+                const clubOperationalStatus = String((club as any).clubOperationalStatus || 'OPEN');
+                const temporaryClosureStartDate = String((club as any).temporaryClosureStartDate || '').trim();
+                const temporaryClosureEndDate = String((club as any).temporaryClosureEndDate || '').trim();
+
+                if (clubOperationalStatus === 'PERMANENTLY_CLOSED') return false;
+                if (
+                  clubOperationalStatus === 'TEMPORARY_CLOSED' &&
+                  /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureStartDate) &&
+                  /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureEndDate) &&
+                  searchDate >= temporaryClosureStartDate &&
+                  searchDate <= temporaryClosureEndDate
+                ) {
+                  return false;
+                }
+
+                if (closureDates.includes(searchDate)) return false;
+                if (!Array.isArray(club.openingDays) || club.openingDays.length === 0) return true; // no config => open all days
+                return club.openingDays.includes(dayOfWeek);
+              });
+            }
+          }
+        } catch (e) { /* noop */ }
+
+        if (searchSport) {
+          const availabilityChecks = await Promise.all(
+            finalClubs.map(async (club) => {
+              try {
+                const courtsRes = await fetch(`${apiBase}/courts?clubSlug=${encodeURIComponent(club.slug)}`, {
+                  cache: 'no-store'
+                });
+                if (!courtsRes.ok) return { hasSlots: false, times: [] };
+
+                const courts = await courtsRes.json();
+                const activityIds = Array.from(
+                  new Set(
+                    (Array.isArray(courts) ? courts : [])
+                      .filter((court: any) => matchesSport(String(court?.activityType?.name || ''), searchSport))
+                      .map((court: any) => Number(court?.activityType?.id))
+                      .filter((activityId: number) => Number.isFinite(activityId) && activityId > 0)
+                  )
+                );
+
+                if (activityIds.length === 0) return { hasSlots: false, times: [] };
+
+                const times: string[] = [];
+                const results = await Promise.all(
+                  activityIds.map(async (activityId) => {
+                    const res = await fetch(
+                      `${apiBase}/bookings/availability-with-courts?activityId=${activityId}&date=${searchDate}&clubSlug=${encodeURIComponent(club.slug)}&t=${Date.now()}`,
+                      { cache: 'no-store' }
+                    );
+                    if (!res.ok) return [];
+                    const data = await res.json();
+                    const slots = Array.isArray(data?.slotsWithCourts)
+                      ? data.slotsWithCourts.filter((slot: any) => Array.isArray(slot.availableCourts) && slot.availableCourts.length > 0)
+                      : [];
+                    return slots
+                      .map((slot: any) => (slot?.slotTime ? String(slot.slotTime) : null))
+                      .filter((slotTime: string | null): slotTime is string => Boolean(slotTime));
+                  })
+                );
+
+                results.forEach((slotTimes) => times.push(...slotTimes));
+                const hasSlots = times.length > 0;
+                if (!hasSlots) return { hasSlots: false, times: [] };
+                const uniqueTimes = Array.from(new Set(times)).sort();
+                return { hasSlots: true, times: uniqueTimes };
+              } catch (error) {
+                reportUiError({ area: 'HomePage', action: 'validateClubAvailability' }, error);
+              }
+              return { hasSlots: false, times: [] };
+            })
+          );
+
+          if (!isCurrentRequest()) return;
+
+          const filteredClubs: Club[] = [];
+          const timesMap: Record<number, string[]> = {};
+          availabilityChecks.forEach((result, index) => {
+            if (result.hasSlots) {
+              const club = finalClubs[index];
+              filteredClubs.push(club);
+              timesMap[club.id] = result.times;
+            }
+          });
+          finalClubs = filteredClubs;
+          setAvailableTimesByClub(timesMap);
+        }
+      } else {
+        setAvailableTimesByClub({});
+      }
+
+      if (!isCurrentRequest()) return;
+
+      setDisplayedClubs(finalClubs);
+      setLastSearchLabel(location.label);
+      scrollToSearchBarTop();
+    } catch (error) {
+      if (!isCurrentRequest()) return;
+      reportUiError({ area: 'HomePage', action: 'handleSearch' }, error);
+      setSearchError('No pudimos completar la búsqueda. Intentá de nuevo.');
+      setDisplayedClubs([]);
+      setLastSearchLabel('');
       setAvailableTimesByClub({});
-    }
-
-    setDisplayedClubs(finalClubs);
-    setLastSearchLabel(location.label);
-
-    if (resultsRef.current) {
-      resultsRef.current.scrollIntoView({ behavior: 'smooth' });
+    } finally {
+      if (isCurrentRequest()) {
+        setIsSearching(false);
+      }
     }
   };
 
@@ -810,7 +840,8 @@ export default function Home() {
         </p>
 
         {/* BARRA DE BÚSQUEDA */}
-    <div 
+    <div
+      ref={searchBarRef}
       className="w-full max-w-5xl bg-[#EBE1D8] rounded-[2rem] p-2 shadow-2xl shadow-[#347048]/50 flex flex-col md:flex-row items-center divide-y md:divide-y-0 md:divide-x divide-[#347048]/10 relative z-50"
             onClick={(e) => e.stopPropagation()} 
         >
@@ -835,7 +866,11 @@ export default function Home() {
               className="bg-transparent border-none outline-none text-[#347048] font-bold placeholder-[#347048]/40 w-full p-0 leading-5 truncate h-full cursor-pointer"
                             value={searchCity}
                             onChange={(e) => {
-                                setSearchCity(e.target.value);
+                                const nextValue = e.target.value;
+                                setSearchCity(nextValue);
+                                if (!nextValue.trim()) {
+                                  setSelectedLocation(null);
+                                }
                                 setShowCityDropdown(true);
                             }}
               onMouseDown={(e) => {
@@ -1021,10 +1056,15 @@ export default function Home() {
             <div className="p-2 w-full md:w-auto">
                 <button 
                     onClick={handleSearch}
-                    className="w-full md:w-auto bg-[#347048] hover:bg-[#B9CF32] hover:text-[#347048] text-[#EBE1D8] font-black py-4 px-8 rounded-full transition-all shadow-lg flex items-center justify-center gap-2 group"
+                    disabled={isSearching}
+                    className={`w-full md:w-auto text-[#EBE1D8] font-black py-4 px-8 rounded-full transition-all shadow-lg flex items-center justify-center gap-2 ${
+                      isSearching
+                        ? 'bg-[#347048]/70 cursor-not-allowed'
+                        : 'bg-[#347048] hover:bg-[#B9CF32] hover:text-[#347048] group'
+                    }`}
                 >
-                    <Search size={20} strokeWidth={3} className="group-hover:scale-110 transition-transform"/>
-                    <span className="md:hidden lg:inline">Buscar</span>
+                    <Search size={20} strokeWidth={3} className={isSearching ? '' : 'group-hover:scale-110 transition-transform'} />
+                    <span className="md:hidden lg:inline">{isSearching ? 'Buscando...' : 'Buscar'}</span>
                 </button>
             </div>
         </div>
@@ -1049,6 +1089,13 @@ export default function Home() {
                 <div key={i} className="h-64 bg-[#D4C5B0]/5 rounded-3xl animate-pulse border border-[#D4C5B0]/10"></div>
              ))}
            </div>
+        ) : isSearching ? (
+          <RevealOnScroll delay={100}>
+            <div className="text-center py-20 bg-[#D4C5B0]/5 rounded-3xl border border-dashed border-[#D4C5B0]/20 flex flex-col items-center justify-center gap-4">
+              <div className="h-10 w-10 rounded-full border-4 border-[#D4C5B0]/25 border-t-[#B9CF32] animate-spin" />
+              <p className="text-[#D4C5B0]/80 font-semibold">Buscando canchas...</p>
+            </div>
+          </RevealOnScroll>
         ) : displayedClubs.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayedClubs.map((club, index) => (
@@ -1116,7 +1163,19 @@ export default function Home() {
           <RevealOnScroll delay={100}>
             <div className="text-center py-20 bg-[#D4C5B0]/5 rounded-3xl border border-dashed border-[#D4C5B0]/20">
               <p className="text-[#D4C5B0]/60">No encontramos canchas con ese criterio.</p>
-              <button onClick={() => setSearchCity('')} className="mt-4 text-[#B9CF32] font-bold hover:underline">Ver todos</button>
+              <button
+                onClick={() => {
+                  setSearchCity('');
+                  setSelectedLocation(null);
+                  setSearchError(null);
+                  setLastSearchLabel('');
+                  setAvailableTimesByClub({});
+                  setDisplayedClubs(clubs);
+                }}
+                className="mt-4 text-[#B9CF32] font-bold hover:underline"
+              >
+                Ver todos
+              </button>
             </div>
           </RevealOnScroll>
         )}
