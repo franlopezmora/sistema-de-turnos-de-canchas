@@ -857,7 +857,6 @@ const AdminCashDashboard = () => {
       allocations
     };
     setSalePayments((prev) => [...prev, nextPayment]);
-    setShowSalePaymentCalculator(false);
   };
 
   const handleAddProductToSaleCart = () => {

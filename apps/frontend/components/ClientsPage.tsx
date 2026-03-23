@@ -532,10 +532,6 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       });
 
       await loadClients();
-      setShowPayMethodModal(false);
-      setDebtTarget(null);
-      setSelectedDebtor(null);
-      showInfo('Cobro registrado correctamente.', 'Pago aplicado');
     } catch (error) {
       showError("No se pudo procesar el cobro. Intenta nuevamente.");
     } finally {

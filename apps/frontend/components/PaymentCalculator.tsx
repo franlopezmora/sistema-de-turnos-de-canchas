@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Banknote, CreditCard, X } from 'lucide-react';
+import { CheckCircle2, X } from 'lucide-react';
 
 export interface PaymentCalculatorItem {
   id?: string | number;
@@ -19,6 +19,8 @@ export type PaymentCalculatorResult = {
   selectedItemKeys: Array<string | number>;
   itemAllocations: Array<{ key: string | number; amount: number }>;
 };
+
+type PaymentMethodOption = 'CASH' | 'CARD' | 'OTHER' | 'TRANSFER_BANK' | 'TRANSFER_WALLET';
 
 export interface PaymentCalculatorProps {
   courtPending: number;
@@ -65,6 +67,14 @@ export default function PaymentCalculator({
   const [itemAllocations, setItemAllocations] = useState<Record<string, number>>({});
   const [courtPortion, setCourtPortion] = useState<number>(0);
   const [validationError, setValidationError] = useState('');
+  const [selectedPaymentOption, setSelectedPaymentOption] = useState<PaymentMethodOption | ''>('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastRegisteredPayment, setLastRegisteredPayment] = useState<{
+    amount: number;
+    methodLabel: string;
+    concepts: string[];
+  } | null>(null);
 
   const safeCourtPending = Math.max(0, Number(courtPending || 0));
   const safeCourtBaseTotal = Math.max(0, Number(courtBaseTotal ?? courtPending ?? 0));
@@ -141,6 +151,27 @@ export default function PaymentCalculator({
   const summaryPaidNow = conceptBreakdown.reduce((sum, row) => sum + row.paidNow, 0);
   const summaryDebtAfter = conceptBreakdown.reduce((sum, row) => sum + row.debtAfter, 0);
   const unassignedAmount = Math.max(0, amountEntered - selectedTotal);
+  const selectedConceptLabels = conceptBreakdown
+    .filter((row) => row.paidNow > 0.009)
+    .map((row) => row.label);
+  const selectedConceptsSummary =
+    selectedConceptLabels.length > 0 ? selectedConceptLabels.join(', ') : 'Sin conceptos seleccionados';
+
+  const selectedMethodLabel = useMemo(() => {
+    if (selectedPaymentOption === 'CASH') return 'Efectivo';
+    if (selectedPaymentOption === 'CARD') return 'Tarjeta';
+    if (selectedPaymentOption === 'OTHER') return 'Otro';
+    if (selectedPaymentOption === 'TRANSFER_BANK') return 'Transferencia bancaria';
+    if (selectedPaymentOption === 'TRANSFER_WALLET') return 'QR / Billetera virtual';
+    return 'Sin seleccionar';
+  }, [selectedPaymentOption]);
+
+  const canConfirmPayment =
+    !submitting &&
+    amountEntered > 0 &&
+    hasSelection &&
+    !hasAmountMismatch &&
+    Boolean(selectedPaymentOption);
 
   useEffect(() => {
     setMounted(true);
@@ -201,9 +232,24 @@ export default function PaymentCalculator({
     setPaymentAmount('');
   };
 
-  const handlePaymentConfirm = async (method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER', forcedChannel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET') => {
-    if (submitting) return;
-    if (!amountEntered || amountEntered <= 0) return;
+  const buildPaymentPayload = (): PaymentCalculatorResult | null => {
+    if (submitting) return null;
+    if (!amountEntered || amountEntered <= 0) {
+      setValidationError('Ingresá un monto válido para registrar el pago.');
+      return null;
+    }
+    if (!hasSelection) {
+      setValidationError('Seleccioná al menos un concepto para cobrar.');
+      return null;
+    }
+    if (hasAmountMismatch) {
+      setValidationError('El monto debe coincidir exactamente con lo seleccionado.');
+      return null;
+    }
+    if (!selectedPaymentOption) {
+      setValidationError('Seleccioná el medio de pago antes de confirmar.');
+      return null;
+    }
 
     const selectedAllocations = cartItems
       .map((item) => {
@@ -224,27 +270,49 @@ export default function PaymentCalculator({
       )
     );
 
-    if (!hasSelection) {
-      setValidationError('Selecciona al menos un concepto para cobrar.');
-      return;
-    }
+    const method: PaymentCalculatorResult['method'] =
+      selectedPaymentOption === 'TRANSFER_BANK' || selectedPaymentOption === 'TRANSFER_WALLET'
+        ? 'TRANSFER'
+        : selectedPaymentOption;
 
-    if (hasAmountMismatch) {
-      setValidationError('El monto debe coincidir exactamente con lo seleccionado.');
-      return;
-    }
+    const channel: PaymentCalculatorResult['channel'] | undefined =
+      selectedPaymentOption === 'TRANSFER_BANK'
+        ? 'BANK_ACCOUNT'
+        : selectedPaymentOption === 'TRANSFER_WALLET'
+          ? 'VIRTUAL_WALLET'
+          : undefined;
 
     setValidationError('');
 
-    await onConfirm({
+    return {
       method,
-      channel: method === 'TRANSFER' ? (forcedChannel ?? 'BANK_ACCOUNT') : undefined,
+      channel,
       amount: amountEntered,
       courtAmount: Number(courtPortion) || 0,
       paidItemIds: numericItemIds,
       selectedItemKeys: selectedKeys,
       itemAllocations: selectedAllocations
+    };
+  };
+
+  const handleOpenConfirmModal = () => {
+    const payload = buildPaymentPayload();
+    if (!payload) return;
+    setShowConfirmModal(true);
+  };
+
+  const handleSubmitPayment = async () => {
+    const payload = buildPaymentPayload();
+    if (!payload) return;
+
+    await onConfirm(payload);
+    setShowConfirmModal(false);
+    setLastRegisteredPayment({
+      amount: Number(payload.amount || 0),
+      methodLabel: selectedMethodLabel,
+      concepts: selectedConceptLabels
     });
+    setShowSuccessModal(true);
   };
 
   const modal = (
@@ -527,50 +595,57 @@ export default function PaymentCalculator({
           </div>
         </div>
 
-        <div className="mb-2">
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button
-              type="button"
-              onClick={() => handlePaymentConfirm('CASH')}
-              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
-              className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Banknote size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-              <span className="font-black text-[10px] uppercase tracking-widest">Efectivo</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handlePaymentConfirm('TRANSFER', 'BANK_ACCOUNT')}
-              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
-              className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-              <span className="font-black text-[10px] uppercase tracking-widest">Transfer. banco</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handlePaymentConfirm('CARD')}
-              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
-              className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-              <span className="font-black text-[10px] uppercase tracking-widest">Tarjeta</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                handlePaymentConfirm('TRANSFER', 'VIRTUAL_WALLET');
+        <div className="mb-2 space-y-4">
+          <div className="bg-white border-2 border-[#347048]/10 rounded-[1.25rem] p-4">
+            <label className="text-[10px] font-black uppercase tracking-widest text-[#347048]/60 block mb-2">
+              Medio de pago
+            </label>
+            <select
+              value={selectedPaymentOption}
+              disabled={submitting}
+              onChange={(event) => {
+                setSelectedPaymentOption(event.target.value as PaymentMethodOption);
+                setValidationError('');
               }}
-              disabled={submitting || !paymentAmount || Number(paymentAmount) <= 0 || !hasSelection || hasAmountMismatch}
-              className="flex flex-col items-center justify-center p-5 bg-white border-2 border-transparent hover:border-[#B9CF32] rounded-2xl text-[#347048] transition-all hover:scale-[1.02] shadow-sm group disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-xl border-2 border-[#347048]/15 bg-[#EBE1D8] px-3 py-3 text-sm font-black text-[#347048] outline-none focus:border-[#B9CF32]"
             >
-              <CreditCard size={32} strokeWidth={2} className="mb-2 group-hover:scale-110 transition-transform text-[#347048]" />
-              <span className="font-black text-[10px] uppercase tracking-widest">QR / Billetera</span>
-            </button>
+              <option value="">Seleccionar medio de pago</option>
+              <option value="CASH">Efectivo</option>
+              <option value="TRANSFER_BANK">Transferencia bancaria</option>
+              <option value="TRANSFER_WALLET">QR / Billetera virtual</option>
+              <option value="CARD">Tarjeta</option>
+              <option value="OTHER">Otro</option>
+            </select>
           </div>
+
+          <div className="bg-[#347048]/5 border border-[#347048]/15 rounded-[1.25rem] p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#347048]/70 mb-2">
+              Confirmación previa
+            </p>
+            <div className="space-y-1.5 text-[12px]">
+              <div className="flex items-center justify-between">
+                <span className="font-black text-[#347048]/70">Monto a registrar</span>
+                <span className="font-black text-[#347048]">${amountEntered.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-black text-[#347048]/70">Medio elegido</span>
+                <span className="font-black text-[#347048]">{selectedMethodLabel}</span>
+              </div>
+              <div className="pt-1">
+                <span className="block text-[10px] font-black uppercase tracking-widest text-[#347048]/60 mb-1">Conceptos</span>
+                <p className="text-[12px] font-bold text-[#347048]">{selectedConceptsSummary}</p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleOpenConfirmModal}
+            disabled={!canConfirmPayment}
+            className="w-full py-4 rounded-2xl bg-[#347048] text-[#EBE1D8] font-black uppercase tracking-widest text-xs transition-all hover:bg-[#2d5f3d] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Confirmar pago
+          </button>
         </div>
         </div>
         </div>
@@ -584,6 +659,114 @@ export default function PaymentCalculator({
           Cancelar operación
         </button>
       </div>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-[2147483500] bg-[#347048]/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md max-h-[92vh] bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-[#347048]/10 flex justify-between items-center bg-[#EBE1D8]">
+              <h4 className="text-2xl font-black uppercase italic tracking-tighter text-[#347048]">
+                Confirmar pago
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={submitting}
+                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100 disabled:opacity-50"
+                title="Cerrar ventana"
+              >
+                <X size={20} strokeWidth={3} />
+              </button>
+            </div>
+            <div className="p-6 sm:p-8 bg-white/40 flex-1 min-h-0 flex flex-col gap-5 overflow-y-auto text-[#347048]">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#347048]/70">¿Registramos este pago?</p>
+              <div className="space-y-2 text-sm font-bold">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#347048]/70">Monto</span>
+                  <span>${amountEntered.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#347048]/70">Medio</span>
+                  <span>{selectedMethodLabel}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-widest font-black text-[#347048]/60 mb-1">Conceptos</span>
+                  <p className="text-[12px] font-bold">{selectedConceptsSummary}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setShowConfirmModal(false)}
+                  className="h-11 rounded-xl border-2 border-[#347048]/20 text-[#347048]/80 hover:text-[#347048] hover:bg-white font-black uppercase text-[10px] tracking-widest transition-all"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleSubmitPayment}
+                  className="h-11 rounded-xl bg-[#347048] text-[#EBE1D8] hover:bg-[#B9CF32] hover:text-[#347048] font-black uppercase text-[10px] tracking-widest transition-all disabled:opacity-60"
+                >
+                  {submitting ? 'Registrando...' : 'Confirmar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSuccessModal && lastRegisteredPayment && (
+        <div className="fixed inset-0 z-[2147483500] bg-[#347048]/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md max-h-[92vh] bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-[#347048]/10 flex justify-between items-center bg-[#EBE1D8]">
+              <h4 className="text-2xl font-black uppercase italic tracking-tighter text-[#347048] flex items-center gap-3">
+                <CheckCircle2 size={26} strokeWidth={2.8} className="text-[#B9CF32]" />
+                Pago registrado
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  onClose();
+                }}
+                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
+                title="Cerrar ventana"
+              >
+                <X size={20} strokeWidth={3} />
+              </button>
+            </div>
+            <div className="p-6 sm:p-8 bg-white/40 flex-1 min-h-0 flex flex-col gap-5 overflow-y-auto text-[#347048]">
+              <div className="space-y-2 text-sm font-bold">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#347048]/70">Monto</span>
+                  <span>${Number(lastRegisteredPayment.amount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#347048]/70">Medio</span>
+                  <span>{lastRegisteredPayment.methodLabel}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-widest font-black text-[#347048]/60 mb-1">Conceptos registrados</span>
+                  <p className="text-[12px] font-bold">{lastRegisteredPayment.concepts.join(', ') || 'Sin detalle'}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 mt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    onClose();
+                  }}
+                  className="h-11 rounded-xl bg-[#347048] text-[#EBE1D8] hover:bg-[#B9CF32] hover:text-[#347048] font-black uppercase text-[10px] tracking-widest transition-all"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 

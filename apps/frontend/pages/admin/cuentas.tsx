@@ -518,7 +518,6 @@ export default function AdminAccountsPage() {
         allocations: allocations.length > 0 ? allocations : undefined
       });
 
-      setShowPaymentCalculator(false);
       await loadDetail(selectedId);
       await refreshLists();
     } catch (err: any) {

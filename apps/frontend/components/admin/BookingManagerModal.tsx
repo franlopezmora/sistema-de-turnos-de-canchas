@@ -528,7 +528,6 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       const updated = await getBookingFinancialSummary(bookingId);
       setSummary(updated || null);
       await loadData();
-      setShowPaymentCalculator(false);
       onUpdated();
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo registrar el pago');
