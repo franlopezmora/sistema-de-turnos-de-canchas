@@ -203,17 +203,25 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     });
   };
 
-  const openLoginModal = (afterLoginAction?: () => void) => {
-    pendingAfterLoginActionRef.current = afterLoginAction || null;
-    setLoginModalError('');
-    setLoginModalLoading(false);
+  const openLoginModal = (
+    afterLoginAction?: () => void,
+    options?: { preserveState?: boolean; preservePendingAction?: boolean }
+  ) => {
+    if (!options?.preservePendingAction) {
+      pendingAfterLoginActionRef.current = afterLoginAction || null;
+    }
+    if (!options?.preserveState) {
+      setLoginModalError('');
+      setLoginModalLoading(false);
+    }
 
     const loginMessage = (
       <div className="space-y-3">
         <p className="text-sm text-[#347048]/80">Iniciá sesión para confirmar tu reserva sin salir de esta pantalla.</p>
         {loginModalError ? (
-          <div className="rounded-lg border border-red-300/60 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-            {loginModalError}
+          <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold flex items-center gap-3 shadow-sm animate-in slide-in-from-top-2">
+            <AlertCircle size={18} className="shrink-0" strokeWidth={2.5} />
+            <span className="leading-tight">{loginModalError}</span>
           </div>
         ) : null}
         <div className="space-y-2">
@@ -244,6 +252,18 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
             autoComplete="current-password"
           />
         </div>
+        <div className="pt-1 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              const from = encodeURIComponent(router.asPath || '/');
+              window.location.href = `/login?mode=register&from=${from}`;
+            }}
+            className="text-[#347048]/60 hover:text-[#347048] text-[10px] font-black uppercase tracking-widest transition-colors hover:underline decoration-2 underline-offset-4"
+          >
+            ¿No tenés cuenta? Regístrate gratis
+          </button>
+        </div>
       </div>
     );
 
@@ -251,12 +271,12 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       show: true,
       title: 'Iniciar sesión',
       message: loginMessage,
-      cancelText: '',
+      cancelText: 'Cancelar',
       confirmText: loginModalLoading ? 'Ingresando...' : 'Ingresar',
       onConfirm: () => {
         void handleLoginFromModal();
       },
-      onCancel: undefined,
+      onCancel: closeModal,
       confirmDisabled: loginModalLoading || !String(loginModalEmail).trim() || !String(loginModalPassword).trim(),
       closeOnBackdrop: false,
       closeOnEscape: false,
@@ -266,19 +286,45 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
 
   const handleLoginFromModal = async () => {
     if (loginModalLoading) return;
+    const safeEmail = String(loginModalEmail || '').trim();
+    const safePassword = String(loginModalPassword || '');
+    if (!safeEmail || !safePassword) {
+      setLoginModalError('Completá email y contraseña.');
+      return;
+    }
+    const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail);
+    if (!emailLooksValid) {
+      setLoginModalError('Ingresá un email válido.');
+      return;
+    }
     setLoginModalLoading(true);
     setLoginModalError('');
     try {
-      await loginUser(String(loginModalEmail).trim(), String(loginModalPassword));
+      await loginUser(safeEmail, safePassword);
       setIsAuthenticated(true);
       setModalState((prev) => ({ ...prev, show: false }));
       const pendingAction = pendingAfterLoginActionRef.current;
       pendingAfterLoginActionRef.current = null;
-      if (pendingAction) pendingAction();
+      if (pendingAction) {
+        try {
+          pendingAction();
+        } catch (error) {
+          reportUiError({ area: 'BookingGrid', action: 'postLoginPendingAction' }, error);
+        }
+      }
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo iniciar sesión.');
       setLoginModalError(message);
-      reportUiError({ area: 'BookingGrid', action: 'loginModalSubmit' }, error);
+      const normalized = message.toLowerCase();
+      const isExpectedAuthError =
+        normalized.includes('credenciales inválidas') ||
+        normalized.includes('credenciales invalidas') ||
+        normalized.includes('usuario o contraseña') ||
+        normalized.includes('usuario o contrasena') ||
+        normalized.includes('401');
+      if (!isExpectedAuthError) {
+        reportUiError({ area: 'BookingGrid', action: 'loginModalSubmit' }, error);
+      }
     } finally {
       setLoginModalLoading(false);
     }
@@ -286,7 +332,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
 
   useEffect(() => {
     if (!modalState.show || modalState.title !== 'Iniciar sesión') return;
-    openLoginModal(pendingAfterLoginActionRef.current || undefined);
+    openLoginModal(undefined, { preserveState: true, preservePendingAction: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loginModalEmail, loginModalPassword, loginModalError, loginModalLoading]);
 

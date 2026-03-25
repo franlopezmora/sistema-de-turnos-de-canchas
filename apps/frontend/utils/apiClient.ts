@@ -60,9 +60,28 @@ export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit
   };
 
   if (res.status === 401) {
-    // 401: token inválido/expirado -> cerrar sesión
-    logout({ redirectTo: resolveAdminLogoutRedirect() });
-    throw new Error('Sesión expirada. Volvé a iniciar sesión.');
+    const errorMessage = (await extractErrorMessage(res)).toLowerCase();
+    const isExpiredToken =
+      errorMessage.includes('token inválido') ||
+      errorMessage.includes('token invalido') ||
+      errorMessage.includes('token expirado') ||
+      errorMessage.includes('sesión expirada') ||
+      errorMessage.includes('sesion expirada') ||
+      errorMessage.includes('jwt') ||
+      errorMessage.includes('unauthorized') ||
+      errorMessage.includes('no token');
+
+    if (isExpiredToken) {
+      logout({ redirectTo: resolveAdminLogoutRedirect() });
+      throw new Error('Sesión expirada. Volvé a iniciar sesión.');
+    }
+
+    // 401 funcional (no token-expirado): mantener sesión y propagar mensaje
+    throw new Error(
+      errorMessage
+        ? errorMessage.charAt(0).toUpperCase() + errorMessage.slice(1)
+        : 'No autorizado'
+    );
   }
 
   if (res.status === 403) {

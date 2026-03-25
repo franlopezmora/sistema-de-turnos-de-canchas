@@ -195,7 +195,7 @@ export class BookingController {
             const useAdminClientMode = Boolean(isAdmin && hasAdminClientInput);
             const effectiveUserId = useAdminClientMode ? null : tokenUserId;
 
-            if (!effectiveUserId) {
+            if (!effectiveUserId && !useAdminClientMode) {
                 return res.status(401).json({ error: "Debes iniciar sesión para reservar." });
             }
 

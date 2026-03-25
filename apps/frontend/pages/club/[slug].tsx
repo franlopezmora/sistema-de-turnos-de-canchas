@@ -380,16 +380,20 @@ export default function ClubPage() {
                     }
                   />
                 </button>
-                <button 
+                <button
                   onClick={handleShare}
-                  className={`relative h-12 w-12 rounded-2xl border-2 flex items-center justify-center transition-all backdrop-blur-md ${
-                    isCopied 
-                      ? 'bg-[#B9CF32] text-[#347048] border-transparent scale-105' 
-                      : 'border-[#EBE1D8]/30 text-[#EBE1D8] bg-[#347048]/50 hover:bg-[#B9CF32] hover:text-[#347048] hover:border-transparent'
+                  className={`group/share relative h-12 w-12 rounded-2xl border-2 flex items-center justify-center transition-all backdrop-blur-md shadow-md ${
+                    isCopied
+                      ? 'bg-[#B9CF32] text-[#347048] border-transparent scale-105'
+                      : 'border-[#EBE1D8]/35 text-[#EBE1D8] bg-[#347048]/55 hover:bg-[#347048] hover:text-[#B9CF32] hover:border-[#B9CF32]'
                   }`}
                   title="Copiar enlace"
                 >
-                    {isCopied ? <Check size={22} strokeWidth={3} className="animate-in zoom-in" /> : <Share2 size={22} />}
+                    {isCopied ? (
+                      <Check size={22} strokeWidth={3} className="animate-in zoom-in" />
+                    ) : (
+                      <Share2 size={22} className="transition-all duration-200 group-hover/share:text-[#B9CF32] group-hover/share:scale-110" />
+                    )}
                     
                     {/* Cartelito flotante de copiado */}
                     {isCopied && (

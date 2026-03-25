@@ -456,6 +456,7 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
   const handlePaymentConfirm = async (result: PaymentCalculatorResult) => {
     if (paymentInFlightRef.current) return;
     paymentInFlightRef.current = true;
+    let paymentRegistered = false;
 
     try {
       setSaving(true);
@@ -523,6 +524,7 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
           result.channel,
           hasBookingItemForCourt ? allocations : undefined
         );
+        paymentRegistered = true;
       }
 
       const updated = await getBookingFinancialSummary(bookingId);
@@ -530,9 +532,14 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
       await loadData();
       onUpdated();
     } catch (error) {
-      const message = extractErrorMessage(error, 'No se pudo registrar el pago');
-      reportUiError({ area: 'BookingManagerModal', action: 'handlePaymentConfirm' }, error);
-      setActionError(message);
+      if (paymentRegistered) {
+        setActionError('Pago registrado. No se pudo refrescar la vista automáticamente.');
+      } else {
+        const message = extractErrorMessage(error, 'No se pudo registrar el pago');
+        reportUiError({ area: 'BookingManagerModal', action: 'handlePaymentConfirm' }, error);
+        setActionError(message);
+        throw error;
+      }
     } finally {
       setSaving(false);
       paymentInFlightRef.current = false;
@@ -1079,7 +1086,10 @@ export default function BookingManagerModal({ booking, clubSlug, courtName, onCl
 
               <button
                 type="button"
-                onClick={() => setShowPaymentCalculator(true)}
+                onClick={async () => {
+                  await loadData();
+                  setShowPaymentCalculator(true);
+                }}
                 disabled={saving || !canRegisterPayment}
                 className="w-full flex items-center justify-center gap-2 bg-[#347048] hover:bg-[#B9CF32] text-white hover:text-[#347048] py-4 rounded-2xl font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >

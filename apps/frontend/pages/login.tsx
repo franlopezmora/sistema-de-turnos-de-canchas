@@ -12,6 +12,11 @@ export default function LoginPage() {
   const returnTo = typeof router.query.from === 'string' && router.query.from.startsWith('/') && !router.query.from.startsWith('//')
     ? router.query.from
     : null;
+  const openRegisterMode =
+    router.query.mode === 'register' ||
+    router.query.view === 'register' ||
+    router.query.register === '1' ||
+    router.query.register === 'true';
 
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -25,6 +30,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    setIsLogin(!openRegisterMode);
+  }, [openRegisterMode]);
 
   useEffect(() => {
     let cancelled = false;

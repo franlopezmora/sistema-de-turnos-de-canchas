@@ -303,15 +303,19 @@ export default function PaymentCalculator({
   const handleSubmitPayment = async () => {
     const payload = buildPaymentPayload();
     if (!payload) return;
-
-    await onConfirm(payload);
-    setShowConfirmModal(false);
-    setLastRegisteredPayment({
-      amount: Number(payload.amount || 0),
-      methodLabel: selectedMethodLabel,
-      concepts: selectedConceptLabels
-    });
-    setShowSuccessModal(true);
+    try {
+      await onConfirm(payload);
+      setShowConfirmModal(false);
+      setLastRegisteredPayment({
+        amount: Number(payload.amount || 0),
+        methodLabel: selectedMethodLabel,
+        concepts: selectedConceptLabels
+      });
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      const message = String(error?.message || '').trim();
+      setValidationError(message || 'No se pudo registrar el pago. Intentá nuevamente.');
+    }
   };
 
   const modal = (

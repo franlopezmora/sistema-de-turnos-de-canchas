@@ -492,10 +492,11 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
   const totalClients = clients.length;
   const topClient = clients.reduce((prev, current) => (prev.totalBookings > current.totalBookings) ? prev : current, {name: '-', totalBookings: 0});
 
-  const ensureAccountBreakdown = useCallback(async (accountId: string) => {
+  const ensureAccountBreakdown = useCallback(async (accountId: string, options?: { forceRefresh?: boolean }) => {
     const key = String(accountId || '').trim();
     if (!key) return null;
-    if (accountBreakdownById[key]) return accountBreakdownById[key];
+    const forceRefresh = Boolean(options?.forceRefresh);
+    if (!forceRefresh && accountBreakdownById[key]) return accountBreakdownById[key];
     if (loadingAccountDetailById[key]) return null;
 
     try {
@@ -520,13 +521,14 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
       return;
     }
 
-    await ensureAccountBreakdown(String(target.accountId));
+    await ensureAccountBreakdown(String(target.accountId), { forceRefresh: true });
     setDebtTarget(target);
     setShowPayMethodModal(true);
   };
 
   const processDebtPayment = async (result: PaymentCalculatorResult) => {
     if (!debtTarget) return;
+    let paymentRegistered = false;
     try {
       setSubmittingCalculator(true);
       const bookingInfo = selectedDebtorPendingEntries.find((entry: any) => String(entry.id) === String(debtTarget.accountId));
@@ -573,12 +575,37 @@ export default function ClientsPage({ clubSlug }: ClientsPageProps = {}) {
         accountId: String(bookingInfo.id),
         amount: Number(result.amount || 0),
         method: result.method,
+        channel: result.channel,
         allocations: allocations.length > 0 ? allocations : undefined
       });
+      paymentRegistered = true;
 
-      await loadClients();
+      const refreshedClients = await loadClients();
+      if (Array.isArray(refreshedClients) && selectedDebtor?.id != null) {
+        const updatedDebtor = refreshedClients.find((client: any) => String(client?.id) === String(selectedDebtor.id));
+        if (updatedDebtor) {
+          setSelectedDebtor(updatedDebtor);
+        } else {
+          setSelectedDebtor(null);
+        }
+      }
+      setAccountBreakdownById((prev) => {
+        const next = { ...prev };
+        delete next[String(bookingInfo.id)];
+        return next;
+      });
     } catch (error) {
-      showError("No se pudo procesar el cobro. Intenta nuevamente.");
+      if (paymentRegistered) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent(APP_NOTICE_EVENT, {
+              detail: { message: 'Pago registrado. No se pudo refrescar la vista automáticamente.' }
+            })
+          );
+        }
+      } else {
+        throw error;
+      }
     } finally {
       setSubmittingCalculator(false);
     }

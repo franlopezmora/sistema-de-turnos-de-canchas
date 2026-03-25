@@ -460,6 +460,7 @@ export default function AdminAccountsPage() {
   }, []);
 
   const handleCalculatorPaymentConfirm = async (result: PaymentCalculatorResult) => {
+    let paymentRegistered = false;
     try {
       if (!selectedId) return;
       setSubmittingCalculator(true);
@@ -517,11 +518,17 @@ export default function AdminAccountsPage() {
         source: resolvedSource,
         allocations: allocations.length > 0 ? allocations : undefined
       });
+      paymentRegistered = true;
 
       await loadDetail(selectedId);
       await refreshLists();
     } catch (err: any) {
-      setError(err?.message || 'No se pudo registrar el pago con calculadora');
+      if (paymentRegistered) {
+        setError('Pago registrado. No se pudo refrescar la vista automáticamente.');
+      } else {
+        setError(err?.message || 'No se pudo registrar el pago con calculadora');
+        throw err;
+      }
     } finally {
       setSubmittingCalculator(false);
     }
@@ -709,7 +716,11 @@ export default function AdminAccountsPage() {
           }}
           onSelectProduct={handleSelectProduct}
           onSelectService={handleSelectService}
-          onOpenPaymentCalculator={() => setShowPaymentCalculator(true)}
+          onOpenPaymentCalculator={async () => {
+            if (!selectedId) return;
+            await loadDetail(selectedId);
+            setShowPaymentCalculator(true);
+          }}
           onOpenCloseAccountConfirm={() => setShowCloseAccountConfirm(true)}
           onRequestRefund={openRefundModal}
         />
