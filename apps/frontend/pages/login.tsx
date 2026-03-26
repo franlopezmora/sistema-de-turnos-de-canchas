@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { login, register } from '../services/AuthService';
+import { login, register, requestMagicLink, verifyMagicLink } from '../services/AuthService';
 import { ClubService } from '../services/ClubService';
 import { Mail, Lock, User, Phone, UserPlus, LogIn, AlertCircle, Loader2, IdCard, CheckCircle, Eye, EyeOff } from 'lucide-react'; // Agregamos IdCard y Eye
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
@@ -28,6 +28,7 @@ export default function LoginPage() {
   const [dni, setDni] = useState(''); // Estado del DNI listo
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -54,6 +55,74 @@ export default function LoginPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const rawHash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
+    if (!rawHash) return;
+    const hashParams = new URLSearchParams(rawHash);
+    const magicToken = String(hashParams.get('magic_token') || '').trim();
+    const magicError = String(hashParams.get('magic_error') || '').trim();
+    if (!magicToken && !magicError) return;
+
+    const clearMagicHash = () => {
+      const cleanUrl = `${window.location.pathname}${window.location.search}`;
+      window.history.replaceState({}, document.title, cleanUrl);
+    };
+
+    if (magicError) {
+      clearMagicHash();
+      setIsLogin(true);
+      setError(
+        magicError === 'internal_error'
+          ? 'No se pudo validar el enlace en este momento. Probá nuevamente.'
+          : 'El enlace es inválido, ya se usó o expiró. Solicitá uno nuevo.'
+      );
+      return;
+    }
+
+    let cancelled = false;
+    setIsLogin(true);
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    (async () => {
+      try {
+        const data = await verifyMagicLink(magicToken);
+        if (cancelled) return;
+
+        const normalizedUser = normalizeSessionUser(data?.user);
+        const activeSlug = getActiveClubSlug(normalizedUser);
+
+        if (hasAdminAccess(normalizedUser)) {
+          await router.replace('/admin/agenda');
+        } else if (returnTo) {
+          await router.replace(returnTo);
+        } else if (activeSlug) {
+          await router.replace(`/club/${activeSlug}`);
+        } else if (normalizedUser?.activeClubId || data?.user?.clubId) {
+          const club = await ClubService.getClubById(Number(normalizedUser?.activeClubId || data.user.clubId));
+          await router.replace(`/club/${club.slug}`);
+        } else {
+          await router.replace('/');
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.message || 'No se pudo iniciar sesión con el enlace.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+        clearMagicHash();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +189,26 @@ export default function LoginPage() {
       setError(err.message || (isLogin ? 'Credenciales inválidas' : 'Error al registrar'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRequestMagicLink = async () => {
+    const safeEmail = String(email || '').trim();
+    if (!safeEmail) {
+      setError('Ingresá tu correo para enviarte el enlace.');
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    setMagicLoading(true);
+    try {
+      const data = await requestMagicLink(safeEmail);
+      setSuccessMessage(data?.message || 'Si el email es válido, te enviamos un enlace para ingresar.');
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo enviar el enlace en este momento.');
+    } finally {
+      setMagicLoading(false);
     }
   };
 
@@ -260,7 +349,7 @@ export default function LoginPage() {
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#347048]/40">
                   <Lock size={16} strokeWidth={3} />
                 </div>
-                <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
+                <input type={showPassword ? 'text' : 'password'} required={isLogin} value={password} onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-11 pr-14 py-3.5 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-2xl text-[#347048] font-bold focus:outline-none transition-all shadow-sm placeholder-[#347048]/20" placeholder="••••••••" />
 
                 <button
@@ -289,6 +378,27 @@ export default function LoginPage() {
                 isLogin ? <><LogIn size={18} strokeWidth={3} /> Ingresar</> : <><UserPlus size={18} strokeWidth={3} /> Registrarse</>
               )}
             </button>
+
+            {isLogin && (
+              <>
+                <div className="relative my-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-[#347048]/15" />
+                  </div>
+                  <div className="relative flex justify-center text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/45">
+                    <span className="bg-[#EBE1D8] px-3">o</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestMagicLink}
+                  disabled={magicLoading || loading || !String(email || '').trim()}
+                  className="w-full py-3.5 bg-white text-[#347048] border-2 border-[#347048]/20 font-black text-xs uppercase tracking-widest rounded-2xl hover:border-[#347048]/40 hover:bg-[#f9f7f4] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {magicLoading ? 'Enviando enlace...' : 'Enviar enlace de acceso'}
+                </button>
+              </>
+            )}
           </form>
 
           <div className="mt-8 text-center border-t border-[#347048]/10 pt-6">

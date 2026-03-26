@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
     logger.error({
-        path: req.originalUrl,
+        path: req.path,
         method: req.method,
         message: err?.message || String(err),
         stack: process.env.NODE_ENV === 'production' ? undefined : err?.stack

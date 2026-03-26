@@ -32,6 +32,15 @@ export const registerLimiter = rateLimit({
   legacyHeaders: false
 });
 
+/** 5 solicitudes de magic link por minuto */
+export const magicLinkRequestLimiter = rateLimit({
+  windowMs: parseWindowMs('RATE_LIMIT_MAGIC_LINK_WINDOW_MS', 60_000),
+  max: parseMax('RATE_LIMIT_MAGIC_LINK_MAX', 5),
+  message: { error: 'Demasiadas solicitudes de enlace. Esperá un momento e intentá de nuevo.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 /** 30 pagos por minuto por IP */
 export const paymentLimiter = rateLimit({
   windowMs: parseWindowMs('RATE_LIMIT_PAYMENT_WINDOW_MS', 60_000),

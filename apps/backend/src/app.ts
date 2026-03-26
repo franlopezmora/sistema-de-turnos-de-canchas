@@ -65,6 +65,20 @@ export const createApp = () => {
   app.use(requestContextMiddleware);
   app.use(pinoHttp({
     logger: baseLogger,
+    serializers: {
+      req: (req) => {
+        const rawUrl = typeof req.url === 'string' ? req.url : '';
+        const [path] = rawUrl.split('?');
+        return {
+          id: (req as any).id,
+          method: req.method,
+          path
+        };
+      },
+      res: (res) => ({
+        statusCode: res.statusCode
+      })
+    },
     genReqId: (req) => {
       const requestId = (req as RequestWithId).requestId;
       if (requestId) return requestId;
@@ -72,8 +86,8 @@ export const createApp = () => {
       if (headerReqId) return headerReqId;
       return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     },
-    customSuccessMessage: (req, res) => `${req.method} ${req.url} ${res.statusCode}`,
-    customErrorMessage: (req, res, err) => `Error ${req.method} ${req.url}: ${err?.message}`,
+    customSuccessMessage: (req, res) => `${req.method} ${req.path} ${res.statusCode}`,
+    customErrorMessage: (req, _res, err) => `Error ${req.method} ${req.path}: ${err?.message}`,
   }));
 
   app.use(cors({

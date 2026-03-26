@@ -81,6 +81,62 @@ export const login = async (email: string, password: string) => {
   return data;
 };
 
+const hydrateSessionFromToken = async (token: string) => {
+  const response = await fetch(`${apiBase()}/auth/me`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo validar la sesión.');
+  }
+
+  const user = await response.json();
+  persistSessionUser(user);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_LOGIN_EVENT));
+  }
+  return user;
+};
+
+export const requestMagicLink = async (email: string) => {
+  const response = await fetch(`${apiBase()}/auth/email/request-link`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || 'No se pudo enviar el enlace');
+  }
+  return data;
+};
+
+export const verifyMagicLink = async (token: string) => {
+  const response = await fetch(`${apiBase()}/auth/email/verify?format=json&token=${encodeURIComponent(token)}`, {
+    method: 'GET',
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || 'Enlace inválido o expirado');
+  }
+
+  if (!data?.token) {
+    throw new Error('No se pudo iniciar sesión con el enlace.');
+  }
+
+  localStorage.setItem('token', data.token);
+  clearPendingLogoutRedirect();
+  await hydrateSessionFromToken(data.token);
+  return data;
+};
+
 export const register = async (
   firstName: string,
   lastName: string,
