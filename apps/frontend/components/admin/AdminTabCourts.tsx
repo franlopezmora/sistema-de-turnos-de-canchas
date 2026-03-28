@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { getCourts, suspendCourt, reactivateCourt, updateCourtPrice } from '../../services/CourtService';
+import { isAuthSessionInvalidatedError } from '../../utils/apiClient';
 import AppModal from '../AppModal';
 import { Plus, LayoutGrid, Activity, Power, Ban } from 'lucide-react';
 
@@ -28,20 +29,27 @@ export default function AdminTabCourts() {
     onConfirm: wrapAction(options.onConfirm), onCancel: options.onCancel ? wrapAction(options.onCancel) : undefined
   });
 
-  const loadCourts = async () => {
-    const data = await getCourts();
-    setCourts(data);
-    setPriceEdits((prev) => {
-      const next = { ...prev };
-      data.forEach((court: any) => {
-        if (next[court.id] === undefined) {
-          next[court.id] = court.price !== undefined && court.price !== null ? String(court.price) : '';
-        }
+  const loadCourts = useCallback(async () => {
+    try {
+      const data = await getCourts();
+      setCourts(data);
+      setPriceEdits((prev) => {
+        const next = { ...prev };
+        data.forEach((court: any) => {
+          if (next[court.id] === undefined) {
+            next[court.id] = court.price !== undefined && court.price !== null ? String(court.price) : '';
+          }
+        });
+        return next;
       });
-      return next;
-    });
-  };
-  useEffect(() => { loadCourts(); }, []);
+    } catch (error: any) {
+      if (isAuthSessionInvalidatedError(error)) {
+        return;
+      }
+      showError('Error: ' + error.message);
+    }
+  }, []);
+  useEffect(() => { loadCourts(); }, [loadCourts]);
 
   // ✅ Alta de canchas deshabilitada por seguridad: se gestiona desde base de datos.
 

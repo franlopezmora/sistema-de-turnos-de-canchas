@@ -1,13 +1,15 @@
 import { Request, Response } from 'express';
 import { prisma } from '../prisma';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { getUserClubContext } from '../utils/getUserClubContext';
 import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 import { normalizeIdentityPhone } from '../utils/phone';
 import { logger } from '../utils/logger';
 import { AuthEmailService } from '../services/AuthEmailService';
+import { authConfig } from '../utils/authConfig';
+import { AuthSessionService } from '../services/AuthSessionService';
+import { AuthTokenService } from '../services/AuthTokenService';
 import {
     generateMagicLinkToken,
     getMagicLinkExpiresAt,
@@ -15,8 +17,7 @@ import {
     hashMagicLinkToken,
     normalizeEmail
 } from '../utils/magicLink';
-
-const JWT_SECRET = process.env.JWT_SECRET as string;
+import { sendAuthError } from '../utils/authError';
 const MAGIC_LINK_NEUTRAL_MESSAGE = 'Si el email es válido, te enviamos un enlace para ingresar.';
 const DEFAULT_MAGIC_LINK_USER_FIRST_NAME = 'Nuevo';
 const DEFAULT_MAGIC_LINK_USER_LAST_NAME = 'Usuario';
@@ -99,6 +100,8 @@ type VerifyFailureReason = 'invalid_or_expired' | 'internal_error';
 
 export class AuthController {
     private authEmailService: AuthEmailService | null = null;
+    private authSessionService = new AuthSessionService();
+    private authTokenService = new AuthTokenService();
 
     private getAuthEmailService() {
         if (!this.authEmailService) {
@@ -107,15 +110,65 @@ export class AuthController {
         return this.authEmailService;
     }
 
-    private buildJwtToken(userId: number, role: string) {
-        return jwt.sign(
-            { userId, role },
-            JWT_SECRET,
-            { expiresIn: '6h' }
-        );
+    private getCookieBaseOptions() {
+        return {
+            httpOnly: true,
+            secure: authConfig.cookieSecure,
+            sameSite: authConfig.cookieSameSite,
+            domain: authConfig.cookieDomain,
+            path: '/'
+        } as const;
     }
 
-    private async buildAuthPayload(userId: number, preferredClubId?: number) {
+    private setSessionCookies(res: Response, accessToken: string, refreshToken: string) {
+        const base = this.getCookieBaseOptions();
+        const accessMaxAgeMs = authConfig.accessTtlMinutes * 60 * 1000;
+        const refreshMaxAgeMs = authConfig.refreshIdleDays * 24 * 60 * 60 * 1000;
+        res.cookie(authConfig.accessCookieName, accessToken, {
+            ...base,
+            maxAge: accessMaxAgeMs
+        });
+        res.cookie(authConfig.refreshCookieName, refreshToken, {
+            ...base,
+            maxAge: refreshMaxAgeMs
+        });
+    }
+
+    private clearSessionCookies(res: Response) {
+        const base = this.getCookieBaseOptions();
+        res.clearCookie(authConfig.accessCookieName, base);
+        res.clearCookie(authConfig.refreshCookieName, base);
+    }
+
+    private getRequestMeta(req: Request) {
+        const userAgent = String(req.headers['user-agent'] || '').trim() || null;
+        return {
+            ip: getRequestIp(req),
+            userAgent
+        };
+    }
+
+    private getRefreshTokenFromRequest(req: Request) {
+        const fromCookieParser = String((req as any).cookies?.[authConfig.refreshCookieName] || '').trim();
+        if (fromCookieParser) return fromCookieParser;
+        const source = String(req.headers.cookie || '');
+        if (!source) return null;
+        for (const part of source.split(';')) {
+            const [rawKey, ...rest] = part.split('=');
+            const key = String(rawKey || '').trim();
+            if (key !== authConfig.refreshCookieName) continue;
+            const value = String(rest.join('=') || '').trim();
+            if (!value) return null;
+            try {
+                return decodeURIComponent(value);
+            } catch {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private async buildAuthUserPayload(userId: number, preferredClubId?: number) {
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, role: true, dni: true }
@@ -125,14 +178,13 @@ export class AuthController {
             throw new Error('Usuario no encontrado');
         }
 
-        const token = this.buildJwtToken(user.id, user.role);
         const memberships = await getMembershipsForUser(user.id);
         const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
         const resolvedClubId = activeMembership?.clubId ?? null;
 
         return {
-            token,
-            user: {
+            user,
+            payload: {
                 id: user.id,
                 firstName: user.firstName,
                 lastName: user.lastName,
@@ -146,6 +198,31 @@ export class AuthController {
                 club: activeMembership?.club ?? null,
                 dni: user.dni
             }
+        };
+    }
+
+    private async issueAuthPayload(userId: number, res: Response, req: Request, preferredClubId?: number) {
+        const authUser = await this.buildAuthUserPayload(userId, preferredClubId);
+        let token: string;
+
+        if (authConfig.enableCookieSessions) {
+            const sessionBundle = await this.authSessionService.issueSession({
+                userId: authUser.user.id,
+                role: authUser.user.role,
+                meta: this.getRequestMeta(req)
+            });
+            token = sessionBundle.accessToken;
+            this.setSessionCookies(res, sessionBundle.accessToken, sessionBundle.refreshToken);
+        } else {
+            token = this.authTokenService.signAccessToken({
+                userId: authUser.user.id,
+                role: authUser.user.role
+            });
+        }
+
+        return {
+            token,
+            user: authUser.payload
         };
     }
 
@@ -259,7 +336,7 @@ export class AuthController {
                 select: { id: true }
             });
 
-            const payload = await this.buildAuthPayload(user.id);
+            const payload = await this.issueAuthPayload(user.id, res, req);
             return res.json({
                 message: "Login exitoso",
                 ...payload
@@ -412,7 +489,7 @@ export class AuthController {
                 return res.redirect(302, this.getVerifyRedirectUrl(req, { reason: result.reason }));
             }
 
-            const payload = await this.buildAuthPayload(result.userId);
+            const payload = await this.issueAuthPayload(result.userId, res, req);
             if (expectsJson) {
                 return res.json({
                     message: 'Login exitoso',
@@ -439,15 +516,18 @@ export class AuthController {
     getMe = async (req: Request, res: Response) => {
         const payload = (req as any).user;
         if (!payload?.userId) {
-            return res.status(401).json({ error: 'No autorizado' });
+            return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
         }
         try {
+            const sessionId = String(payload?.sid || '').trim() || null;
+            await this.authSessionService.touchSession(sessionId);
+
             const user = await prisma.user.findUnique({
                 where: { id: payload.userId },
                 select: { id: true, firstName: true, lastName: true, email: true, phoneNumber: true, role: true, dni: true }
             });
             if (!user) {
-                return res.status(401).json({ error: 'Usuario no encontrado' });
+                return sendAuthError(res, 401, 'AUTH_INVALID', 'Usuario no encontrado');
             }
 
             const memberships = await getMembershipsForUser(user.id);
@@ -455,7 +535,7 @@ export class AuthController {
             try {
                 preferredClubId = getPreferredClubIdFromRequest(req);
             } catch (error: any) {
-                return res.status(400).json({ error: error?.message || 'Contexto de club inválido' });
+                return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', error?.message || 'Contexto de club inválido');
             }
             const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
             const clubId = activeMembership?.clubId ?? null;
@@ -483,7 +563,7 @@ export class AuthController {
     updateMe = async (req: Request, res: Response) => {
         const payload = (req as any).user;
         if (!payload?.userId) {
-            return res.status(401).json({ error: 'No autorizado' });
+            return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
         }
 
         const updateSchema = z.object({
@@ -526,6 +606,9 @@ export class AuthController {
         }
 
         try {
+            const sessionId = String(payload?.sid || '').trim() || null;
+            await this.authSessionService.touchSession(sessionId);
+
             const user = await prisma.user.update({
                 where: { id: payload.userId },
                 data: {
@@ -542,7 +625,7 @@ export class AuthController {
             try {
                 preferredClubId = getPreferredClubIdFromRequest(req);
             } catch (error: any) {
-                return res.status(400).json({ error: error?.message || 'Contexto de club inválido' });
+                return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', error?.message || 'Contexto de club inválido');
             }
             const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
             const clubId = activeMembership?.clubId ?? null;
@@ -564,6 +647,68 @@ export class AuthController {
             });
         } catch (error: any) {
             return res.status(500).json({ error: error.message || 'No se pudo actualizar el perfil' });
+        }
+    };
+
+    sessionMe = async (req: Request, res: Response) => {
+        return this.getMe(req, res);
+    };
+
+    sessionRefresh = async (req: Request, res: Response) => {
+        try {
+            const refreshToken = this.getRefreshTokenFromRequest(req);
+            if (!refreshToken) {
+                this.clearSessionCookies(res);
+                return sendAuthError(res, 401, 'AUTH_MISSING', 'No hay sesión activa para refrescar.');
+            }
+
+            const rotated = await this.authSessionService.rotateSession({
+                refreshToken,
+                meta: this.getRequestMeta(req)
+            });
+
+            if (!rotated.ok) {
+                this.clearSessionCookies(res);
+                return sendAuthError(res, 401, rotated.reason, 'No se pudo refrescar la sesión.');
+            }
+
+            this.setSessionCookies(res, rotated.accessToken, rotated.refreshToken);
+            return res.status(204).send();
+        } catch (error: any) {
+            return res.status(500).json({ error: error?.message || 'No se pudo refrescar la sesión.' });
+        }
+    };
+
+    sessionLogout = async (req: Request, res: Response) => {
+        try {
+            const refreshToken = this.getRefreshTokenFromRequest(req);
+            const sessionId = String((req as any)?.user?.sid || '').trim() || null;
+
+            await Promise.all([
+                this.authSessionService.revokeCurrentSessionByRefreshToken(refreshToken),
+                this.authSessionService.revokeSessionById(sessionId)
+            ]);
+
+            this.clearSessionCookies(res);
+            return res.status(204).send();
+        } catch (error: any) {
+            return res.status(500).json({ error: error?.message || 'No se pudo cerrar la sesión.' });
+        }
+    };
+
+    sessionLogoutAll = async (req: Request, res: Response) => {
+        try {
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                this.clearSessionCookies(res);
+                return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
+            }
+
+            await this.authSessionService.revokeAllUserSessions(userId);
+            this.clearSessionCookies(res);
+            return res.status(204).send();
+        } catch (error: any) {
+            return res.status(500).json({ error: error?.message || 'No se pudieron cerrar las sesiones.' });
         }
     };
 }

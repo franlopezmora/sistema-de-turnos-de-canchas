@@ -28,10 +28,11 @@ export default function AdminIndex() {
         <title>Admin | TuCancha</title>
       </Head>
       {!authChecked || !user
-        ? <RouteTransitionScreen message={authChecked ? 'Redirigiendo al login...' : 'Validando acceso...'} />
+        ? <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />
         : !hasAdminAccess(user)
           ? <NotFound message="No tenes permiso para acceder al panel de administracion." />
           : null}
     </>
   );
 }
+

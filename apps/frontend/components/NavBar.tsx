@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AUTH_LOGIN_EVENT, AUTH_LOGOUT_EVENT, getToken, logout } from '../services/AuthService';
+import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { ClubService } from '../services/ClubService';
 import { NotificationService, NotificationItem } from '../services/NotificationService';
-import { getActiveClubSlug, getLastClubSlug, hasAdminAccess, normalizeSessionUser, setLastClubSlug } from '../utils/session';
+import { getActiveClubSlug, getLastClubSlug, hasAdminAccess, setLastClubSlug } from '../utils/session';
 import { reportUiError } from '../utils/uiError';
+import { useAuth } from '../contexts/AuthContext';
+import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 import AppModal from './AppModal';
 import { Menu, Home, Calendar, Settings, LogOut, Phone, Mail, Check, Lock, MapPin, Bell, User } from 'lucide-react'; 
 
@@ -29,8 +31,7 @@ const countActiveBookings = (rows: any[]): number => {
 
 const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [isGuest, setIsGuest] = useState(false);
+  const { user } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -41,69 +42,23 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
   const navRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const hydrateAuthState = () => {
-      const token = getToken();
-      const userStr = localStorage.getItem('user');
-
-      if (token && userStr) {
-        try {
-          setUser(normalizeSessionUser(JSON.parse(userStr)));
-          setIsGuest(false);
-          return;
-        } catch {
-          localStorage.removeItem('user');
-          setUser(null);
-        }
-      } else if (!token && userStr) {
-        localStorage.removeItem('user');
-      }
-
-      let guestId = localStorage.getItem('guestId');
-      if (!guestId) {
-        try {
-          guestId = (typeof crypto !== 'undefined' && (crypto as any).randomUUID) 
-            ? (crypto as any).randomUUID() 
-            : `guest_${Math.random().toString(36).slice(2, 10)}`;
-          localStorage.setItem('guestId', guestId);
-        } catch {
-          guestId = `guest_${Math.random().toString(36).slice(2, 10)}`;
-          localStorage.setItem('guestId', guestId);
-        }
-      }
-      setUser(null);
-      setIsGuest(Boolean(guestId));
-    };
-
-    hydrateAuthState();
-
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 10);
     };
-    const handleLogout = () => {
-      setUser(null);
-      setShowUserMenu(false);
-      setShowNotifications(false);
-      setActiveBookingsCount(0);
-      setResolvedAdminClubSlug(null);
-      setIsGuest(true);
-    };
-    const handleLogin = () => {
-      hydrateAuthState();
-    };
-    const handleStorage = () => {
-      hydrateAuthState();
-    };
+
     window.addEventListener('scroll', handleScroll);
-    window.addEventListener(AUTH_LOGOUT_EVENT, handleLogout);
-    window.addEventListener(AUTH_LOGIN_EVENT, handleLogin);
-    window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener(AUTH_LOGOUT_EVENT, handleLogout);
-      window.removeEventListener(AUTH_LOGIN_EVENT, handleLogin);
-      window.removeEventListener('storage', handleStorage);
     };
   }, []);
+
+  useEffect(() => {
+    if (user) return;
+    setShowUserMenu(false);
+    setShowNotifications(false);
+    setActiveBookingsCount(0);
+    setResolvedAdminClubSlug(null);
+  }, [user]);
 
 
   useEffect(() => {
@@ -121,6 +76,9 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
         const active = Array.isArray(bookings) ? countActiveBookings(bookings) : 0;
         setActiveBookingsCount(active);
       } catch (error) {
+        if (isAuthSessionInvalidatedError(error)) {
+          return;
+        }
         reportUiError({ area: 'NavBar', action: 'loadActiveBookings' }, error);
       }
     };
@@ -434,8 +392,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
         </div>
 
           {/* --- DERECHA: USUARIO / LOGIN --- */}
-          {(user || isGuest) && (
-            <div className="flex items-center gap-2 sm:gap-4 relative">
+          <div className="flex items-center gap-2 sm:gap-4 relative">
 
               {isAdmin && (
                 <div className="relative">
@@ -597,7 +554,6 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
                 </Link>
               )}
             </div>
-          )}
         </div>
       </nav>
       

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { ClientDuplicateIncidentService } from '../services/ClientDuplicateIncidentService';
+import { sendAuthError } from '../utils/authError';
 
 export class ClientDuplicateIncidentController {
   constructor(private readonly service: ClientDuplicateIncidentService) {}
@@ -49,7 +50,7 @@ export class ClientDuplicateIncidentController {
       const clubId = Number((req as any).clubId);
       const actorUserId = Number((req as any)?.user?.userId || 0);
       if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
-        return res.status(401).json({ error: 'No autorizado' });
+        return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
       }
 
       const paramsSchema = z.object({ incidentId: z.string().trim().min(1) });
@@ -77,7 +78,7 @@ export class ClientDuplicateIncidentController {
       const clubId = Number((req as any).clubId);
       const actorUserId = Number((req as any)?.user?.userId || 0);
       if (!Number.isInteger(actorUserId) || actorUserId <= 0) {
-        return res.status(401).json({ error: 'No autorizado' });
+        return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
       }
 
       const paramsSchema = z.object({ incidentId: z.string().trim().min(1) });

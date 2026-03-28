@@ -201,6 +201,13 @@ enum ClubReviewStatus {
   HIDDEN
 }
 
+enum AuthSessionStatus {
+  ACTIVE
+  ROTATED
+  REVOKED
+  EXPIRED
+}
+
 //
 // MODELOS
 //
@@ -238,6 +245,7 @@ model User {
   clubFavorites ClubFavorite[]
   duplicateIncidents ClientDuplicateIncident[] @relation("DuplicateIncidentUser")
   duplicateIncidentsResolved ClientDuplicateIncident[] @relation("DuplicateIncidentResolvedBy")
+  sessions      AuthSession[]
 }
 
 model MagicLoginToken {
@@ -251,6 +259,32 @@ model MagicLoginToken {
   userAgent String?
 
   @@index([email])
+  @@index([expiresAt])
+}
+
+model AuthSession {
+  id                String            @id @default(cuid())
+  userId            Int
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  refreshTokenHash  String            @unique
+  familyId          String
+  parentSessionId   String?
+  status            AuthSessionStatus @default(ACTIVE)
+
+  ip                String?
+  userAgent         String?
+  deviceLabel       String?
+
+  createdAt         DateTime          @default(now()) @db.Timestamptz(3)
+  lastSeenAt        DateTime          @default(now()) @db.Timestamptz(3)
+  rotatedAt         DateTime?         @db.Timestamptz(3)
+  revokedAt         DateTime?         @db.Timestamptz(3)
+  expiresAt         DateTime          @db.Timestamptz(3)
+  absoluteExpiresAt DateTime          @db.Timestamptz(3)
+
+  @@index([userId, status])
+  @@index([familyId])
   @@index([expiresAt])
 }
 

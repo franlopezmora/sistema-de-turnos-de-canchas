@@ -3,15 +3,19 @@ import Head from 'next/head';
 import { useEffect, useRef, useState } from 'react';
 import Router from 'next/router';
 import { ActiveClubProvider } from '../contexts/ActiveClubContext';
+import { AuthProvider } from '../contexts/AuthContext';
 import { AUTH_LOGOUT_EVENT, clearPendingLogoutRedirect, type AuthLogoutEventDetail } from '../services/AuthService';
+import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 
-// IMPORTANTE: Aquí buscamos el archivo en la carpeta styles
+// IMPORTANTE: Aqui buscamos el archivo en la carpeta styles
 import '../styles/globals.css'; 
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || '';
 const LOGO_PATH = '/logo1.svg';
 const LOGO_URL = SITE_URL ? `${SITE_URL.replace(/\/+$/,'')}${LOGO_PATH}` : LOGO_PATH;
 export const APP_NOTICE_EVENT = 'app:notice';
+const PENDING_APP_NOTICE_STORAGE_KEY = 'app:notice:pending';
+const LOGOUT_NOTICE_COOLDOWN_MS = 6000;
 type AppNotice = {
   id: number;
   message: string;
@@ -22,6 +26,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   const [notices, setNotices] = useState<AppNotice[]>([]);
   const noticeIdRef = useRef(1);
   const noticeTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const lastLogoutNoticeAtRef = useRef(0);
 
   useEffect(() => {
     const preventNumberInputWheel = (event: WheelEvent) => {
@@ -39,6 +44,23 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   }, []);
 
   useEffect(() => {
+    const consumePendingNotice = () => {
+      if (typeof window === 'undefined') return null;
+      const raw = sessionStorage.getItem(PENDING_APP_NOTICE_STORAGE_KEY);
+      if (!raw) return null;
+      sessionStorage.removeItem(PENDING_APP_NOTICE_STORAGE_KEY);
+      try {
+        const parsed = JSON.parse(raw) as { message?: unknown; ts?: unknown };
+        const message = String(parsed?.message || '').trim();
+        const ts = Number(parsed?.ts || 0);
+        if (!message) return null;
+        if (!Number.isFinite(ts) || Date.now() - ts > 15000) return null;
+        return message;
+      } catch {
+        return null;
+      }
+    };
+
     const scheduleTimeout = (fn: () => void, delay: number) => {
       const timeout = setTimeout(fn, delay);
       noticeTimeoutsRef.current.push(timeout);
@@ -64,14 +86,27 @@ export default function MyApp({ Component, pageProps }: AppProps) {
     const handleLogout = (event: Event) => {
       const custom = event as CustomEvent<AuthLogoutEventDetail>;
       const redirectTo = String(custom?.detail?.redirectTo || '').trim();
-      showNotice('Sesion cerrada correctamente.');
-      if (redirectTo) {
-        void Router.replace(redirectTo).finally(() => {
-          clearPendingLogoutRedirect();
-        });
-        return;
+      const now = Date.now();
+      // Evita toasts duplicados cuando varias requests disparan logout casi al mismo tiempo.
+      if (now - lastLogoutNoticeAtRef.current > LOGOUT_NOTICE_COOLDOWN_MS) {
+        if (redirectTo) {
+          // Solo persistimos cuando hay navegacion para mostrarlo en destino.
+          sessionStorage.setItem(
+            PENDING_APP_NOTICE_STORAGE_KEY,
+            JSON.stringify({ message: 'Sesion cerrada correctamente.', ts: now })
+          );
+        } else {
+          // Sin navegacion, mostrar una vez y no persistir para evitar duplicados.
+          showNotice('Sesion cerrada correctamente.');
+        }
+        lastLogoutNoticeAtRef.current = now;
       }
-      clearPendingLogoutRedirect();
+      // La navegacion post-logout la orquesta AuthService.logout().
+      // _app solo mantiene feedback UI y limpieza minima.
+      if (!redirectTo) {
+        sessionStorage.removeItem(PENDING_APP_NOTICE_STORAGE_KEY);
+        clearPendingLogoutRedirect();
+      }
     };
     const handleAppNotice = (event: Event) => {
       const custom = event as CustomEvent<{ message?: string }>;
@@ -79,12 +114,38 @@ export default function MyApp({ Component, pageProps }: AppProps) {
       if (!message) return;
       showNotice(message);
     };
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      if (isAuthSessionInvalidatedError(reason)) {
+        event.preventDefault();
+        return;
+      }
+      const message = String((reason as any)?.message || reason || '').toUpperCase();
+      if (
+        message.includes('AUTH_MISSING') ||
+        message.includes('AUTH_INVALID') ||
+        message.includes('AUTH_EXPIRED') ||
+        message.includes('AUTH_REVOKED')
+      ) {
+        event.preventDefault();
+      }
+    };
 
     window.addEventListener(AUTH_LOGOUT_EVENT, handleLogout);
     window.addEventListener(APP_NOTICE_EVENT, handleAppNotice as EventListener);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    const consumeAndShowPendingNotice = () => {
+      const pending = consumePendingNotice();
+      if (pending) showNotice(pending);
+    };
+    consumeAndShowPendingNotice();
+    Router.events.on('routeChangeComplete', consumeAndShowPendingNotice);
+
     return () => {
       window.removeEventListener(AUTH_LOGOUT_EVENT, handleLogout);
       window.removeEventListener(APP_NOTICE_EVENT, handleAppNotice as EventListener);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      Router.events.off('routeChangeComplete', consumeAndShowPendingNotice);
       noticeTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
       noticeTimeoutsRef.current = [];
     };
@@ -109,7 +170,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="TuCancha" />
         <meta property="og:title" content="TuCancha" />
-        <meta property="og:description" content="Reserva canchas y gestiona turnos fácilmente." />
+        <meta property="og:description" content="Reserva canchas y gestiona turnos facilmente." />
         <meta property="og:image" content={LOGO_URL} />
         <meta property="og:image:width" content="512" />
         <meta property="og:image:height" content="512" />
@@ -122,7 +183,9 @@ export default function MyApp({ Component, pageProps }: AppProps) {
         />
       </Head>
       <ActiveClubProvider>
-        <Component {...pageProps} />
+        <AuthProvider>
+          <Component {...pageProps} />
+        </AuthProvider>
       </ActiveClubProvider>
       {notices.length > 0 && (
         <div className="fixed bottom-5 left-1/2 z-[100000] -translate-x-1/2 pointer-events-none">

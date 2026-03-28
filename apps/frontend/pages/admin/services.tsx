@@ -27,7 +27,7 @@ export default function AdminServicesPage() {
     setClubSlug(activeSlug || undefined);
   }, [authChecked, user]);
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo al login...' : 'Validando acceso...'} />;
+  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
   if (!hasAdminAccess(user)) return <NotFound message="No tenes permiso para acceder al panel de administracion." />;
 
   return (
@@ -41,3 +41,4 @@ export default function AdminServicesPage() {
     </div>
   );
 }
+

@@ -21,7 +21,7 @@ export default function AdminStatisticsPage() {
     void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/admin/statistics')}`);
   }, [authChecked, user, router]);
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo al login...' : 'Validando acceso...'} />;
+  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
 
   if (!hasAdminAccess(user)) {
     return <NotFound message="No tenés permiso para acceder." />;
@@ -47,3 +47,4 @@ export default function AdminStatisticsPage() {
     </div>
   );
 }
+

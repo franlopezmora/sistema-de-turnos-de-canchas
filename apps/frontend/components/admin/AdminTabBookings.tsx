@@ -23,6 +23,7 @@ import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 import { formatTime24 } from '../../utils/dateTime';
 import { reportUiError } from '../../utils/uiError';
 import { lockBodyScroll } from '../../utils/bodyScrollLock';
+import { isAuthSessionInvalidatedError } from '../../utils/apiClient';
 import { buildCanonicalPhone, DEFAULT_PHONE_COUNTRY_ISO2, normalizePhoneCountryIso2, PHONE_COUNTRY_OPTIONS, splitCanonicalPhone } from '../../utils/phone';
 import type { RefundDraft } from '../../modules/refunds/refund.types';
 import { buildDefaultRefundDraft } from '../../modules/refunds/refund.policy';
@@ -919,8 +920,15 @@ export default function AdminTabBookings() {
       setCourts([]);
       return;
     }
-    const data = await ClubAdminService.getCourts(slug);
-    setCourts(Array.isArray(data) ? data : []);
+    try {
+      const data = await ClubAdminService.getCourts(slug);
+      setCourts(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      if (isAuthSessionInvalidatedError(error)) {
+        return;
+      }
+      showError('Error: ' + error.message);
+    }
   }, [getClubSlug]);
 
   const loadSchedule = useCallback(async () => {

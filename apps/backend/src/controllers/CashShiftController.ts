@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { CashShiftService } from '../services/CashShiftService';
 import { mapCashShiftDto } from '../dto/financialDto';
+import { sendAuthError } from '../utils/authError';
 
 export class CashShiftController {
   private readonly service = new CashShiftService();
@@ -28,7 +29,7 @@ export class CashShiftController {
 
       const clubId = this.resolveClubId(req);
       const openedByUserId = Number((req as any)?.user?.userId || 0);
-      if (!openedByUserId) return res.status(401).json({ error: 'Usuario inválido' });
+      if (!openedByUserId) return sendAuthError(res, 401, 'AUTH_MISSING', 'Usuario inválido');
 
       const shift = await this.service.open(clubId, openedByUserId, parsed.data);
       return res.status(201).json(mapCashShiftDto(shift));

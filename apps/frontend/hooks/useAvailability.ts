@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiUrl } from '../utils/apiUrl';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
-import { getToken } from '../services/AuthService';
 
 interface Court {
   id: number;
@@ -67,14 +66,10 @@ export function useAvailability(
       const durationParam = Number.isFinite(durationMinutes)
         ? `&durationMinutes=${durationMinutes}`
         : '';
-      const token = getToken();
       const headers: Record<string, string> = {
         'Pragma': 'no-cache',
         'Cache-Control': 'no-cache, no-store, must-revalidate'
       };
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
 
       const res = await fetch(
         `${apiBase}/bookings/availability-with-courts?activityId=${Number(activityId)}&date=${dateString}&t=${timestamp}${clubParam}${durationParam}`,

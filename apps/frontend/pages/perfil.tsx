@@ -51,7 +51,7 @@ export default function PerfilPage() {
     });
   }, [user]);
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo al login...' : 'Validando sesion...'} />;
+  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando sesion...'} />;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -222,3 +222,4 @@ export default function PerfilPage() {
     </>
   );
 }
+

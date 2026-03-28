@@ -1,4 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
+﻿import { Request, Response, NextFunction } from 'express';
+import { sendAuthError } from '../utils/authError';
 
 const expandAcceptedRoles = (roles: string[]) => {
     const accepted = new Set<string>();
@@ -15,7 +16,7 @@ export const requireRole = (role: string | string[]) => {
     return (req: Request, res: Response, next: NextFunction) => {
         const user = (req as any).user;
         if (!user) {
-            return res.status(401).json({ error: 'Acceso denegado. Falta autenticación.' });
+            return sendAuthError(res, 401, 'AUTH_MISSING', 'Acceso denegado. Falta autenticación.');
         }
         const requestedRoles = Array.isArray(role) ? role : [role];
         const acceptedRoles = expandAcceptedRoles(requestedRoles);
@@ -26,8 +27,7 @@ export const requireRole = (role: string | string[]) => {
         }
 
         if (!acceptedRoles.has(String(user.role))) {
-            return res.status(403).json({ error: 'Permisos insuficientes.' });
+            return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'Permisos insuficientes.');
         }
     };
 };
-

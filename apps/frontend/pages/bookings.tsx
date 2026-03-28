@@ -301,7 +301,7 @@ export default function MyBookingsPage() {
     }
   };
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo al login...' : 'Validando sesion...'} />;
+  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando sesion...'} />;
 
   // --- RENDERIZADO VISUAL PREMIUM ---
   return (
@@ -639,3 +639,4 @@ export default function MyBookingsPage() {
     </>
   );
 }
+

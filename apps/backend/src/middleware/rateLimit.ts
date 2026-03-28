@@ -41,6 +41,15 @@ export const magicLinkRequestLimiter = rateLimit({
   legacyHeaders: false
 });
 
+/** 20 refresh attempts por minuto */
+export const sessionRefreshLimiter = rateLimit({
+  windowMs: parseWindowMs('RATE_LIMIT_SESSION_REFRESH_WINDOW_MS', 60_000),
+  max: parseMax('RATE_LIMIT_SESSION_REFRESH_MAX', 20),
+  message: { error: 'Demasiadas solicitudes de refresco de sesión. Esperá un momento.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 /** 30 pagos por minuto por IP */
 export const paymentLimiter = rateLimit({
   windowMs: parseWindowMs('RATE_LIMIT_PAYMENT_WINDOW_MS', 60_000),

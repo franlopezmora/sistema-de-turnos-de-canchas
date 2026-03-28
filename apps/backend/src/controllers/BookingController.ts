@@ -9,6 +9,7 @@ import { getUserClubContext } from '../utils/getUserClubContext';
 import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 import { sanitizeString } from '../utils/sanitize';
 import { normalizeIdentityPhone } from '../utils/phone';
+import { sendAuthError } from '../utils/authError';
 
 const getErrorMessage = (error: unknown, fallback: string) =>
     error instanceof Error && String(error.message || '').trim().length > 0
@@ -17,6 +18,14 @@ const getErrorMessage = (error: unknown, fallback: string) =>
 
 const isIntegrityInconsistencyError = (error: unknown) =>
     getErrorMessage(error, '').includes('Inconsistencia de integridad');
+
+type OptionalAuthState = 'guest' | 'authenticated' | 'invalid_token';
+
+const resolveOptionalAuthState = (req: Request): OptionalAuthState => {
+    const raw = String((req as any).authState || 'guest').trim();
+    if (raw === 'authenticated' || raw === 'invalid_token') return raw;
+    return 'guest';
+};
 
 export class BookingController {
     private productService = new ProductService();
@@ -196,7 +205,10 @@ export class BookingController {
             const effectiveUserId = useAdminClientMode ? null : tokenUserId;
 
             if (!effectiveUserId && !useAdminClientMode) {
-                return res.status(401).json({ error: "Debes iniciar sesión para reservar." });
+                if (resolveOptionalAuthState(req) === 'invalid_token') {
+                    return sendAuthError(res, 401, 'AUTH_INVALID', 'Sesion invalida. Volve a iniciar sesion.');
+                }
+                return sendAuthError(res, 401, 'AUTH_MISSING', 'Debes iniciar sesión para reservar.');
             }
 
             // 1. CREAR LA RESERVA
@@ -359,7 +371,10 @@ export class BookingController {
                 applyDiscount: isAdmin ? applyDiscount : false
             });
 
-            return res.json(quote);
+            return res.json({
+                ...quote,
+                authState: resolveOptionalAuthState(req)
+            });
         } catch (error: any) {
             return res.status(400).json({ error: error?.message || 'No se pudo cotizar la reserva' });
         }
@@ -433,7 +448,7 @@ export class BookingController {
             res.json({ message: "Reserva cancelada", booking: result });
         } catch (error: any) {
             if (error.message === "No tienes acceso a esta reserva") {
-                return res.status(403).json({ error: error.message });
+                return sendAuthError(res, 403, 'AUTH_FORBIDDEN', error.message);
             }
             if (isIntegrityInconsistencyError(error)) {
                 return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en reserva') });
@@ -495,7 +510,7 @@ export class BookingController {
             const take = Number.isInteger(takeRaw) && takeRaw > 0 ? Math.min(takeRaw, 100) : 50;
             const user = (req as any).user;
             if (!user?.userId) {
-                return res.status(401).json({ error: 'No autorizado' });
+                return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
             }
             let preferredClubId: number | undefined;
             try {
@@ -545,7 +560,7 @@ export class BookingController {
             res.json(payload);
         } catch (error: any) {
             if (error.message === "No tienes permiso para ver el historial de otro usuario") {
-                return res.status(403).json({ error: error.message });
+                return sendAuthError(res, 403, 'AUTH_FORBIDDEN', error.message);
             }
             res.status(400).json({ error: error.message });
         }
@@ -632,7 +647,8 @@ export class BookingController {
                 date: date,
                 slotsWithCourts: availability.slotsWithCourts,
                 professorOverrideAvailable: availability.professorOverrideAvailable,
-                professorDurationOverrideMinutes: availability.professorDurationOverrideMinutes
+                professorDurationOverrideMinutes: availability.professorDurationOverrideMinutes,
+                authState: resolveOptionalAuthState(req)
             });
         } catch (error: any) {
             res.status(400).json({ error: error.message });
@@ -709,7 +725,7 @@ export class BookingController {
             const clubId = (req as any).clubId;
 
             if (!isAdmin) {
-                return res.status(403).json({ error: "Solo un administrador puede crear turnos fijos." });
+                return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'Solo un administrador puede crear turnos fijos.');
             }
 
             const sanitizedClient = client

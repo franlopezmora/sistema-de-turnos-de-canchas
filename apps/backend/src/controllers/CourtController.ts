@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { CourtRepository } from '../repositories/CourtRepository';
 import { prisma } from '../prisma';
 import { z } from 'zod';
+import { sendAuthError } from '../utils/authError';
 
 export class CourtController {
     private courtRepo: CourtRepository;
@@ -83,7 +84,7 @@ export class CourtController {
                     return res.status(404).json({ error: "Cancha no encontrada" });
                 }
                 if (court.clubId !== clubId) {
-                    return res.status(403).json({ error: "No tienes acceso a esta cancha" });
+                    return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'No tienes acceso a esta cancha');
                 }
             }
 
@@ -141,7 +142,7 @@ export class CourtController {
                     return res.status(404).json({ error: "Cancha no encontrada" });
                 }
                 if (court.clubId !== clubId) {
-                    return res.status(403).json({ error: "No tienes acceso a esta cancha" });
+                    return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'No tienes acceso a esta cancha');
                 }
             }
 
@@ -173,7 +174,7 @@ export class CourtController {
                     return res.status(404).json({ error: "Cancha no encontrada" });
                 }
                 if (court.clubId !== clubId) {
-                    return res.status(403).json({ error: "No tienes acceso a esta cancha" });
+                    return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'No tienes acceso a esta cancha');
                 }
             }
 
@@ -208,7 +209,7 @@ export class CourtController {
             }
 
             if (clubId && court.clubId !== clubId) {
-                return res.status(403).json({ error: 'No tienes acceso a esta cancha' });
+                return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'No tienes acceso a esta cancha');
             }
 
             const deleted = await this.courtRepo.deleteCourt(id);
@@ -218,4 +219,3 @@ export class CourtController {
         }
     }
 }
-

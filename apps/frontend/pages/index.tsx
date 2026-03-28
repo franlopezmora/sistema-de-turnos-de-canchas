@@ -5,12 +5,15 @@ import { ClubService, Club } from '../services/ClubService';
 import { getApiUrl } from '../utils/apiUrl';
 import { LocationService, Location } from '../services/LocationService';
 import DatePickerDark from '../components/ui/DatePickerDark';
+import AppModal from '../components/AppModal';
 import { Search, MapPin, Calendar, TrendingUp, ShieldCheck, ArrowRight, Menu, X, Phone, Mail, Instagram, Activity, ChevronRight, ChevronLeft, MousePointerClick, CalendarCheck, PlayCircle, Coffee, Droplets, Lightbulb, Trophy, ChevronDown, LogOut, Check, MessageSquare, Calculator, Users, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 import { reportUiError } from '../utils/uiError';
+import { useAuth } from '../contexts/AuthContext';
+import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 // Importamos los íconos de la librería
 import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Pádel)
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de fútbol limpia
@@ -144,12 +147,14 @@ const formatClubAddress = (club: Club) => {
 
 export default function Home() {
   const router = useRouter();
+  const { user: authUser } = useAuth();
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loadingClubs, setLoadingClubs] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [showContact, setShowContact] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeBookingsCount, setActiveBookingsCount] = useState(0);
   const [favoriteClubIds, setFavoriteClubIds] = useState<Set<number>>(new Set());
@@ -334,13 +339,6 @@ export default function Home() {
   const selectedSport = sportOptions.find((sport) => sport.value === searchSport) || sportOptions[0];
 
   useEffect(() => {
-    const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-    if (userStr) {
-      try {
-        setUser(normalizeSessionUser(JSON.parse(userStr)));
-      } catch {}
-    }
-
     const loadClubs = async () => {
       try {
         const allClubs = await ClubService.getAllClubs();
@@ -366,6 +364,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    setUser(authUser ? normalizeSessionUser(authUser as any) : null);
+    if (!authUser) {
+      setShowUserMenu(false);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
     const loadActiveBookings = async () => {
       if (!user?.id) {
         setActiveBookingsCount(0);
@@ -376,6 +381,9 @@ export default function Home() {
         const active = Array.isArray(bookings) ? countActiveBookings(bookings) : 0;
         setActiveBookingsCount(active);
       } catch (error) {
+        if (isAuthSessionInvalidatedError(error)) {
+          return;
+        }
         reportUiError({ area: 'HomePage', action: 'loadActiveBookings' }, error);
       }
     };
@@ -400,6 +408,9 @@ export default function Home() {
         setFavoriteClubIds(nextIds);
         setFavoriteClubs(nextClubs);
       } catch (error) {
+        if (isAuthSessionInvalidatedError(error)) {
+          return;
+        }
         reportUiError({ area: 'HomePage', action: 'loadFavorites' }, error);
       }
     };
@@ -895,8 +906,7 @@ export default function Home() {
                           className="flex items-center gap-3 text-red-500 hover:text-red-600 w-full text-left p-2 rounded-xl hover:bg-red-50 transition-colors"
                           onClick={() => {
                             // Cerrar sesión sin forzar redirección.
-                            logout();
-                            setUser(null);
+                            setShowLogoutModal(true);
                             setShowUserMenu(false);
                           }}
                         >
@@ -1596,6 +1606,21 @@ export default function Home() {
             >{copied ? 'Copiado!' : 'Copiar'}</button>
           </div>
         )}
+        <AppModal
+          show={showLogoutModal}
+          title="Cerrar sesión"
+          message="¿Seguro que querés cerrar sesión?"
+          isWarning
+          confirmText="Salir"
+          cancelText="Cancelar"
+          onConfirm={() => {
+            setShowLogoutModal(false);
+            logout();
+            setUser(null);
+          }}
+          onClose={() => setShowLogoutModal(false)}
+          onCancel={() => setShowLogoutModal(false)}
+        />
       </div>
       </div>
     </>

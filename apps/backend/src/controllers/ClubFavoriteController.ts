@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ClubFavoriteService } from '../services/ClubFavoriteService';
+import { sendAuthError } from '../utils/authError';
 
 export class ClubFavoriteController {
   constructor(private readonly favoriteService: ClubFavoriteService) {}
@@ -8,7 +9,7 @@ export class ClubFavoriteController {
     try {
       const userId = Number((req as any)?.user?.userId || 0);
       if (!Number.isFinite(userId) || userId <= 0) {
-        return res.status(401).json({ error: 'Usuario no autenticado' });
+        return sendAuthError(res, 401, 'AUTH_MISSING', 'Usuario no autenticado');
       }
 
       const favorites = await this.favoriteService.listFavorites(userId);
@@ -23,7 +24,7 @@ export class ClubFavoriteController {
       const userId = Number((req as any)?.user?.userId || 0);
       const clubId = Number(req.params.id || 0);
       if (!Number.isFinite(userId) || userId <= 0) {
-        return res.status(401).json({ error: 'Usuario no autenticado' });
+        return sendAuthError(res, 401, 'AUTH_MISSING', 'Usuario no autenticado');
       }
       if (!Number.isFinite(clubId) || clubId <= 0) {
         return res.status(400).json({ error: 'Club inválido' });
@@ -41,7 +42,7 @@ export class ClubFavoriteController {
       const userId = Number((req as any)?.user?.userId || 0);
       const clubId = Number(req.params.id || 0);
       if (!Number.isFinite(userId) || userId <= 0) {
-        return res.status(401).json({ error: 'Usuario no autenticado' });
+        return sendAuthError(res, 401, 'AUTH_MISSING', 'Usuario no autenticado');
       }
       if (!Number.isFinite(clubId) || clubId <= 0) {
         return res.status(400).json({ error: 'Club inválido' });
@@ -54,4 +55,3 @@ export class ClubFavoriteController {
     }
   };
 }
-

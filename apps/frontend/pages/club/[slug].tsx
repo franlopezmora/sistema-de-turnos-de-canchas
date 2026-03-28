@@ -10,6 +10,7 @@ import { getMyBookings } from '../../services/BookingService';
 import { getMyReviewForBooking } from '../../services/ClubReviewService';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import { reportUiError } from '../../utils/uiError';
+import { isAuthSessionInvalidatedError } from '../../utils/apiClient';
 import { 
   MapPin, 
   Calendar, 
@@ -127,6 +128,9 @@ export default function ClubPage() {
           setHasExistingClubReview(false);
         }
       } catch (error) {
+        if (isAuthSessionInvalidatedError(error)) {
+          return;
+        }
         reportUiError({ area: 'ClubPage', action: 'loadReviewEligibility' }, error);
         setCanReviewClub(false);
         setHasExistingClubReview(false);
@@ -165,7 +169,10 @@ export default function ClubPage() {
         setIsFavorite(
           Array.isArray(favorites) && favorites.some((item: any) => Number(item?.clubId) === clubId)
         );
-      } catch {
+      } catch (error) {
+        if (isAuthSessionInvalidatedError(error)) {
+          return;
+        }
         setIsFavorite(false);
       }
     };

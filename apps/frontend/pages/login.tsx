@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { login, register, requestMagicLink, verifyMagicLink } from '../services/AuthService';
@@ -6,9 +6,15 @@ import { ClubService } from '../services/ClubService';
 import { Mail, Lock, User, Phone, UserPlus, LogIn, AlertCircle, Loader2, IdCard, CheckCircle, Eye, EyeOff } from 'lucide-react'; // Agregamos IdCard y Eye
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 import { buildCanonicalPhone, DEFAULT_PHONE_COUNTRY_ISO2, normalizePhoneCountryIso2, PHONE_COUNTRY_OPTIONS, resolveCallingCodeByIso2 } from '../utils/phone';
+import { useAuth } from '../contexts/AuthContext';
+
+type PostLoginRedirectIntent = {
+  sourceUser?: any;
+};
 
 export default function LoginPage() {
   const router = useRouter();
+  const { status, user: authUser, revalidateSession } = useAuth();
   const returnTo = typeof router.query.from === 'string' && router.query.from.startsWith('/') && !router.query.from.startsWith('//')
     ? router.query.from
     : null;
@@ -31,10 +37,76 @@ export default function LoginPage() {
   const [magicLoading, setMagicLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [redirectIntent, setRedirectIntent] = useState<PostLoginRedirectIntent | null>(null);
+  const redirectingRef = useRef(false);
+
+  const resolvePostLoginDestination = useCallback(async (sourceUser?: any) => {
+    const normalizedUser = normalizeSessionUser(sourceUser || authUser);
+    const safeReturnTo =
+      returnTo &&
+      returnTo !== '/login' &&
+      !returnTo.startsWith('/login?') &&
+      !returnTo.startsWith('/login#')
+        ? returnTo
+        : null;
+
+    if (hasAdminAccess(normalizedUser)) {
+      return '/admin/agenda';
+    }
+    if (safeReturnTo) {
+      return safeReturnTo;
+    }
+
+    const activeSlug = getActiveClubSlug(normalizedUser);
+    if (activeSlug) {
+      return `/club/${activeSlug}`;
+    }
+
+    const activeClubId = Number(normalizedUser?.activeClubId || normalizedUser?.clubId || normalizedUser?.club?.id || 0);
+    if (Number.isInteger(activeClubId) && activeClubId > 0) {
+      try {
+        const club = await ClubService.getClubById(activeClubId);
+        if (club?.slug) {
+          return `/club/${club.slug}`;
+        }
+      } catch {
+      }
+    }
+
+    return '/';
+  }, [authUser, returnTo]);
+
+  const navigateAfterAuth = useCallback(async (sourceUser?: any) => {
+    if (redirectingRef.current) return;
+    redirectingRef.current = true;
+    try {
+      const target = await resolvePostLoginDestination(sourceUser);
+      await router.replace(target);
+    } finally {
+      window.setTimeout(() => {
+        redirectingRef.current = false;
+      }, 250);
+    }
+  }, [resolvePostLoginDestination, router]);
 
   useEffect(() => {
     setIsLogin(!openRegisterMode);
   }, [openRegisterMode]);
+
+  useEffect(() => {
+    if (router.pathname !== '/login') return;
+    if (loading || magicLoading) return;
+
+    if (!redirectIntent && status === 'authenticated') {
+      setRedirectIntent({ sourceUser: authUser });
+      return;
+    }
+    if (!redirectIntent) return;
+
+    void navigateAfterAuth(redirectIntent.sourceUser || authUser).finally(() => {
+      setRedirectIntent(null);
+    });
+  }, [authUser, loading, magicLoading, navigateAfterAuth, redirectIntent, router.pathname, status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,21 +164,8 @@ export default function LoginPage() {
         const data = await verifyMagicLink(magicToken);
         if (cancelled) return;
 
-        const normalizedUser = normalizeSessionUser(data?.user);
-        const activeSlug = getActiveClubSlug(normalizedUser);
-
-        if (hasAdminAccess(normalizedUser)) {
-          await router.replace('/admin/agenda');
-        } else if (returnTo) {
-          await router.replace(returnTo);
-        } else if (activeSlug) {
-          await router.replace(`/club/${activeSlug}`);
-        } else if (normalizedUser?.activeClubId || data?.user?.clubId) {
-          const club = await ClubService.getClubById(Number(normalizedUser?.activeClubId || data.user.clubId));
-          await router.replace(`/club/${club.slug}`);
-        } else {
-          await router.replace('/');
-        }
+        await revalidateSession();
+        setRedirectIntent({ sourceUser: data?.user });
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.message || 'No se pudo iniciar sesión con el enlace.');
@@ -122,7 +181,7 @@ export default function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, returnTo]);
+  }, [navigateAfterAuth, revalidateSession, returnTo, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,20 +192,8 @@ export default function LoginPage() {
     try {
       if (isLogin) {
         const data = await login(email, password);
-        const normalizedUser = normalizeSessionUser(data?.user);
-        const activeSlug = getActiveClubSlug(normalizedUser);
-        if (hasAdminAccess(normalizedUser)) {
-          await router.replace('/admin/agenda');
-        } else if (returnTo) {
-          await router.replace(returnTo);
-        } else if (activeSlug) {
-          await router.replace(`/club/${activeSlug}`);
-        } else if (normalizedUser?.activeClubId || data?.user?.clubId) {
-          const club = await ClubService.getClubById(Number(normalizedUser?.activeClubId || data.user.clubId));
-          await router.replace(`/club/${club.slug}`);
-        } else {
-          await router.replace('/');
-        }
+        await revalidateSession();
+        setRedirectIntent({ sourceUser: data?.user });
       } else {
         const localPhone = String(phoneNumber || '').replace(/[^\d]/g, '');
         const fullPhone = buildCanonicalPhone({

@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
+import cookieParser from 'cookie-parser';
 import QRCode from 'qrcode';
 
 import { requestContextMiddleware } from './middleware/requestContext';
@@ -32,6 +33,7 @@ import { prisma } from './prisma';
 import { metricsService } from './services/MetricsService';
 import { RedisService } from './services/RedisService';
 import { WhatsappDeliveryService } from './services/WhatsappDeliveryService';
+import { authConfig } from './utils/authConfig';
 
 const defaultAllowedOrigins = [
   'http://localhost:3000',
@@ -54,7 +56,11 @@ export const createApp = () => {
   const app = express();
   const whatsappDelivery = new WhatsappDeliveryService();
   const allowedOrigins = getAllowedOrigins();
-  type RequestWithId = Request & { requestId?: string };
+  type RequestWithId = Request & { requestId?: string; id?: string };
+
+  if (authConfig.trustProxy) {
+    app.set('trust proxy', 1);
+  }
 
   app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production',
@@ -70,7 +76,7 @@ export const createApp = () => {
         const rawUrl = typeof req.url === 'string' ? req.url : '';
         const [path] = rawUrl.split('?');
         return {
-          id: (req as any).id,
+          id: (req as RequestWithId).id,
           method: req.method,
           path
         };
@@ -117,6 +123,7 @@ export const createApp = () => {
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
+  app.use(cookieParser());
   app.use(metricsService.middleware);
 
   app.use('/api/auth', authRoutes);

@@ -5,12 +5,13 @@ import { useRouter } from 'next/router';
 import type { ReactNode } from 'react';
 import { useAvailability } from '../hooks/useAvailability';
 import { createBooking } from '../services/BookingService';
-import { AUTH_LOGIN_EVENT, AUTH_LOGOUT_EVENT, getToken, login as loginUser } from '../services/AuthService';
+import { login as loginUser } from '../services/AuthService';
 import AppModal from './AppModal';
 
 import { getApiUrl } from '../utils/apiUrl';
 import { ClubService, Club } from '../services/ClubService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
+import { useAuth } from '../contexts/AuthContext';
 import { ChevronDown, Check, Calendar, Clock, MapPin, Zap, MousePointerClick, Hourglass, Moon, Ban, AlertCircle, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const apiBase = () => `${getApiUrl()}/api`;
@@ -113,6 +114,7 @@ const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
 
 export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   const router = useRouter();
+  const { isAuthenticated: hasAuthSession } = useAuth();
   const formatLocalDate = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -471,19 +473,8 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   }, [selectedActivityDurations]);
   // --- Sincronizar autenticación en vivo ---
   useEffect(() => {
-    const syncAuth = () => {
-      setIsAuthenticated(Boolean(getToken()));
-    };
-    syncAuth();
-    window.addEventListener(AUTH_LOGIN_EVENT, syncAuth);
-    window.addEventListener(AUTH_LOGOUT_EVENT, syncAuth);
-    window.addEventListener('storage', syncAuth);
-    return () => {
-      window.removeEventListener(AUTH_LOGIN_EVENT, syncAuth);
-      window.removeEventListener(AUTH_LOGOUT_EVENT, syncAuth);
-      window.removeEventListener('storage', syncAuth);
-    };
-  }, []);
+    setIsAuthenticated(Boolean(hasAuthSession));
+  }, [hasAuthSession]);
 
   useEffect(() => {
     if (!router.isReady || queryApplied) return;
@@ -710,8 +701,7 @@ const performBooking = async () => {
 
   const handleBooking = () => {
     if (!selectedDate || !selectedSlot || !selectedCourt) return;
-    const hasSession = Boolean(getToken());
-    if (!hasSession || !isAuthenticated) {
+    if (!hasAuthSession || !isAuthenticated) {
       setIsAuthenticated(false);
       openLoginModal(() => {
         performBooking();

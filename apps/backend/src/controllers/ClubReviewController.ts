@@ -3,6 +3,7 @@ import { ClubReviewStatus } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../prisma';
 import { ClubReviewService } from '../services/ClubReviewService';
+import { sendAuthError } from '../utils/authError';
 
 const listQuerySchema = z.object({
   take: z.preprocess(
@@ -110,7 +111,7 @@ export class ClubReviewController {
     try {
       const userId = Number((req as any).user?.userId);
       if (!Number.isInteger(userId) || userId <= 0) {
-        return res.status(401).json({ error: 'No autorizado' });
+        return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
       }
 
       const slug = String(req.params.slug || '').trim();
@@ -140,7 +141,7 @@ export class ClubReviewController {
     try {
       const userId = Number((req as any).user?.userId);
       if (!Number.isInteger(userId) || userId <= 0) {
-        return res.status(401).json({ error: 'No autorizado' });
+        return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
       }
 
       const slug = String(req.params.slug || '').trim();

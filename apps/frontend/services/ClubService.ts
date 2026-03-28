@@ -1,5 +1,4 @@
-import { getToken } from './AuthService';
-import { fetchWithAuth } from '../utils/apiClient';
+import { fetchWithAuth, isAuthSessionInvalidatedError } from '../utils/apiClient';
 import { getApiUrl } from '../utils/apiUrl';
 
 const apiBase = () => `${getApiUrl()}/api`;
@@ -98,8 +97,6 @@ export class ClubService {
   }
 
   static async updateClub(id: number, data: Partial<Club>): Promise<Club> {
-    if (!getToken()) throw new Error('No autenticado');
-
     const response = await fetchWithAuth(`${apiBase()}/clubs/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -115,8 +112,6 @@ export class ClubService {
   }
 
   static async createClub(data: Partial<Club>): Promise<Club> {
-    if (!getToken()) throw new Error('No autenticado');
-
     const response = await fetchWithAuth(`${apiBase()}/clubs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -132,7 +127,6 @@ export class ClubService {
   }
 
   static async getMyFavorites(): Promise<ClubFavorite[]> {
-    if (!getToken()) return [];
     try {
       const response = await fetchWithAuth(`${apiBase()}/clubs/favorites/me`, {
         method: 'GET'
@@ -144,6 +138,9 @@ export class ClubService {
       const payload = await response.json();
       return Array.isArray(payload?.favorites) ? payload.favorites : [];
     } catch (error: any) {
+      if (isAuthSessionInvalidatedError(error)) {
+        return [];
+      }
       const message = String(error?.message || '').toLowerCase();
       if (
         message.includes('findmany') ||
@@ -168,7 +165,6 @@ export class ClubService {
       clientId: string | null;
     };
   }> {
-    if (!getToken()) throw new Error('No autenticado');
     const response = await fetchWithAuth(`${apiBase()}/clubs/${clubId}/favorite`, {
       method: 'POST'
     });
@@ -180,7 +176,6 @@ export class ClubService {
   }
 
   static async unmarkFavorite(clubId: number): Promise<{ removed: boolean }> {
-    if (!getToken()) throw new Error('No autenticado');
     const response = await fetchWithAuth(`${apiBase()}/clubs/${clubId}/favorite`, {
       method: 'DELETE'
     });

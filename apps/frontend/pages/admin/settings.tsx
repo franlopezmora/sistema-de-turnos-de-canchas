@@ -19,7 +19,7 @@ export default function AdminSettingsPage() {
     void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/admin/settings')}`);
   }, [authChecked, user, router]);
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo al login...' : 'Validando acceso...'} />;
+  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
   if (!hasAdminAccess(user)) return <NotFound message="No tenés permiso para acceder al panel de administración." />;
 
   return (
@@ -33,3 +33,4 @@ export default function AdminSettingsPage() {
     </div>
   );
 }
+

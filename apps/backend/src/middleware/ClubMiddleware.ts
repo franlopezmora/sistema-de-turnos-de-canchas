@@ -1,17 +1,18 @@
-import { Request, Response, NextFunction } from 'express';
+﻿import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../prisma';
 import { getUserClubContext } from '../utils/getUserClubContext';
 import { getPreferredClubIdFromRequest } from '../utils/clubContext';
+import { sendAuthError } from '../utils/authError';
 
 const handleClubContextError = (error: unknown, res: Response, fallbackMessage: string) => {
     const message = error instanceof Error ? error.message : fallbackMessage;
     if (message.includes('x-active-club-id')) {
-        return res.status(400).json({ error: message });
+        return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', message);
     }
     if (message.includes('Debe seleccionar un club activo')) {
-        return res.status(400).json({ error: message });
+        return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', message);
     }
-    return res.status(403).json({ error: fallbackMessage });
+    return sendAuthError(res, 403, 'AUTH_FORBIDDEN', fallbackMessage);
 };
 
 /**
@@ -44,7 +45,7 @@ export const verifyClubAccess = async (req: Request, res: Response, next: NextFu
         }
 
         if (!context || context.clubId !== club.id) {
-            return res.status(403).json({ error: 'No tienes acceso a este club' });
+            return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'No tienes acceso a este club');
         }
 
         (req as any).club = club;
@@ -79,7 +80,7 @@ export const verifyClubAccessById = async (req: Request, res: Response, next: Ne
         }
 
         if (!context || context.clubId !== parsed) {
-            return res.status(403).json({ error: 'No tienes acceso a este club' });
+            return sendAuthError(res, 403, 'AUTH_FORBIDDEN', 'No tienes acceso a este club');
         }
 
         (req as any).clubId = parsed;
@@ -101,7 +102,7 @@ export const setAdminClubFromUser = async (req: Request, res: Response, next: Ne
     try {
         const user = (req as any).user;
         if (!user?.userId) {
-            return res.status(401).json({ error: 'No autorizado' });
+            return sendAuthError(res, 401, 'AUTH_MISSING', 'No autorizado');
         }
         let context;
         try {

@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import AdminLayout from '../../components/AdminLayout';
@@ -19,7 +19,7 @@ export default function AdminRefundsPage() {
     void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/admin/devoluciones')}`);
   }, [authChecked, user, router]);
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo al login...' : 'Validando acceso...'} />;
+  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
   if (!hasAdminAccess(user)) return <NotFound message="No tenes permiso para acceder al panel de administracion." />;
 
   return (
@@ -33,3 +33,4 @@ export default function AdminRefundsPage() {
     </div>
   );
 }
+

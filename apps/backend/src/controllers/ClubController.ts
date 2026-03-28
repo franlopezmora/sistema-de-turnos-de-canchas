@@ -264,7 +264,7 @@ export class ClubController {
         try {
             const id = parseInt(req.params.id as string);
             if (isNaN(id)) {
-                return res.status(400).json({ error: 'ID de club invÃ¡lido' });
+                return res.status(400).json({ error: 'ID de club inválido' });
             }
             const club = await this.clubService.getClubById(id);
             res.json(club);
@@ -300,7 +300,7 @@ export class ClubController {
             const idSchema = z.preprocess((v) => Number(v), z.number().int().positive());
             const idParsed = idSchema.safeParse(req.params.id);
             if (!idParsed.success) {
-                return res.status(400).json({ error: 'ID de club invÃ¡lido' });
+                return res.status(400).json({ error: 'ID de club inválido' });
             }
             const id = idParsed.data;
             const updateClubSchema = z.object({
