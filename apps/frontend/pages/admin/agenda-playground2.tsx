@@ -37,6 +37,22 @@ type Booking = {
   isRecurring?: boolean;
   clientId?: string;
   userId?: number;
+  hoverPayment?: {
+    status: 'UNPAID' | 'PARTIAL' | 'PAID';
+    totalAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    chargeMode?: string;
+    chargeResponsibleRef?: string | null;
+    chargeResponsibleName?: string | null;
+    latestPayerRef?: string | null;
+    latestPayerName?: string | null;
+    participants?: Array<{
+      ref: string;
+      name: string;
+      isOwner?: boolean;
+    }>;
+  };
 };
 
 type DraftSelection = {
@@ -51,7 +67,7 @@ type BookingDropPreview = {
   endSlot: number;
 };
 
-type PaymentMode = 'Ãšnico' | 'Dividido';
+type PaymentMode = 'Único' | 'Dividido';
 
 type RecurringOverlapItem = {
   courtName: string;
@@ -124,7 +140,7 @@ const sidebarItems = [
   { label: 'Partidos', icon: Trophy },
   { label: 'Tienda', icon: ShoppingBag },
   { label: 'Mensajes', icon: MessageSquare },
-  { label: 'FacturaciÃ³n', icon: FileText },
+  { label: 'Facturación', icon: FileText },
   { label: 'Informes', icon: BarChart3 },
   { label: 'Ajustes', icon: Settings },
 ];
@@ -155,13 +171,13 @@ const bookingKindOptions: Array<{
   {
     value: 'regular',
     label: 'Reserva normal',
-    description: 'Para reservas individuales de un solo dÃ­a y pista',
+    description: 'Para reservas individuales de un solo día y pista',
     icon: CalendarDays,
   },
   {
     value: 'recurring',
     label: 'Serie recurrente',
-    description: 'Para reservas que se repiten con una frecuencia. Reservas en mÃºltiples pistas permitidas.',
+    description: 'Para reservas que se repiten con una frecuencia. Reservas en múltiples pistas permitidas.',
     icon: Repeat,
   },
   {
@@ -188,10 +204,10 @@ const WEEKDAY_OPTIONS = [
   { value: 0, label: 'Domingo' },
   { value: 1, label: 'Lunes' },
   { value: 2, label: 'Martes' },
-  { value: 3, label: 'MiÃ©rcoles' },
+  { value: 3, label: 'Miércoles' },
   { value: 4, label: 'Jueves' },
   { value: 5, label: 'Viernes' },
-  { value: 6, label: 'SÃ¡bado' },
+  { value: 6, label: 'Sábado' },
 ];
 const CUSTOM_DAY_OPTIONS = [
   { value: 1, short: 'Lu' },
@@ -461,12 +477,19 @@ function distributePaidByParticipants(
   participants: Participant[],
   paymentMode: PaymentMode,
   totalAmount: number,
-  paidAmount: number
+  paidAmount: number,
+  payerParticipantId?: string
 ) {
   const safeTotal = Number(Math.max(0, totalAmount || 0).toFixed(2));
   let remainingPaid = Number(Math.max(0, paidAmount || 0).toFixed(2));
 
-  if (paymentMode === 'Ãšnico') {
+  if (paymentMode === 'Único') {
+    const payerId = String(payerParticipantId || '').trim();
+    if (payerId && participants.some((participant) => participant.id === payerId)) {
+      const hasAnyPaid = remainingPaid > 0.009;
+      return participants.map((participant) => ({ ...participant, paid: hasAnyPaid && participant.id === payerId }));
+    }
+
     return participants.map((participant) => {
       if (!participant.isOwner) return { ...participant, paid: false };
       const covered = remainingPaid + 0.009 >= safeTotal;
@@ -531,23 +554,151 @@ function humanizeClubSlug(slug: string) {
     .join(' ');
 }
 
+function isOwnerLikeParticipantRef(participantRef: string | null | undefined) {
+  const normalized = String(participantRef || '').trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.startsWith('guest:owner') ||
+    normalized.startsWith('guest:booking-responsible') ||
+    normalized.startsWith('booking-client:') ||
+    normalized.startsWith('booking-user:')
+  );
+}
+
+function resolveLatestPaymentPayerRef(events: BookingDomainEvent[] | null | undefined) {
+  const timelineEvents = Array.isArray(events) ? [...events] : [];
+  timelineEvents.sort((left, right) => {
+    const leftTime = new Date(String(left?.createdAt || '')).getTime();
+    const rightTime = new Date(String(right?.createdAt || '')).getTime();
+    return rightTime - leftTime;
+  });
+
+  for (const event of timelineEvents) {
+    const normalizedType = String(event?.type || '').trim().toUpperCase();
+    if (normalizedType !== 'PAYMENT_RECEIVED') continue;
+    const payload =
+      event?.payload && typeof event.payload === 'object'
+        ? (event.payload as Record<string, unknown>)
+        : {};
+    const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
+    if (payerRef) return payerRef;
+  }
+
+  return '';
+}
+
 function resolveHoverParticipantsForBooking(booking: Booking) {
   const ownerName = String(booking.title || '').trim();
-  return [
-    {
-      id: `owner-${booking.id}`,
-      name: ownerName || 'Titular',
-      paid: booking.paymentState === 'paid',
-      isOwner: true,
+  const hoverPayment = booking.hoverPayment;
+  const status = hoverPayment?.status || (booking.paymentState === 'paid' ? 'PAID' : 'UNPAID');
+  const chargeMode = String(hoverPayment?.chargeMode || 'INDIVIDUAL').trim().toUpperCase();
+  const modeLabel = chargeMode === 'SHARED' ? 'Pago dividido' : 'Pago único';
+  const chargeResponsibleName = String(hoverPayment?.chargeResponsibleName || '').trim();
+  const latestPayerName = String(hoverPayment?.latestPayerName || '').trim();
+  const latestPayerRef = String(hoverPayment?.latestPayerRef || '').trim();
+  const chargeResponsibleRef = String(hoverPayment?.chargeResponsibleRef || '').trim();
+  const ownerFallbackName = ownerName || 'Titular';
+
+  const rawParticipants = Array.isArray(hoverPayment?.participants)
+    ? hoverPayment?.participants
+    : [];
+  const normalizedParticipants = rawParticipants
+    .map((rawParticipant, index) => {
+      const ref = String(rawParticipant?.ref || '').trim();
+      const name = String(rawParticipant?.name || '').trim();
+      const isOwner = Boolean(rawParticipant?.isOwner) || isOwnerLikeParticipantRef(ref);
+      const resolvedName =
+        name ||
+        (isOwner ? ownerFallbackName : '') ||
+        `Participante ${index + 1}`;
+      return {
+        id: `${booking.id}-hover-${index}`,
+        ref,
+        name: resolvedName,
+        isOwner,
+      };
+    })
+    .filter((participant) => participant.name.trim().length > 0);
+
+  const participants =
+    normalizedParticipants.length > 0
+      ? normalizedParticipants
+      : [{
+          id: `owner-${booking.id}`,
+          ref: chargeResponsibleRef || '',
+          name: ownerFallbackName,
+          isOwner: true,
+        }];
+
+  const findByRef = (ref: string) =>
+    participants.find((participant) => participant.ref && participant.ref === ref);
+  const normalizeName = (value: string) =>
+    String(value || '').trim().toLowerCase();
+  const findByName = (name: string) => {
+    const target = normalizeName(name);
+    if (!target) return undefined;
+    return participants.find((participant) => normalizeName(participant.name) === target);
+  };
+
+  const latestPayerParticipant =
+    findByRef(latestPayerRef) ||
+    findByName(latestPayerName) ||
+    (latestPayerRef && isOwnerLikeParticipantRef(latestPayerRef)
+      ? participants.find((participant) => participant.isOwner)
+      : undefined);
+
+  const responsibleParticipant =
+    findByRef(chargeResponsibleRef) ||
+    findByName(chargeResponsibleName) ||
+    (chargeResponsibleRef && isOwnerLikeParticipantRef(chargeResponsibleRef)
+      ? participants.find((participant) => participant.isOwner)
+      : undefined);
+
+  const payableParticipantId = chargeMode === 'SHARED'
+    ? null
+    : latestPayerParticipant?.id ||
+      responsibleParticipant?.id ||
+      participants.find((participant) => participant.isOwner)?.id ||
+      participants[0]?.id ||
+      null;
+
+  return participants.map((participant) => {
+    const isLatestPayer = Boolean(latestPayerParticipant && participant.id === latestPayerParticipant.id);
+    const isResponsible = Boolean(responsibleParticipant && participant.id === responsibleParticipant.id);
+    const isPayable = chargeMode === 'SHARED'
+      ? true
+      : participant.id === payableParticipantId;
+    const roleLabel = chargeMode === 'SHARED'
+      ? isLatestPayer
+        ? (status === 'PARTIAL' ? 'Pagó (último)' : 'Pagó')
+        : isResponsible
+          ? 'Paga'
+          : participant.isOwner
+            ? 'Titular'
+            : 'Participante'
+      : isPayable
+        ? 'Paga'
+        : participant.isOwner
+          ? 'Titular'
+          : 'Participante';
+    const participantStatus = isPayable ? status : 'UNPAID';
+
+    return {
+      id: participant.id,
+      name: participant.name,
+      roleLabel,
+      modeLabel,
+      status: participantStatus,
+      isOwner: participant.isOwner,
       paymentMethod: '',
-      payable: true,
-    },
-  ];
+      payable: isPayable,
+    };
+  });
 }
 
 function estimateBookingHoverTarjetaHeight(participantsCount: number) {
   const rows = Math.max(1, participantsCount);
-  // Header + paddings + rows (estimaciÃ³n mÃ¡s cercana al tamaÃ±o real del hover).
+  // Header + paddings + rows (estimación más cercana al tamaño real del hover).
   return 40 + 12 + rows * 30 + 8;
 }
 
@@ -619,6 +770,22 @@ function parseScheduleSlotToBooking(slot: any): Booking | null {
       0
   );
   const bookingPrice = Number(booking?.price ?? 0);
+  const remainingAmount = Number(Math.max(0, bookingPrice - paidAmount).toFixed(2));
+  const fallbackHoverStatus: Booking['hoverPayment']['status'] =
+    bookingPrice <= 0 || remainingAmount <= 0.009
+      ? 'PAID'
+      : paidAmount > 0.009
+        ? 'PARTIAL'
+        : 'UNPAID';
+  const hoverPaymentRaw =
+    booking?.hoverPayment && typeof booking.hoverPayment === 'object'
+      ? (booking.hoverPayment as Record<string, unknown>)
+      : null;
+  const hoverPaymentStatusRaw = String(hoverPaymentRaw?.status || '').trim().toUpperCase();
+  const hoverPaymentStatus: Booking['hoverPayment']['status'] =
+    hoverPaymentStatusRaw === 'PAID' || hoverPaymentStatusRaw === 'PARTIAL' || hoverPaymentStatusRaw === 'UNPAID'
+      ? (hoverPaymentStatusRaw as Booking['hoverPayment']['status'])
+      : fallbackHoverStatus;
   const paymentState: Booking['paymentState'] =
     bookingPrice <= 0 || paidAmount + 0.009 >= bookingPrice ? 'paid' : 'unpaid';
 
@@ -636,6 +803,30 @@ function parseScheduleSlotToBooking(slot: any): Booking | null {
     isRecurring: Number(booking?.fixedBookingId || 0) > 0,
     clientId: booking?.client?.id ? String(booking.client.id) : undefined,
     userId: Number(booking?.userId || booking?.user?.id || 0) || undefined,
+    hoverPayment: {
+      status: hoverPaymentStatus,
+      totalAmount: Number(Number(hoverPaymentRaw?.totalAmount ?? bookingPrice).toFixed(2)),
+      paidAmount: Number(Number(hoverPaymentRaw?.paidAmount ?? paidAmount).toFixed(2)),
+      remainingAmount: Number(Number(hoverPaymentRaw?.remainingAmount ?? remainingAmount).toFixed(2)),
+      chargeMode: String(hoverPaymentRaw?.chargeMode || 'INDIVIDUAL'),
+      chargeResponsibleRef: hoverPaymentRaw?.chargeResponsibleRef
+        ? String(hoverPaymentRaw.chargeResponsibleRef)
+        : null,
+      chargeResponsibleName: hoverPaymentRaw?.chargeResponsibleName
+        ? String(hoverPaymentRaw.chargeResponsibleName)
+        : null,
+      latestPayerRef: hoverPaymentRaw?.latestPayerRef ? String(hoverPaymentRaw.latestPayerRef) : null,
+      latestPayerName: hoverPaymentRaw?.latestPayerName ? String(hoverPaymentRaw.latestPayerName) : null,
+      participants: Array.isArray(hoverPaymentRaw?.participants)
+        ? hoverPaymentRaw.participants
+            .map((rawParticipant: any) => ({
+              ref: String(rawParticipant?.ref || '').trim(),
+              name: String(rawParticipant?.name || '').trim(),
+              isOwner: Boolean(rawParticipant?.isOwner),
+            }))
+            .filter((participant: { ref: string; name: string }) => participant.ref || participant.name)
+        : undefined,
+    },
   };
 }
 
@@ -663,7 +854,7 @@ function resolveChargedParticipantIds(
   paymentMode: PaymentMode,
   singleChargeParticipantId?: string
 ) {
-  if (paymentMode === 'Ãšnico') {
+  if (paymentMode === 'Único') {
     if (singleChargeParticipantId && participants.some((participant) => participant.id === singleChargeParticipantId)) {
       return [singleChargeParticipantId];
     }
@@ -964,10 +1155,10 @@ function inferCourtSport(courtLike: any): string {
   if (full.includes('pickle')) return 'Pickleball';
   if (full.includes('squash')) return 'Squash';
   if (full.includes('voley') || full.includes('beach volley') || full.includes('volley playa')) return 'Voley playa';
-  if (full.includes('futbol') || full.includes('futbol 5')) return 'FÃºtbol';
-  if (full.includes('padel') || full.includes('paddle')) return 'PÃ¡del';
+  if (full.includes('futbol') || full.includes('futbol 5')) return 'Fútbol';
+  if (full.includes('padel') || full.includes('paddle')) return 'Pádel';
 
-  return String(courtLike?.activityType?.name || courtLike?.sport || courtLike?.surface || 'PÃ¡del');
+  return String(courtLike?.activityType?.name || courtLike?.sport || courtLike?.surface || 'Pádel');
 }
 
 export default function AdminAgendaPlaygroundPage() {
@@ -997,7 +1188,7 @@ export default function AdminAgendaPlaygroundPage() {
   const [selectedCourtId, setSelectedCourtId] = useState<string>('');
   const [selectedStartSlot, setSelectedStartSlot] = useState(2);
   const [selectedEndSlot, setSelectedEndSlot] = useState(4);
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('Ãšnico');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('Único');
   const [participantPriceDraftById, setParticipantPriceDraftById] = useState<Record<string, string>>({});
   const [defaultPricePerParticipant, setDefaultPricePerParticipant] = useState(0);
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
@@ -1042,6 +1233,8 @@ export default function AdminAgendaPlaygroundPage() {
   } | null>(null);
   const [remoteBillingConfig, setRemoteBillingConfig] = useState<BookingBillingConfig | null>(null);
   const [isRemoteBillingConfigLoading, setIsRemoteBillingConfigLoading] = useState(false);
+  const [isBillingConfigHydrated, setIsBillingConfigHydrated] = useState(false);
+  const [billingConfigLoadError, setBillingConfigLoadError] = useState('');
   const [billingConfigTouchedByUser, setBillingConfigTouchedByUser] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
   const [bookingKind, setBookingKind] = useState<BookingKind>('regular');
@@ -1091,6 +1284,7 @@ export default function AdminAgendaPlaygroundPage() {
     y: number;
   } | null>(null);
   const [calendarNotice, setCalendarNotice] = useState('');
+  const [participantLabelByRefCache, setParticipantLabelByRefCache] = useState<Record<string, string>>({});
   const [isQuickDatePickerOpen, setIsQuickDatePickerOpen] = useState(false);
   const participantSearchSeqRef = useRef(0);
   const clubMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1103,8 +1297,10 @@ export default function AdminAgendaPlaygroundPage() {
   const drawerCloseCleanupTimerRef = useRef<number | null>(null);
   const bookingFinancialRequestSeqRef = useRef(0);
   const bookingTimelineRequestSeqRef = useRef(0);
+  const remoteBillingConfigRequestSeqRef = useRef(0);
   const bookingDrawerLoadKeyRef = useRef<string>('');
   const bookingDrawerFormSyncSignatureRef = useRef<string>('');
+  const pendingParticipantSaveNoticeRef = useRef<string>('');
   const normalizedUser = useMemo(() => normalizeSessionUser((user as any) || null), [user]);
   const clubOptions = useMemo(
     () =>
@@ -1292,6 +1488,7 @@ export default function AdminAgendaPlaygroundPage() {
   const openBookingInDrawer = useCallback((booking: Booking) => {
     bookingFinancialRequestSeqRef.current += 1;
     bookingTimelineRequestSeqRef.current += 1;
+    remoteBillingConfigRequestSeqRef.current += 1;
     setIsBookingFinancialLoading(booking.state !== 'blocked');
     setIsRemoteBillingConfigLoading(booking.state !== 'blocked');
     setBookingTimelineLoading(booking.state !== 'blocked');
@@ -1299,7 +1496,11 @@ export default function AdminAgendaPlaygroundPage() {
     setBookingTimelineEvents([]);
     setBookingFinancial(null);
     setRemoteBillingConfig(null);
+    setIsBillingConfigHydrated(false);
+    setBillingConfigLoadError('');
     setBillingConfigTouchedByUser(false);
+    setParticipantLabelByRefCache({});
+    pendingParticipantSaveNoticeRef.current = '';
     setQuotedListPrice(null);
     setQuotedFinalPrice(null);
     setQuotedDiscountAmount(0);
@@ -1322,7 +1523,7 @@ export default function AdminAgendaPlaygroundPage() {
     setNotes('');
     setNotesTouchedByUser(false);
     setParticipantPriceDraftById({});
-    setPaymentMode('Ãšnico');
+    setPaymentMode('Único');
     if (booking.state === 'blocked') {
       setBookingKind('block');
       const normalizedTitle = normalizeBookingDisplayTitle(booking.title, '');
@@ -1452,7 +1653,7 @@ export default function AdminAgendaPlaygroundPage() {
   useEffect(() => {
     if (!authChecked || user) return;
     if (getPendingLogoutRedirect()) return;
-    void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/admin/agenda-playground')}`);
+    void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/admin/agenda-playground2')}`);
   }, [authChecked, user, router]);
 
   useEffect(() => {
@@ -1476,7 +1677,7 @@ export default function AdminAgendaPlaygroundPage() {
   }, [drawerOpen, editingBookingId]);
 
   useEffect(() => {
-    if (paymentMode === 'Ãšnico') return;
+    if (paymentMode === 'Único') return;
     setSimplifiedSidebarSection('DETAILS');
   }, [paymentMode]);
 
@@ -1511,6 +1712,7 @@ export default function AdminAgendaPlaygroundPage() {
     drawerCloseCleanupTimerRef.current = window.setTimeout(() => {
       bookingFinancialRequestSeqRef.current += 1;
       bookingTimelineRequestSeqRef.current += 1;
+      remoteBillingConfigRequestSeqRef.current += 1;
       setBillingHubTab('SUMMARY');
       setParticipantMenuId(null);
       setExpandedParticipantId(null);
@@ -1524,7 +1726,11 @@ export default function AdminAgendaPlaygroundPage() {
       setBookingTimelineEvents([]);
       setBookingFinancial(null);
       setRemoteBillingConfig(null);
+      setIsBillingConfigHydrated(false);
+      setBillingConfigLoadError('');
       setBillingConfigTouchedByUser(false);
+      setParticipantLabelByRefCache({});
+      pendingParticipantSaveNoticeRef.current = '';
       setRecurringResult(null);
       setDeleteBookingConfirmOpen(false);
       setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' });
@@ -1578,15 +1784,26 @@ export default function AdminAgendaPlaygroundPage() {
     if (!persistedEditingBookingId) return;
 
     let cancelled = false;
+    const requestSeq = remoteBillingConfigRequestSeqRef.current + 1;
+    remoteBillingConfigRequestSeqRef.current = requestSeq;
     const run = async () => {
       setIsRemoteBillingConfigLoading(true);
+      setIsBillingConfigHydrated(false);
+      setBillingConfigLoadError('');
       try {
         const config = await getBookingBillingConfig(persistedEditingBookingId);
         if (cancelled) return;
+        if (remoteBillingConfigRequestSeqRef.current !== requestSeq) return;
         setRemoteBillingConfig(config);
       } catch {
-        if (!cancelled) {
+        if (!cancelled && remoteBillingConfigRequestSeqRef.current === requestSeq) {
           setRemoteBillingConfig(null);
+          setIsRemoteBillingConfigLoading(false);
+          setIsBillingConfigHydrated(false);
+          setBillingConfigLoadError('No se pudo cargar la configuración de cobro.');
+        }
+      } finally {
+        if (!cancelled && remoteBillingConfigRequestSeqRef.current === requestSeq) {
           setIsRemoteBillingConfigLoading(false);
         }
       }
@@ -1624,7 +1841,7 @@ export default function AdminAgendaPlaygroundPage() {
             return {
               ...participant,
               sourceType: nextSourceType,
-              entityRef: persistedResponsibleRef,
+              entityRef: participant.entityRef,
             };
           })
         );
@@ -1645,6 +1862,8 @@ export default function AdminAgendaPlaygroundPage() {
       setBillingConfigTouchedByUser(false);
     }
     setIsRemoteBillingConfigLoading(false);
+    setIsBillingConfigHydrated(true);
+    setBillingConfigLoadError('');
   }, [
     bookingKind,
     drawerOpen,
@@ -1822,10 +2041,11 @@ export default function AdminAgendaPlaygroundPage() {
       setParticipants(initialParticipants.map((participant) => ({ ...participant })));
       setNotes('');
       setNotesTouchedByUser(false);
-      setPaymentMode('Ãšnico');
+      setPaymentMode('Único');
       setParticipantPriceDraftById({});
       bookingFinancialRequestSeqRef.current += 1;
       bookingTimelineRequestSeqRef.current += 1;
+      remoteBillingConfigRequestSeqRef.current += 1;
       setIsBookingFinancialLoading(false);
       setIsRemoteBillingConfigLoading(false);
       setBookingTimelineLoading(false);
@@ -1833,6 +2053,8 @@ export default function AdminAgendaPlaygroundPage() {
       setBookingTimelineEvents([]);
       setBookingFinancial(null);
       setRemoteBillingConfig(null);
+      setIsBillingConfigHydrated(false);
+      setBillingConfigLoadError('');
       setBillingConfigTouchedByUser(false);
       setQuotedListPrice(null);
       setQuotedFinalPrice(null);
@@ -1907,15 +2129,106 @@ export default function AdminAgendaPlaygroundPage() {
     () => isBlockingQuoteError(quoteError),
     [quoteError]
   );
+  const latestPaymentPayerRef = useMemo(
+    () => resolveLatestPaymentPayerRef(bookingTimelineEvents),
+    [bookingTimelineEvents]
+  );
+  const singleChargeParticipantIdFromRemoteConfig = useMemo(() => {
+    if (paymentMode !== 'Único') return undefined;
+    const responsibleRef = String(remoteBillingConfig?.chargeResponsibleRef || '').trim();
+    if (!responsibleRef) return undefined;
+
+    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
+    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+    const bookingUserId =
+      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+        ? bookingUserIdRaw
+        : undefined;
+
+    const matched = participants.find(
+      (participant) =>
+        buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === responsibleRef
+    );
+    return matched?.id;
+  }, [
+    editingBooking?.clientId,
+    editingBooking?.userId,
+    participants,
+    paymentMode,
+    remoteBillingConfig?.chargeResponsibleRef,
+  ]);
   const singleChargeParticipantId = useMemo(() => {
-    if (paymentMode !== 'Ãšnico') return undefined;
+    if (paymentMode !== 'Único') return undefined;
+    if (
+      singleChargeParticipantIdFromRemoteConfig &&
+      participants.some((participant) => participant.id === singleChargeParticipantIdFromRemoteConfig)
+    ) {
+      return singleChargeParticipantIdFromRemoteConfig;
+    }
     const draftResponsible = String(bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || '').trim();
     if (draftResponsible && participants.some((participant) => participant.id === draftResponsible)) {
       return draftResponsible;
     }
     const owner = participants.find((participant) => participant.isOwner);
     return owner?.id;
-  }, [bookingDrawerState.draft?.billing.chargeResponsibleParticipantId, participants, paymentMode]);
+  }, [
+    bookingDrawerState.draft?.billing.chargeResponsibleParticipantId,
+    participants,
+    paymentMode,
+    singleChargeParticipantIdFromRemoteConfig,
+  ]);
+  const effectiveSingleChargeResponsibleParticipantId = useMemo(() => {
+    if (paymentMode !== 'Único') return '';
+    const draftResponsible = String(bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || '').trim();
+    if (draftResponsible && participants.some((participant) => participant.id === draftResponsible)) {
+      return draftResponsible;
+    }
+    const fromConfig = String(singleChargeParticipantId || '').trim();
+    if (fromConfig && participants.some((participant) => participant.id === fromConfig)) {
+      return fromConfig;
+    }
+    const ownerParticipant = participants.find((participant) => participant.isOwner);
+    return ownerParticipant?.id || participants[0]?.id || '';
+  }, [
+    bookingDrawerState.draft?.billing.chargeResponsibleParticipantId,
+    participants,
+    paymentMode,
+    singleChargeParticipantId,
+  ]);
+  const deleteParticipantContext = useMemo(() => {
+    const participantId = String(deleteParticipantConfirm.participantId || '').trim();
+    if (!participantId) {
+      return {
+        participantId: '',
+        isChargeResponsible: false,
+        nextResponsibleParticipantId: '',
+        nextResponsibleLabel: '',
+      };
+    }
+    const isChargeResponsible =
+      paymentMode === 'Único' &&
+      participantId === effectiveSingleChargeResponsibleParticipantId;
+    const remainingParticipants = participants.filter((participant) => participant.id !== participantId);
+    const nextResponsibleParticipant =
+      remainingParticipants.find((participant) => participant.isOwner) ||
+      remainingParticipants.find((participant) => participant.name.trim().length > 0) ||
+      remainingParticipants[0];
+    const nextResponsibleLabel = nextResponsibleParticipant
+      ? (String(nextResponsibleParticipant.name || '').trim() ||
+          (nextResponsibleParticipant.isOwner ? 'Titular' : 'Participante'))
+      : '';
+    return {
+      participantId,
+      isChargeResponsible,
+      nextResponsibleParticipantId: String(nextResponsibleParticipant?.id || ''),
+      nextResponsibleLabel,
+    };
+  }, [
+    deleteParticipantConfirm.participantId,
+    effectiveSingleChargeResponsibleParticipantId,
+    participants,
+    paymentMode,
+  ]);
   const chargedParticipantIds = useMemo(
     () => resolveChargedParticipantIds(participants, paymentMode, singleChargeParticipantId),
     [participants, paymentMode, singleChargeParticipantId]
@@ -1943,7 +2256,7 @@ export default function AdminAgendaPlaygroundPage() {
     const map = new Map<string, number>();
     if (participants.length === 0) return map;
 
-    if (paymentMode === 'Ãšnico') {
+    if (paymentMode === 'Único') {
       const ownerId = chargedParticipantIds[0];
       participants.forEach((participant) => {
         map.set(participant.id, participant.id === ownerId ? totalPrice : 0);
@@ -1984,13 +2297,13 @@ export default function AdminAgendaPlaygroundPage() {
   const priceFieldLabel = 'Precio total';
   const priceFieldHint = isClassBooking
     ? 'En clases, este total se distribuye entre los alumnos cargados.'
-    : paymentMode === 'Ãšnico'
+    : paymentMode === 'Único'
       ? 'En reserva normal, paga una sola persona.'
-      : 'En reserva normal, se reparte automÃ¡ticamente entre participantes.';
+      : 'En reserva normal, se reparte automáticamente entre participantes.';
   const exceedsRemainingWarning = useMemo(() => {
     if (!bookingFinancial || bookingFinancial.remaining <= 0.009) return false;
     return participants.some((participant) => {
-      if (paymentMode === 'Ãšnico' && !participant.isOwner) return false;
+      if (paymentMode === 'Único' && !participant.isOwner) return false;
       return resolveParticipantPrice(participant) > bookingFinancial.remaining + 0.009;
     });
   }, [bookingFinancial, participants, paymentMode, resolveParticipantPrice]);
@@ -2025,8 +2338,8 @@ export default function AdminAgendaPlaygroundPage() {
   useEffect(() => {
     if (hasDuplicateParticipants) return;
     if (
-      formError === 'No podÃ©s guardar con participantes duplicados.' ||
-      formError === 'Ese participante ya estÃ¡ agregado en esta reserva.'
+      formError === 'No podés guardar con participantes duplicados.' ||
+      formError === 'Ese participante ya está agregado en esta reserva.'
     ) {
       setFormError('');
     }
@@ -2259,7 +2572,7 @@ export default function AdminAgendaPlaygroundPage() {
       return incomingTokens.some((token) => currentTokens.includes(token));
     });
     if (duplicateExists) {
-      setFormError('Ese participante ya estÃ¡ agregado en esta reserva.');
+      setFormError('Ese participante ya está agregado en esta reserva.');
       setParticipantSearchOpenId(null);
       return;
     }
@@ -2292,33 +2605,88 @@ export default function AdminAgendaPlaygroundPage() {
       editingBooking?.state === 'pending'
     );
     if (lockPaymentsNow) {
-      showCalendarNotice('Primero confirmÃ¡ la reserva para poder registrar pagos.');
+      showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
       return false;
     }
     if (!persistedEditingBookingId || bookingKind === 'block') {
-      showCalendarNotice('Primero creÃ¡/abrÃ­ una reserva vÃ¡lida.');
+      showCalendarNotice('Primero creá/abrí una reserva válida.');
       return false;
     }
 
     const amount = Number(Number(input.amount || 0).toFixed(2));
     if (!Number.isFinite(amount) || amount <= 0.009) {
-      showCalendarNotice('IngresÃ¡ un monto mayor a 0.');
+      showCalendarNotice('Ingresá un monto mayor a 0.');
       return false;
     }
 
+    const effectiveParticipantId = (() => {
+      if (paymentMode !== 'Único') return input.participantId;
+      const confirmedFromDraft = Boolean(
+        bookingDrawerState.draft?.billing.payments.some(
+          (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
+        )
+      );
+      const confirmedFromFinancial = Number(bookingFinancial?.paid || 0) > 0.009;
+      const hasConfirmedPayments = confirmedFromDraft || confirmedFromFinancial;
+      const explicitResponsibleId = String(singleChargeParticipantId || '').trim();
+      const requestedParticipantId = String(input.participantId || '').trim();
+
+      if (
+        !hasConfirmedPayments &&
+        requestedParticipantId &&
+        requestedParticipantId !== explicitResponsibleId &&
+        participants.some((participant) => participant.id === requestedParticipantId)
+      ) {
+        setBillingConfigTouchedByUser(true);
+        bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId: requestedParticipantId } });
+        return requestedParticipantId;
+      }
+
+      if (hasConfirmedPayments && explicitResponsibleId) return explicitResponsibleId;
+      if (input.participantId) return input.participantId;
+      if (explicitResponsibleId) return explicitResponsibleId;
+      const ownerParticipant = participants.find((participant) => participant.isOwner);
+      return ownerParticipant?.id;
+    })();
+
     try {
-      if (input.participantId) {
-        setPaymentInFlightId(input.participantId);
+      if (effectiveParticipantId) {
+        setPaymentInFlightId(effectiveParticipantId);
       }
       setIsWaitingQueuedPaymentConfirmation(true);
       setFormError('');
+
+      const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+      const payerParticipant =
+        (effectiveParticipantId
+          ? participants.find((participant) => participant.id === effectiveParticipantId)
+          : null) ||
+        participants.find((participant) => participant.isOwner) ||
+        participants[0];
+      const payerParticipantRef = payerParticipant
+        ? buildStableParticipantRef(payerParticipant, {
+            bookingClientId: String(editingBooking?.clientId || '').trim() || undefined,
+            bookingUserId:
+              Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+                ? bookingUserIdRaw
+                : undefined,
+          })
+        : undefined;
+      const payerParticipantName = payerParticipant
+        ? (String(payerParticipant.name || '').trim() || (payerParticipant.isOwner ? 'Titular' : 'Participante'))
+        : undefined;
 
       const paymentChannel = input.method === 'TRANSFER' ? 'BANK_ACCOUNT' : undefined;
       await registerBookingPartialPayment(
         persistedEditingBookingId,
         amount,
         input.method,
-        paymentChannel
+        paymentChannel,
+        undefined,
+        {
+          participantRef: payerParticipantRef,
+          participantName: payerParticipantName,
+        }
       );
 
       await reloadSchedule();
@@ -2328,7 +2696,8 @@ export default function AdminAgendaPlaygroundPage() {
           previous,
           paymentMode,
           Number(latestFinancialSummary?.total || 0),
-          Number(latestFinancialSummary?.paid || 0)
+          Number(latestFinancialSummary?.paid || 0),
+          effectiveParticipantId
         )
       );
 
@@ -2358,6 +2727,92 @@ export default function AdminAgendaPlaygroundPage() {
       }
 
       showCalendarNotice(input.successMessage || `Pago registrado: ${amount.toFixed(2)} $.`);
+      if (paymentMode === 'Único' && effectiveParticipantId) {
+        const currentResponsibleId = String(
+          bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || ''
+        ).trim();
+        if (
+          currentResponsibleId !== effectiveParticipantId &&
+          participants.some((participant) => participant.id === effectiveParticipantId)
+        ) {
+          setBillingConfigTouchedByUser(true);
+          bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId: effectiveParticipantId } });
+          try {
+            const bookingClientIdRaw = String(editingBooking?.clientId || '').trim();
+            const bookingClientId = bookingClientIdRaw.length > 0 ? bookingClientIdRaw : undefined;
+            const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+            const bookingUserId =
+              Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+                ? bookingUserIdRaw
+                : undefined;
+
+            const participantRefById = new Map<string, string>();
+            participants.forEach((participant) => {
+              participantRefById.set(
+                String(participant.id),
+                buildStableParticipantRef(participant, { bookingClientId, bookingUserId })
+              );
+            });
+
+            const totalChargeableAmount = Number(
+              Number(
+                bookingDrawerState.draft?.billing.financialSummary.totalAmount ??
+                  latestFinancialSummary?.total ??
+                  0
+              ).toFixed(2)
+            );
+            const assignmentByParticipantId = new Map<string, string>();
+            (bookingDrawerState.draft?.billing.assignments || []).forEach((assignment) => {
+              const participantId = String(assignment?.participantId || '').trim();
+              if (!participantId) return;
+              assignmentByParticipantId.set(
+                participantId,
+                String(assignment?.id || `asg-${participantId}`)
+              );
+            });
+
+            const payloadAssignments = participants.map((participant) => {
+              const participantId = String(participant.id || '').trim();
+              const participantRef =
+                participantRefById.get(participantId) || `guest:${participantId}`;
+              const isChargeable = participantId === effectiveParticipantId;
+              return {
+                id: assignmentByParticipantId.get(participantId) || `asg-${participantId}`,
+                participantRef,
+                isChargeable,
+                assignedAmount: isChargeable ? totalChargeableAmount : 0,
+                participantLinkState: 'ACTIVE' as const,
+              };
+            });
+
+            const chargeResponsibleRef =
+              participantRefById.get(String(effectiveParticipantId)) ||
+              `guest:${String(effectiveParticipantId)}`;
+            const sidebarParticipantsMetadata = buildSidebarParticipantsMetadata(participants);
+            const sidebarNotesValue = String(notes || '');
+
+            const savedConfig = await updateBookingBillingConfig(persistedEditingBookingId, {
+              chargeMode: 'INDIVIDUAL',
+              chargeResponsibleRef,
+              assignments: payloadAssignments,
+              metadata: {
+                schemaVersion: 1,
+                client: 'agenda-playground-v2',
+                sidebarParticipants: sidebarParticipantsMetadata,
+                sidebarNotes: sidebarNotesValue,
+                sidebar: {
+                  participants: sidebarParticipantsMetadata,
+                  notes: sidebarNotesValue,
+                },
+              },
+            });
+            remoteBillingConfigRequestSeqRef.current += 1;
+            setRemoteBillingConfig(savedConfig);
+          } catch (persistError) {
+            reportUiError({ area: 'AgendaPlayground', action: 'persistChargeResponsibleAfterPayment' }, persistError);
+          }
+        }
+      }
       return true;
     } catch (error: any) {
       const message = toUserSafeMessage(error?.message, 'No se pudo registrar el pago.');
@@ -2365,19 +2820,26 @@ export default function AdminAgendaPlaygroundPage() {
       showCalendarNotice(message);
       return false;
     } finally {
-      if (input.participantId) {
-        setPaymentInFlightId((previous) => (previous === input.participantId ? null : previous));
+      if (effectiveParticipantId) {
+        setPaymentInFlightId((previous) => (previous === effectiveParticipantId ? null : previous));
       }
       setIsWaitingQueuedPaymentConfirmation(false);
     }
   }, [
     bookingFinancial?.confirmationMode,
+    bookingFinancial?.paid,
+    bookingDrawerState.draft,
     bookingKind,
+    editingBooking?.clientId,
     editingBooking?.state,
+    editingBooking?.userId,
     paymentMode,
+    participants,
     persistedEditingBookingId,
     refreshBookingFinancial,
     reloadSchedule,
+    notes,
+    singleChargeParticipantId,
     showCalendarNotice,
   ]);
 
@@ -2409,7 +2871,7 @@ export default function AdminAgendaPlaygroundPage() {
 
   const addParticipantRow = () => {
     if (!persistedEditingBookingId && bookingKind !== 'block') {
-      showCalendarNotice('Primero creÃ¡ la reserva. DespuÃ©s podÃ©s agregar mÃ¡s participantes.');
+      showCalendarNotice('Primero creá la reserva. Después podés agregar más participantes.');
       return;
     }
     setParticipants((previous) => [
@@ -2428,13 +2890,113 @@ export default function AdminAgendaPlaygroundPage() {
     ]);
   };
 
-  const removeParticipant = (id: string) => {
-    setParticipants((previous) => previous.filter((participant) => participant.id !== id));
-  };
+  const removeParticipant = useCallback((id: string) => {
+    const participantId = String(id || '').trim();
+    if (!participantId) return;
+    const participantToRemove = participants.find((participant) => participant.id === participantId);
+    if (!participantToRemove || participantToRemove.isOwner) return;
+
+    const remainingParticipants = participants.filter((participant) => participant.id !== participantId);
+    const fallbackResponsibleParticipant =
+      remainingParticipants.find((participant) => participant.isOwner) ||
+      remainingParticipants.find((participant) => participant.name.trim().length > 0) ||
+      remainingParticipants[0];
+    const nextResponsibleParticipantId = String(fallbackResponsibleParticipant?.id || '').trim();
+
+    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
+    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+    const bookingUserId =
+      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+        ? bookingUserIdRaw
+        : undefined;
+    const removedParticipantLabel =
+      String(participantToRemove.name || '').trim() ||
+      (participantToRemove.isOwner ? 'Titular' : 'Participante sin nombre');
+    const refsForHistory = new Set<string>();
+    refsForHistory.add(buildStableParticipantRef(participantToRemove, { bookingClientId, bookingUserId }));
+    refsForHistory.add(String(participantToRemove.entityRef || '').trim());
+    refsForHistory.add(`guest:${participantToRemove.id}`);
+    if (participantToRemove.isOwner) {
+      refsForHistory.add('guest:owner');
+      refsForHistory.add('guest:booking-responsible');
+      if (bookingClientId) refsForHistory.add(`booking-client:${bookingClientId}`);
+      if (bookingUserId) refsForHistory.add(`booking-user:${bookingUserId}`);
+    }
+    setParticipantLabelByRefCache((previous) => {
+      const next = { ...previous };
+      refsForHistory.forEach((ref) => {
+        const safeRef = String(ref || '').trim();
+        if (!safeRef) return;
+        next[safeRef] = removedParticipantLabel;
+      });
+      return next;
+    });
+
+    setParticipants(remainingParticipants);
+    setParticipantMenuId((previous) => (previous === participantId ? null : previous));
+    setExpandedParticipantId((previous) => (previous === participantId ? null : previous));
+    setParticipantSearchOpenId((previous) => (previous === participantId ? null : previous));
+    setParticipantSearchLoadingId((previous) => (previous === participantId ? null : previous));
+    setParticipantSuggestionsById((previous) => {
+      if (!Object.prototype.hasOwnProperty.call(previous, participantId)) return previous;
+      const next = { ...previous };
+      delete next[participantId];
+      return next;
+    });
+    setSimplifiedEditingParticipantId((previous) => (previous === participantId ? null : previous));
+    setSimplifiedEditPaymentMethodDraft((previous) =>
+      simplifiedEditingParticipantId === participantId ? '' : previous
+    );
+
+    const payerDraftId = String(simplifiedPaymentPayerParticipantIdDraft || '').trim();
+    if (payerDraftId === participantId) {
+      const fallbackPayer =
+        fallbackResponsibleParticipant ||
+        remainingParticipants.find((participant) => participant.isOwner) ||
+        remainingParticipants[0];
+      const fallbackPaymentMethod = String(fallbackPayer?.paymentMethod || '');
+      setSimplifiedPaymentPayerParticipantIdDraft(String(fallbackPayer?.id || ''));
+      setSimplifiedPaymentMethodDraft(
+        isParticipantPaymentMethod(fallbackPaymentMethod)
+          ? fallbackPaymentMethod
+          : 'CASH'
+      );
+    }
+
+    const isRemovingChargeResponsible =
+      paymentMode === 'Único' &&
+      participantId === effectiveSingleChargeResponsibleParticipantId;
+    if (isRemovingChargeResponsible && nextResponsibleParticipantId) {
+      setBillingConfigTouchedByUser(true);
+      bookingDrawerDispatch({
+        type: 'SET_CHARGE_RESPONSIBLE',
+        payload: { participantId: nextResponsibleParticipantId },
+      });
+      const nextResponsibleLabel =
+        String(fallbackResponsibleParticipant?.name || '').trim() ||
+        (fallbackResponsibleParticipant?.isOwner ? 'Titular' : 'Participante');
+      pendingParticipantSaveNoticeRef.current =
+        `Participante eliminado. Responsable de pago reasignado a ${nextResponsibleLabel}.`
+      return;
+    }
+
+    if (!pendingParticipantSaveNoticeRef.current) {
+      pendingParticipantSaveNoticeRef.current = 'Participante eliminado.';
+    }
+  }, [
+    bookingDrawerDispatch,
+    editingBooking?.clientId,
+    editingBooking?.userId,
+    effectiveSingleChargeResponsibleParticipantId,
+    participants,
+    paymentMode,
+    simplifiedEditingParticipantId,
+    simplifiedPaymentPayerParticipantIdDraft,
+  ]);
 
   const markParticipantAsPending = useCallback((id: string) => {
     if (persistedEditingBookingId) {
-      setFormError('Para volver a pendiente una reserva cobrada hay que gestionar una devoluciÃ³n.');
+      setFormError('Para volver a pendiente una reserva cobrada hay que gestionar una devolución.');
       return;
     }
     setParticipants((previous) =>
@@ -2470,7 +3032,7 @@ export default function AdminAgendaPlaygroundPage() {
           setBookingTimelineLoading(false);
         }
       }
-      showCalendarNotice('Reserva confirmada. Ya podÃ©s registrar pagos.');
+      showCalendarNotice('Reserva confirmada. Ya podés registrar pagos.');
     } catch (error: any) {
       applyBookingError(error, 'No se pudo confirmar la reserva.');
     } finally {
@@ -2703,10 +3265,10 @@ export default function AdminAgendaPlaygroundPage() {
 
     const owner = participants.find((participant) => participant.isOwner);
     const ownerId = owner ? String(owner.id) : (participantsDraft[0]?.id || undefined);
-    let chargeMode: 'INDIVIDUAL' | 'SHARED' = paymentMode === 'Ãšnico' ? 'INDIVIDUAL' : 'SHARED';
+    let chargeMode: 'INDIVIDUAL' | 'SHARED' = paymentMode === 'Único' ? 'INDIVIDUAL' : 'SHARED';
     let chargeResponsibleParticipantId = ownerId;
     let assignments: NewBookingDrawerDraft['billing']['assignments'] =
-      paymentMode === 'Ãšnico'
+      paymentMode === 'Único'
         ? participantsDraft.map((participant) => ({
             id: `asg-${participant.id}`,
             participantId: participant.id,
@@ -2847,7 +3409,7 @@ export default function AdminAgendaPlaygroundPage() {
     const bookingResponsibleParticipantId = activeParticipantsForSync.find(
       (participant) => participant.bookingRole === 'BOOKING_RESPONSIBLE'
     )?.id;
-    const chargeMode = paymentMode === 'Ãšnico' ? 'INDIVIDUAL' as const : 'SHARED' as const;
+    const chargeMode = paymentMode === 'Único' ? 'INDIVIDUAL' as const : 'SHARED' as const;
     const isPersistedEdit = Boolean(editingBookingId);
     const syncTotalAmount = isPersistedEdit
       ? Number(bookingDrawerState.draft.billing.financialSummary.totalAmount || 0)
@@ -2895,7 +3457,7 @@ export default function AdminAgendaPlaygroundPage() {
     if (isSelectionInPast) return 'No se pueden reservar turnos en el pasado.';
     if (shouldShowScheduleConflict) return 'Hay un turno superpuesto en ese rango de fecha y horario.';
     if (hasDuplicateParticipants) return 'Hay participantes duplicados. Corregilo para poder guardar.';
-    if (shouldBlockSaveByQuote && !isSelectionInPast) return quoteError || 'RevisÃ¡ los datos del turno.';
+    if (shouldBlockSaveByQuote && !isSelectionInPast) return quoteError || 'Revisá los datos del turno.';
     return '';
   }, [formError, hasDuplicateParticipants, isSelectionInPast, quoteError, shouldBlockSaveByQuote, shouldShowScheduleConflict]);
   const hasBlockingActionError = blockingActionMessage.length > 0;
@@ -2924,7 +3486,7 @@ export default function AdminAgendaPlaygroundPage() {
     const fromField = String(fieldErrors.owner || '').trim();
     if (fromField.length > 0) return fromField;
     if (!hasValidOwner) return 'Falta el responsable de la reserva.';
-    if (paymentMode === 'Ãšnico' && !simplifiedOwnerAdded) return 'Primero agregÃ¡ el titular.';
+    if (paymentMode === 'Único' && !simplifiedOwnerAdded) return 'Primero agregá el titular.';
     return '';
   }, [fieldErrors.owner, hasValidOwner, paymentMode, simplifiedOwnerAdded]);
   const participantsFieldError = useMemo(() => {
@@ -2994,7 +3556,7 @@ export default function AdminAgendaPlaygroundPage() {
     isSelectionInPast ||
     shouldBlockSaveByQuote ||
     shouldShowScheduleConflict ||
-    (paymentMode === 'Ãšnico' && !simplifiedOwnerAdded) ||
+    (paymentMode === 'Único' && !simplifiedOwnerAdded) ||
     Boolean(simplifiedEditingParticipantId) ||
     simplifiedNewParticipantOpen ||
     (Boolean(editingBookingId) && isRemoteBillingConfigLoading) ||
@@ -3027,14 +3589,14 @@ export default function AdminAgendaPlaygroundPage() {
 
     rows.push({
       key: 'schedule',
-      label: 'Horario vÃ¡lido',
+      label: 'Horario válido',
       ok: !isSelectionInPast && !shouldShowScheduleConflict && !shouldBlockSaveByQuote,
       detail: isSelectionInPast
         ? 'No se puede reservar en el pasado.'
         : shouldShowScheduleConflict
           ? 'Se superpone con otra reserva.'
           : shouldBlockSaveByQuote
-            ? quoteError || 'Horario no permitido por configuraciÃ³n.'
+            ? quoteError || 'Horario no permitido por configuración.'
             : undefined,
     });
 
@@ -3057,7 +3619,7 @@ export default function AdminAgendaPlaygroundPage() {
         ok: blockingBillingWarnings.size === 0,
         detail:
           blockingBillingWarnings.size > 0
-            ? 'RevisÃ¡ asignaciÃ³n de cobro (sumas/responsable).'
+            ? 'Revisá asignación de cobro (sumas/responsable).'
             : undefined,
       });
     }
@@ -3067,7 +3629,7 @@ export default function AdminAgendaPlaygroundPage() {
         key: 'recurring-courts',
         label: 'Canchas seleccionadas para la serie',
         ok: recurringCourtIds.length > 0,
-        detail: recurringCourtIds.length > 0 ? undefined : 'SeleccionÃ¡ al menos una cancha.',
+        detail: recurringCourtIds.length > 0 ? undefined : 'Seleccioná al menos una cancha.',
       });
     }
 
@@ -3269,7 +3831,7 @@ export default function AdminAgendaPlaygroundPage() {
     const amountToRegister = Number(remainingAmount.toFixed(2));
     if (amountToRegister <= 0.009) {
       setBillingHubTab('PAYMENTS');
-      showCalendarNotice('El saldo ya estÃ¡ cubierto por pagos registrados.');
+      showCalendarNotice('El saldo ya está cubierto por pagos registrados.');
       return;
     }
     void registerPaymentNow({
@@ -3308,35 +3870,77 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentNoteDraft('');
   }, []);
 
-  const openSimplifiedPaymentModal = useCallback(() => {
+  const openSimplifiedPaymentModal = useCallback(async () => {
     if (!persistedEditingBookingId) {
-      showCalendarNotice('Primero creÃ¡ la reserva. DespuÃ©s podÃ©s registrar cobros.');
+      showCalendarNotice('Primero creá la reserva. Después podés registrar cobros.');
+      return;
+    }
+    if (isRemoteBillingConfigLoading) {
       return;
     }
     if (isPaymentLockedByManualPending) {
-      showCalendarNotice('Primero confirmÃ¡ la reserva para poder registrar pagos.');
+      showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
       return;
     }
 
     const draft = bookingDrawerState.draft;
     if (!draft) {
-      showCalendarNotice('No se pudo preparar el cobro. ReabrÃ­ la reserva e intentÃ¡ de nuevo.');
+      showCalendarNotice('No se pudo preparar el cobro. Reabrí la reserva e intentá de nuevo.');
       return;
     }
 
-    const namedParticipants = participants.filter((participant) => participant.name.trim().length > 0);
-    if (namedParticipants.length === 0) {
-      showCalendarNotice('Primero agregÃ¡ al menos un participante con nombre.');
+    if (participants.length === 0) {
+      showCalendarNotice('Primero agregá al menos un participante.');
       return;
     }
+
+    const requestSeq = remoteBillingConfigRequestSeqRef.current + 1;
+    remoteBillingConfigRequestSeqRef.current = requestSeq;
+    let latestConfig: BookingBillingConfig | null = null;
+    try {
+      setIsRemoteBillingConfigLoading(true);
+      setBillingConfigLoadError('');
+      const config = await getBookingBillingConfig(persistedEditingBookingId);
+      if (remoteBillingConfigRequestSeqRef.current !== requestSeq) return;
+      latestConfig = config;
+      setRemoteBillingConfig(config);
+      setIsBillingConfigHydrated(true);
+    } catch (error: any) {
+      if (remoteBillingConfigRequestSeqRef.current !== requestSeq) return;
+      const message = toUserSafeMessage(error?.message, 'No se pudo cargar la configuración de cobro.');
+      setIsBillingConfigHydrated(false);
+      setBillingConfigLoadError(message);
+      showCalendarNotice(message);
+      return;
+    } finally {
+      if (remoteBillingConfigRequestSeqRef.current === requestSeq) {
+        setIsRemoteBillingConfigLoading(false);
+      }
+    }
+
+    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
+    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+    const bookingUserId =
+      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+        ? bookingUserIdRaw
+        : undefined;
 
     const preferredPayerId = (() => {
+      const persistedResponsibleRef = String(latestConfig?.chargeResponsibleRef || '').trim();
+      if (persistedResponsibleRef) {
+        const persistedResponsible = participants.find(
+          (participant) =>
+            buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === persistedResponsibleRef
+        );
+        if (persistedResponsible) return String(persistedResponsible.id);
+      }
+
       const draftResponsible = String(draft.billing.chargeResponsibleParticipantId || '').trim();
-      if (draftResponsible && namedParticipants.some((participant) => participant.id === draftResponsible)) {
+      if (draftResponsible && participants.some((participant) => participant.id === draftResponsible)) {
         return draftResponsible;
       }
-      const ownerNamed = namedParticipants.find((participant) => participant.isOwner);
-      return ownerNamed?.id || namedParticipants[0]?.id || '';
+      const ownerParticipant = participants.find((participant) => participant.isOwner);
+      return ownerParticipant?.id || participants[0]?.id || '';
     })();
     const payer = participants.find((participant) => participant.id === preferredPayerId);
 
@@ -3350,7 +3954,10 @@ export default function AdminAgendaPlaygroundPage() {
     setFormError('');
   }, [
     bookingDrawerState.draft,
+    editingBooking?.clientId,
+    editingBooking?.userId,
     isPaymentLockedByManualPending,
+    isRemoteBillingConfigLoading,
     participants,
     persistedEditingBookingId,
     showCalendarNotice,
@@ -3359,24 +3966,51 @@ export default function AdminAgendaPlaygroundPage() {
 
   const queueSimplifiedPaymentFromModal = useCallback(() => {
     if (isPaymentLockedByManualPending) {
-      showCalendarNotice('Primero confirmÃ¡ la reserva para poder registrar pagos.');
+      showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
       return;
     }
 
-    const payerId = String(simplifiedPaymentPayerParticipantIdDraft || '').trim();
+    const payerId = (() => {
+      const selectedPayerId = String(simplifiedPaymentPayerParticipantIdDraft || '').trim();
+      if (selectedPayerId) return selectedPayerId;
+      const responsiblePayerId = String(singleChargeParticipantId || '').trim();
+      if (responsiblePayerId) return responsiblePayerId;
+      const ownerPayerId = participants.find((participant) => participant.isOwner)?.id || '';
+      return String(ownerPayerId).trim();
+    })();
     if (!payerId) {
-      showCalendarNotice('SeleccionÃ¡ quiÃ©n paga esta reserva.');
+      showCalendarNotice('Seleccioná quién paga esta reserva.');
       return;
     }
+    if (paymentMode === 'Único') {
+      const confirmedFromDraft = Boolean(
+        bookingDrawerState.draft?.billing.payments.some(
+          (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
+        )
+      );
+      const confirmedFromFinancial = Number(bookingFinancial?.paid || 0) > 0.009;
+      const hasConfirmedPayments = confirmedFromDraft || confirmedFromFinancial;
+      const allowedPayerId = String(singleChargeParticipantId || '').trim() ||
+        participants.find((participant) => participant.isOwner)?.id ||
+        '';
+      if (hasConfirmedPayments && allowedPayerId && payerId !== allowedPayerId) {
+        showCalendarNotice('En pago único, solo puede pagar el responsable de cobro.');
+        return;
+      }
+      if (!hasConfirmedPayments && payerId !== allowedPayerId) {
+        setBillingConfigTouchedByUser(true);
+        bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId: payerId } });
+      }
+    }
     if (!isParticipantPaymentMethod(simplifiedPaymentMethodDraft)) {
-      showCalendarNotice('SeleccionÃ¡ un mÃ©todo de pago.');
+      showCalendarNotice('Seleccioná un método de pago.');
       return;
     }
     const selectedMethod = simplifiedPaymentMethodDraft as Participant['paymentMethod'];
 
     const amount = Number(String(simplifiedPaymentAmountDraft || '').replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0.009) {
-      showCalendarNotice('IngresÃ¡ un monto mayor a 0.');
+      showCalendarNotice('Ingresá un monto mayor a 0.');
       return;
     }
     if (amount > simplifiedRemainingAfterQueue + 0.009) {
@@ -3397,6 +4031,8 @@ export default function AdminAgendaPlaygroundPage() {
     });
   }, [
     closeSimplifiedPaymentModal,
+    bookingDrawerState.draft,
+    bookingFinancial?.paid,
     isPaymentLockedByManualPending,
     registerPaymentNow,
     showCalendarNotice,
@@ -3404,6 +4040,9 @@ export default function AdminAgendaPlaygroundPage() {
     simplifiedPaymentMethodDraft,
     simplifiedPaymentPayerParticipantIdDraft,
     simplifiedRemainingAfterQueue,
+    singleChargeParticipantId,
+    paymentMode,
+    participants,
     updateParticipant,
   ]);
 
@@ -3554,6 +4193,7 @@ export default function AdminAgendaPlaygroundPage() {
             },
           },
         });
+        remoteBillingConfigRequestSeqRef.current += 1;
         setRemoteBillingConfig(savedConfig);
         backendPersisted = true;
       } catch (error) {
@@ -3611,23 +4251,23 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
 
-    if (paymentMode === 'Ãšnico' && !simplifiedOwnerAdded) {
-      setBlockingFieldError('owner', 'Primero agregÃ¡ el titular.');
+    if (paymentMode === 'Único' && !simplifiedOwnerAdded) {
+      setBlockingFieldError('owner', 'Primero agregá el titular.');
       return;
     }
 
     if (simplifiedEditingParticipantId) {
-      setBlockingFieldError('participants', 'TerminÃ¡ de editar el participante antes de guardar.');
+      setBlockingFieldError('participants', 'Terminá de editar el participante antes de guardar.');
       return;
     }
 
     if (simplifiedNewParticipantOpen) {
-      setBlockingFieldError('participants', 'TerminÃ¡ de agregar el nuevo participante antes de guardar.');
+      setBlockingFieldError('participants', 'Terminá de agregar el nuevo participante antes de guardar.');
       return;
     }
 
     if (hasDuplicateParticipants) {
-      setBlockingFieldError('participants', 'No podÃ©s guardar con participantes duplicados.');
+      setBlockingFieldError('participants', 'No podés guardar con participantes duplicados.');
       return;
     }
 
@@ -3724,13 +4364,13 @@ export default function AdminAgendaPlaygroundPage() {
 
         if (!billingSaved) {
           const partialIssues = [
-            !billingSaved ? 'configuraciÃ³n de cobro' : '',
+            !billingSaved ? 'configuración de cobro' : '',
             failedPaymentTempIds.length > 0 ? `${failedPaymentTempIds.length} pagos` : '',
           ].filter(Boolean);
           bookingDrawerDispatch({
             type: 'SAVE_PARTIAL',
             payload: {
-              message: `Guardado parcial: faltÃ³ guardar ${partialIssues.join(' y ')}.`,
+              message: `Guardado parcial: faltó guardar ${partialIssues.join(' y ')}.`,
               operationalSaved,
               billingSaved,
               failedPaymentTempIds,
@@ -3738,15 +4378,42 @@ export default function AdminAgendaPlaygroundPage() {
           });
           setFormError(
             !billingSaved
-              ? 'Guardado parcial: no se pudo persistir toda la configuraciÃ³n de cobro.'
+              ? 'Guardado parcial: no se pudo persistir toda la configuración de cobro.'
               : 'Guardado parcial.'
           );
           showCalendarNotice(
             !billingSaved
-              ? 'Guardado parcial: configuraciÃ³n de cobro pendiente'
+              ? 'Guardado parcial: configuración de cobro pendiente'
               : 'Guardado parcial'
           );
           return;
+        }
+
+        if (Number.isFinite(numericBookingId) && numericBookingId > 0) {
+          const timelineRequestSeq = bookingTimelineRequestSeqRef.current + 1;
+          bookingTimelineRequestSeqRef.current = timelineRequestSeq;
+          setBookingTimelineLoading(true);
+          setBookingTimelineError('');
+          try {
+            const events = await getBookingTimelineEvents(numericBookingId, { take: 200 });
+            if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
+              setBookingTimelineEvents(Array.isArray(events) ? events : []);
+            }
+          } catch (timelineError: any) {
+            if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
+              setBookingTimelineEvents([]);
+              setBookingTimelineError(
+                toUserSafeMessage(
+                  timelineError?.message,
+                  'No se pudo cargar el historial de la reserva.'
+                )
+              );
+            }
+          } finally {
+            if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
+              setBookingTimelineLoading(false);
+            }
+          }
         }
 
         if (latestFinancialSummary) {
@@ -3762,13 +4429,20 @@ export default function AdminAgendaPlaygroundPage() {
         setBillingConfigTouchedByUser(false);
         bookingDrawerDispatch({ type: 'SAVE_SUCCESS' });
         const shouldClose = hasScheduleChanges;
+        const pendingParticipantNotice = String(pendingParticipantSaveNoticeRef.current || '').trim();
+        if (pendingParticipantNotice) {
+          pendingParticipantSaveNoticeRef.current = '';
+        }
         if (shouldClose) {
           setDrawerOpen(false);
           setEditingBookingId(null);
           setEditingBaseline(null);
         }
         setFormError('');
-        showCalendarNotice(shouldClose ? 'Reserva actualizada correctamente.' : 'Cambios guardados.');
+        const baseSuccessMessage = shouldClose ? 'Reserva actualizada correctamente.' : 'Cambios guardados.';
+        showCalendarNotice(
+          pendingParticipantNotice ? `${baseSuccessMessage} ${pendingParticipantNotice}` : baseSuccessMessage
+        );
         return;
       } catch (error: any) {
         const handled = applyBookingError(error, 'No se pudo actualizar la reserva.');
@@ -3793,18 +4467,18 @@ export default function AdminAgendaPlaygroundPage() {
         setRecurringOverlapModalOpen(false);
 
         if (!Number.isFinite(recurringEveryDays) || recurringEveryDays <= 0) {
-          setFormError('IndicÃ¡ cada cuÃ¡ntos dÃ­as querÃ©s repetir la serie.');
+          setFormError('Indicá cada cuántos días querés repetir la serie.');
           return;
         }
         if (
           !(recurringFrequencyPreset === 'custom' && !customEndAfterEnabled) &&
           (!Number.isFinite(recurringRepetitions) || recurringRepetitions <= 0)
         ) {
-          setFormError('IndicÃ¡ cuÃ¡ntas repeticiones querÃ©s generar.');
+          setFormError('Indicá cuántas repeticiones querés generar.');
           return;
         }
         if (selectedRecurringCourts.length === 0) {
-          setFormError('SeleccionÃ¡ al menos una cancha para crear la serie.');
+          setFormError('Seleccioná al menos una cancha para crear la serie.');
           return;
         }
         const recurrenceDays =
@@ -3812,7 +4486,7 @@ export default function AdminAgendaPlaygroundPage() {
             ? Array.from(new Set(customRecurrenceDays)).sort((a, b) => a - b)
             : [recurringDayOfWeek];
         if (recurrenceDays.length === 0) {
-          setFormError('SeleccionÃ¡ al menos un dÃ­a para la recurrencia.');
+          setFormError('Seleccioná al menos un día para la recurrencia.');
           return;
         }
         const baseDate = new Date(selectedDate);
@@ -3981,7 +4655,7 @@ export default function AdminAgendaPlaygroundPage() {
           courtsCount: selectedRecurringCourts.length,
         });
         if (hardErrors.length > 0) {
-          recurringSummaryError = `Algunas canchas fallaron: ${hardErrors.join(' Â· ')}`;
+          recurringSummaryError = `Algunas canchas fallaron: ${hardErrors.join(' · ')}`;
           setFormError(recurringSummaryError);
         } else if (generatedCount === 0 && skippedCount > 0 && recurringOverlapOnlyMessage) {
           recurringSummaryError = recurringOverlapOnlyMessage;
@@ -3996,7 +4670,7 @@ export default function AdminAgendaPlaygroundPage() {
       } else {
         const selectedActivityId = Number(selectedCourt?.activityTypeId || 0);
         if (!Number.isFinite(selectedActivityId) || selectedActivityId <= 0) {
-          setFormError('No se pudo resolver la actividad de la cancha. RevisÃ¡ la configuraciÃ³n del club.');
+          setFormError('No se pudo resolver la actividad de la cancha. Revisá la configuración del club.');
           return;
         }
         const bookingDate = new Date(selectedDate);
@@ -4128,7 +4802,7 @@ export default function AdminAgendaPlaygroundPage() {
   }, []);
 
   useEffect(() => {
-    if (!drawerOpen || paymentMode !== 'Ãšnico') return;
+    if (!drawerOpen || paymentMode !== 'Único') return;
     if (!editingBookingId) {
       setSimplifiedOwnerAdded(false);
       setSimplifiedOwnerPaymentMethodDraft('');
@@ -4142,7 +4816,7 @@ export default function AdminAgendaPlaygroundPage() {
   }, [closeSimplifiedPaymentModal, drawerOpen, editingBookingId, paymentMode]);
 
   useEffect(() => {
-    if (!drawerOpen || paymentMode !== 'Ãšnico' || !editingBookingId) return;
+    if (!drawerOpen || paymentMode !== 'Único' || !editingBookingId) return;
     const namedOwner = participants.find(
       (participant) => participant.isOwner && participant.name.trim().length > 0
     );
@@ -4154,18 +4828,35 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedNewParticipantOpen(false);
     setSimplifiedNewParticipantName('');
     setSimplifiedNewParticipantContact('');
-    closeSimplifiedPaymentModal();
-  }, [closeSimplifiedPaymentModal, drawerOpen, editingBookingId, participants, paymentMode]);
+  }, [drawerOpen, editingBookingId, participants, paymentMode]);
+
+  const simplifiedParticipantWithPaymentControlsIdSet = useMemo(() => {
+    if (paymentMode === 'Único') {
+      const paidIds = participants.filter((participant) => participant.paid).map((participant) => participant.id);
+      if (paidIds.length > 0) {
+        return new Set(paidIds);
+      }
+    }
+    return new Set(chargedParticipantIdSet);
+  }, [chargedParticipantIdSet, participants, paymentMode]);
 
   useEffect(() => {
     if (!simplifiedEditingParticipantId) return;
     const stillExistsAndCharged = participants.some(
-      (participant) => participant.id === simplifiedEditingParticipantId && chargedParticipantIdSet.has(participant.id)
+      (participant) =>
+        participant.id === simplifiedEditingParticipantId &&
+        simplifiedParticipantWithPaymentControlsIdSet.has(participant.id)
     );
-    if (stillExistsAndCharged && simplifiedOwnerAdded) return;
+    if (stillExistsAndCharged && simplifiedOwnerAdded && !isBookingFullyPaid) return;
     setSimplifiedEditingParticipantId(null);
     setSimplifiedEditPaymentMethodDraft('');
-  }, [chargedParticipantIdSet, participants, simplifiedEditingParticipantId, simplifiedOwnerAdded]);
+  }, [
+    isBookingFullyPaid,
+    participants,
+    simplifiedEditingParticipantId,
+    simplifiedOwnerAdded,
+    simplifiedParticipantWithPaymentControlsIdSet,
+  ]);
 
   useEffect(() => {
     if (!simplifiedNewParticipantOpen) return;
@@ -4176,12 +4867,49 @@ export default function AdminAgendaPlaygroundPage() {
   }, [simplifiedNewParticipantOpen, simplifiedOwnerAdded]);
 
   useEffect(() => {
-    if (drawerOpen && paymentMode === 'Ãšnico' && simplifiedOwnerAdded) return;
+    if (drawerOpen && paymentMode === 'Único') return;
     closeSimplifiedPaymentModal();
-  }, [closeSimplifiedPaymentModal, drawerOpen, paymentMode, simplifiedOwnerAdded]);
+  }, [closeSimplifiedPaymentModal, drawerOpen, paymentMode]);
+
+  useEffect(() => {
+    if (!drawerOpen || bookingKind === 'block' || paymentMode !== 'Único') return;
+    if (!latestPaymentPayerRef) return;
+
+    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
+    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+    const bookingUserId =
+      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+        ? bookingUserIdRaw
+        : undefined;
+
+    setParticipants((previous) => {
+      const matchedPayer = previous.find(
+        (participant) =>
+          buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === latestPaymentPayerRef
+      );
+      if (!matchedPayer) return previous;
+
+      let changed = false;
+      const next = previous.map((participant) => {
+        const shouldBePaid = participant.id === matchedPayer.id;
+        if (participant.paid === shouldBePaid) return participant;
+        changed = true;
+        return { ...participant, paid: shouldBePaid };
+      });
+      return changed ? next : previous;
+    });
+  }, [
+    bookingKind,
+    drawerOpen,
+    editingBooking?.clientId,
+    editingBooking?.userId,
+    latestPaymentPayerRef,
+    participants,
+    paymentMode,
+  ]);
 
   if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
-  if (!hasAdminAccess(user)) return <NotFound message="No tenÃ©s permiso para acceder al panel de administraciÃ³n." />;
+  if (!hasAdminAccess(user)) return <NotFound message="No tenés permiso para acceder al panel de administración." />;
   const userInitial = String((user as any)?.firstName || (user as any)?.name || 'U')
     .trim()
     .charAt(0)
@@ -4196,11 +4924,11 @@ export default function AdminAgendaPlaygroundPage() {
     selectedRecurringCourts.length === 0
       ? 'Seleccionar canchas'
       : selectedRecurringCourts.map((court) => court.name).join(', ');
-  const useSimplifiedBookingSidebar = paymentMode === 'Ãšnico';
+  const useSimplifiedBookingSidebar = paymentMode === 'Único';
   const simplifiedIsEditingReservation = useSimplifiedBookingSidebar && Boolean(editingBookingId);
   const simplifiedHeaderDateLabel = selectedDate
     .toLocaleDateString('es-AR', {
-      weekday: 'short',
+      weekday: 'long',
       month: '2-digit',
       day: '2-digit',
       year: 'numeric',
@@ -4221,8 +4949,11 @@ export default function AdminAgendaPlaygroundPage() {
     ? participants.find((participant) => participant.id === simplifiedEditingParticipantId) || null
     : null;
   const simplifiedEditingParticipantCanBeCharged = Boolean(
-    simplifiedEditingParticipant && chargedParticipantIdSet.has(simplifiedEditingParticipant.id)
+    simplifiedEditingParticipant &&
+    simplifiedParticipantWithPaymentControlsIdSet.has(simplifiedEditingParticipant.id)
   );
+  const simplifiedCanEditParticipantPaymentMethod =
+    simplifiedEditingParticipantCanBeCharged && !isBookingFullyPaid;
   const hasValidSimplifiedOwnerPaymentMethod = isParticipantPaymentMethod(simplifiedOwnerPaymentMethodDraft);
   const hasValidSimplifiedEditPaymentMethod = isParticipantPaymentMethod(simplifiedEditPaymentMethodDraft);
   const hasValidSimplifiedNewParticipantName = simplifiedNewParticipantName.trim().length > 0;
@@ -4232,8 +4963,33 @@ export default function AdminAgendaPlaygroundPage() {
     { value: 'CARD', label: 'Tarjeta' },
     { value: 'OTHER', label: 'Otro' },
   ];
-  const simplifiedPayerCandidates = simplifiedNamedParticipants;
+  const simplifiedHasConfirmedPayments =
+    Boolean(
+      bookingDrawerState.draft?.billing.payments.some(
+        (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
+      )
+    ) || Number(bookingFinancial?.paid || 0) > 0.009;
+  const simplifiedLockedSinglePayerId = (() => {
+    if (paymentMode !== 'Único' || !simplifiedHasConfirmedPayments) return '';
+    const explicitResponsibleId = String(singleChargeParticipantId || '').trim();
+    if (explicitResponsibleId && participants.some((participant) => participant.id === explicitResponsibleId)) {
+      return explicitResponsibleId;
+    }
+    const ownerParticipant = participants.find((participant) => participant.isOwner);
+    return ownerParticipant?.id || participants[0]?.id || '';
+  })();
+  const simplifiedPayerCandidates = (() => {
+    return participants.map((participant, index) => ({
+      ...participant,
+      optionLabel:
+        String(participant.name || '').trim() ||
+        (participant.isOwner ? 'Titular sin nombre' : `Participante ${index + 1}`),
+    }));
+  })();
   const simplifiedResolvedPayerParticipantId = (() => {
+    if (paymentMode === 'Único' && simplifiedLockedSinglePayerId) {
+      return simplifiedLockedSinglePayerId;
+    }
     const draftSelection = String(simplifiedPaymentPayerParticipantIdDraft || '').trim();
     if (draftSelection && simplifiedPayerCandidates.some((participant) => participant.id === draftSelection)) {
       return draftSelection;
@@ -4256,6 +5012,7 @@ export default function AdminAgendaPlaygroundPage() {
   const hasValidSimplifiedPaymentMethod = isParticipantPaymentMethod(simplifiedPaymentMethodDraft);
   const simplifiedCanRegisterPayment =
     Boolean(persistedEditingBookingId) &&
+    !isRemoteBillingConfigLoading &&
     !isPaymentLockedByManualPending &&
     simplifiedRemainingAfterQueue > 0.009;
   const simplifiedSectionTabs: Array<{ id: SimplifiedSidebarSection; label: string }> = [
@@ -4304,7 +5061,7 @@ export default function AdminAgendaPlaygroundPage() {
     };
     const formatBillingModeLabel = (mode: unknown): string => {
       const normalized = String(mode || '').trim().toUpperCase();
-      if (normalized === 'INDIVIDUAL') return 'Pago Ãºnico';
+      if (normalized === 'INDIVIDUAL') return 'Pago único';
       if (normalized === 'SHARED') return 'Pago dividido';
       return 'Sin definir';
     };
@@ -4313,8 +5070,8 @@ export default function AdminAgendaPlaygroundPage() {
       if (!normalized) return '';
       if (normalized === 'MANUAL') return 'Manual';
       if (normalized === 'SYSTEM') return 'Sistema';
-      if (normalized === 'AUTOMATIC') return 'AutomÃ¡tico';
-      if (normalized === 'API') return 'IntegraciÃ³n externa';
+      if (normalized === 'AUTOMATIC') return 'Automático';
+      if (normalized === 'API') return 'Integración externa';
       if (normalized === 'POS') return 'Caja';
       if (normalized === 'MANAGER') return 'Administrador';
       return 'Sistema';
@@ -4325,12 +5082,63 @@ export default function AdminAgendaPlaygroundPage() {
       if (normalized === 'CASH_DRAWER') return 'Caja';
       if (normalized === 'BANK_TRANSFER') return 'Transferencia';
       if (normalized === 'CARD_TERMINAL') return 'Terminal';
-      if (normalized === 'ONLINE_GATEWAY') return 'Pasarela en lÃ­nea';
+      if (normalized === 'ONLINE_GATEWAY') return 'Pasarela en línea';
       return 'Canal interno';
     };
+    const bookingClientIdForRefs = String(editingBooking?.clientId || '').trim() || undefined;
+    const bookingUserIdForRefsRaw = Number(editingBooking?.userId || 0);
+    const bookingUserIdForRefs =
+      Number.isFinite(bookingUserIdForRefsRaw) && bookingUserIdForRefsRaw > 0
+        ? bookingUserIdForRefsRaw
+        : undefined;
+    const responsibleLabelByRef = new Map<string, string>();
+    const registerResponsibleRef = (ref: string, label: string) => {
+      const safeRef = String(ref || '').trim();
+      const safeLabel = String(label || '').trim();
+      if (!safeRef || !safeLabel) return;
+      if (!responsibleLabelByRef.has(safeRef)) {
+        responsibleLabelByRef.set(safeRef, safeLabel);
+      }
+    };
+    Object.entries(participantLabelByRefCache).forEach(([ref, label]) => {
+      registerResponsibleRef(ref, label);
+    });
+    participants.forEach((participant) => {
+      const label =
+        String(participant.name || '').trim() ||
+        (participant.isOwner ? 'Titular' : 'Participante');
+      const stableRef = buildStableParticipantRef(participant, {
+        bookingClientId: bookingClientIdForRefs,
+        bookingUserId: bookingUserIdForRefs,
+      });
+      const entityRef = String(participant.entityRef || '').trim();
+      const guestRef = String(participant.id || '').trim();
+
+      registerResponsibleRef(stableRef, label);
+      registerResponsibleRef(entityRef, label);
+      if (guestRef) {
+        registerResponsibleRef(`guest:${guestRef}`, label);
+      }
+      if (participant.isOwner) {
+        registerResponsibleRef('guest:owner', label);
+        registerResponsibleRef('guest:booking-responsible', label);
+        if (bookingClientIdForRefs) {
+          registerResponsibleRef(`booking-client:${bookingClientIdForRefs}`, label);
+        }
+        if (bookingUserIdForRefs) {
+          registerResponsibleRef(`booking-user:${bookingUserIdForRefs}`, label);
+        }
+      }
+    });
     const formatResponsibleRefLabel = (rawRef: unknown): string => {
       const ref = String(rawRef || '').trim();
       if (!ref) return 'Sin asignar';
+      const mappedLabel =
+        responsibleLabelByRef.get(ref) ||
+        Array.from(responsibleLabelByRef.entries()).find(
+          ([candidateRef]) => candidateRef.toLowerCase() === ref.toLowerCase()
+        )?.[1];
+      if (mappedLabel) return mappedLabel;
       if (ref.startsWith('guest:owner') || ref.startsWith('guest:booking-responsible')) return 'Titular';
       if (ref.startsWith('booking-client:')) return 'Cliente de la reserva';
       if (ref.startsWith('booking-user:')) return 'Usuario vinculado';
@@ -4359,11 +5167,15 @@ export default function AdminAgendaPlaygroundPage() {
         const methodRaw = String((payload as any)?.method || '').trim();
         const sourceRaw = String((payload as any)?.source || '').trim();
         const channelRaw = String((payload as any)?.channel || '').trim();
+        const payerNameRaw = String((payload as any)?.payerParticipantName || '').trim();
+        const payerRefRaw = String((payload as any)?.payerParticipantRef || '').trim();
+        const payerLabel = payerNameRaw || (payerRefRaw ? formatResponsibleRefLabel(payerRefRaw) : '');
         title = Number.isFinite(amount) && amount > 0.009
           ? `Pago recibido (${amount.toFixed(2)} $)`
           : 'Pago recibido';
         const detailParts = [
-          methodRaw ? `MÃ©todo: ${formatPaymentMethodLabel(methodRaw)}` : '',
+          payerLabel ? `Pagador: ${payerLabel}` : '',
+          methodRaw ? `Método: ${formatPaymentMethodLabel(methodRaw)}` : '',
           sourceRaw ? `Origen: ${formatTimelineSourceLabel(sourceRaw)}` : '',
           channelRaw ? `Canal: ${formatTimelineChannelLabel(channelRaw)}` : '',
         ].filter(Boolean);
@@ -4407,7 +5219,7 @@ export default function AdminAgendaPlaygroundPage() {
         const isOwnerAssignment = participantRole === 'BOOKING_RESPONSIBLE' && source === 'BOOKING_CREATED';
         if (isOwnerAssignment) {
           title = 'Titular asignado';
-          detail = 'Se asignÃ³ el titular durante la creaciÃ³n.';
+          detail = 'Se asignó el titular durante la creación.';
         } else {
           title = count > 1 ? 'Participantes agregados' : 'Participante agregado';
           detail = count > 0 ? `${count} participante${count > 1 ? 's' : ''} agregado${count > 1 ? 's' : ''}.` : 'Participante agregado.';
@@ -4419,7 +5231,7 @@ export default function AdminAgendaPlaygroundPage() {
       } else if (normalizedType === 'BOOKING_BILLING_CONFIG_UPDATED') {
         const previousChargeMode = formatBillingModeLabel((payload as any)?.previousChargeMode);
         const chargeMode = formatBillingModeLabel((payload as any)?.chargeMode);
-        title = 'ConfiguraciÃ³n de cobro actualizada';
+        title = 'Configuración de cobro actualizada';
         const detailParts = [
           previousChargeMode !== chargeMode ? `Modo: ${previousChargeMode} -> ${chargeMode}` : `Modo: ${chargeMode}`,
         ];
@@ -4440,7 +5252,7 @@ export default function AdminAgendaPlaygroundPage() {
         title = 'Notas actualizadas';
         detail = notes ? 'Se actualizaron las notas privadas.' : 'Se limpiaron las notas privadas.';
       } else {
-        detail = 'Se registrÃ³ una actualizaciÃ³n.';
+        detail = 'Se registró una actualización.';
       }
 
       events.push({
@@ -4587,8 +5399,8 @@ export default function AdminAgendaPlaygroundPage() {
                 type="button"
                 onClick={() => logout({ redirectTo: '/login' })}
                 className="h-9 w-9 rounded-lg border border-[#e5e7eb] bg-white text-[#58627a] grid place-items-center hover:bg-[#f8f9fc]"
-                title="Cerrar sesiÃ³n"
-                aria-label="Cerrar sesiÃ³n"
+                title="Cerrar sesión"
+                aria-label="Cerrar sesión"
               >
                 <LogOut size={16} />
               </button>
@@ -4864,7 +5676,7 @@ export default function AdminAgendaPlaygroundPage() {
                                         >
                                           {visibility.showDurationOnly ? (
                                             <p className="w-full truncate text-[11px] font-semibold leading-tight">
-                                              {isDropConflicted ? 'SuperposiciÃ³n' : draggingBookingMeta.title}
+                                              {isDropConflicted ? 'Superposición' : draggingBookingMeta.title}
                                             </p>
                                           ) : (
                                             <>
@@ -4885,7 +5697,7 @@ export default function AdminAgendaPlaygroundPage() {
                                                 <p className="font-semibold truncate">{draggingBookingMeta.title}</p>
                                               )}
                                               {isDropConflicted && visibility.showTimeRange && (
-                                                <p className="font-semibold text-[#b42346]">SuperposiciÃ³n</p>
+                                                <p className="font-semibold text-[#b42346]">Superposición</p>
                                               )}
                                               {visibility.showTimeRange && (
                                                 <p className="opacity-70">
@@ -5001,18 +5813,26 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="truncate text-[11px] font-semibold">{participant.name}</p>
-                        <p className="text-[10px] text-[#7b8396]">{participant.isOwner ? 'Responsable' : 'Jugador'}</p>
+                        <p className="text-[10px] text-[#7b8396]">{participant.roleLabel}</p>
                       </div>
                       <span
                         className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
                           participant.payable === false
-                            ? 'bg-[#f2f4f8] text-[#6b7285]'
-                            : participant.paid
-                              ? 'bg-[#e8f8ed] text-[#1c7a44]'
+                            ? 'bg-[#f3f5f9] text-[#7c8598]'
+                            : participant.status === 'PAID'
+                            ? 'bg-[#e8f8ed] text-[#1c7a44]'
+                            : participant.status === 'PARTIAL'
+                              ? 'bg-[#fff4e5] text-[#9a5a00]'
                               : 'bg-[#eef1f7] text-[#5c667f]'
                         }`}
                       >
-                        {participant.payable === false ? 'Sin cargo' : participant.paid ? 'Pagado' : 'Pendiente'}
+                        {participant.payable === false
+                          ? 'Sin cargo'
+                          : participant.status === 'PAID'
+                          ? 'Pagado'
+                          : participant.status === 'PARTIAL'
+                            ? 'Parcial'
+                            : 'Pendiente'}
                       </span>
                     </div>
                   ))}
@@ -5071,7 +5891,7 @@ export default function AdminAgendaPlaygroundPage() {
                               : 'border-[#cdd6ea] bg-white text-[#3f4c6a] hover:bg-[#f5f7ff]'
                           }`}
                         >
-                          DÃ­as hÃ¡biles
+                          Días hábiles
                         </button>
                         <button
                           type="button"
@@ -5189,7 +6009,7 @@ export default function AdminAgendaPlaygroundPage() {
                         onClick={() => {
                           const days = Array.from(new Set(customRecurrenceDays));
                           if (days.length === 0) {
-                            setFormError('SeleccionÃ¡ al menos un dÃ­a para la recurrencia personalizada.');
+                            setFormError('Seleccioná al menos un día para la recurrencia personalizada.');
                             return;
                           }
                           setCustomRecurrenceDays(days);
@@ -5226,7 +6046,7 @@ export default function AdminAgendaPlaygroundPage() {
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar creaciÃ³n de serie</h3>
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar creación de serie</h3>
                     <button
                       type="button"
                       onClick={() => {
@@ -5240,10 +6060,10 @@ export default function AdminAgendaPlaygroundPage() {
                   </div>
                   <div className="px-5 py-5 space-y-4">
                     <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[13px] text-[#2f4fd8]">
-                      Se crearÃ¡n todas las ocurrencias vÃ¡lidas de la serie.
+                      Se crearán todas las ocurrencias válidas de la serie.
                     </div>
                     <div className="rounded-xl border border-[#f0e3d1] bg-[#fff8ef] px-3 py-2 text-[13px] text-[#8a622f]">
-                      Si alguna fecha se superpone, se omitirÃ¡ automÃ¡ticamente. Nunca se reemplaza una reserva existente.
+                      Si alguna fecha se superpone, se omitirá automáticamente. Nunca se reemplaza una reserva existente.
                     </div>
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
@@ -5294,7 +6114,7 @@ export default function AdminAgendaPlaygroundPage() {
                   </div>
                   <div className="px-5 py-5 space-y-4">
                     <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[13px] text-[#2f4fd8]">
-                      Se creÃ³ la serie solo en ocurrencias vÃ¡lidas. Las que se superponen fueron omitidas automÃ¡ticamente.
+                      Se creó la serie solo en ocurrencias válidas. Las que se superponen fueron omitidas automáticamente.
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
@@ -5302,7 +6122,7 @@ export default function AdminAgendaPlaygroundPage() {
                         <strong>{recurringResult?.generatedCount ?? 0}</strong>
                       </div>
                       <div className="rounded-lg bg-[#fff4f6] px-3 py-2 text-xs text-[#8f2f46] flex justify-between">
-                        <span>Omitidas por superposiciÃ³n</span>
+                        <span>Omitidas por superposición</span>
                         <strong>{recurringResult?.skippedCount ?? recurringOverlapItems.length}</strong>
                       </div>
                     </div>
@@ -5315,17 +6135,17 @@ export default function AdminAgendaPlaygroundPage() {
                           <div key={`overlap-item-${index}`} className="px-3 py-2">
                             <p className="text-[13px] font-semibold text-[#27314b]">{item.courtName}</p>
                             <p className="text-[12px] text-[#68738e]">
-                              Solicitada: {item.requestedDateLabel} Â· {item.requestedTimeLabel}
+                              Solicitada: {item.requestedDateLabel} · {item.requestedTimeLabel}
                             </p>
                             {(item.conflictingDateLabel || item.conflictingTimeLabel) && (
                               <p className="text-[11px] text-[#8a93a7]">
                                 Ocupada: {item.conflictingDateLabel || item.requestedDateLabel}
-                                {item.conflictingTimeLabel ? ` Â· ${item.conflictingTimeLabel}` : ''}
+                                {item.conflictingTimeLabel ? ` · ${item.conflictingTimeLabel}` : ''}
                               </p>
                             )}
                             {(item.clientName || item.activityName) && (
                               <p className="text-[11px] text-[#8a93a7]">
-                                En conflicto con: {[item.clientName, item.activityName].filter(Boolean).join(' Â· ')}
+                                En conflicto con: {[item.clientName, item.activityName].filter(Boolean).join(' · ')}
                               </p>
                             )}
                           </div>
@@ -5367,7 +6187,7 @@ export default function AdminAgendaPlaygroundPage() {
                   </div>
                   <div className="px-5 py-5 space-y-4">
                     <p className="text-[14px] text-[#4b556d]">
-                      Esta acciÃ³n cancelarÃ¡ la reserva seleccionada. PodrÃ¡s verla como cancelada en el historial.
+                      Esta acción cancelará la reserva seleccionada. Podrás verla como cancelada en el historial.
                     </p>
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -5385,7 +6205,7 @@ export default function AdminAgendaPlaygroundPage() {
                         }}
                         className="h-10 rounded-xl bg-[#cf3f57] px-5 text-white text-sm font-bold hover:bg-[#b8354b]"
                       >
-                        SÃ­, cancelar
+                        Sí, cancelar
                       </button>
                     </div>
                   </div>
@@ -5414,8 +6234,14 @@ export default function AdminAgendaPlaygroundPage() {
                   </div>
                   <div className="px-5 py-5 space-y-4">
                     <p className="text-[14px] text-[#4b556d]">
-                      Â¿QuerÃ©s eliminar a <strong>{deleteParticipantConfirm.participantName}</strong> de esta reserva?
+                      ¿Querés eliminar a <strong>{deleteParticipantConfirm.participantName}</strong> de esta reserva?
                     </p>
+                    {deleteParticipantContext.isChargeResponsible && (
+                      <p className="rounded-lg border border-[#ffe5b5] bg-[#fff8ea] px-3 py-2 text-[12px] text-[#8a5a14]">
+                        Este participante es el responsable de pago actual. Al eliminarlo, el responsable pasará a{' '}
+                        <strong>{deleteParticipantContext.nextResponsibleLabel || 'otro participante disponible'}</strong>.
+                      </p>
+                    )}
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
@@ -5435,7 +6261,7 @@ export default function AdminAgendaPlaygroundPage() {
                         }}
                         className="h-10 rounded-xl bg-[#cf3f57] px-5 text-white text-sm font-bold hover:bg-[#b8354b]"
                       >
-                        SÃ­, eliminar
+                        Sí, eliminar
                       </button>
                     </div>
                   </div>
@@ -5464,7 +6290,7 @@ export default function AdminAgendaPlaygroundPage() {
                   </div>
                   <div className="px-5 py-5 space-y-4">
                     <p className="text-[14px] text-[#5b4550]">
-                      CorregÃ­ primero la fecha/cancha/horario para poder seguir con pagos y participantes.
+                      Corregí primero la fecha/cancha/horario para poder seguir con pagos y participantes.
                     </p>
                     <div className="rounded-lg border border-[#f1c5d0] bg-[#fff4f7] px-3 py-2">
                       <p className="text-[13px] font-semibold text-[#b42346]">{blockingActionMessage}</p>
@@ -5504,7 +6330,7 @@ export default function AdminAgendaPlaygroundPage() {
                   </div>
                   <div className="px-5 py-5 space-y-4">
                     <p className="text-[14px] text-[#4a5674]">
-                      La reserva se creÃ³ correctamente y quedÃ³ abierta para ediciÃ³n.
+                      La reserva se creó correctamente y quedó abierta para edición.
                     </p>
                     <div className="flex items-center justify-end">
                       <button
@@ -5543,7 +6369,7 @@ export default function AdminAgendaPlaygroundPage() {
                         Confirmando pago...
                       </p>
                       <p className="mt-1 text-[12px] text-[#6f7890]">
-                        Esperando confirmaciÃ³n del sistema.
+                        Esperando confirmación del sistema.
                       </p>
                     </div>
                   </div>
@@ -5704,9 +6530,8 @@ export default function AdminAgendaPlaygroundPage() {
                       {showSimplifiedDetailsSection && (simplifiedIsEditingReservation ? (
                         <>
                           <div className="rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center">
                               <p className="text-[16px] font-semibold text-[#1f2638]">Reserva del usuario</p>
-                              <span className="text-[14px] font-medium text-[#8b93a6]">Bloqueada</span>
                             </div>
                             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-3">
                               <div>
@@ -5870,7 +6695,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   readOnly
                                   value={isFinancialDisplayPending
                                     ? ''
-                                    : paymentMode === 'Ãšnico'
+                                    : paymentMode === 'Único'
                                       ? Number(totalPrice.toFixed(2))
                                       : Number((totalPrice / Math.max(chargedParticipantsCount, 1)).toFixed(2))}
                                   className="w-full bg-transparent text-[18px] font-semibold text-[#2a3245] outline-none"
@@ -5904,7 +6729,7 @@ export default function AdminAgendaPlaygroundPage() {
                               <p className="text-[13px] text-[#5f6880]">Cargando historial de la reserva...</p>
                             </div>
                           ) : simplifiedReservationHistoryTimeline.length === 0 ? (
-                            <p className="mt-4 px-1 text-[13px] text-[#6f7890]">TodavÃ­a no hay eventos en el historial.</p>
+                            <p className="mt-4 px-1 text-[13px] text-[#6f7890]">Todavía no hay eventos en el historial.</p>
                           ) : (
                             <div className="mt-4 space-y-5">
                               {simplifiedReservationHistoryTimeline.map((group) => (
@@ -5990,9 +6815,11 @@ export default function AdminAgendaPlaygroundPage() {
                             Registrar pago
                           </button>
                           {!persistedEditingBookingId ? (
-                            <p className="text-[12px] text-[#7c8598]">Primero creÃ¡ la reserva.</p>
+                            <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
+                          ) : billingConfigLoadError ? (
+                            <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
                           ) : isPaymentLockedByManualPending ? (
-                            <p className="text-[12px] text-[#7c8598]">ConfirmÃ¡ la reserva para habilitar pagos.</p>
+                            <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
                           ) : simplifiedRemainingAmount <= 0.009 ? (
                             <p className="text-[12px] text-[#1c7a44]">No hay deuda pendiente.</p>
                           ) : null}
@@ -6012,11 +6839,14 @@ export default function AdminAgendaPlaygroundPage() {
                                 const emailValue = contactValue.includes('@') ? contactValue : 'Sin correo';
                                 const phoneValue = contactValue && !contactValue.includes('@')
                                   ? contactValue
-                                  : 'Sin telÃ©fono';
-                                const participantHasCharge = chargedParticipantIdSet.has(participant.id);
+                                  : 'Sin teléfono';
+                                const participantHasPaymentControls = simplifiedParticipantWithPaymentControlsIdSet.has(participant.id);
+                                const participantDisplayedPrice = paymentMode === 'Único'
+                                  ? Number((bookingFinancial?.total || totalPrice || 0).toFixed(2))
+                                  : Number(resolveParticipantPrice(participant).toFixed(2));
                                 return (
                                   <div key={`simplified-participant-${participant.id}`} className="border-b border-[#edf1f7] py-3 last:border-b-0">
-                                    <div className={`grid ${participantHasCharge ? 'grid-cols-[42px_1fr_auto_auto_auto]' : 'grid-cols-[42px_1fr_auto]'} gap-2 items-start`}>
+                                    <div className={`grid ${participantHasPaymentControls ? 'grid-cols-[42px_1fr_auto_auto_auto]' : 'grid-cols-[42px_1fr_auto]'} gap-2 items-start`}>
                                       <div className="h-10 w-10 rounded-full bg-[#e9edf8] text-[#4a5674] text-[14px] font-semibold grid place-items-center">
                                         {participant.name.trim().charAt(0).toUpperCase() || 'P'}
                                       </div>
@@ -6025,15 +6855,14 @@ export default function AdminAgendaPlaygroundPage() {
                                         <p className="text-[13px] text-[#5f6880]">{phoneValue}</p>
                                         <p className="text-[13px] text-[#5f6880]">{emailValue}</p>
                                       </div>
-                                      {participantHasCharge && (
+                                      {participantHasPaymentControls && (
                                         <div className="pt-0.5 text-right">
                                           <p className="text-[16px] font-semibold text-[#1f2638]">
-                                            {Number(resolveParticipantPrice(participant).toFixed(2))} $
+                                            {participantDisplayedPrice} $
                                           </p>
-                                          <p className="mt-1 text-[14px] text-[#2f364b]">{simplifiedPaymentStatusLabel}</p>
                                         </div>
                                       )}
-                                      {participantHasCharge && (
+                                      {participantHasPaymentControls && !isBookingFullyPaid && (
                                         <button
                                           type="button"
                                           onClick={() => {
@@ -6052,8 +6881,11 @@ export default function AdminAgendaPlaygroundPage() {
                                       )}
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          showCalendarNotice('Acciones de participante prÃ³ximamente.');
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setParticipantMenuId((previous) =>
+                                            previous === participant.id ? null : participant.id
+                                          );
                                         }}
                                         className="h-8 w-8 rounded-full text-[#737c90] grid place-items-center hover:bg-[#f3f5fa]"
                                         title="Acciones del participante"
@@ -6061,6 +6893,85 @@ export default function AdminAgendaPlaygroundPage() {
                                         <MoreVertical size={15} />
                                       </button>
                                     </div>
+                                    {expandedParticipantId === participant.id && (
+                                      <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                                        <label className="block">
+                                          <span className="text-[11px] font-medium text-[#7a8398]">Nombre</span>
+                                          <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
+                                            <input
+                                              value={participant.name}
+                                              onChange={(event) =>
+                                                updateParticipant(participant.id, { name: event.target.value })
+                                              }
+                                              onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === 'Escape') {
+                                                  event.preventDefault();
+                                                  setExpandedParticipantId((previous) =>
+                                                    previous === participant.id ? null : previous
+                                                  );
+                                                }
+                                              }}
+                                              placeholder="Nombre del participante"
+                                              className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                            />
+                                          </div>
+                                        </label>
+                                        <label className="block">
+                                          <span className="text-[11px] font-medium text-[#7a8398]">Contacto</span>
+                                          <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
+                                            <input
+                                              ref={participantContactInputRef}
+                                              value={participant.contact}
+                                              onChange={(event) =>
+                                                updateParticipant(participant.id, { contact: event.target.value })
+                                              }
+                                              onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === 'Escape') {
+                                                  event.preventDefault();
+                                                  setExpandedParticipantId((previous) =>
+                                                    previous === participant.id ? null : previous
+                                                  );
+                                                }
+                                              }}
+                                              placeholder="Correo o teléfono"
+                                              className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                            />
+                                          </div>
+                                        </label>
+                                      </div>
+                                    )}
+                                    {participantMenuId === participant.id && (
+                                      <div className="mt-2 rounded-xl border border-[#dce2ef] bg-white shadow-sm p-2 text-[12px] text-[#30384d]">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedParticipantId(participant.id);
+                                            setParticipantMenuId(null);
+                                          }}
+                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                        >
+                                          Editar participante (nombre/contacto)
+                                        </button>
+                                        <div className="mt-1 border-t border-[#edf0f6] pt-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (participant.isOwner) return;
+                                              setDeleteParticipantConfirm({
+                                                open: true,
+                                                participantId: participant.id,
+                                                participantName: participant.name.trim() || 'este participante',
+                                              });
+                                              setParticipantMenuId(null);
+                                            }}
+                                            disabled={participant.isOwner}
+                                            className="w-full text-left rounded-lg px-2 py-1.5 text-[#c0354f] hover:bg-[#fff2f4] disabled:opacity-40"
+                                          >
+                                            Eliminar participante
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -6084,7 +6995,7 @@ export default function AdminAgendaPlaygroundPage() {
                                         entityRef: undefined,
                                       });
                                     }}
-                                    placeholder="IngresÃ¡ un nombre"
+                                    placeholder="Ingresá un nombre"
                                     className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
                                   />
                                   {ownerHasName ? (
@@ -6131,7 +7042,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     }}
                                     className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
                                   >
-                                    <option value="">Seleccionar mÃ©todo de pago</option>
+                                    <option value="">Seleccionar método de pago</option>
                                     {ownerPaymentMethodOptions.map((option) => (
                                       <option key={option.value} value={option.value}>
                                         {option.label}
@@ -6184,7 +7095,7 @@ export default function AdminAgendaPlaygroundPage() {
                             </>
                           )}
 
-                          {simplifiedOwnerAdded && simplifiedEditingParticipantCanBeCharged && simplifiedEditingParticipant && (
+                          {simplifiedOwnerAdded && simplifiedCanEditParticipantPaymentMethod && simplifiedEditingParticipant && (
                             <div className="mt-4 border-t border-[#e9edf5] pt-4">
                               <p className="text-[14px] font-semibold text-[#1f2638]">
                                 {simplifiedEditingParticipant.name} {'>'} Editar
@@ -6197,7 +7108,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     onChange={(event) => setSimplifiedEditPaymentMethodDraft(String(event.target.value || ''))}
                                     className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
                                   >
-                                    <option value="">Seleccionar mÃ©todo de pago</option>
+                                    <option value="">Seleccionar método de pago</option>
                                     {ownerPaymentMethodOptions.map((option) => (
                                       <option key={`edit-payment-${option.value}`} value={option.value}>
                                         {option.label}
@@ -6273,7 +7184,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     <input
                                       value={simplifiedNewParticipantContact}
                                       onChange={(event) => setSimplifiedNewParticipantContact(event.target.value)}
-                                      placeholder="Contacto (correo o telÃ©fono)"
+                                      placeholder="Contacto (correo o teléfono)"
                                       className="h-11 rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] outline-none"
                                     />
                                   </div>
@@ -6380,7 +7291,7 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
                   </section>
                   <section className="mb-6 rounded-xl border border-[#dce2ee] bg-white px-4 py-3">
-                    <p className="text-[14px] font-semibold text-[#1f2a44]">Resumen rÃ¡pido</p>
+                    <p className="text-[14px] font-semibold text-[#1f2a44]">Resumen rápido</p>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <div className="rounded-lg bg-[#f7f9fd] px-2.5 py-2">
                         <p className="text-[11px] text-[#79829a]">Tipo</p>
@@ -6409,7 +7320,7 @@ export default function AdminAgendaPlaygroundPage() {
                       <section className="pb-6 border-b border-[#edf0f5]">
                         <div className="grid grid-cols-2 gap-3">
                           <label className="block">
-                            <span className="text-[13px] text-[#727b90]">TÃ­tulo (opcional)</span>
+                            <span className="text-[13px] text-[#727b90]">Título (opcional)</span>
                             <input
                               value={blockingTitle}
                               onChange={(event) => setBlockingTitle(event.target.value)}
@@ -6581,7 +7492,7 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3">
                         <label className="block">
-                          <span className="text-[13px] text-[#727b90]">DÃ­a de repeticiÃ³n</span>
+                          <span className="text-[13px] text-[#727b90]">Día de repetición</span>
                           <PlaygroundCombo
                             value={String(recurringDayOfWeek)}
                             onChange={(nextValue) => {
@@ -6627,11 +7538,11 @@ export default function AdminAgendaPlaygroundPage() {
                         <div className="mt-3 grid grid-cols-2 gap-3">
                           <div className="col-span-2 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-3">
                             <p className="text-[12px] text-[#677188]">
-                              DÃ­as: {customRecurrenceDays.length > 0 ? customRecurrenceDays.map((day) => WEEKDAY_OPTIONS.find((option) => option.value === day)?.label || day).join(', ') : 'Sin selecciÃ³n'}
+                              Días: {customRecurrenceDays.length > 0 ? customRecurrenceDays.map((day) => WEEKDAY_OPTIONS.find((option) => option.value === day)?.label || day).join(', ') : 'Sin selección'}
                             </p>
                             <p className="mt-1 text-[12px] text-[#677188]">
                               Cada {customRepeatEveryWeeks} semana(s)
-                              {customEndAfterEnabled ? ` Â· Finaliza tras ${customEndAfterReservations} reservas` : ' Â· Sin lÃ­mite manual de reservas'}
+                              {customEndAfterEnabled ? ` · Finaliza tras ${customEndAfterReservations} reservas` : ' · Sin límite manual de reservas'}
                             </p>
                             <button
                               type="button"
@@ -6650,7 +7561,7 @@ export default function AdminAgendaPlaygroundPage() {
                               <p className="text-[13px] font-semibold text-[#2f4fd8]">
                                 {customEndAfterEnabled
                                   ? `Finaliza luego de ${customEndAfterReservations} reservas`
-                                  : 'Sin lÃ­mite manual de reservas'}
+                                  : 'Sin límite manual de reservas'}
                               </p>
                           </div>
                           <p className="mt-1 text-[12px] text-[#5c6da8]">
@@ -6677,7 +7588,7 @@ export default function AdminAgendaPlaygroundPage() {
                         <div className="mt-3 rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[12px] text-[#2f4fd8]">
                           Serie creada en <strong>{recurringResult.courtsCount}</strong> canchas: <strong>{recurringResult.generatedCount}</strong> turnos generados
                           {recurringResult.skippedCount > 0 ? (
-                            <> Â· <strong>{recurringResult.skippedCount}</strong> omitidos por superposiciÃ³n</>
+                            <> · <strong>{recurringResult.skippedCount}</strong> omitidos por superposición</>
                           ) : null}
                         </div>
                       )}
@@ -6701,19 +7612,19 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                     </div>
                     <p className="mt-1 text-[12px] text-[#6f7890]">
-                      ConfigurÃ¡ la asignaciÃ³n de cobro y registrÃ¡ pagos desde este bloque.
+                      Configurá la asignación de cobro y registrá pagos desde este bloque.
                     </p>
                     {shouldHideBillingUntilConfirmed ? (
                       <div className="mt-3 rounded-xl border border-[#f2d6a8] bg-[#fff9ee] px-3 py-3">
                         <p className="text-[12px] font-semibold text-[#8b5c1a]">
                           {shouldHideBillingUntilCreated
-                            ? 'Cobro disponible despuÃ©s de crear la reserva.'
+                            ? 'Cobro disponible después de crear la reserva.'
                             : 'Cobro oculto hasta confirmar la reserva.'}
                         </p>
                         <p className="mt-1 text-[12px] text-[#926a2a]">
                           {shouldHideBillingUntilCreated
-                            ? 'Primero creÃ¡ la reserva. DespuÃ©s podÃ©s definir asignaciÃ³n de cobro y registrar pagos.'
-                            : 'ConfirmÃ¡ esta reserva para habilitar asignaciÃ³n de cobro, registro de pagos y saldo.'}
+                            ? 'Primero creá la reserva. Después podés definir asignación de cobro y registrar pagos.'
+                            : 'Confirmá esta reserva para habilitar asignación de cobro, registro de pagos y saldo.'}
                         </p>
                         {!shouldHideBillingUntilCreated && (
                           <div className="mt-2 flex justify-end">
@@ -6734,7 +7645,7 @@ export default function AdminAgendaPlaygroundPage() {
                           draft={bookingDrawerState.draft}
                           activeTab={billingHubTab}
                           paymentsLocked={isPaymentLockedByManualPending}
-                          paymentsLockedReason="Primero confirmÃ¡ la reserva para poder registrar pagos."
+                          paymentsLockedReason="Primero confirmá la reserva para poder registrar pagos."
                           warnings={[
                             ...(hasBlockingActionError ? ['CURRENT_VALIDATION_WARNING'] : []),
                             ...(bookingDrawerState.ui.warnings || []),
@@ -6747,7 +7658,7 @@ export default function AdminAgendaPlaygroundPage() {
                           onQueuePayment={(input) =>
                             (() => {
                               if (isPaymentLockedByManualPending) {
-                                showCalendarNotice('Primero confirmÃ¡ la reserva para poder registrar pagos.');
+                                showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
                                 return;
                               }
                               const draft = bookingDrawerState.draft;
@@ -6761,8 +7672,8 @@ export default function AdminAgendaPlaygroundPage() {
                               if (amount <= 0.009) {
                                 showCalendarNotice(
                                   draft?.billing.chargeMode === 'INDIVIDUAL'
-                                    ? 'El saldo ya estÃ¡ cubierto. No hay cobro pendiente.'
-                                    : 'IngresÃ¡ un monto mayor a 0 para registrar pago.'
+                                    ? 'El saldo ya está cubierto. No hay cobro pendiente.'
+                                    : 'Ingresá un monto mayor a 0 para registrar pago.'
                                 );
                                 return;
                               }
@@ -6778,7 +7689,7 @@ export default function AdminAgendaPlaygroundPage() {
                           }}
                           onRegisterPayment={isBookingFullyPaid ? undefined : () => {
                             setBillingHubTab('PAYMENTS');
-                            showCalendarNotice('CompletÃ¡ monto y mÃ©todo para registrar el pago.');
+                            showCalendarNotice('Completá monto y método para registrar el pago.');
                           }}
                           onCollectRemaining={
                             isBookingFullyPaid
@@ -6798,7 +7709,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   : warning === 'ASSIGNMENT_SUM_MISMATCH'
                                     ? 'La suma asignada no coincide con el total.'
                                     : warning === 'CANCELLED_WITH_PAYMENTS'
-                                      ? 'La reserva estÃ¡ cancelada y tiene pagos.'
+                                      ? 'La reserva está cancelada y tiene pagos.'
                                       : warning === 'ARCHIVED_PARTICIPANT_WITH_HISTORY'
                                         ? 'Hay participantes archivados con historial.'
                                         : warning === 'INDIVIDUAL_WITHOUT_CHARGE_RESPONSIBLE'
@@ -6854,10 +7765,10 @@ export default function AdminAgendaPlaygroundPage() {
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       {!isBookingFullyPaid && (
                         <div>
-                        <p className="text-[13px] text-[#727b90] inline-flex items-center gap-1">AsignaciÃ³n de cobro <CircleAlert size={13} /></p>
+                        <p className="text-[13px] text-[#727b90] inline-flex items-center gap-1">Asignación de cobro <CircleAlert size={13} /></p>
                         <div className="mt-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
                           <div className="h-9 rounded-lg bg-[#dfe4f4] text-[#2e58e5] text-[15px] font-semibold grid place-items-center">
-                            Pago Ãºnico
+                            Pago único
                           </div>
                         </div>
                         </div>
@@ -6890,13 +7801,13 @@ export default function AdminAgendaPlaygroundPage() {
                         )}
                         {bookingFinancial && (
                           <p className="mt-1 text-[11px] text-[#6f7890]">
-                            Pagado: <strong>{bookingFinancial.paid.toFixed(2)} $</strong> Â· Restante:{' '}
+                            Pagado: <strong>{bookingFinancial.paid.toFixed(2)} $</strong> · Restante:{' '}
                             <strong>{bookingFinancial.remaining.toFixed(2)} $</strong>
                           </p>
                         )}
                         {exceedsRemainingWarning && (
                           <p className="mt-1 text-[11px] text-[#d13d57]">
-                            El precio configurado supera el saldo pendiente. Al cobrar se ajustarÃ¡ al restante.
+                            El precio configurado supera el saldo pendiente. Al cobrar se ajustará al restante.
                           </p>
                         )}
                       </div>
@@ -6918,7 +7829,7 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
                     {isModernBillingEnabled && (
                       <p className="mt-2 text-[12px] text-[#6f7890]">
-                        AcÃ¡ gestionÃ¡s personas de la reserva. La lÃ³gica de cobro estÃ¡ en la secciÃ³n <strong>Cobro</strong>.
+                        Acá gestionás personas de la reserva. La lógica de cobro está en la sección <strong>Cobro</strong>.
                       </p>
                     )}
 
@@ -6950,7 +7861,7 @@ export default function AdminAgendaPlaygroundPage() {
                                         setParticipantSearchOpenId(participant.id);
                                       }
                                     }}
-                                    placeholder="Buscar nombre, correo o telÃ©fono"
+                                    placeholder="Buscar nombre, correo o teléfono"
                                     className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
                                   />
                                 </div>
@@ -7104,7 +8015,7 @@ export default function AdminAgendaPlaygroundPage() {
                                         );
                                       }
                                     }}
-                                    placeholder="Contacto (correo o telÃ©fono)"
+                                    placeholder="Contacto (correo o teléfono)"
                                     className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
                                   />
                                 </div>
@@ -7150,7 +8061,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     </button>
                                     <div className="mt-1 border-t border-[#edf0f6] pt-1">
                                       <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-[#7a8398]">
-                                        MÃ©todo de pago
+                                        Método de pago
                                       </p>
                                       {([
                                         { value: 'CASH', label: 'Efectivo' },
@@ -7338,9 +8249,9 @@ export default function AdminAgendaPlaygroundPage() {
                     )}
                     {bookingKind !== 'block' && shouldHideBillingUntilConfirmed && (
                       <div className="rounded-xl border border-[#f2d6a8] bg-[#fff9ee] px-3 py-2.5">
-                        <p className="text-[12px] font-semibold text-[#8b5c1a]">Cobro pendiente de confirmaciÃ³n</p>
+                        <p className="text-[12px] font-semibold text-[#8b5c1a]">Cobro pendiente de confirmación</p>
                         <p className="mt-1 text-[12px] text-[#926a2a]">
-                          ConfirmÃ¡ la reserva para habilitar asignaciÃ³n de cobro, pagos y saldo.
+                          Confirmá la reserva para habilitar asignación de cobro, pagos y saldo.
                         </p>
                       </div>
                     )}
@@ -7348,7 +8259,7 @@ export default function AdminAgendaPlaygroundPage() {
                     {hasBlockingActionError && (
                       <div className="rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2.5">
                         <p className="text-[12px] font-semibold text-[#b42346]">
-                          No podÃ©s continuar hasta corregir este error.
+                          No podés continuar hasta corregir este error.
                         </p>
                         <p className="mt-0.5 text-[12px] text-[#b42346]">{blockingActionMessage}</p>
                       </div>
@@ -7405,13 +8316,19 @@ export default function AdminAgendaPlaygroundPage() {
             onClick={closeSimplifiedPaymentModal}
             aria-label="Cerrar modal de cobro"
           />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-[560px] rounded-2xl border border-[#dce2ee] bg-white shadow-2xl">
+          <div
+            className="absolute inset-0 flex items-center justify-center p-4"
+            onClick={closeSimplifiedPaymentModal}
+          >
+            <div
+              className="w-full max-w-[560px] rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
                 <div>
                   <p className="text-[18px] font-semibold text-[#1f2638]">Registrar pago</p>
                   <p className="text-[12px] text-[#707a92]">
-                    Pago Ãºnico: una persona paga el total en uno o varios pagos parciales.
+                    Pago único: una persona paga el total en uno o varios pagos parciales.
                   </p>
                 </div>
                 <button
@@ -7447,12 +8364,22 @@ export default function AdminAgendaPlaygroundPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="block">
-                    <span className="text-[12px] font-medium text-[#79829a]">QuiÃ©n paga</span>
+                    <span className="text-[12px] font-medium text-[#79829a]">Quién paga</span>
                     <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
                       <select
                         value={simplifiedResolvedPayerParticipantId}
+                        disabled={paymentMode === 'Único' && Boolean(simplifiedLockedSinglePayerId)}
                         onChange={(event) => {
                           const nextParticipantId = String(event.target.value || '');
+                          if (
+                            paymentMode === 'Único' &&
+                            simplifiedLockedSinglePayerId &&
+                            nextParticipantId &&
+                            nextParticipantId !== simplifiedLockedSinglePayerId
+                          ) {
+                            showCalendarNotice('En pago único, después del primer pago queda fijo el pagador.');
+                            return;
+                          }
                           setSimplifiedPaymentPayerParticipantIdDraft(nextParticipantId);
                           const nextPayer = participants.find((participant) => participant.id === nextParticipantId);
                           if (nextPayer) {
@@ -7463,23 +8390,41 @@ export default function AdminAgendaPlaygroundPage() {
                       >
                         <option value="">Seleccionar participante</option>
                         {simplifiedPayerCandidates.map((participant) => (
-                          <option key={`simplified-payer-${participant.id}`} value={participant.id}>
-                            {participant.name}
+                          <option
+                            key={`simplified-payer-${participant.id}`}
+                            value={participant.id}
+                            disabled={
+                              paymentMode === 'Único' &&
+                              Boolean(simplifiedLockedSinglePayerId) &&
+                              participant.id !== simplifiedLockedSinglePayerId
+                            }
+                          >
+                            {participant.optionLabel}
                             {participant.isOwner ? ' (titular)' : ''}
+                            {paymentMode === 'Único' &&
+                            simplifiedLockedSinglePayerId &&
+                            participant.id !== simplifiedLockedSinglePayerId
+                              ? ' (bloqueado)'
+                              : ''}
                           </option>
                         ))}
                       </select>
                     </div>
+                    {paymentMode === 'Único' && simplifiedLockedSinglePayerId && (
+                      <p className="mt-1 text-[11px] text-[#7a8398]">
+                        El pagador queda fijo después del primer pago confirmado.
+                      </p>
+                    )}
                   </label>
                   <label className="block">
-                    <span className="text-[12px] font-medium text-[#79829a]">MÃ©todo</span>
+                    <span className="text-[12px] font-medium text-[#79829a]">Método</span>
                     <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
                       <select
                         value={simplifiedPaymentMethodDraft}
                         onChange={(event) => setSimplifiedPaymentMethodDraft(String(event.target.value || ''))}
                         className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
                       >
-                        <option value="">Seleccionar mÃ©todo de pago</option>
+                        <option value="">Seleccionar método de pago</option>
                         {ownerPaymentMethodOptions.map((option) => (
                           <option key={`modal-payment-method-${option.value}`} value={option.value}>
                             {option.label}
@@ -7630,8 +8575,3 @@ export default function AdminAgendaPlaygroundPage() {
     </>
   );
 }
-
-
-
-
-

@@ -7,6 +7,8 @@ type PaymentFingerprintInput = {
   externalReference?: string;
   source?: string;
   cashShiftId?: string;
+  payerParticipantRef?: string;
+  payerParticipantName?: string;
   allocations?: Array<{
     accountItemId: string;
     amount: number;
@@ -36,6 +38,8 @@ const buildFingerprint = (input: PaymentFingerprintInput) => {
     externalReference: String(input.externalReference || '').trim() || null,
     source: input.source || 'POS',
     cashShiftId: input.cashShiftId || null,
+    payerParticipantRef: String(input.payerParticipantRef || '').trim() || null,
+    payerParticipantName: String(input.payerParticipantName || '').trim() || null,
     allocations: normalizedAllocations
   });
 };

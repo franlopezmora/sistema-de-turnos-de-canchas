@@ -259,6 +259,47 @@ export class BookingService {
         return 'guest:booking-responsible';
     }
 
+    // Algunos flujos del frontend pueden alternar aliases del titular
+    // (ej. booking-client:* <-> guest:owner) sin cambios reales de participantes.
+    // Normalizamos para evitar eventos falsos de "agregado/eliminado".
+    private normalizeParticipantRefForDiff(
+        participantRef: string | null | undefined,
+        booking: { clientId?: string | null; userId?: number | null }
+    ) {
+        const rawRef = String(participantRef || '').trim();
+        if (!rawRef) return '';
+
+        const lowered = rawRef.toLowerCase();
+        if (lowered.startsWith('guest:owner') || lowered.startsWith('guest:booking-responsible')) {
+            return 'booking:responsible';
+        }
+
+        // Los refs "booking-client:*" y "booking-user:*" representan al titular de la reserva.
+        // No deben disparar diffs de participante por cambios de alias/formato.
+        if (lowered.startsWith('booking-client:') || lowered.startsWith('booking-user:')) {
+            return 'booking:responsible';
+        }
+
+        const bookingClientId = String(booking.clientId || '').trim();
+        if (bookingClientId && lowered.startsWith('booking-client:')) {
+            const refClientId = rawRef.slice('booking-client:'.length).trim();
+            if (refClientId === bookingClientId) return 'booking:responsible';
+        }
+
+        const bookingUserId = Number(booking.userId || 0);
+        if (Number.isFinite(bookingUserId) && bookingUserId > 0 && lowered.startsWith('booking-user:')) {
+            const refUserId = Number(rawRef.slice('booking-user:'.length).trim());
+            if (Number.isFinite(refUserId) && refUserId === bookingUserId) return 'booking:responsible';
+        }
+
+        const defaultResponsibleRef = this.resolveBookingResponsibleRef(booking);
+        if (rawRef === defaultResponsibleRef) {
+            return 'booking:responsible';
+        }
+
+        return rawRef;
+    }
+
     private normalizeBillingAssignments(raw: unknown): BookingBillingAssignmentDTO[] {
         const payload = (raw || {}) as Partial<PersistedBillingAssignmentsJson>;
         const items = Array.isArray(payload.assignments) ? payload.assignments : [];
@@ -580,10 +621,24 @@ export class BookingService {
                 }
                 : this.buildDefaultBillingConfig(booking);
             const previousAssignments = previousConfig.assignments;
-            const previousActiveRefs = new Set(this.collectActiveParticipantRefs(previousAssignments));
-            const nextActiveRefs = this.collectActiveParticipantRefs(normalizedAssignments);
-            const addedParticipantRefs = nextActiveRefs.filter((ref) => !previousActiveRefs.has(ref));
-            const removedParticipantRefs = Array.from(previousActiveRefs.values()).filter((ref) => !nextActiveRefs.includes(ref));
+            const previousActiveRefs = new Set(
+                this.collectActiveParticipantRefs(previousAssignments).map((ref) =>
+                    this.normalizeParticipantRefForDiff(ref, {
+                        clientId: booking.clientId,
+                        userId: booking.userId
+                    })
+                )
+            );
+            const nextActiveRefs = new Set(
+                this.collectActiveParticipantRefs(normalizedAssignments).map((ref) =>
+                    this.normalizeParticipantRefForDiff(ref, {
+                        clientId: booking.clientId,
+                        userId: booking.userId
+                    })
+                )
+            );
+            const addedParticipantRefs = Array.from(nextActiveRefs.values()).filter((ref) => !previousActiveRefs.has(ref));
+            const removedParticipantRefs = Array.from(previousActiveRefs.values()).filter((ref) => !nextActiveRefs.has(ref));
             const effectiveChargeResponsibleRef = (() => {
                 const explicit = String(input.chargeResponsibleRef || '').trim();
                 if (explicit) return explicit;
@@ -626,14 +681,35 @@ export class BookingService {
             const nextAssignmentsComparable = this.normalizeAssignmentsForComparison(normalizedAssignments);
             const previousChargeableComparable = previousAssignmentsComparable
                 .filter((assignment) => assignment.isChargeable)
+                .map((assignment) => ({
+                    ...assignment,
+                    participantRef: this.normalizeParticipantRefForDiff(assignment.participantRef, {
+                        clientId: booking.clientId,
+                        userId: booking.userId
+                    })
+                }))
                 .sort((left, right) => left.participantRef.localeCompare(right.participantRef));
             const nextChargeableComparable = nextAssignmentsComparable
                 .filter((assignment) => assignment.isChargeable)
+                .map((assignment) => ({
+                    ...assignment,
+                    participantRef: this.normalizeParticipantRefForDiff(assignment.participantRef, {
+                        clientId: booking.clientId,
+                        userId: booking.userId
+                    })
+                }))
                 .sort((left, right) => left.participantRef.localeCompare(right.participantRef));
             const chargeModeChanged = previousConfig.chargeMode !== input.chargeMode;
+            const previousChargeResponsibleComparable = this.normalizeParticipantRefForDiff(previousConfig.chargeResponsibleRef, {
+                clientId: booking.clientId,
+                userId: booking.userId
+            });
+            const nextChargeResponsibleComparable = this.normalizeParticipantRefForDiff(effectiveChargeResponsibleRef, {
+                clientId: booking.clientId,
+                userId: booking.userId
+            });
             const chargeResponsibleChanged =
-                String(previousConfig.chargeResponsibleRef || '').trim() !==
-                String(effectiveChargeResponsibleRef || '').trim();
+                previousChargeResponsibleComparable !== nextChargeResponsibleComparable;
             const chargeRulesChanged =
                 JSON.stringify(previousChargeableComparable) !== JSON.stringify(nextChargeableComparable);
             const billingConfigChanged =
@@ -710,13 +786,21 @@ export class BookingService {
                 }, tx as any);
             }
             if (billingConfigChanged) {
+                const stableResponsibleForEvent =
+                    String(previousConfig.chargeResponsibleRef || '').trim() ||
+                    String(effectiveChargeResponsibleRef || '').trim() ||
+                    null;
                 await this.eventService.bookingBillingConfigUpdated(input.clubId, {
                     bookingId: booking.id,
                     actorUserId: input.actorUserId || null,
                     previousChargeMode: previousConfig.chargeMode,
                     chargeMode: input.chargeMode,
-                    previousChargeResponsibleRef: previousConfig.chargeResponsibleRef || null,
-                    chargeResponsibleRef: effectiveChargeResponsibleRef || null,
+                    previousChargeResponsibleRef: chargeResponsibleChanged
+                        ? (previousConfig.chargeResponsibleRef || null)
+                        : stableResponsibleForEvent,
+                    chargeResponsibleRef: chargeResponsibleChanged
+                        ? (effectiveChargeResponsibleRef || null)
+                        : stableResponsibleForEvent,
                     addedParticipantsCount: addedParticipantRefs.length,
                     removedParticipantsCount: removedParticipantRefs.length,
                 }, tx as any);
@@ -3099,8 +3183,66 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         const bookingIds = bookings.map((booking) => booking.id);
         const sourceIds = bookingIds.map((id) => String(id));
+        const resolveSidebarParticipantsFromMetadata = (metadataJson: unknown) => {
+            if (!metadataJson || typeof metadataJson !== 'object') return [] as Array<{ ref: string; name: string; isOwner: boolean }>;
+            const metadataRecord = metadataJson as Record<string, unknown>;
+            const sidebarBlock =
+                metadataRecord.sidebar && typeof metadataRecord.sidebar === 'object'
+                    ? (metadataRecord.sidebar as Record<string, unknown>)
+                    : null;
+            const rawParticipants = Array.isArray(metadataRecord.sidebarParticipants)
+                ? metadataRecord.sidebarParticipants
+                : (Array.isArray(sidebarBlock?.participants) ? sidebarBlock?.participants : []);
+            return rawParticipants
+                .map((rawParticipant) => {
+                    if (!rawParticipant || typeof rawParticipant !== 'object') return null;
+                    const participantRecord = rawParticipant as Record<string, unknown>;
+                    return {
+                        ref: String(participantRecord.ref || participantRecord.entityRef || '').trim(),
+                        name: String(participantRecord.name || '').trim(),
+                        isOwner: Boolean(participantRecord.isOwner)
+                    };
+                })
+                .filter((participant): participant is { ref: string; name: string; isOwner: boolean } => Boolean(participant));
+        };
+        const resolveParticipantRefsFromAssignments = (assignmentsJson: unknown) => {
+            if (!Array.isArray(assignmentsJson)) return [] as string[];
+            const refs: string[] = [];
+            for (const assignment of assignmentsJson) {
+                if (!assignment || typeof assignment !== 'object') continue;
+                const assignmentRecord = assignment as Record<string, unknown>;
+                const ref = String(assignmentRecord.participantRef || '').trim();
+                if (!ref || refs.includes(ref)) continue;
+                refs.push(ref);
+            }
+            return refs;
+        };
+        const isOwnerLikeRef = (participantRef: string) => {
+            const normalized = String(participantRef || '').trim().toLowerCase();
+            if (!normalized) return false;
+            return (
+                normalized.startsWith('guest:owner') ||
+                normalized.startsWith('guest:booking-responsible') ||
+                normalized.startsWith('booking-client:') ||
+                normalized.startsWith('booking-user:')
+            );
+        };
+        const resolveParticipantNameByRef = (metadataJson: unknown, participantRef: string | null | undefined) => {
+            const targetRef = String(participantRef || '').trim();
+            if (!targetRef) return '';
+            const participants = resolveSidebarParticipantsFromMetadata(metadataJson);
+            const exact = participants.find((participant) => participant.ref === targetRef && participant.name);
+            if (exact?.name) return exact.name;
+            if (isOwnerLikeRef(targetRef)) {
+                const owner = participants.find(
+                    (participant) => participant.name && isOwnerLikeRef(String(participant.ref || ''))
+                );
+                if (owner?.name) return owner.name;
+            }
+            return '';
+        };
 
-        const [accounts, clubsWithSettings, paymentAgg, refundAgg] = await Promise.all([
+        const [accounts, clubsWithSettings, paymentAgg, refundAgg, billingConfigs] = await Promise.all([
             sourceIds.length > 0
                 ? prisma.account.findMany({
                     where: {
@@ -3155,6 +3297,21 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     },
                     _sum: { amount: true }
                 })
+                : Promise.resolve([]),
+            bookingIds.length > 0
+                ? prisma.bookingBillingConfig.findMany({
+                    where: {
+                        bookingId: { in: bookingIds },
+                        ...(clubId ? { clubId } : {})
+                    },
+                    select: {
+                        bookingId: true,
+                        chargeMode: true,
+                        chargeResponsibleRef: true,
+                        metadataJson: true,
+                        assignmentsJson: true
+                    }
+                })
                 : Promise.resolve([])
         ]);
 
@@ -3164,6 +3321,56 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             if (Number.isInteger(parsedBookingId)) {
                 accountByBookingId.set(parsedBookingId, { id: account.id, clubId: account.clubId });
             }
+        }
+        const billingConfigByBookingId = new Map<number, {
+            chargeMode: ChargeMode;
+            chargeResponsibleRef: string | null;
+            metadataJson: unknown;
+            assignmentsJson: unknown;
+        }>();
+        for (const config of billingConfigs) {
+            billingConfigByBookingId.set(config.bookingId, {
+                chargeMode: config.chargeMode,
+                chargeResponsibleRef: config.chargeResponsibleRef || null,
+                metadataJson: config.metadataJson ?? null,
+                assignmentsJson: config.assignmentsJson ?? null
+            });
+        }
+
+        const accountIds = Array.from(new Set(accounts.map((account) => account.id)));
+        const paymentEvents = accountIds.length > 0
+            ? await prisma.event.findMany({
+                where: {
+                    type: 'PAYMENT_RECEIVED',
+                    ...(clubId ? { clubId } : {}),
+                    OR: accountIds.map((accountId) => ({
+                        payload: { path: ['accountId'], equals: accountId }
+                    }))
+                },
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    payload: true,
+                    createdAt: true
+                }
+            })
+            : [];
+        const latestPaymentByAccountId = new Map<string, {
+            payerParticipantRef: string | null;
+            payerParticipantName: string | null;
+            createdAt: Date;
+        }>();
+        for (const event of paymentEvents) {
+            if (!event?.payload || typeof event.payload !== 'object') continue;
+            const payloadRecord = event.payload as Record<string, unknown>;
+            const accountId = String(payloadRecord.accountId || '').trim();
+            if (!accountId || latestPaymentByAccountId.has(accountId)) continue;
+            const payerParticipantRef = String(payloadRecord.payerParticipantRef || '').trim();
+            const payerParticipantName = String(payloadRecord.payerParticipantName || '').trim();
+            latestPaymentByAccountId.set(accountId, {
+                payerParticipantRef: payerParticipantRef || null,
+                payerParticipantName: payerParticipantName || null,
+                createdAt: event.createdAt
+            });
         }
 
         const paymentByAccountId = new Map<string, number>();
@@ -3196,6 +3403,16 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             const paidAmount = accountRef
                 ? Math.max(0, Number((paymentByAccountId.get(accountRef.id) || 0) - (refundByAccountId.get(accountRef.id) || 0)))
                 : 0;
+            const roundedPaidAmount = Number(paidAmount.toFixed(2));
+            const roundedTotalAmount = Number(Number(booking.price || 0).toFixed(2));
+            const roundedRemainingAmount = Number(Math.max(0, roundedTotalAmount - roundedPaidAmount).toFixed(2));
+            const hoverPaymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' =
+                roundedRemainingAmount <= 0.009
+                    ? 'PAID'
+                    : roundedPaidAmount > 0.009
+                        ? 'PARTIAL'
+                        : 'UNPAID';
+
             const clubSettings = clubSettingsByClubId.get(booking.clubId) || { mode: 'MANUAL' as const, depositPercent: null };
             const confirmationContext = this.buildBookingConfirmationContext({
                 status: booking.status,
@@ -3204,12 +3421,67 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 depositPercent: clubSettings.depositPercent,
                 paidAmount
             });
+            const billingConfig = billingConfigByBookingId.get(booking.id);
+            const chargeResponsibleRef = String(billingConfig?.chargeResponsibleRef || '').trim();
+            const chargeResponsibleName = resolveParticipantNameByRef(
+                billingConfig?.metadataJson,
+                chargeResponsibleRef
+            );
+            const latestPayment = accountRef ? latestPaymentByAccountId.get(accountRef.id) : undefined;
+            const latestPayerRef = String(latestPayment?.payerParticipantRef || '').trim();
+            const latestPayerNameRaw = String(latestPayment?.payerParticipantName || '').trim();
+            const latestPayerName = latestPayerNameRaw || resolveParticipantNameByRef(
+                billingConfig?.metadataJson,
+                latestPayerRef
+            );
+            const sidebarParticipants = resolveSidebarParticipantsFromMetadata(billingConfig?.metadataJson);
+            const assignmentRefs = resolveParticipantRefsFromAssignments(billingConfig?.assignmentsJson);
+            const hoverParticipants = (() => {
+                if (sidebarParticipants.length > 0) {
+                    return sidebarParticipants.map((participant) => ({
+                        ref: String(participant.ref || '').trim(),
+                        name: String(participant.name || '').trim(),
+                        isOwner: Boolean(participant.isOwner) || isOwnerLikeRef(String(participant.ref || ''))
+                    }));
+                }
+
+                if (assignmentRefs.length > 0) {
+                    return assignmentRefs.map((ref) => ({
+                        ref,
+                        name:
+                            (ref === chargeResponsibleRef && chargeResponsibleName
+                                ? chargeResponsibleName
+                                : ref === latestPayerRef && latestPayerName
+                                    ? latestPayerName
+                                    : ''),
+                        isOwner: isOwnerLikeRef(ref) || ref === chargeResponsibleRef
+                    }));
+                }
+
+                return [{
+                    ref: chargeResponsibleRef || '',
+                    name: chargeResponsibleName || latestPayerName || String(booking.client?.name || '').trim(),
+                    isOwner: true
+                }];
+            })();
 
             bookingWithContextById.set(booking.id, {
                 ...booking,
                 confirmationContext: {
-                    paidAmount: Number(paidAmount.toFixed(2)),
+                    paidAmount: roundedPaidAmount,
                     ...confirmationContext
+                },
+                hoverPayment: {
+                    status: hoverPaymentStatus,
+                    totalAmount: roundedTotalAmount,
+                    paidAmount: roundedPaidAmount,
+                    remainingAmount: roundedRemainingAmount,
+                    chargeMode: String(billingConfig?.chargeMode || ChargeMode.INDIVIDUAL),
+                    chargeResponsibleRef: chargeResponsibleRef || null,
+                    chargeResponsibleName: chargeResponsibleName || null,
+                    latestPayerRef: latestPayerRef || null,
+                    latestPayerName: latestPayerName || null,
+                    participants: hoverParticipants
                 }
             });
         }

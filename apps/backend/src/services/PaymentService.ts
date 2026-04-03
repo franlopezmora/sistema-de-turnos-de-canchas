@@ -32,6 +32,8 @@ type CreatePaymentInput = {
   externalReference?: string;
   source?: PaymentSource;
   cashShiftId?: string;
+  payerParticipantRef?: string;
+  payerParticipantName?: string;
   createdByUserId?: number;
   idempotencyKey?: string;
   allocations?: Array<{
@@ -239,6 +241,8 @@ export class PaymentService {
       const channel = this.resolvePaymentChannel(input.method, input.channel);
       const collectorAccountLabel = this.normalizeText(input.collectorAccountLabel, 120);
       const externalReference = this.normalizeText(input.externalReference, 120);
+      const payerParticipantRef = this.normalizeText(input.payerParticipantRef, 191);
+      const payerParticipantName = this.normalizeText(input.payerParticipantName, 120);
       const scopedIdempotencyKey = input.idempotencyKey
         ? `payment:${input.accountId}:${input.idempotencyKey.trim()}`
         : undefined;
@@ -421,11 +425,14 @@ export class PaymentService {
       await this.eventService.paymentReceived(account.clubId, {
         paymentId: payment.id,
         accountId: account.id,
+        bookingId: account.sourceType === 'BOOKING' ? Number(account.sourceId) : null,
         userId: input.createdByUserId ?? null,
         amount: input.amount,
         method: input.method,
         channel,
-        source
+        source,
+        payerParticipantRef,
+        payerParticipantName
       }, tx);
 
       let notificationUserId: number | null = null;

@@ -237,6 +237,8 @@ export class AccountController {
         externalReference: z.string().trim().max(120).optional(),
         source: z.enum(['POS', 'ONLINE', 'BACKOFFICE']).optional(),
         cashShiftId: z.string().trim().min(1).optional(),
+        payerParticipantRef: z.string().trim().min(1).max(191).optional(),
+        payerParticipantName: z.string().trim().min(1).max(120).optional(),
         allocations: z.array(z.object({
           accountItemId: z.string().trim().min(1),
           amount: z.preprocess((v) => Number(v), z.number().positive())
@@ -268,6 +270,8 @@ export class AccountController {
         externalReference: bodyParsed.data.externalReference,
         source: bodyParsed.data.source,
         cashShiftId: bodyParsed.data.cashShiftId,
+        payerParticipantRef: bodyParsed.data.payerParticipantRef,
+        payerParticipantName: bodyParsed.data.payerParticipantName,
         createdByUserId: actorUserId,
         idempotencyKey: idempotencyKey.trim(),
         allocations: bodyParsed.data.allocations

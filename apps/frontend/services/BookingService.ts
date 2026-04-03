@@ -340,7 +340,11 @@ export const registerBookingPartialPayment = async (
   amount: number,
   method: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER',
   channel?: 'BANK_ACCOUNT' | 'VIRTUAL_WALLET',
-  allocations?: Array<{ accountItemId: string; amount: number }>
+  allocations?: Array<{ accountItemId: string; amount: number }>,
+  payer?: {
+    participantRef?: string;
+    participantName?: string;
+  }
 ) => {
   if (method === 'TRANSFER' && !channel) {
     throw new Error('El canal es obligatorio para pagos por transferencia');
@@ -351,6 +355,8 @@ export const registerBookingPartialPayment = async (
     amount,
     method,
     channel,
+    payerParticipantRef: payer?.participantRef,
+    payerParticipantName: payer?.participantName,
     allocations
   });
 };
