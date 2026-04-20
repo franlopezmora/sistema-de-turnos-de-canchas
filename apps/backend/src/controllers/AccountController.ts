@@ -239,6 +239,8 @@ export class AccountController {
         cashShiftId: z.string().trim().min(1).optional(),
         payerParticipantRef: z.string().trim().min(1).max(191).optional(),
         payerParticipantName: z.string().trim().min(1).max(120).optional(),
+        coveredParticipantRef: z.string().trim().min(1).max(191).optional(),
+        coveredParticipantName: z.string().trim().min(1).max(120).optional(),
         allocations: z.array(z.object({
           accountItemId: z.string().trim().min(1),
           amount: z.preprocess((v) => Number(v), z.number().positive())
@@ -272,6 +274,8 @@ export class AccountController {
         cashShiftId: bodyParsed.data.cashShiftId,
         payerParticipantRef: bodyParsed.data.payerParticipantRef,
         payerParticipantName: bodyParsed.data.payerParticipantName,
+        coveredParticipantRef: bodyParsed.data.coveredParticipantRef,
+        coveredParticipantName: bodyParsed.data.coveredParticipantName,
         createdByUserId: actorUserId,
         idempotencyKey: idempotencyKey.trim(),
         allocations: bodyParsed.data.allocations

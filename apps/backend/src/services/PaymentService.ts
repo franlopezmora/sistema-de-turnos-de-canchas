@@ -34,6 +34,8 @@ type CreatePaymentInput = {
   cashShiftId?: string;
   payerParticipantRef?: string;
   payerParticipantName?: string;
+  coveredParticipantRef?: string;
+  coveredParticipantName?: string;
   createdByUserId?: number;
   idempotencyKey?: string;
   allocations?: Array<{
@@ -243,6 +245,8 @@ export class PaymentService {
       const externalReference = this.normalizeText(input.externalReference, 120);
       const payerParticipantRef = this.normalizeText(input.payerParticipantRef, 191);
       const payerParticipantName = this.normalizeText(input.payerParticipantName, 120);
+      const coveredParticipantRef = this.normalizeText(input.coveredParticipantRef, 191);
+      const coveredParticipantName = this.normalizeText(input.coveredParticipantName, 120);
       const scopedIdempotencyKey = input.idempotencyKey
         ? `payment:${input.accountId}:${input.idempotencyKey.trim()}`
         : undefined;
@@ -359,6 +363,10 @@ export class PaymentService {
           channel,
           collectorAccountLabel,
           externalReference,
+          payerParticipantRef,
+          payerParticipantName,
+          coveredParticipantRef,
+          coveredParticipantName,
           source,
           accountId: input.accountId,
           cashShiftId: source === 'POS' ? resolvedCashShiftId : null,
@@ -432,7 +440,9 @@ export class PaymentService {
         channel,
         source,
         payerParticipantRef,
-        payerParticipantName
+        payerParticipantName,
+        coveredParticipantRef,
+        coveredParticipantName
       }, tx);
 
       let notificationUserId: number | null = null;

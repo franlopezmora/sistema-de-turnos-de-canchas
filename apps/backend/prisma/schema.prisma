@@ -844,6 +844,10 @@ model Payment {
   channel   PaymentChannel @default(AUTO)
   collectorAccountLabel String?
   externalReference String?
+  payerParticipantRef String? @db.VarChar(191)
+  payerParticipantName String? @db.VarChar(120)
+  coveredParticipantRef String? @db.VarChar(191)
+  coveredParticipantName String? @db.VarChar(120)
   source    PaymentSource @default(POS)
   idempotencyKey String?
 
@@ -861,6 +865,8 @@ model Payment {
   @@index([accountId])
   @@index([channel])
   @@index([externalReference])
+  @@index([payerParticipantRef])
+  @@index([coveredParticipantRef])
   @@index([source])
   @@index([cashShiftId])
   @@index([idempotencyKey])

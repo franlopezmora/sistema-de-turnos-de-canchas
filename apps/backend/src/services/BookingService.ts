@@ -184,6 +184,9 @@ export class BookingService {
         if (booking.status === 'CANCELLED') {
             throw new Error('No se puede mover una reserva cancelada');
         }
+        if (booking.status === 'COMPLETED') {
+            throw new Error('No se puede reprogramar una reserva completada.');
+        }
         if (new Date(input.startDateTime).getTime() < Date.now()) {
             throw new Error('No se pueden reservar turnos en el pasado.');
         }
@@ -583,6 +586,7 @@ export class BookingService {
                 select: {
                     id: true,
                     clubId: true,
+                    status: true,
                     clientId: true,
                     userId: true,
                     price: true,
@@ -639,6 +643,13 @@ export class BookingService {
             );
             const addedParticipantRefs = Array.from(nextActiveRefs.values()).filter((ref) => !previousActiveRefs.has(ref));
             const removedParticipantRefs = Array.from(previousActiveRefs.values()).filter((ref) => !nextActiveRefs.has(ref));
+            if (booking.status === 'COMPLETED' && (addedParticipantRefs.length > 0 || removedParticipantRefs.length > 0)) {
+                const lockedParticipantsError: any = new Error(
+                    'No se pueden modificar participantes en una reserva completada.'
+                );
+                lockedParticipantsError.code = 'BOOKING_COMPLETED_PARTICIPANTS_LOCKED';
+                throw lockedParticipantsError;
+            }
             const effectiveChargeResponsibleRef = (() => {
                 const explicit = String(input.chargeResponsibleRef || '').trim();
                 if (explicit) return explicit;
@@ -716,6 +727,30 @@ export class BookingService {
                 chargeModeChanged ||
                 chargeResponsibleChanged ||
                 chargeRulesChanged;
+            if (billingConfigChanged) {
+                const bookingAccount = await tx.account.findFirst({
+                    where: {
+                        clubId: input.clubId,
+                        sourceType: 'BOOKING',
+                        sourceId: String(booking.id),
+                    },
+                    select: {
+                        id: true,
+                        payments: {
+                            select: { id: true },
+                            take: 1,
+                        },
+                    },
+                });
+                const hasRegisteredPayments = Boolean(bookingAccount?.payments?.length);
+                if (hasRegisteredPayments) {
+                    const lockedError: any = new Error(
+                        'No se puede cambiar la asignación de cobro porque la reserva ya tiene pagos registrados.'
+                    );
+                    lockedError.code = 'BILLING_CONFIG_LOCKED_BY_PAYMENTS';
+                    throw lockedError;
+                }
+            }
             const previousNotes = this.extractSidebarNotesFromMetadata(previousConfig.metadata as Record<string, unknown>);
             const nextNotes = this.extractSidebarNotesFromMetadata((input.metadata || {}) as Record<string, unknown>);
             const notesChanged = previousNotes !== nextNotes;
@@ -1432,8 +1467,62 @@ export class BookingService {
             }
         }
 
+        // Validar que el slot solicitado exista en la grilla operativa del club para ese día.
+        const localForSlot = TimeHelper.utcToLocal(input.startDateTime, clubTimeZone);
+        const slotTime = `${String(localForSlot.getHours()).padStart(2, '0')}:${String(localForSlot.getMinutes()).padStart(2, '0')}`;
+        const possibleSlots = buildSlotsFromSchedule(
+            {
+                scheduleMode: activitySchedule.mode,
+                scheduleOpenTime: activitySchedule.openTime,
+                scheduleCloseTime: activitySchedule.closeTime,
+                scheduleIntervalMinutes: activitySchedule.intervalMinutes,
+                scheduleWindows: activitySchedule.rangeWindows,
+                scheduleDurations: activitySchedule.durations,
+                scheduleFixedSlots: activitySchedule.fixedSlots
+            },
+            activity.defaultDurationMinutes,
+            effectiveDuration
+        ) as Array<{ slotTime: string; dayOffset: number }>;
+        const hasExactSlot = possibleSlots.some((slot) => slot.slotTime === slotTime);
+        if (!hasExactSlot) {
+            const canUseProfessorFixedSlotFallback =
+                canProfessorDurationOverride &&
+                effectiveDuration === professorOverrideMinutes &&
+                activitySchedule.mode === 'FIXED' &&
+                Array.isArray(activitySchedule.fixedSlots) &&
+                activitySchedule.fixedSlots.some((slot: any) => String(slot?.start) === slotTime);
+
+            if (!canUseProfessorFixedSlotFallback) {
+                throw new Error('Horario no permitido por el club');
+            }
+        }
+
         const endDateTime = new Date(input.startDateTime.getTime() + effectiveDuration * 60000);
         this.assertValidRange(input.startDateTime, endDateTime);
+
+        // Mantener coherencia con createBooking: si el club está cerrado ese día, la cotización debe bloquear.
+        if (!this.isClubOpenOnLocalDate(clubConfig, input.startDateTime, clubTimeZone)) {
+            throw new Error('El club está cerrado ese día');
+        }
+
+        // Si el modo es rango continuo (sin ventanas partidas), validar que la reserva no exceda apertura/cierre.
+        const hasSplitWindows = activitySchedule.mode === 'RANGE' && Array.isArray(activitySchedule.rangeWindows) && activitySchedule.rangeWindows.length > 0;
+        const openStr = activitySchedule.mode === 'RANGE' ? activitySchedule.openTime : null;
+        const closeStr = activitySchedule.mode === 'RANGE' ? activitySchedule.closeTime : null;
+        if (!hasSplitWindows && openStr && closeStr) {
+            const localStart = TimeHelper.utcToLocal(input.startDateTime, clubTimeZone);
+            const localEnd = TimeHelper.utcToLocal(endDateTime, clubTimeZone);
+            const startMinutes = localStart.getHours() * 60 + localStart.getMinutes();
+            const endMinutes = localEnd.getHours() * 60 + localEnd.getMinutes();
+            const openMinutes = this.toMinutes(openStr)!;
+            let closeMinutes = this.toMinutes(closeStr)!;
+            if (closeMinutes <= openMinutes) closeMinutes += 24 * 60;
+            const startNorm = startMinutes < openMinutes ? startMinutes + 24 * 60 : startMinutes;
+            const endNorm = endMinutes < openMinutes ? endMinutes + 24 * 60 : endMinutes;
+            if (startNorm < openMinutes || endNorm > closeMinutes) {
+                throw new Error('La reserva excede el horario de apertura del club');
+            }
+        }
 
         const basePrice = await this.pricingService.calculateCourtPrice(input.courtId, input.startDateTime);
         if (!Number.isFinite(basePrice) || basePrice <= 0) {
@@ -3242,7 +3331,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             return '';
         };
 
-        const [accounts, clubsWithSettings, paymentAgg, refundAgg, billingConfigs] = await Promise.all([
+        const [accounts, clubsWithSettings, paymentAgg, bookingPayments, refundAgg, billingConfigs] = await Promise.all([
             sourceIds.length > 0
                 ? prisma.account.findMany({
                     where: {
@@ -3282,6 +3371,27 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         }
                     },
                     _sum: { amount: true }
+                })
+                : Promise.resolve([]),
+            sourceIds.length > 0
+                ? prisma.payment.findMany({
+                    where: {
+                        account: {
+                            sourceType: 'BOOKING',
+                            sourceId: { in: sourceIds },
+                            ...(clubId ? { clubId } : {})
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    select: {
+                        accountId: true,
+                        amount: true,
+                        createdAt: true,
+                        payerParticipantRef: true,
+                        payerParticipantName: true,
+                        coveredParticipantRef: true,
+                        coveredParticipantName: true
+                    }
                 })
                 : Promise.resolve([]),
             sourceIds.length > 0
@@ -3337,40 +3447,85 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             });
         }
 
-        const accountIds = Array.from(new Set(accounts.map((account) => account.id)));
-        const paymentEvents = accountIds.length > 0
-            ? await prisma.event.findMany({
-                where: {
-                    type: 'PAYMENT_RECEIVED',
-                    ...(clubId ? { clubId } : {}),
-                    OR: accountIds.map((accountId) => ({
-                        payload: { path: ['accountId'], equals: accountId }
-                    }))
-                },
-                orderBy: { createdAt: 'desc' },
-                select: {
-                    payload: true,
-                    createdAt: true
-                }
-            })
-            : [];
         const latestPaymentByAccountId = new Map<string, {
             payerParticipantRef: string | null;
             payerParticipantName: string | null;
+            coveredParticipantRef: string | null;
+            coveredParticipantName: string | null;
             createdAt: Date;
         }>();
-        for (const event of paymentEvents) {
-            if (!event?.payload || typeof event.payload !== 'object') continue;
-            const payloadRecord = event.payload as Record<string, unknown>;
-            const accountId = String(payloadRecord.accountId || '').trim();
-            if (!accountId || latestPaymentByAccountId.has(accountId)) continue;
-            const payerParticipantRef = String(payloadRecord.payerParticipantRef || '').trim();
-            const payerParticipantName = String(payloadRecord.payerParticipantName || '').trim();
-            latestPaymentByAccountId.set(accountId, {
-                payerParticipantRef: payerParticipantRef || null,
-                payerParticipantName: payerParticipantName || null,
-                createdAt: event.createdAt
-            });
+        const payerTotalsByAccountId = new Map<string, Map<string, {
+            ref: string | null;
+            name: string | null;
+            amount: number;
+        }>>();
+        const coveredTotalsByAccountId = new Map<string, Map<string, {
+            ref: string | null;
+            name: string | null;
+            amount: number;
+        }>>();
+        for (const payment of bookingPayments) {
+            const accountId = String(payment.accountId || '').trim();
+            const payerParticipantRef = String(payment.payerParticipantRef || '').trim();
+            const payerParticipantName = String(payment.payerParticipantName || '').trim();
+            const coveredParticipantRef = String(payment.coveredParticipantRef || '').trim();
+            const coveredParticipantName = String(payment.coveredParticipantName || '').trim();
+            const paymentAmount = Number(payment.amount || 0);
+            if (!accountId) continue;
+
+            if (Number.isFinite(paymentAmount) && paymentAmount > 0.009) {
+                const payerKey = payerParticipantRef
+                    ? `ref:${payerParticipantRef.toLowerCase()}`
+                    : payerParticipantName
+                        ? `name:${payerParticipantName.toLowerCase()}`
+                        : '';
+                if (payerKey) {
+                    let payerMap = payerTotalsByAccountId.get(accountId);
+                    if (!payerMap) {
+                        payerMap = new Map();
+                        payerTotalsByAccountId.set(accountId, payerMap);
+                    }
+                    const previous = payerMap.get(payerKey);
+                    const previousAmount = Number(previous?.amount || 0);
+                    payerMap.set(payerKey, {
+                        ref: payerParticipantRef || previous?.ref || null,
+                        name: payerParticipantName || previous?.name || null,
+                        amount: Number((previousAmount + paymentAmount).toFixed(2))
+                    });
+                }
+
+                const effectiveCoveredRef = coveredParticipantRef || payerParticipantRef;
+                const effectiveCoveredName = coveredParticipantName || payerParticipantName;
+                const coveredKey = effectiveCoveredRef
+                    ? `ref:${effectiveCoveredRef.toLowerCase()}`
+                    : effectiveCoveredName
+                        ? `name:${effectiveCoveredName.toLowerCase()}`
+                        : '';
+                if (coveredKey) {
+                    let coveredMap = coveredTotalsByAccountId.get(accountId);
+                    if (!coveredMap) {
+                        coveredMap = new Map();
+                        coveredTotalsByAccountId.set(accountId, coveredMap);
+                    }
+                    const previous = coveredMap.get(coveredKey);
+                    const previousAmount = Number(previous?.amount || 0);
+                    coveredMap.set(coveredKey, {
+                        ref: effectiveCoveredRef || previous?.ref || null,
+                        name: effectiveCoveredName || previous?.name || null,
+                        amount: Number((previousAmount + paymentAmount).toFixed(2))
+                    });
+                }
+            }
+
+            if (!latestPaymentByAccountId.has(accountId)) {
+                latestPaymentByAccountId.set(accountId, {
+                    payerParticipantRef: payerParticipantRef || null,
+                    payerParticipantName: payerParticipantName || null,
+                    coveredParticipantRef: coveredParticipantRef || payerParticipantRef || null,
+                    coveredParticipantName: coveredParticipantName || payerParticipantName || null,
+                    createdAt: payment.createdAt
+                });
+            }
         }
 
         const paymentByAccountId = new Map<string, number>();
@@ -3434,6 +3589,38 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 billingConfig?.metadataJson,
                 latestPayerRef
             );
+            const latestCoveredRef = String(latestPayment?.coveredParticipantRef || '').trim();
+            const latestCoveredNameRaw = String(latestPayment?.coveredParticipantName || '').trim();
+            const latestCoveredName = latestCoveredNameRaw || resolveParticipantNameByRef(
+                billingConfig?.metadataJson,
+                latestCoveredRef
+            );
+            const payerParticipants = accountRef
+                ? Array.from(payerTotalsByAccountId.get(accountRef.id)?.values() || [])
+                    .map((payer) => ({
+                        ref: String(payer.ref || '').trim() || null,
+                        name: String(payer.name || '').trim() || null,
+                        amount: Number(Number(payer.amount || 0).toFixed(2))
+                    }))
+                    .filter((payer) =>
+                        Number.isFinite(payer.amount) &&
+                        payer.amount > 0.009 &&
+                        (Boolean(payer.ref) || Boolean(payer.name))
+                    )
+                : [];
+            const coveredParticipants = accountRef
+                ? Array.from(coveredTotalsByAccountId.get(accountRef.id)?.values() || [])
+                    .map((covered) => ({
+                        ref: String(covered.ref || '').trim() || null,
+                        name: String(covered.name || '').trim() || null,
+                        amount: Number(Number(covered.amount || 0).toFixed(2))
+                    }))
+                    .filter((covered) =>
+                        Number.isFinite(covered.amount) &&
+                        covered.amount > 0.009 &&
+                        (Boolean(covered.ref) || Boolean(covered.name))
+                    )
+                : [];
             const sidebarParticipants = resolveSidebarParticipantsFromMetadata(billingConfig?.metadataJson);
             const assignmentRefs = resolveParticipantRefsFromAssignments(billingConfig?.assignmentsJson);
             const hoverParticipants = (() => {
@@ -3481,7 +3668,11 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     chargeResponsibleName: chargeResponsibleName || null,
                     latestPayerRef: latestPayerRef || null,
                     latestPayerName: latestPayerName || null,
-                    participants: hoverParticipants
+                    latestCoveredRef: latestCoveredRef || null,
+                    latestCoveredName: latestCoveredName || null,
+                    participants: hoverParticipants,
+                    payerParticipants: payerParticipants,
+                    coveredParticipants: coveredParticipants
                 }
             });
         }

@@ -88,46 +88,117 @@ function withDerived(state: BookingDrawerState, nextDraft: BookingDrawerDraft): 
   };
 }
 
+function cloneBookingDrawerDraft(draft: BookingDrawerDraft): BookingDrawerDraft {
+  return {
+    operational: {
+      ...draft.operational,
+    },
+    participants: draft.participants.map((participant) => ({
+      ...participant,
+    })),
+    billing: {
+      ...draft.billing,
+      assignments: draft.billing.assignments.map((assignment) => ({
+        ...assignment,
+      })),
+      payments: draft.billing.payments.map((payment) => ({
+        ...payment,
+      })),
+      pendingPaymentsQueue: draft.billing.pendingPaymentsQueue.map((payment) => ({
+        ...payment,
+      })),
+      financialSummary: {
+        ...draft.billing.financialSummary,
+      },
+    },
+  };
+}
+
+function normalizeComparableParticipantId(participant: BookingParticipant): string {
+  if (participant.bookingRole === 'BOOKING_RESPONSIBLE') return 'owner';
+  return String(participant.id || '').trim();
+}
+
 function buildSyncComparableSnapshot(draft: BookingDrawerDraft | null) {
   if (!draft) return null;
 
+  const comparableParticipantIdByOriginalId = new Map<string, string>();
   const participants = [...draft.participants]
     .map((participant) => ({
-      id: String(participant.id || ''),
-      personId: Number(participant.personId || 0) || 0,
+      id: normalizeComparableParticipantId(participant),
       displayName: String(participant.displayName || ''),
       contact: String(participant.contact || ''),
-      sourceType: participant.sourceType,
-      linked: Boolean(participant.linked),
       bookingRole: participant.bookingRole,
       archived: Boolean(participant.archived),
       archivedAt: String(participant.archivedAt || ''),
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
+  draft.participants.forEach((participant) => {
+    const originalId = String(participant.id || '').trim();
+    if (!originalId) return;
+    comparableParticipantIdByOriginalId.set(
+      originalId,
+      normalizeComparableParticipantId(participant)
+    );
+  });
 
-  const assignments = [...draft.billing.assignments]
-    .map((assignment) => ({
-      id: String(assignment.id || ''),
-      participantId: String(assignment.participantId || ''),
-      isChargeable: Boolean(assignment.isChargeable),
-      assignedAmount: roundMoney(Number(assignment.assignedAmount || 0)),
-      participantLinkState:
-        assignment.participantLinkState === 'ARCHIVED_REFERENCE'
+  const assignmentByComparableParticipantId = new Map<string, PaymentAssignment>();
+  draft.billing.assignments.forEach((assignment) => {
+    const originalParticipantId = String(assignment.participantId || '').trim();
+    if (!originalParticipantId) return;
+    const comparableParticipantId =
+      comparableParticipantIdByOriginalId.get(originalParticipantId) ||
+      originalParticipantId;
+    if (!comparableParticipantId || assignmentByComparableParticipantId.has(comparableParticipantId)) return;
+    assignmentByComparableParticipantId.set(comparableParticipantId, assignment);
+  });
+  const assignments = participants
+    .map((participant) => {
+      const assignment = assignmentByComparableParticipantId.get(participant.id);
+      const participantArchived = Boolean(participant.archived);
+      const isChargeable = participantArchived
+        ? false
+        : Boolean(assignment?.isChargeable);
+      return {
+        participantId: participant.id,
+        isChargeable,
+        assignedAmount: isChargeable ? roundMoney(Number(assignment?.assignedAmount || 0)) : 0,
+        participantLinkState: participantArchived
           ? 'ARCHIVED_REFERENCE'
-          : 'ACTIVE',
-    }))
-    .sort((left, right) => {
-      const byId = left.id.localeCompare(right.id);
-      if (byId !== 0) return byId;
-      return left.participantId.localeCompare(right.participantId);
-    });
+          : (
+              assignment?.participantLinkState === 'ARCHIVED_REFERENCE'
+                ? 'ARCHIVED_REFERENCE'
+                : 'ACTIVE'
+            ),
+      } as const;
+    })
+    .sort((left, right) => left.participantId.localeCompare(right.participantId));
+
+  const comparableBookingResponsibleParticipantId =
+    draft.participants.find(
+      (participant) =>
+        String(participant.id || '').trim() ===
+        String(draft.operational.bookingResponsibleParticipantId || '').trim()
+    )?.bookingRole === 'BOOKING_RESPONSIBLE'
+      ? 'owner'
+      : String(draft.operational.bookingResponsibleParticipantId || '');
 
   return {
-    bookingResponsibleParticipantId: String(draft.operational.bookingResponsibleParticipantId || ''),
+    bookingResponsibleParticipantId: comparableBookingResponsibleParticipantId,
     participants,
     billing: {
       chargeMode: draft.billing.chargeMode,
-      chargeResponsibleParticipantId: String(draft.billing.chargeResponsibleParticipantId || ''),
+      chargeResponsibleParticipantId:
+        draft.billing.chargeMode === 'INDIVIDUAL'
+          ? (() => {
+              const rawResponsible = String(draft.billing.chargeResponsibleParticipantId || '').trim();
+              if (!rawResponsible) return '';
+              return (
+                comparableParticipantIdByOriginalId.get(rawResponsible) ||
+                rawResponsible
+              );
+            })()
+          : '',
       totalAmount: roundMoney(Number(draft.billing.financialSummary.totalAmount || 0)),
       assignments,
     },
@@ -139,6 +210,70 @@ function hasSyncFormDiff(reference: BookingDrawerDraft | null, candidate: Bookin
   const right = buildSyncComparableSnapshot(candidate);
   if (!left || !right) return true;
   return JSON.stringify(left) !== JSON.stringify(right);
+}
+
+function resolveBillingDirtyFromSource(state: BookingDrawerState, candidate: BookingDrawerDraft): boolean {
+  return hasSyncFormDiff(state.source, candidate);
+}
+
+function normalizeRestoreText(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function participantRestoreKey(participant: BookingParticipant): string {
+  return [
+    participant.bookingRole === 'BOOKING_RESPONSIBLE' ? 'OWNER' : 'PARTICIPANT',
+    normalizeRestoreText(participant.displayName),
+    normalizeRestoreText(participant.contact),
+    participant.archived ? 'ARCHIVED' : 'ACTIVE',
+  ].join('|');
+}
+
+function resolveSourceToCurrentParticipantMap(
+  source: BookingDrawerDraft,
+  current: BookingDrawerDraft
+): Map<string, string> | null {
+  if (source.participants.length !== current.participants.length) return null;
+
+  const buildBuckets = (participants: BookingParticipant[]) => {
+    const buckets = new Map<string, string[]>();
+    participants.forEach((participant) => {
+      const key = participantRestoreKey(participant);
+      const ids = buckets.get(key) || [];
+      ids.push(String(participant.id || ''));
+      buckets.set(key, ids);
+    });
+    buckets.forEach((ids, key) => {
+      buckets.set(
+        key,
+        [...ids].sort((left, right) => left.localeCompare(right))
+      );
+    });
+    return buckets;
+  };
+
+  const sourceBuckets = buildBuckets(source.participants);
+  const currentBuckets = buildBuckets(current.participants);
+  if (sourceBuckets.size !== currentBuckets.size) return null;
+
+  for (const [key, sourceIds] of sourceBuckets.entries()) {
+    const currentIds = currentBuckets.get(key);
+    if (!currentIds) return null;
+    if (currentIds.length !== sourceIds.length) return null;
+  }
+
+  const sourceToCurrent = new Map<string, string>();
+  for (const [key, sourceIds] of sourceBuckets.entries()) {
+    const currentIds = currentBuckets.get(key) || [];
+    sourceIds.forEach((sourceId, index) => {
+      const currentId = String(currentIds[index] || '');
+      if (!sourceId || !currentId) return;
+      sourceToCurrent.set(sourceId, currentId);
+    });
+  }
+
+  if (sourceToCurrent.size !== source.participants.length) return null;
+  return sourceToCurrent;
 }
 
 export function bookingDrawerReducer(
@@ -160,9 +295,11 @@ export function bookingDrawerReducer(
       };
 
     case 'LOAD_SUCCESS': {
-      const draft = recomputeFinancialSummaryOnly(event.payload);
+      const normalizedDraft = recomputeFinancialSummaryOnly(event.payload);
+      const source = cloneBookingDrawerDraft(normalizedDraft);
+      const draft = cloneBookingDrawerDraft(normalizedDraft);
       return {
-        source: draft,
+        source,
         draft,
         ui: {
           ...state.ui,
@@ -306,123 +443,225 @@ export function bookingDrawerReducer(
 
     case 'ADD_PARTICIPANT':
       if (!state.draft) return state;
-      return withDerived(
-        {
-          ...state,
-          ui: {
-            ...state.ui,
-            dirtyFlags: {
-              ...state.ui.dirtyFlags,
-              billingConfig: true,
-            },
-          },
-        },
-        {
+      {
+        const nextDraft: BookingDrawerDraft = {
           ...state.draft,
           participants: [...state.draft.participants, event.payload],
-        }
-      );
+        };
+        const nextBillingDirty = resolveBillingDirtyFromSource(state, nextDraft);
+        return withDerived(
+          {
+            ...state,
+            ui: {
+              ...state.ui,
+              dirtyFlags: {
+                ...state.ui.dirtyFlags,
+                billingConfig: nextBillingDirty,
+              },
+            },
+          },
+          nextDraft
+        );
+      }
 
     case 'UPDATE_PARTICIPANT':
       if (!state.draft) return state;
-      return withDerived(
-        {
-          ...state,
-          ui: {
-            ...state.ui,
-            dirtyFlags: {
-              ...state.ui.dirtyFlags,
-              billingConfig: true,
-            },
-          },
-        },
-        {
+      {
+        const nextDraft: BookingDrawerDraft = {
           ...state.draft,
           participants: state.draft.participants.map((participant) =>
             participant.id === event.payload.participantId
               ? { ...participant, ...event.payload.patch }
               : participant
           ),
-        }
-      );
+        };
+        const nextBillingDirty = resolveBillingDirtyFromSource(state, nextDraft);
+        return withDerived(
+          {
+            ...state,
+            ui: {
+              ...state.ui,
+              dirtyFlags: {
+                ...state.ui.dirtyFlags,
+                billingConfig: nextBillingDirty,
+              },
+            },
+          },
+          nextDraft
+        );
+      }
 
     case 'REMOVE_PARTICIPANT':
       if (!state.draft) return state;
-      return withDerived(
-        {
-          ...state,
-          ui: {
-            ...state.ui,
-            dirtyFlags: {
-              ...state.ui.dirtyFlags,
-              billingConfig: true,
+      {
+        const nextDraft = removeParticipantSafely(state.draft, event.payload.participantId, event.payload.archivedAt);
+        const nextBillingDirty = resolveBillingDirtyFromSource(state, nextDraft);
+        return withDerived(
+          {
+            ...state,
+            ui: {
+              ...state.ui,
+              dirtyFlags: {
+                ...state.ui.dirtyFlags,
+                billingConfig: nextBillingDirty,
+              },
             },
           },
-        },
-        removeParticipantSafely(state.draft, event.payload.participantId, event.payload.archivedAt)
-      );
+          nextDraft
+        );
+      }
 
     case 'SET_CHARGE_MODE': {
       if (!state.draft) return state;
       const next = { ...state.draft };
       next.billing = { ...next.billing, chargeMode: event.payload.mode };
+      const source = state.source;
+      const sourceToCurrentParticipantMap = source
+        ? resolveSourceToCurrentParticipantMap(source, next)
+        : null;
+      const canRestoreModeFromSource = (mode: ChargeMode): boolean => {
+        if (!source) return false;
+        if (source.billing.chargeMode !== mode) return false;
+        if (!sourceToCurrentParticipantMap) return false;
+        if (
+          roundMoney(Number(source.billing.financialSummary.totalAmount || 0)) !==
+          roundMoney(Number(next.billing.financialSummary.totalAmount || 0))
+        ) {
+          return false;
+        }
+        return true;
+      };
 
       if (event.payload.mode === 'INDIVIDUAL') {
         const activeParticipants = next.participants.filter((participant) => !participant.archived);
-        const fallbackResponsibleParticipantId =
-          event.payload.chargeResponsibleParticipantId ||
-          next.billing.chargeResponsibleParticipantId ||
-          next.operational.bookingResponsibleParticipantId ||
-          activeParticipants.find((participant) => participant.bookingRole === 'BOOKING_RESPONSIBLE')?.id ||
-          activeParticipants[0]?.id;
+        if (canRestoreModeFromSource('INDIVIDUAL') && source && sourceToCurrentParticipantMap) {
+          const sourceAssignmentsByCurrentParticipantId = new Map<string, PaymentAssignment>();
+          source.billing.assignments.forEach((assignment) => {
+            const sourceParticipantId = String(assignment.participantId || '');
+            const currentParticipantId = sourceToCurrentParticipantMap.get(sourceParticipantId);
+            if (!currentParticipantId) return;
+            if (sourceAssignmentsByCurrentParticipantId.has(currentParticipantId)) return;
+            sourceAssignmentsByCurrentParticipantId.set(currentParticipantId, {
+              ...assignment,
+              participantId: currentParticipantId,
+            });
+          });
+          const activeParticipantIds = new Set(activeParticipants.map((participant) => participant.id));
+          const sourceResponsible = sourceToCurrentParticipantMap.get(
+            String(source.billing.chargeResponsibleParticipantId || '')
+          ) || '';
+          const fallbackResponsibleParticipantId =
+            event.payload.chargeResponsibleParticipantId ||
+            (sourceResponsible && activeParticipantIds.has(sourceResponsible) ? sourceResponsible : '') ||
+            next.billing.chargeResponsibleParticipantId ||
+            next.operational.bookingResponsibleParticipantId ||
+            activeParticipants.find((participant) => participant.bookingRole === 'BOOKING_RESPONSIBLE')?.id ||
+            activeParticipants[0]?.id;
 
-        next.billing.chargeResponsibleParticipantId = fallbackResponsibleParticipantId;
-        next.billing.assignments = next.billing.assignments.map((assignment) => ({
-          ...assignment,
-          isChargeable: assignment.participantId === fallbackResponsibleParticipantId,
-          assignedAmount:
-            assignment.participantId === fallbackResponsibleParticipantId
-              ? next.billing.financialSummary.totalAmount
-              : 0,
-        }));
+          next.billing.chargeResponsibleParticipantId = fallbackResponsibleParticipantId;
+          next.billing.assignments = next.participants.map((participant) => {
+            const sourceAssignment = sourceAssignmentsByCurrentParticipantId.get(participant.id);
+            const isChargeable =
+              !participant.archived &&
+              Boolean(fallbackResponsibleParticipantId) &&
+              participant.id === fallbackResponsibleParticipantId;
+            return {
+              id: sourceAssignment?.id || `asg-${participant.id}`,
+              participantId: participant.id,
+              isChargeable,
+              assignedAmount: isChargeable
+                ? roundMoney(
+                    Number(
+                      sourceAssignment?.assignedAmount ||
+                      next.billing.financialSummary.totalAmount
+                    )
+                  )
+                : 0,
+              participantLinkState: participant.archived ? 'ARCHIVED_REFERENCE' : 'ACTIVE',
+            } satisfies PaymentAssignment;
+          });
+        } else {
+          const fallbackResponsibleParticipantId =
+            event.payload.chargeResponsibleParticipantId ||
+            next.billing.chargeResponsibleParticipantId ||
+            next.operational.bookingResponsibleParticipantId ||
+            activeParticipants.find((participant) => participant.bookingRole === 'BOOKING_RESPONSIBLE')?.id ||
+            activeParticipants[0]?.id;
+
+          next.billing.chargeResponsibleParticipantId = fallbackResponsibleParticipantId;
+          next.billing.assignments = next.billing.assignments.map((assignment) => ({
+            ...assignment,
+            isChargeable: assignment.participantId === fallbackResponsibleParticipantId,
+            assignedAmount:
+              assignment.participantId === fallbackResponsibleParticipantId
+                ? next.billing.financialSummary.totalAmount
+                : 0,
+          }));
+        }
       } else {
         next.billing.chargeResponsibleParticipantId = undefined;
-        next.billing.assignments = buildSharedAssignments(
-          next.participants,
-          next.billing.financialSummary.totalAmount,
-          next.billing.assignments
-        );
+        if (canRestoreModeFromSource('SHARED') && source && sourceToCurrentParticipantMap) {
+          const sourceAssignmentByCurrentParticipantId = new Map<string, PaymentAssignment>();
+          source.billing.assignments.forEach((assignment) => {
+            const sourceParticipantId = String(assignment.participantId || '');
+            const currentParticipantId = sourceToCurrentParticipantMap.get(sourceParticipantId);
+            if (!currentParticipantId) return;
+            if (sourceAssignmentByCurrentParticipantId.has(currentParticipantId)) return;
+            sourceAssignmentByCurrentParticipantId.set(currentParticipantId, {
+              ...assignment,
+              participantId: currentParticipantId,
+            });
+          });
+          next.billing.assignments = next.participants.map((participant) => {
+            const sourceAssignment = sourceAssignmentByCurrentParticipantId.get(participant.id);
+            if (!sourceAssignment) {
+              return {
+                id: `asg-${participant.id}`,
+                participantId: participant.id,
+                isChargeable: false,
+                assignedAmount: 0,
+                participantLinkState: participant.archived ? 'ARCHIVED_REFERENCE' : 'ACTIVE',
+              } satisfies PaymentAssignment;
+            }
+            return {
+              ...sourceAssignment,
+              participantId: participant.id,
+              isChargeable: participant.archived ? false : Boolean(sourceAssignment.isChargeable),
+              assignedAmount: participant.archived ? 0 : roundMoney(Number(sourceAssignment.assignedAmount || 0)),
+              participantLinkState: participant.archived ? 'ARCHIVED_REFERENCE' : 'ACTIVE',
+            } satisfies PaymentAssignment;
+          });
+        } else {
+          next.billing.assignments = buildSharedAssignments(
+            next.participants,
+            next.billing.financialSummary.totalAmount,
+            next.billing.assignments
+          );
+        }
       }
 
-      return withDerived(
-        {
-          ...state,
-          ui: {
-            ...state.ui,
-            dirtyFlags: {
-              ...state.ui.dirtyFlags,
-              billingConfig: true,
+      {
+        const nextBillingDirty = resolveBillingDirtyFromSource(state, next);
+        return withDerived(
+          {
+            ...state,
+            ui: {
+              ...state.ui,
+              dirtyFlags: {
+                ...state.ui.dirtyFlags,
+                billingConfig: nextBillingDirty,
+              },
             },
           },
-        },
-        next
-      );
+          next
+        );
+      }
     }
 
     case 'SET_CHARGE_RESPONSIBLE':
       if (!state.draft) return state;
-      return withDerived(
-        {
-          ...state,
-          ui: {
-            ...state.ui,
-            dirtyFlags: {
-              ...state.ui.dirtyFlags,
-              billingConfig: true,
-            },
-          },
-        },
-        {
+      {
+        const nextDraft: BookingDrawerDraft = {
           ...state.draft,
           billing: {
             ...state.draft.billing,
@@ -436,23 +675,27 @@ export function bookingDrawerReducer(
                   : 0,
             })),
           },
-        }
-      );
+        };
+        const nextBillingDirty = resolveBillingDirtyFromSource(state, nextDraft);
+        return withDerived(
+          {
+            ...state,
+            ui: {
+              ...state.ui,
+              dirtyFlags: {
+                ...state.ui.dirtyFlags,
+                billingConfig: nextBillingDirty,
+              },
+            },
+          },
+          nextDraft
+        );
+      }
 
     case 'SET_ASSIGNMENT_AMOUNT':
       if (!state.draft) return state;
-      return withDerived(
-        {
-          ...state,
-          ui: {
-            ...state.ui,
-            dirtyFlags: {
-              ...state.ui.dirtyFlags,
-              billingConfig: true,
-            },
-          },
-        },
-        {
+      {
+        const nextDraft: BookingDrawerDraft = {
           ...state.draft,
           billing: {
             ...state.draft.billing,
@@ -462,23 +705,27 @@ export function bookingDrawerReducer(
                 : assignment
             ),
           },
-        }
-      );
+        };
+        const nextBillingDirty = resolveBillingDirtyFromSource(state, nextDraft);
+        return withDerived(
+          {
+            ...state,
+            ui: {
+              ...state.ui,
+              dirtyFlags: {
+                ...state.ui.dirtyFlags,
+                billingConfig: nextBillingDirty,
+              },
+            },
+          },
+          nextDraft
+        );
+      }
 
     case 'TOGGLE_ASSIGNMENT_CHARGEABLE':
       if (!state.draft) return state;
-      return withDerived(
-        {
-          ...state,
-          ui: {
-            ...state.ui,
-            dirtyFlags: {
-              ...state.ui.dirtyFlags,
-              billingConfig: true,
-            },
-          },
-        },
-        {
+      {
+        const nextDraft: BookingDrawerDraft = {
           ...state.draft,
           billing: {
             ...state.draft.billing,
@@ -492,8 +739,22 @@ export function bookingDrawerReducer(
                 : assignment
             ),
           },
-        }
-      );
+        };
+        const nextBillingDirty = resolveBillingDirtyFromSource(state, nextDraft);
+        return withDerived(
+          {
+            ...state,
+            ui: {
+              ...state.ui,
+              dirtyFlags: {
+                ...state.ui.dirtyFlags,
+                billingConfig: nextBillingDirty,
+              },
+            },
+          },
+          nextDraft
+        );
+      }
 
     case 'QUEUE_PAYMENT':
       if (!state.draft) return state;
@@ -568,9 +829,11 @@ export function bookingDrawerReducer(
           },
         };
       }
-      const draft = recomputeFinancialSummaryOnly(sourceDraft);
+      const normalizedDraft = recomputeFinancialSummaryOnly(sourceDraft);
+      const source = cloneBookingDrawerDraft(normalizedDraft);
+      const draft = cloneBookingDrawerDraft(normalizedDraft);
       return {
-        source: draft,
+        source,
         draft,
         ui: {
           ...state.ui,
@@ -616,7 +879,7 @@ export function bookingDrawerReducer(
       if (!state.source) return state;
       return {
         ...state,
-        draft: state.source,
+        draft: cloneBookingDrawerDraft(state.source),
         ui: {
           ...state.ui,
           dirtyFlags: {

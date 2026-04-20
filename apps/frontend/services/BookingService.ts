@@ -344,6 +344,10 @@ export const registerBookingPartialPayment = async (
   payer?: {
     participantRef?: string;
     participantName?: string;
+  },
+  covered?: {
+    participantRef?: string;
+    participantName?: string;
   }
 ) => {
   if (method === 'TRANSFER' && !channel) {
@@ -357,6 +361,8 @@ export const registerBookingPartialPayment = async (
     channel,
     payerParticipantRef: payer?.participantRef,
     payerParticipantName: payer?.participantName,
+    coveredParticipantRef: covered?.participantRef,
+    coveredParticipantName: covered?.participantName,
     allocations
   });
 };

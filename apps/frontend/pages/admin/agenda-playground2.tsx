@@ -47,10 +47,22 @@ type Booking = {
     chargeResponsibleName?: string | null;
     latestPayerRef?: string | null;
     latestPayerName?: string | null;
+    latestCoveredRef?: string | null;
+    latestCoveredName?: string | null;
     participants?: Array<{
       ref: string;
       name: string;
       isOwner?: boolean;
+    }>;
+    payerParticipants?: Array<{
+      ref?: string | null;
+      name?: string | null;
+      amount?: number;
+    }>;
+    coveredParticipants?: Array<{
+      ref?: string | null;
+      name?: string | null;
+      amount?: number;
     }>;
   };
 };
@@ -459,7 +471,7 @@ function bookingStatusLabel(state: Booking['state']) {
 }
 
 function bookingBadgeColor(state: Booking['state']) {
-  if (state === 'completed') return 'bg-[#1d2248] text-white';
+  if (state === 'completed') return 'bg-[#eef2ff] text-[#1d2248]';
   if (state === 'confirmed') return 'bg-[#2d4fc9] text-white';
   if (state === 'blocked') return 'bg-[#9f1635] text-white';
   return 'bg-[#2f6b45] text-white';
@@ -558,11 +570,20 @@ function isOwnerLikeParticipantRef(participantRef: string | null | undefined) {
   const normalized = String(participantRef || '').trim().toLowerCase();
   if (!normalized) return false;
   return (
+    normalized === 'owner' ||
+    normalized.startsWith('owner-') ||
+    normalized.startsWith('owner_') ||
     normalized.startsWith('guest:owner') ||
     normalized.startsWith('guest:booking-responsible') ||
     normalized.startsWith('booking-client:') ||
     normalized.startsWith('booking-user:')
   );
+}
+
+function isOwnerLikeParticipantId(participantId: string | null | undefined) {
+  const normalized = String(participantId || '').trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized === 'owner' || normalized.startsWith('owner-') || normalized.startsWith('owner_');
 }
 
 function resolveLatestPaymentPayerRef(events: BookingDomainEvent[] | null | undefined) {
@@ -587,6 +608,30 @@ function resolveLatestPaymentPayerRef(events: BookingDomainEvent[] | null | unde
   return '';
 }
 
+function resolveLatestPaymentCoveredRef(events: BookingDomainEvent[] | null | undefined) {
+  const timelineEvents = Array.isArray(events) ? [...events] : [];
+  timelineEvents.sort((left, right) => {
+    const leftTime = new Date(String(left?.createdAt || '')).getTime();
+    const rightTime = new Date(String(right?.createdAt || '')).getTime();
+    return rightTime - leftTime;
+  });
+
+  for (const event of timelineEvents) {
+    const normalizedType = String(event?.type || '').trim().toUpperCase();
+    if (normalizedType !== 'PAYMENT_RECEIVED') continue;
+    const payload =
+      event?.payload && typeof event.payload === 'object'
+        ? (event.payload as Record<string, unknown>)
+        : {};
+    const coveredRef = String((payload as any)?.coveredParticipantRef || '').trim();
+    if (coveredRef) return coveredRef;
+    const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
+    if (payerRef) return payerRef;
+  }
+
+  return '';
+}
+
 function resolveHoverParticipantsForBooking(booking: Booking) {
   const ownerName = String(booking.title || '').trim();
   const hoverPayment = booking.hoverPayment;
@@ -596,8 +641,12 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
   const chargeResponsibleName = String(hoverPayment?.chargeResponsibleName || '').trim();
   const latestPayerName = String(hoverPayment?.latestPayerName || '').trim();
   const latestPayerRef = String(hoverPayment?.latestPayerRef || '').trim();
+  const latestCoveredName = String(hoverPayment?.latestCoveredName || '').trim();
+  const latestCoveredRef = String(hoverPayment?.latestCoveredRef || '').trim();
   const chargeResponsibleRef = String(hoverPayment?.chargeResponsibleRef || '').trim();
   const ownerFallbackName = ownerName || 'Titular';
+  const totalAmount = Number(hoverPayment?.totalAmount || 0);
+  const paidAmount = Number(hoverPayment?.paidAmount || 0);
 
   const rawParticipants = Array.isArray(hoverPayment?.participants)
     ? hoverPayment?.participants
@@ -640,10 +689,33 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
     return participants.find((participant) => normalizeName(participant.name) === target);
   };
 
+  const rawPayerParticipants = Array.isArray(hoverPayment?.payerParticipants)
+    ? hoverPayment?.payerParticipants
+    : [];
+  const normalizedPayerParticipants = rawPayerParticipants.map((payer) => ({
+    ref: String(payer?.ref || '').trim(),
+    name: String(payer?.name || '').trim(),
+    amount: Number(payer?.amount || 0),
+  }));
+  const rawCoveredParticipants = Array.isArray(hoverPayment?.coveredParticipants)
+    ? hoverPayment?.coveredParticipants
+    : rawPayerParticipants;
+  const normalizedCoveredParticipants = rawCoveredParticipants.map((covered) => ({
+    ref: String(covered?.ref || '').trim(),
+    name: String(covered?.name || '').trim(),
+    amount: Number(covered?.amount || 0),
+  }));
+
   const latestPayerParticipant =
     findByRef(latestPayerRef) ||
     findByName(latestPayerName) ||
     (latestPayerRef && isOwnerLikeParticipantRef(latestPayerRef)
+      ? participants.find((participant) => participant.isOwner)
+      : undefined);
+  const latestCoveredParticipant =
+    findByRef(latestCoveredRef) ||
+    findByName(latestCoveredName) ||
+    (latestCoveredRef && isOwnerLikeParticipantRef(latestCoveredRef)
       ? participants.find((participant) => participant.isOwner)
       : undefined);
 
@@ -653,35 +725,95 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
     (chargeResponsibleRef && isOwnerLikeParticipantRef(chargeResponsibleRef)
       ? participants.find((participant) => participant.isOwner)
       : undefined);
+  const payerParticipantIdSet = new Set<string>();
+  normalizedPayerParticipants.forEach((payer) => {
+    const hasAmount = Number.isFinite(payer.amount) && payer.amount > 0.009;
+    if (!hasAmount) return;
+    const matched =
+      (payer.ref ? findByRef(payer.ref) : undefined) ||
+      (payer.name ? findByName(payer.name) : undefined) ||
+      (payer.ref && isOwnerLikeParticipantRef(payer.ref)
+        ? participants.find((participant) => participant.isOwner)
+        : undefined);
+    if (!matched) return;
+    payerParticipantIdSet.add(matched.id);
+  });
+  if (payerParticipantIdSet.size === 0 && latestPayerParticipant) {
+    payerParticipantIdSet.add(latestPayerParticipant.id);
+  }
 
-  const payableParticipantId = chargeMode === 'SHARED'
-    ? null
-    : latestPayerParticipant?.id ||
+  const coveredAmountByParticipantId = new Map<string, number>();
+  const addCoveredAmount = (participantId: string, amount: number) => {
+    if (!participantId) return;
+    if (!Number.isFinite(amount) || amount <= 0.009) return;
+    coveredAmountByParticipantId.set(
+      participantId,
+      Number((Number(coveredAmountByParticipantId.get(participantId) || 0) + amount).toFixed(2))
+    );
+  };
+  normalizedCoveredParticipants.forEach((covered) => {
+    const matched =
+      (covered.ref ? findByRef(covered.ref) : undefined) ||
+      (covered.name ? findByName(covered.name) : undefined) ||
+      (covered.ref && isOwnerLikeParticipantRef(covered.ref)
+        ? participants.find((participant) => participant.isOwner)
+        : undefined);
+    if (!matched) return;
+    addCoveredAmount(matched.id, covered.amount);
+  });
+  if (coveredAmountByParticipantId.size === 0 && latestCoveredParticipant) {
+    addCoveredAmount(latestCoveredParticipant.id, paidAmount);
+  }
+
+  const assignedAmountByParticipantId = new Map<string, number>();
+  if (chargeMode === 'SHARED') {
+    const chargeableParticipants = participants.filter((participant) => participant.name.trim().length > 0);
+    const target = chargeableParticipants.length > 0
+      ? chargeableParticipants
+      : (participants.filter((participant) => participant.isOwner).length > 0
+          ? participants.filter((participant) => participant.isOwner)
+          : participants);
+    const distributedByParticipantId = distributeAmountByParticipants(
+      Math.max(0, totalAmount),
+      target.map((participant) => participant.id)
+    );
+    distributedByParticipantId.forEach((amount, participantId) => {
+      assignedAmountByParticipantId.set(participantId, amount);
+    });
+  } else {
+    const payableParticipantId =
       responsibleParticipant?.id ||
+      latestCoveredParticipant?.id ||
       participants.find((participant) => participant.isOwner)?.id ||
       participants[0]?.id ||
-      null;
+      '';
+    if (payableParticipantId) {
+      assignedAmountByParticipantId.set(payableParticipantId, Number(Math.max(0, totalAmount).toFixed(2)));
+    }
+  }
 
   return participants.map((participant) => {
-    const isLatestPayer = Boolean(latestPayerParticipant && participant.id === latestPayerParticipant.id);
-    const isResponsible = Boolean(responsibleParticipant && participant.id === responsibleParticipant.id);
-    const isPayable = chargeMode === 'SHARED'
-      ? true
-      : participant.id === payableParticipantId;
-    const roleLabel = chargeMode === 'SHARED'
-      ? isLatestPayer
-        ? (status === 'PARTIAL' ? 'Pagó (último)' : 'Pagó')
-        : isResponsible
-          ? 'Paga'
-          : participant.isOwner
-            ? 'Titular'
-            : 'Participante'
-      : isPayable
-        ? 'Paga'
-        : participant.isOwner
-          ? 'Titular'
-          : 'Participante';
-    const participantStatus = isPayable ? status : 'UNPAID';
+    const isPayer = payerParticipantIdSet.has(participant.id);
+    const assignedAmount = Number(assignedAmountByParticipantId.get(participant.id) || 0);
+    const coveredAmount = Number(coveredAmountByParticipantId.get(participant.id) || 0);
+    const remainingAmount = Number(Math.max(0, assignedAmount - coveredAmount).toFixed(2));
+    const isPayable = assignedAmount > 0.009;
+    const roleLabel = !isPayable
+      ? 'Sin cargo'
+      : isPayer
+        ? 'Pagó'
+        : coveredAmount > 0.009
+          ? 'Cubierto'
+          : 'Debe';
+    const participantStatus: Booking['hoverPayment']['status'] = !isPayable
+      ? 'UNPAID'
+      : status === 'PAID'
+        ? 'PAID'
+        : remainingAmount <= 0.009
+        ? 'PAID'
+        : coveredAmount > 0.009
+          ? 'PARTIAL'
+          : status;
 
     return {
       id: participant.id,
@@ -692,6 +824,9 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
       isOwner: participant.isOwner,
       paymentMethod: '',
       payable: isPayable,
+      shouldPayAmount: assignedAmount,
+      paidAmount: coveredAmount,
+      debtAmount: remainingAmount,
     };
   });
 }
@@ -699,7 +834,7 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
 function estimateBookingHoverTarjetaHeight(participantsCount: number) {
   const rows = Math.max(1, participantsCount);
   // Header + paddings + rows (estimación más cercana al tamaño real del hover).
-  return 40 + 12 + rows * 30 + 8;
+  return 40 + 12 + rows * 48 + 8;
 }
 
 function normalizeParticipantText(value: string) {
@@ -817,6 +952,8 @@ function parseScheduleSlotToBooking(slot: any): Booking | null {
         : null,
       latestPayerRef: hoverPaymentRaw?.latestPayerRef ? String(hoverPaymentRaw.latestPayerRef) : null,
       latestPayerName: hoverPaymentRaw?.latestPayerName ? String(hoverPaymentRaw.latestPayerName) : null,
+      latestCoveredRef: hoverPaymentRaw?.latestCoveredRef ? String(hoverPaymentRaw.latestCoveredRef) : null,
+      latestCoveredName: hoverPaymentRaw?.latestCoveredName ? String(hoverPaymentRaw.latestCoveredName) : null,
       participants: Array.isArray(hoverPaymentRaw?.participants)
         ? hoverPaymentRaw.participants
             .map((rawParticipant: any) => ({
@@ -825,6 +962,28 @@ function parseScheduleSlotToBooking(slot: any): Booking | null {
               isOwner: Boolean(rawParticipant?.isOwner),
             }))
             .filter((participant: { ref: string; name: string }) => participant.ref || participant.name)
+        : undefined,
+      payerParticipants: Array.isArray(hoverPaymentRaw?.payerParticipants)
+        ? hoverPaymentRaw.payerParticipants
+            .map((rawPayer: any) => ({
+              ref: rawPayer?.ref ? String(rawPayer.ref).trim() : null,
+              name: rawPayer?.name ? String(rawPayer.name).trim() : null,
+              amount: Number(rawPayer?.amount || 0),
+            }))
+            .filter((payer: { ref: string | null; name: string | null; amount: number }) =>
+              Boolean(payer.ref || payer.name || (Number.isFinite(payer.amount) && payer.amount > 0.009))
+            )
+        : undefined,
+      coveredParticipants: Array.isArray(hoverPaymentRaw?.coveredParticipants)
+        ? hoverPaymentRaw.coveredParticipants
+            .map((rawCovered: any) => ({
+              ref: rawCovered?.ref ? String(rawCovered.ref).trim() : null,
+              name: rawCovered?.name ? String(rawCovered.name).trim() : null,
+              amount: Number(rawCovered?.amount || 0),
+            }))
+            .filter((covered: { ref: string | null; name: string | null; amount: number }) =>
+              Boolean(covered.ref || covered.name || (Number.isFinite(covered.amount) && covered.amount > 0.009))
+            )
         : undefined,
     },
   };
@@ -847,6 +1006,101 @@ function parseMoneyInput(raw: string) {
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) return null;
   return clampParticipantPrice(parsed);
+}
+
+function distributeAmountByParticipants(totalAmount: number, participantIds: string[]) {
+  const distribution = new Map<string, number>();
+  const ids = Array.isArray(participantIds)
+    ? participantIds
+      .map((id) => String(id || '').trim())
+      .filter((id) => id.length > 0)
+    : [];
+  if (ids.length === 0) return distribution;
+
+  const safeTotalCents = Math.max(0, Math.round(Number(totalAmount || 0) * 100));
+  const baseCents = Math.floor(safeTotalCents / ids.length);
+  let remainderCents = safeTotalCents - baseCents * ids.length;
+
+  ids.forEach((id) => {
+    let cents = baseCents;
+    if (remainderCents > 0) {
+      cents += 1;
+      remainderCents -= 1;
+    }
+    distribution.set(id, Number((cents / 100).toFixed(2)));
+  });
+
+  return distribution;
+}
+
+function allocatePaymentProportionallyByDebt(input: {
+  amount: number;
+  participantDebts: Array<{ participantId: string; debt: number }>;
+}) {
+  const amountCents = Math.round(Number(input.amount || 0) * 100);
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return [] as Array<{
+    coveredParticipantId: string;
+    amount: number;
+  }>;
+
+  const normalizedRows = (Array.isArray(input.participantDebts) ? input.participantDebts : [])
+    .map((row, index) => ({
+      participantId: String(row.participantId || '').trim(),
+      debtCents: Math.round(Number(row.debt || 0) * 100),
+      index,
+    }))
+    .filter((row) => row.participantId.length > 0 && Number.isFinite(row.debtCents) && row.debtCents > 0);
+  if (normalizedRows.length === 0) {
+    return [] as Array<{ coveredParticipantId: string; amount: number }>;
+  }
+
+  const totalDebtCents = normalizedRows.reduce((sum, row) => sum + row.debtCents, 0);
+  if (!Number.isFinite(totalDebtCents) || totalDebtCents <= 0 || amountCents > totalDebtCents) {
+    return [] as Array<{ coveredParticipantId: string; amount: number }>;
+  }
+
+  const rows = normalizedRows.map((row) => {
+    const rawShare = amountCents * row.debtCents;
+    const allocatedCents = Math.floor(rawShare / totalDebtCents);
+    const fractionalNumerator = rawShare % totalDebtCents;
+    return {
+      ...row,
+      allocatedCents,
+      fractionalNumerator,
+    };
+  });
+
+  let remainderCents = amountCents - rows.reduce((sum, row) => sum + row.allocatedCents, 0);
+  if (remainderCents > 0) {
+    const priorityRows = [...rows].sort((left, right) => {
+      const byFraction = right.fractionalNumerator - left.fractionalNumerator;
+      if (byFraction !== 0) return byFraction;
+      const byDebt = right.debtCents - left.debtCents;
+      if (byDebt !== 0) return byDebt;
+      return left.index - right.index;
+    });
+
+    while (remainderCents > 0) {
+      let distributedInRound = false;
+      for (const row of priorityRows) {
+        if (remainderCents <= 0) break;
+        if (row.allocatedCents >= row.debtCents) continue;
+        row.allocatedCents += 1;
+        remainderCents -= 1;
+        distributedInRound = true;
+      }
+      if (!distributedInRound) {
+        return [] as Array<{ coveredParticipantId: string; amount: number }>;
+      }
+    }
+  }
+
+  return rows
+    .filter((row) => row.allocatedCents > 0)
+    .map((row) => ({
+      coveredParticipantId: row.participantId,
+      amount: Number((row.allocatedCents / 100).toFixed(2)),
+    }));
 }
 
 function resolveChargedParticipantIds(
@@ -951,7 +1205,7 @@ function buildDefaultParticipantsForBooking(booking: Booking): Participant[] {
     participant.isOwner
       ? {
           ...participant,
-          id: `owner-${String(booking.id)}`,
+          id: 'owner',
           name: String(booking.title || ''),
           paid: booking.paymentState === 'paid',
           sourceType: ownerSourceType,
@@ -996,13 +1250,14 @@ function parseSidebarParticipantsFromMetadata(
       const rawName = String(rawParticipant.name || '').trim();
       const rawContact = String(rawParticipant.contact || '').trim();
       const rawId = String(rawParticipant.id || '').trim();
+      const isOwner = Boolean(rawParticipant.isOwner) || isOwnerLikeParticipantRef(rawRef) || isOwnerLikeParticipantId(rawId);
       const baseToken = rawRef || rawId || rawName || `participant-${index + 1}`;
       return {
-        id: rawId || `meta-${index}-${toSlugToken(baseToken)}`,
+        id: isOwner ? 'owner' : (rawId || `meta-${index}-${toSlugToken(baseToken)}`),
         name: rawName,
         contact: rawContact,
         paid: Boolean(rawParticipant.paid),
-        isOwner: Boolean(rawParticipant.isOwner),
+        isOwner,
         sourceType: normalizeParticipantSourceType(rawParticipant.sourceType),
         entityRef: rawRef || undefined,
         paymentMethod: normalizeParticipantPaymentMethod(rawParticipant.paymentMethod),
@@ -1013,7 +1268,14 @@ function parseSidebarParticipantsFromMetadata(
 
   if (mapped.length === 0) return buildDefaultParticipantsForBooking(booking);
   if (!mapped.some((participant) => participant.isOwner)) {
-    mapped[0] = { ...mapped[0], isOwner: true };
+    mapped[0] = { ...mapped[0], id: 'owner', isOwner: true };
+  } else {
+    let ownerFixed = false;
+    for (let i = 0; i < mapped.length; i += 1) {
+      if (!mapped[i].isOwner || ownerFixed) continue;
+      mapped[i] = { ...mapped[i], id: 'owner' };
+      ownerFixed = true;
+    }
   }
   return mapped;
 }
@@ -1048,8 +1310,6 @@ function buildSidebarComparableParticipants(participants: Participant[]) {
       name: String(participant.name || '').trim(),
       contact: String(participant.contact || '').trim(),
       isOwner: Boolean(participant.isOwner),
-      sourceType: normalizeParticipantSourceType(participant.sourceType),
-      entityRef: String(participant.entityRef || '').trim(),
       paymentMethod: normalizeParticipantPaymentMethod(participant.paymentMethod),
     }))
     .sort((left, right) => {
@@ -1059,10 +1319,6 @@ function buildSidebarComparableParticipants(participants: Participant[]) {
       if (byName !== 0) return byName;
       const byContact = left.contact.localeCompare(right.contact);
       if (byContact !== 0) return byContact;
-      const byRef = left.entityRef.localeCompare(right.entityRef);
-      if (byRef !== 0) return byRef;
-      const bySource = left.sourceType.localeCompare(right.sourceType);
-      if (bySource !== 0) return bySource;
       return left.paymentMethod.localeCompare(right.paymentMethod);
     });
 }
@@ -1118,6 +1374,101 @@ function resolveOwnerAssignmentIdForDraft(draft?: NewBookingDrawerDraft | null) 
   return ownerAssignment?.id;
 }
 
+function buildComparableBillingFromDrawerDraft(draft?: NewBookingDrawerDraft | null) {
+  if (!draft) return null;
+  const participants = (Array.isArray(draft.participants) ? draft.participants : [])
+    .map((participant) => ({
+      id: String(participant.id || ''),
+      identity: [
+        participant.bookingRole === 'BOOKING_RESPONSIBLE' ? 'OWNER' : 'PARTICIPANT',
+        normalizeParticipantText(String(participant.displayName || '')),
+        normalizeParticipantText(String(participant.contact || '')),
+        Boolean(participant.archived) ? 'ARCHIVED' : 'ACTIVE',
+      ].join('|'),
+      archived: Boolean(participant.archived),
+    }))
+    .sort((left, right) => {
+      const byIdentity = left.identity.localeCompare(right.identity);
+      if (byIdentity !== 0) return byIdentity;
+      return left.id.localeCompare(right.id);
+    });
+
+  const assignmentByParticipantId = new Map<
+    string,
+    {
+      isChargeable: boolean;
+      assignedAmount: number;
+      participantLinkState: 'ACTIVE' | 'ARCHIVED_REFERENCE';
+    }
+  >();
+  (Array.isArray(draft.billing.assignments) ? draft.billing.assignments : []).forEach((assignment) => {
+    const participantId = String(assignment.participantId || '');
+    if (!participantId || assignmentByParticipantId.has(participantId)) return;
+    assignmentByParticipantId.set(participantId, {
+      isChargeable: Boolean(assignment.isChargeable),
+      assignedAmount: Number(Number(assignment.assignedAmount || 0).toFixed(2)),
+      participantLinkState:
+        assignment.participantLinkState === 'ARCHIVED_REFERENCE'
+          ? 'ARCHIVED_REFERENCE'
+          : 'ACTIVE',
+    });
+  });
+
+  const participantBillingRows = participants.map((participant) => {
+    const assignment = assignmentByParticipantId.get(participant.id);
+    const isArchived = participant.archived;
+    const isChargeable = !isArchived && Boolean(assignment?.isChargeable);
+    return {
+      participantIdentity: participant.identity,
+      isChargeable,
+      assignedAmount: isChargeable ? Number(Number(assignment?.assignedAmount || 0).toFixed(2)) : 0,
+      archived: isArchived,
+    };
+  });
+
+  const groupedByIdentity = new Map<
+    string,
+    {
+      count: number;
+      archivedCount: number;
+      chargeableCount: number;
+      assignedAmountTotal: number;
+    }
+  >();
+  participantBillingRows.forEach((row) => {
+    const key = row.participantIdentity;
+    const current = groupedByIdentity.get(key) || {
+      count: 0,
+      archivedCount: 0,
+      chargeableCount: 0,
+      assignedAmountTotal: 0,
+    };
+    current.count += 1;
+    if (row.archived) current.archivedCount += 1;
+    if (row.isChargeable) current.chargeableCount += 1;
+    current.assignedAmountTotal = Number(
+      Number(current.assignedAmountTotal + Number(row.assignedAmount || 0)).toFixed(2)
+    );
+    groupedByIdentity.set(key, current);
+  });
+
+  const participantGroups = Array.from(groupedByIdentity.entries())
+    .map(([participantIdentity, metrics]) => ({
+      participantIdentity,
+      count: metrics.count,
+      archivedCount: metrics.archivedCount,
+      chargeableCount: metrics.chargeableCount,
+      assignedAmountTotal: Number(Number(metrics.assignedAmountTotal || 0).toFixed(2)),
+    }))
+    .sort((left, right) => left.participantIdentity.localeCompare(right.participantIdentity));
+
+  return {
+    chargeMode: draft.billing.chargeMode === 'SHARED' ? 'SHARED' : 'INDIVIDUAL',
+    totalAmount: Number(Number(draft.billing.financialSummary.totalAmount || 0).toFixed(2)),
+    participantGroups,
+  };
+}
+
 function isBlockingQuoteError(message: string) {
   const normalized = normalizeText(message);
   if (!normalized) return false;
@@ -1126,7 +1477,9 @@ function isBlockingQuoteError(message: string) {
     'duracion no permitida por el club',
     'horario no permitido por el club',
     'el club esta cerrado ese dia',
+    'el club esta cerrado para la fecha seleccionada',
     'la actividad esta cerrada para la fecha seleccionada',
+    'la actividad esta cerrada para la fecha solicitada',
     'la reserva excede el horario de apertura del club',
     'limite de anticipacion excedido',
     'precio de cancha no configurado',
@@ -1202,6 +1555,8 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedNewParticipantContact, setSimplifiedNewParticipantContact] = useState('');
   const [simplifiedPaymentModalOpen, setSimplifiedPaymentModalOpen] = useState(false);
   const [simplifiedPaymentPayerParticipantIdDraft, setSimplifiedPaymentPayerParticipantIdDraft] = useState('');
+  const [simplifiedPaymentCoveredParticipantIdDraft, setSimplifiedPaymentCoveredParticipantIdDraft] = useState('');
+  const [simplifiedPaymentCoveredParticipantIdsDraft, setSimplifiedPaymentCoveredParticipantIdsDraft] = useState<string[]>([]);
   const [simplifiedPaymentAmountDraft, setSimplifiedPaymentAmountDraft] = useState('');
   const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState('');
   const [simplifiedPaymentNoteDraft, setSimplifiedPaymentNoteDraft] = useState('');
@@ -1524,6 +1879,7 @@ export default function AdminAgendaPlaygroundPage() {
     setNotesTouchedByUser(false);
     setParticipantPriceDraftById({});
     setPaymentMode('Único');
+    setSimplifiedSidebarSection('DETAILS');
     if (booking.state === 'blocked') {
       setBookingKind('block');
       const normalizedTitle = normalizeBookingDisplayTitle(booking.title, '');
@@ -1673,16 +2029,6 @@ export default function AdminAgendaPlaygroundPage() {
 
   useEffect(() => {
     if (!drawerOpen) return;
-    setSimplifiedSidebarSection('DETAILS');
-  }, [drawerOpen, editingBookingId]);
-
-  useEffect(() => {
-    if (paymentMode === 'Único') return;
-    setSimplifiedSidebarSection('DETAILS');
-  }, [paymentMode]);
-
-  useEffect(() => {
-    if (!drawerOpen) return;
     const resetDrawerScrollTop = () => {
       const container = drawerScrollContainerRef.current;
       if (!container) return;
@@ -1819,6 +2165,8 @@ export default function AdminAgendaPlaygroundPage() {
     if (!drawerOpen || bookingKind === 'block') return;
     if (!persistedEditingBookingId || !editingBooking) return;
     if (!remoteBillingConfig) return;
+
+    setPaymentMode(remoteBillingConfig.chargeMode === 'SHARED' ? 'Dividido' : 'Único');
 
     const metadata = remoteBillingConfig?.metadata;
     const resolvedParticipants = parseSidebarParticipantsFromMetadata(metadata, editingBooking);
@@ -2032,39 +2380,45 @@ export default function AdminAgendaPlaygroundPage() {
       }
 
       if (!isDragging || !dragSelection) return;
-      const range = toSelectionRange(dragSelection);
-      setEditingBookingId(null);
-      setEditingBaseline(null);
-      setSelectedCourtId(dragSelection.courtId);
-      setSelectedStartSlot(range.start);
-      setSelectedEndSlot(range.end);
-      setParticipants(initialParticipants.map((participant) => ({ ...participant })));
-      setNotes('');
-      setNotesTouchedByUser(false);
-      setPaymentMode('Único');
-      setParticipantPriceDraftById({});
-      bookingFinancialRequestSeqRef.current += 1;
-      bookingTimelineRequestSeqRef.current += 1;
-      remoteBillingConfigRequestSeqRef.current += 1;
-      setIsBookingFinancialLoading(false);
-      setIsRemoteBillingConfigLoading(false);
-      setBookingTimelineLoading(false);
-      setBookingTimelineError('');
-      setBookingTimelineEvents([]);
-      setBookingFinancial(null);
-      setRemoteBillingConfig(null);
-      setIsBillingConfigHydrated(false);
-      setBillingConfigLoadError('');
-      setBillingConfigTouchedByUser(false);
-      setQuotedListPrice(null);
-      setQuotedFinalPrice(null);
-      setQuotedDiscountAmount(0);
-      setQuoteError('');
-      setDrawerOpen(true);
-      setScheduleInputsDirty(false);
       setIsDragging(false);
       setDragSelection(null);
-      setFormError('');
+      const draftSelectionSnapshot = dragSelection;
+      const range = toSelectionRange(draftSelectionSnapshot);
+      const openDrawerWithSelection = () => {
+        setEditingBookingId(null);
+        setEditingBaseline(null);
+        setSelectedCourtId(draftSelectionSnapshot.courtId);
+        setSelectedStartSlot(range.start);
+        setSelectedEndSlot(range.end);
+        setParticipants(initialParticipants.map((participant) => ({ ...participant })));
+        setNotes('');
+        setNotesTouchedByUser(false);
+        setPaymentMode('Único');
+        setSimplifiedSidebarSection('DETAILS');
+        setParticipantPriceDraftById({});
+        bookingFinancialRequestSeqRef.current += 1;
+        bookingTimelineRequestSeqRef.current += 1;
+        remoteBillingConfigRequestSeqRef.current += 1;
+        setIsBookingFinancialLoading(false);
+        setIsRemoteBillingConfigLoading(false);
+        setBookingTimelineLoading(false);
+        setBookingTimelineError('');
+        setBookingTimelineEvents([]);
+        setBookingFinancial(null);
+        setRemoteBillingConfig(null);
+        setIsBillingConfigHydrated(false);
+        setBillingConfigLoadError('');
+        setBillingConfigTouchedByUser(false);
+        setQuotedListPrice(null);
+        setQuotedFinalPrice(null);
+        setQuotedDiscountAmount(0);
+        setQuoteError('');
+        setDrawerOpen(true);
+        setScheduleInputsDirty(false);
+        setFormError('');
+      };
+
+      openDrawerWithSelection();
     };
 
     window.addEventListener('mousemove', onWindowMouseMove);
@@ -2073,7 +2427,19 @@ export default function AdminAgendaPlaygroundPage() {
       window.removeEventListener('mousemove', onWindowMouseMove);
       window.removeEventListener('mouseup', onWindowMouseUp);
     };
-  }, [applyBookingError, beginBookingDrag, bookingDropPreview, bookings, dragSelection, isDragging, openBookingInDrawer, persistBookingMove, reloadSchedule, selectedDate, showCalendarNotice]);
+  }, [
+    applyBookingError,
+    beginBookingDrag,
+    bookingDropPreview,
+    bookings,
+    dragSelection,
+    isDragging,
+    openBookingInDrawer,
+    persistBookingMove,
+    reloadSchedule,
+    selectedDate,
+    showCalendarNotice,
+  ]);
 
   const visibleCourts = useMemo(() => {
     return effectiveCourts.filter((court) => {
@@ -2131,6 +2497,10 @@ export default function AdminAgendaPlaygroundPage() {
   );
   const latestPaymentPayerRef = useMemo(
     () => resolveLatestPaymentPayerRef(bookingTimelineEvents),
+    [bookingTimelineEvents]
+  );
+  const latestPaymentCoveredRef = useMemo(
+    () => resolveLatestPaymentCoveredRef(bookingTimelineEvents),
     [bookingTimelineEvents]
   );
   const singleChargeParticipantIdFromRemoteConfig = useMemo(() => {
@@ -2293,6 +2663,169 @@ export default function AdminAgendaPlaygroundPage() {
   const resolveParticipantPrice = useCallback((participant: Participant) => {
     return Number(participantPriceById.get(participant.id) || 0);
   }, [participantPriceById]);
+  const participantCoverageAmountById = useMemo(() => {
+    const totals = new Map<string, number>();
+    if (!persistedEditingBookingId || bookingKind === 'block' || participants.length === 0) return totals;
+
+    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
+    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+    const bookingUserId =
+      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+        ? bookingUserIdRaw
+        : undefined;
+
+    const participantIdByRef = new Map<string, string>();
+    const participantIdByName = new Map<string, string>();
+    const ownerParticipant = participants.find((participant) => participant.isOwner) || participants[0] || null;
+    const ownerId = String(ownerParticipant?.id || '').trim();
+
+    const registerRefAlias = (participantId: string, rawRef: string) => {
+      const normalizedRef = String(rawRef || '').trim().toLowerCase();
+      if (!participantId || !normalizedRef) return;
+      participantIdByRef.set(normalizedRef, participantId);
+    };
+
+    participants.forEach((participant) => {
+      const participantId = String(participant.id || '').trim();
+      if (!participantId) return;
+      const stableRef = buildStableParticipantRef(participant, { bookingClientId, bookingUserId });
+      registerRefAlias(participantId, stableRef);
+      registerRefAlias(participantId, participant.entityRef || '');
+      if (participant.isOwner) {
+        registerRefAlias(participantId, 'guest:owner');
+        registerRefAlias(participantId, 'guest:booking-responsible');
+        if (bookingClientId) {
+          registerRefAlias(participantId, `booking-client:${bookingClientId}`);
+        }
+        if (bookingUserId) {
+          registerRefAlias(participantId, `booking-user:${bookingUserId}`);
+        }
+      }
+
+      const normalizedName = String(participant.name || '').trim().toLowerCase();
+      if (normalizedName && !participantIdByName.has(normalizedName)) {
+        participantIdByName.set(normalizedName, participantId);
+      }
+    });
+
+    const addCoveredAmount = (participantRefRaw: unknown, participantNameRaw: unknown, amountRaw: unknown) => {
+      const amount = Number(amountRaw || 0);
+      if (!Number.isFinite(amount) || amount <= 0.009) return;
+
+      const normalizedRef = String(participantRefRaw || '').trim().toLowerCase();
+      const normalizedName = String(participantNameRaw || '').trim().toLowerCase();
+      let participantId = normalizedRef ? participantIdByRef.get(normalizedRef) : undefined;
+      if (!participantId && normalizedName) {
+        participantId = participantIdByName.get(normalizedName);
+      }
+      if (!participantId && normalizedRef && isOwnerLikeParticipantRef(normalizedRef) && ownerId) {
+        participantId = ownerId;
+      }
+      if (!participantId) return;
+
+      totals.set(
+        participantId,
+        Number((Number(totals.get(participantId) || 0) + amount).toFixed(2))
+      );
+    };
+
+    let usedTimelineEvents = 0;
+    (Array.isArray(bookingTimelineEvents) ? bookingTimelineEvents : []).forEach((event) => {
+      const normalizedType = String(event?.type || '').trim().toUpperCase();
+      if (normalizedType !== 'PAYMENT_RECEIVED') return;
+      const payload =
+        event?.payload && typeof event.payload === 'object'
+          ? (event.payload as Record<string, unknown>)
+          : {};
+      const amount = Number((payload as any)?.amount || 0);
+      if (!Number.isFinite(amount) || amount <= 0.009) return;
+      usedTimelineEvents += 1;
+      const coveredRef = String((payload as any)?.coveredParticipantRef || '').trim();
+      const coveredName = String((payload as any)?.coveredParticipantName || '').trim();
+      const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
+      const payerName = String((payload as any)?.payerParticipantName || '').trim();
+      addCoveredAmount(coveredRef || payerRef, coveredName || payerName, amount);
+    });
+
+    if (usedTimelineEvents === 0) {
+      const coveredFallback = Array.isArray(editingBooking?.hoverPayment?.coveredParticipants)
+        ? editingBooking?.hoverPayment?.coveredParticipants
+        : [];
+      coveredFallback.forEach((row) => {
+        addCoveredAmount(row?.ref, row?.name, row?.amount);
+      });
+      if (coveredFallback.length === 0) {
+        const payerFallback = Array.isArray(editingBooking?.hoverPayment?.payerParticipants)
+          ? editingBooking?.hoverPayment?.payerParticipants
+          : [];
+        payerFallback.forEach((row) => {
+          addCoveredAmount(row?.ref, row?.name, row?.amount);
+        });
+      }
+    }
+
+    return totals;
+  }, [
+    bookingKind,
+    bookingTimelineEvents,
+    editingBooking?.clientId,
+    editingBooking?.hoverPayment?.coveredParticipants,
+    editingBooking?.hoverPayment?.payerParticipants,
+    editingBooking?.userId,
+    participants,
+    persistedEditingBookingId,
+  ]);
+  const participantAssignedAmountById = useMemo(() => {
+    const assigned = new Map<string, number>();
+    participants.forEach((participant) => {
+      assigned.set(participant.id, 0);
+    });
+
+    if (paymentMode === 'Único') {
+      const responsibleId = String(singleChargeParticipantId || '').trim() ||
+        participants.find((participant) => participant.isOwner)?.id ||
+        participants[0]?.id ||
+        '';
+      if (responsibleId) {
+        assigned.set(responsibleId, Number(totalPrice.toFixed(2)));
+      }
+      return assigned;
+    }
+
+    participants.forEach((participant) => {
+      if (!chargedParticipantIdSet.has(participant.id)) return;
+      assigned.set(participant.id, Number(resolveParticipantPrice(participant).toFixed(2)));
+    });
+    return assigned;
+  }, [
+    chargedParticipantIdSet,
+    participants,
+    paymentMode,
+    resolveParticipantPrice,
+    singleChargeParticipantId,
+    totalPrice,
+  ]);
+  const participantDebtAmountById = useMemo(() => {
+    const debt = new Map<string, number>();
+    participants.forEach((participant) => {
+      const assigned = Number(participantAssignedAmountById.get(participant.id) || 0);
+      const covered = Number(participantCoverageAmountById.get(participant.id) || 0);
+      debt.set(participant.id, Number(Math.max(0, assigned - covered).toFixed(2)));
+    });
+    return debt;
+  }, [participantAssignedAmountById, participantCoverageAmountById, participants]);
+  const participantPaidComputedIdSet = useMemo(() => {
+    const paidIds = new Set<string>();
+    participants.forEach((participant) => {
+      const assigned = Number(participantAssignedAmountById.get(participant.id) || 0);
+      if (assigned <= 0.009) return;
+      const debt = Number(participantDebtAmountById.get(participant.id) || 0);
+      if (debt <= 0.009) {
+        paidIds.add(participant.id);
+      }
+    });
+    return paidIds;
+  }, [participantAssignedAmountById, participantDebtAmountById, participants]);
   const isClassBooking = bookingKind === 'privateClass' || bookingKind === 'courseClass';
   const priceFieldLabel = 'Precio total';
   const priceFieldHint = isClassBooking
@@ -2360,7 +2893,7 @@ export default function AdminAgendaPlaygroundPage() {
   }, [totalPrice]);
 
   const resolveBookingHoverPosition = useCallback((clientX: number, clientY: number, participantsCount: number) => {
-    const cardWidth = 252;
+    const cardWidth = 292;
     const cardHeight = estimateBookingHoverTarjetaHeight(participantsCount);
     const gap = 10;
     const bottomGap = 24;
@@ -2596,7 +3129,9 @@ export default function AdminAgendaPlaygroundPage() {
     amount: number;
     method: Participant['paymentMethod'];
     successMessage?: string;
+    silentSuccessNotice?: boolean;
     participantId?: string;
+    coveredParticipantId?: string;
   }) => {
     const lockPaymentsNow = Boolean(
       persistedEditingBookingId &&
@@ -2648,6 +3183,19 @@ export default function AdminAgendaPlaygroundPage() {
       const ownerParticipant = participants.find((participant) => participant.isOwner);
       return ownerParticipant?.id;
     })();
+    const effectiveCoveredParticipantId = (() => {
+      const requestedCoveredParticipantId = String(input.coveredParticipantId || '').trim();
+      if (requestedCoveredParticipantId && participants.some((participant) => participant.id === requestedCoveredParticipantId)) {
+        return requestedCoveredParticipantId;
+      }
+      if (paymentMode === 'Único') {
+        const explicitResponsibleId = String(singleChargeParticipantId || '').trim();
+        if (explicitResponsibleId && participants.some((participant) => participant.id === explicitResponsibleId)) {
+          return explicitResponsibleId;
+        }
+      }
+      return String(effectiveParticipantId || '').trim();
+    })();
 
     try {
       if (effectiveParticipantId) {
@@ -2675,6 +3223,23 @@ export default function AdminAgendaPlaygroundPage() {
       const payerParticipantName = payerParticipant
         ? (String(payerParticipant.name || '').trim() || (payerParticipant.isOwner ? 'Titular' : 'Participante'))
         : undefined;
+      const coveredParticipant =
+        (effectiveCoveredParticipantId
+          ? participants.find((participant) => participant.id === effectiveCoveredParticipantId)
+          : null) ||
+        payerParticipant;
+      const coveredParticipantRef = coveredParticipant
+        ? buildStableParticipantRef(coveredParticipant, {
+            bookingClientId: String(editingBooking?.clientId || '').trim() || undefined,
+            bookingUserId:
+              Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+                ? bookingUserIdRaw
+                : undefined,
+          })
+        : undefined;
+      const coveredParticipantName = coveredParticipant
+        ? (String(coveredParticipant.name || '').trim() || (coveredParticipant.isOwner ? 'Titular' : 'Participante'))
+        : undefined;
 
       const paymentChannel = input.method === 'TRANSFER' ? 'BANK_ACCOUNT' : undefined;
       await registerBookingPartialPayment(
@@ -2686,6 +3251,10 @@ export default function AdminAgendaPlaygroundPage() {
         {
           participantRef: payerParticipantRef,
           participantName: payerParticipantName,
+        },
+        {
+          participantRef: coveredParticipantRef,
+          participantName: coveredParticipantName,
         }
       );
 
@@ -2697,7 +3266,7 @@ export default function AdminAgendaPlaygroundPage() {
           paymentMode,
           Number(latestFinancialSummary?.total || 0),
           Number(latestFinancialSummary?.paid || 0),
-          effectiveParticipantId
+          effectiveCoveredParticipantId
         )
       );
 
@@ -2726,7 +3295,9 @@ export default function AdminAgendaPlaygroundPage() {
         }
       }
 
-      showCalendarNotice(input.successMessage || `Pago registrado: ${amount.toFixed(2)} $.`);
+      if (!input.silentSuccessNotice) {
+        showCalendarNotice(input.successMessage || `Pago registrado: ${amount.toFixed(2)} $.`);
+      }
       if (paymentMode === 'Único' && effectiveParticipantId) {
         const currentResponsibleId = String(
           bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || ''
@@ -3123,15 +3694,39 @@ export default function AdminAgendaPlaygroundPage() {
   const shouldShowScheduleConflict = hasConflict && (
     editingBookingId ? hasScheduleChanges : scheduleInputsDirty
   );
+  const isSelectionInPastBlocking = isSelectionInPast && (!editingBookingId || hasScheduleChanges);
   const isPaymentLockedByManualPending = Boolean(
     persistedEditingBookingId &&
     bookingKind !== 'block' &&
     bookingFinancial?.confirmationMode === 'MANUAL' &&
     editingBooking?.state === 'pending'
   );
+  const hasRegisteredPaymentsForCurrentBooking = useMemo(() => {
+    const fromTimeline = (Array.isArray(bookingTimelineEvents) ? bookingTimelineEvents : []).some((event) => {
+      const normalizedType = String(event?.type || '').trim().toUpperCase();
+      return normalizedType === 'PAYMENT_RECEIVED';
+    });
+    const fromDraft = Boolean(
+      bookingDrawerState.draft?.billing?.payments?.some(
+        (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
+      )
+    );
+    const fromFinancial = Number(bookingFinancial?.paid || 0) > 0.009;
+    return fromTimeline || fromDraft || fromFinancial;
+  }, [bookingDrawerState.draft?.billing?.payments, bookingFinancial?.paid, bookingTimelineEvents]);
+  const isBillingConfigLockedByPayments = Boolean(
+    persistedEditingBookingId &&
+    bookingKind !== 'block' &&
+    hasRegisteredPaymentsForCurrentBooking
+  );
   const shouldHideBillingUntilCreated = Boolean(
     !persistedEditingBookingId &&
     bookingKind !== 'block'
+  );
+  const isCompletedReservation = Boolean(
+    persistedEditingBookingId &&
+    bookingKind !== 'block' &&
+    editingBooking?.state === 'completed'
   );
   const isBookingFullyPaid = Boolean(
     persistedEditingBookingId &&
@@ -3215,6 +3810,8 @@ export default function AdminAgendaPlaygroundPage() {
     bookingKind !== 'block' &&
     bookingDrawerState.draft
   );
+  const isBillingModeSwitchLocked =
+    Boolean(editingBookingId) && (isRemoteBillingConfigLoading || !isBillingConfigHydrated);
   const bookingDrawerDraftSnapshot = useMemo<NewBookingDrawerDraft | null>(() => {
     if (!drawerOpen || bookingKind === 'block') return null;
 
@@ -3384,12 +3981,27 @@ export default function AdminAgendaPlaygroundPage() {
   ]);
   useEffect(() => {
     if (!drawerOpen || !bookingDrawerDraftSnapshot) return;
+    const requiresBillingHydration =
+      Boolean(editingBookingId) && bookingKind !== 'block';
+    const waitingBillingHydration =
+      requiresBillingHydration &&
+      !isBillingConfigHydrated &&
+      !billingConfigLoadError;
+    if (waitingBillingHydration) return;
     const loadKey = `${editingBookingId || 'new'}-${bookingKind}-${remoteBillingConfig?.updatedAt || 'billing-none'}`;
     if (bookingDrawerLoadKeyRef.current === loadKey) return;
     bookingDrawerLoadKeyRef.current = loadKey;
     bookingDrawerFormSyncSignatureRef.current = '';
     bookingDrawerDispatch({ type: 'LOAD_SUCCESS', payload: bookingDrawerDraftSnapshot });
-  }, [bookingDrawerDraftSnapshot, bookingKind, drawerOpen, editingBookingId, remoteBillingConfig?.updatedAt]);
+  }, [
+    billingConfigLoadError,
+    bookingDrawerDraftSnapshot,
+    bookingKind,
+    drawerOpen,
+    editingBookingId,
+    isBillingConfigHydrated,
+    remoteBillingConfig?.updatedAt,
+  ]);
 
   useEffect(() => {
     if (!drawerOpen || bookingKind === 'block') return;
@@ -3409,14 +4021,17 @@ export default function AdminAgendaPlaygroundPage() {
     const bookingResponsibleParticipantId = activeParticipantsForSync.find(
       (participant) => participant.bookingRole === 'BOOKING_RESPONSIBLE'
     )?.id;
-    const chargeMode = paymentMode === 'Único' ? 'INDIVIDUAL' as const : 'SHARED' as const;
     const isPersistedEdit = Boolean(editingBookingId);
+    const uiChargeMode = paymentMode === 'Único' ? 'INDIVIDUAL' as const : 'SHARED' as const;
+    const chargeModeForSync = isPersistedEdit
+      ? (bookingDrawerState.draft.billing.chargeMode === 'SHARED' ? 'SHARED' : 'INDIVIDUAL')
+      : uiChargeMode;
     const syncTotalAmount = isPersistedEdit
       ? Number(bookingDrawerState.draft.billing.financialSummary.totalAmount || 0)
       : Number(totalPrice || 0);
     const signature = JSON.stringify({
       key: `${editingBookingId || 'new'}-${bookingKind}`,
-      chargeMode,
+      chargeMode: isPersistedEdit ? 'persisted' : chargeModeForSync,
       total: isPersistedEdit ? 'persisted' : syncTotalAmount.toFixed(2),
       participants: activeParticipantsForSync.map((participant) => ({
         id: participant.id,
@@ -3439,7 +4054,7 @@ export default function AdminAgendaPlaygroundPage() {
       payload: {
         participants: activeParticipantsForSync,
         bookingResponsibleParticipantId,
-        chargeMode,
+        chargeMode: chargeModeForSync,
         totalAmount: syncTotalAmount,
       },
     });
@@ -3454,12 +4069,22 @@ export default function AdminAgendaPlaygroundPage() {
   }, [editingBookingId, hasBlockingQuoteError, hasScheduleChanges, quoteLoading, shouldValidatePastSelection]);
   const blockingActionMessage = useMemo(() => {
     if (formError) return formError;
-    if (isSelectionInPast) return 'No se pueden reservar turnos en el pasado.';
+    if (isCompletedReservation && hasScheduleChanges) return 'No podés reprogramar una reserva completada.';
+    if (isSelectionInPastBlocking) return 'No se pueden reservar turnos en el pasado.';
     if (shouldShowScheduleConflict) return 'Hay un turno superpuesto en ese rango de fecha y horario.';
     if (hasDuplicateParticipants) return 'Hay participantes duplicados. Corregilo para poder guardar.';
-    if (shouldBlockSaveByQuote && !isSelectionInPast) return quoteError || 'Revisá los datos del turno.';
+    if (shouldBlockSaveByQuote && !isSelectionInPastBlocking) return quoteError || 'Revisá los datos del turno.';
     return '';
-  }, [formError, hasDuplicateParticipants, isSelectionInPast, quoteError, shouldBlockSaveByQuote, shouldShowScheduleConflict]);
+  }, [
+    formError,
+    hasDuplicateParticipants,
+    hasScheduleChanges,
+    isCompletedReservation,
+    isSelectionInPastBlocking,
+    quoteError,
+    shouldBlockSaveByQuote,
+    shouldShowScheduleConflict,
+  ]);
   const hasBlockingActionError = blockingActionMessage.length > 0;
   const hasValidOwner = useMemo(
     () => participants.some((participant) => participant.isOwner && participant.name.trim().length > 0),
@@ -3469,11 +4094,11 @@ export default function AdminAgendaPlaygroundPage() {
   const timeFieldError = useMemo(() => {
     const fromField = String(fieldErrors.time || '').trim();
     if (fromField.length > 0) return fromField;
-    if (isSelectionInPast) return 'No se pueden reservar turnos en el pasado.';
+    if (isSelectionInPastBlocking) return 'No se pueden reservar turnos en el pasado.';
     if (shouldShowScheduleConflict) return 'Hay un turno superpuesto en ese rango de fecha y horario.';
     if (shouldBlockSaveByQuote && quoteError) return quoteError;
     return '';
-  }, [fieldErrors.time, isSelectionInPast, quoteError, shouldBlockSaveByQuote, shouldShowScheduleConflict]);
+  }, [fieldErrors.time, isSelectionInPastBlocking, quoteError, shouldBlockSaveByQuote, shouldShowScheduleConflict]);
   const courtFieldError = useMemo(() => {
     const fromField = String(fieldErrors.court || '').trim();
     if (fromField.length > 0) return fromField;
@@ -3529,7 +4154,19 @@ export default function AdminAgendaPlaygroundPage() {
     if (!editingBookingId || bookingKind === 'block') return false;
     return String(notes || '') !== String(persistedSidebarNotes);
   }, [bookingKind, editingBookingId, notes, persistedSidebarNotes]);
-  const hasBillingConfigChanges = bookingDrawerState.ui.dirtyFlags.billingConfig;
+  const sourceBillingComparable = useMemo(
+    () => buildComparableBillingFromDrawerDraft(bookingDrawerState.source as NewBookingDrawerDraft | null),
+    [bookingDrawerState.source]
+  );
+  const draftBillingComparable = useMemo(
+    () => buildComparableBillingFromDrawerDraft(bookingDrawerState.draft as NewBookingDrawerDraft | null),
+    [bookingDrawerState.draft]
+  );
+  const hasBillingConfigChanges = useMemo(() => {
+    if (!editingBookingId || bookingKind === 'block') return false;
+    if (!sourceBillingComparable || !draftBillingComparable) return false;
+    return JSON.stringify(sourceBillingComparable) !== JSON.stringify(draftBillingComparable);
+  }, [bookingKind, draftBillingComparable, editingBookingId, sourceBillingComparable]);
   const hasUserBillingConfigChanges = hasBillingConfigChanges && billingConfigTouchedByUser;
   const hasEditChanges = useMemo(() => {
     if (!editingBookingId) return true;
@@ -3553,7 +4190,9 @@ export default function AdminAgendaPlaygroundPage() {
     isDeletingBooking ||
     !hasValidOwner ||
     hasDuplicateParticipants ||
-    isSelectionInPast ||
+    (isCompletedReservation && hasScheduleChanges) ||
+    (isCompletedReservation && hasSidebarParticipantsChanges) ||
+    isSelectionInPastBlocking ||
     shouldBlockSaveByQuote ||
     shouldShowScheduleConflict ||
     (paymentMode === 'Único' && !simplifiedOwnerAdded) ||
@@ -3566,10 +4205,10 @@ export default function AdminAgendaPlaygroundPage() {
     bookingKind !== 'block' &&
     (
       Boolean(formError) ||
-      isSelectionInPast ||
+      isSelectionInPastBlocking ||
       shouldShowScheduleConflict ||
       hasDuplicateParticipants ||
-      (shouldBlockSaveByQuote && !isSelectionInPast)
+      (shouldBlockSaveByQuote && !isSelectionInPastBlocking)
     );
 
   const blockingBillingWarnings = useMemo(
@@ -3590,8 +4229,8 @@ export default function AdminAgendaPlaygroundPage() {
     rows.push({
       key: 'schedule',
       label: 'Horario válido',
-      ok: !isSelectionInPast && !shouldShowScheduleConflict && !shouldBlockSaveByQuote,
-      detail: isSelectionInPast
+      ok: !isSelectionInPastBlocking && !shouldShowScheduleConflict && !shouldBlockSaveByQuote,
+      detail: isSelectionInPastBlocking
         ? 'No se puede reservar en el pasado.'
         : shouldShowScheduleConflict
           ? 'Se superpone con otra reserva.'
@@ -3639,7 +4278,7 @@ export default function AdminAgendaPlaygroundPage() {
     bookingKind,
     hasDuplicateParticipants,
     hasValidOwner,
-    isSelectionInPast,
+    isSelectionInPastBlocking,
     quoteError,
     recurringCourtIds.length,
     shouldBlockSaveByQuote,
@@ -3718,7 +4357,7 @@ export default function AdminAgendaPlaygroundPage() {
   }, []);
 
   useEffect(() => {
-    if (persistedEditingBookingId && bookingKind !== 'block') {
+    if (persistedEditingBookingId && bookingKind !== 'block' && !hasScheduleChanges) {
       setQuoteLoading(false);
       setQuotedListPrice(null);
       setQuotedFinalPrice(null);
@@ -3811,6 +4450,7 @@ export default function AdminAgendaPlaygroundPage() {
     selectedCourtId,
     selectedDate,
     clearFieldErrorsFor,
+    hasScheduleChanges,
     selectedStartSlot,
     selectionMinutes,
     persistedEditingBookingId,
@@ -3841,30 +4481,52 @@ export default function AdminAgendaPlaygroundPage() {
     });
   }, [bookingDrawerState.draft, registerPaymentNow, showCalendarNotice]);
 
-  const handleBillingModeChange = useCallback((_mode: 'INDIVIDUAL' | 'SHARED') => {
+  const handleBillingModeChange = useCallback((mode: 'INDIVIDUAL' | 'SHARED') => {
+    if (editingBookingId && (isRemoteBillingConfigLoading || !isBillingConfigHydrated)) {
+      return;
+    }
+    if (isBillingConfigLockedByPayments) {
+      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      return;
+    }
+    const nextPaymentMode: PaymentMode = mode === 'SHARED' ? 'Dividido' : 'Único';
     setBillingConfigTouchedByUser(true);
-    setPaymentMode('Único');
-    bookingDrawerDispatch({ type: 'SET_CHARGE_MODE', payload: { mode: 'INDIVIDUAL' } });
-  }, []);
+    setPaymentMode(nextPaymentMode);
+    bookingDrawerDispatch({ type: 'SET_CHARGE_MODE', payload: { mode } });
+  }, [editingBookingId, isBillingConfigHydrated, isBillingConfigLockedByPayments, isRemoteBillingConfigLoading, showCalendarNotice]);
 
   const handleBillingResponsibleChange = useCallback((participantId: string) => {
+    if (isBillingConfigLockedByPayments) {
+      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      return;
+    }
     setBillingConfigTouchedByUser(true);
     bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId } });
-  }, []);
+  }, [isBillingConfigLockedByPayments, showCalendarNotice]);
 
   const handleBillingAssignmentAmountChange = useCallback((assignmentId: string, amount: number) => {
+    if (isBillingConfigLockedByPayments) {
+      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      return;
+    }
     setBillingConfigTouchedByUser(true);
     bookingDrawerDispatch({ type: 'SET_ASSIGNMENT_AMOUNT', payload: { assignmentId, amount } });
-  }, []);
+  }, [isBillingConfigLockedByPayments, showCalendarNotice]);
 
   const handleBillingToggleChargeable = useCallback((assignmentId: string, isChargeable: boolean) => {
+    if (isBillingConfigLockedByPayments) {
+      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      return;
+    }
     setBillingConfigTouchedByUser(true);
     bookingDrawerDispatch({ type: 'TOGGLE_ASSIGNMENT_CHARGEABLE', payload: { assignmentId, isChargeable } });
-  }, []);
+  }, [isBillingConfigLockedByPayments, showCalendarNotice]);
 
   const closeSimplifiedPaymentModal = useCallback(() => {
     setSimplifiedPaymentModalOpen(false);
     setSimplifiedPaymentPayerParticipantIdDraft('');
+    setSimplifiedPaymentCoveredParticipantIdDraft('');
+    setSimplifiedPaymentCoveredParticipantIdsDraft([]);
     setSimplifiedPaymentAmountDraft('');
     setSimplifiedPaymentMethodDraft('');
     setSimplifiedPaymentNoteDraft('');
@@ -3926,6 +4588,13 @@ export default function AdminAgendaPlaygroundPage() {
         : undefined;
 
     const preferredPayerId = (() => {
+      if (paymentMode === 'Dividido' && latestPaymentPayerRef) {
+        const latestPayer = participants.find(
+          (participant) =>
+            buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === latestPaymentPayerRef
+        );
+        if (latestPayer) return String(latestPayer.id);
+      }
       const persistedResponsibleRef = String(latestConfig?.chargeResponsibleRef || '').trim();
       if (persistedResponsibleRef) {
         const persistedResponsible = participants.find(
@@ -3943,11 +4612,42 @@ export default function AdminAgendaPlaygroundPage() {
       return ownerParticipant?.id || participants[0]?.id || '';
     })();
     const payer = participants.find((participant) => participant.id === preferredPayerId);
+    const preferredCoveredId = (() => {
+      if (paymentMode === 'Único') {
+        return String(singleChargeParticipantId || preferredPayerId || '');
+      }
+      const payerDebt = Number(participantDebtAmountById.get(String(preferredPayerId || '').trim()) || 0);
+      if (payerDebt > 0.009) {
+        return String(preferredPayerId || '').trim();
+      }
+      const firstWithDebt = participants.find(
+        (participant) => Number(participantDebtAmountById.get(participant.id) || 0) > 0.009
+      );
+      return String(firstWithDebt?.id || '');
+    })();
+    const preferredCoveredDebt = Number(participantDebtAmountById.get(preferredCoveredId) || 0);
+    const preferredAmount = Number(
+      (
+        paymentMode === 'Dividido'
+          ? Math.max(
+              0,
+              Math.min(
+                simplifiedRemainingAfterQueue,
+                preferredCoveredDebt > 0.009 ? preferredCoveredDebt : simplifiedRemainingAfterQueue
+              )
+            )
+          : simplifiedRemainingAfterQueue
+      ).toFixed(2)
+    );
 
     setSimplifiedPaymentPayerParticipantIdDraft(preferredPayerId);
+    setSimplifiedPaymentCoveredParticipantIdDraft(preferredCoveredId);
+    setSimplifiedPaymentCoveredParticipantIdsDraft(
+      paymentMode === 'Dividido' && preferredCoveredId ? [preferredCoveredId] : []
+    );
     setSimplifiedPaymentMethodDraft(payer?.paymentMethod || 'CASH');
     setSimplifiedPaymentAmountDraft(
-      simplifiedRemainingAfterQueue > 0.009 ? simplifiedRemainingAfterQueue.toFixed(2) : ''
+      preferredAmount > 0.009 ? preferredAmount.toFixed(2) : ''
     );
     setSimplifiedPaymentNoteDraft('');
     setSimplifiedPaymentModalOpen(true);
@@ -3962,6 +4662,10 @@ export default function AdminAgendaPlaygroundPage() {
     persistedEditingBookingId,
     showCalendarNotice,
     simplifiedRemainingAfterQueue,
+    participantDebtAmountById,
+    singleChargeParticipantId,
+    latestPaymentPayerRef,
+    paymentMode,
   ]);
 
   const queueSimplifiedPaymentFromModal = useCallback(() => {
@@ -3980,6 +4684,48 @@ export default function AdminAgendaPlaygroundPage() {
     })();
     if (!payerId) {
       showCalendarNotice('Seleccioná quién paga esta reserva.');
+      return;
+    }
+    const coveredIds = (() => {
+      if (paymentMode === 'Único') {
+        return [String(singleChargeParticipantId || payerId).trim() || payerId].filter(Boolean);
+      }
+      const selectedMany = Array.from(
+        new Set(
+          (Array.isArray(simplifiedPaymentCoveredParticipantIdsDraft)
+            ? simplifiedPaymentCoveredParticipantIdsDraft
+            : []
+          )
+            .map((value) => String(value || '').trim())
+            .filter(
+              (value) =>
+                value.length > 0 &&
+                participants.some((participant) => participant.id === value) &&
+                Number(participantDebtAmountById.get(value) || 0) > 0.009
+            )
+        )
+      );
+      if (selectedMany.length > 0) {
+        return selectedMany;
+      }
+      const selectedCoveredId = String(simplifiedPaymentCoveredParticipantIdDraft || '').trim();
+      if (
+        selectedCoveredId &&
+        participants.some((participant) => participant.id === selectedCoveredId) &&
+        Number(participantDebtAmountById.get(selectedCoveredId) || 0) > 0.009
+      ) {
+        return [selectedCoveredId];
+      }
+      if (Number(participantDebtAmountById.get(payerId) || 0) > 0.009) {
+        return [payerId].filter(Boolean);
+      }
+      const firstWithDebt = participants.find(
+        (participant) => Number(participantDebtAmountById.get(participant.id) || 0) > 0.009
+      );
+      return firstWithDebt?.id ? [firstWithDebt.id] : [];
+    })();
+    if (coveredIds.length === 0) {
+      showCalendarNotice('Seleccioná por quién se imputa el pago.');
       return;
     }
     if (paymentMode === 'Único') {
@@ -4013,22 +4759,75 @@ export default function AdminAgendaPlaygroundPage() {
       showCalendarNotice('Ingresá un monto mayor a 0.');
       return;
     }
-    if (amount > simplifiedRemainingAfterQueue + 0.009) {
+    const roundedAmount = Number(amount.toFixed(2));
+    if (paymentMode === 'Dividido') {
+      const coveredDebtTotal = Number(
+        coveredIds.reduce((sum, participantId) => sum + Number(participantDebtAmountById.get(participantId) || 0), 0).toFixed(2)
+      );
+      if (coveredDebtTotal <= 0.009) {
+        showCalendarNotice('Los participantes seleccionados no tienen deuda pendiente.');
+        return;
+      }
+      if (roundedAmount > coveredDebtTotal + 0.009) {
+        showCalendarNotice(`El monto supera la deuda de los participantes seleccionados (${coveredDebtTotal.toFixed(2)} $).`);
+        return;
+      }
+    }
+    if (roundedAmount > simplifiedRemainingAfterQueue + 0.009) {
       showCalendarNotice(`El monto supera la deuda pendiente (${simplifiedRemainingAfterQueue.toFixed(2)} $).`);
       return;
     }
 
+    const paymentAllocations = (() => {
+      if (paymentMode === 'Único') {
+        const firstCovered = String(coveredIds[0] || '').trim();
+        if (!firstCovered) return [];
+        return [{ coveredParticipantId: firstCovered, amount: roundedAmount }];
+      }
+
+      return allocatePaymentProportionallyByDebt({
+        amount: roundedAmount,
+        participantDebts: coveredIds.map((coveredParticipantId) => ({
+          participantId: coveredParticipantId,
+          debt: Number(participantDebtAmountById.get(coveredParticipantId) || 0),
+        })),
+      });
+    })();
+    if (paymentAllocations.length === 0) {
+      showCalendarNotice('No se pudo distribuir el pago entre los participantes seleccionados.');
+      return;
+    }
+
     updateParticipant(payerId, { paymentMethod: selectedMethod });
-    void registerPaymentNow({
-      amount: Number(amount.toFixed(2)),
-      method: selectedMethod,
-      participantId: payerId,
-      successMessage: `Pago registrado: ${amount.toFixed(2)} $.`,
-    }).then((ok) => {
-      if (!ok) return;
+    void (async () => {
+      let registeredAmount = 0;
+      for (let index = 0; index < paymentAllocations.length; index += 1) {
+        const allocation = paymentAllocations[index];
+        const ok = await registerPaymentNow({
+          amount: allocation.amount,
+          method: selectedMethod,
+          participantId: payerId,
+          coveredParticipantId: allocation.coveredParticipantId,
+          silentSuccessNotice: paymentAllocations.length > 1,
+        });
+        if (!ok) {
+          if (registeredAmount > 0.009) {
+            showCalendarNotice(
+              `Pago parcial registrado: ${registeredAmount.toFixed(2)} $. Revisá el resto e intentá nuevamente.`
+            );
+          }
+          return;
+        }
+        registeredAmount = Number((registeredAmount + allocation.amount).toFixed(2));
+      }
       closeSimplifiedPaymentModal();
       setFormError('');
-    });
+      showCalendarNotice(
+        paymentAllocations.length > 1
+          ? `Pago registrado: ${registeredAmount.toFixed(2)} $ imputado a ${paymentAllocations.length} participantes.`
+          : `Pago registrado: ${registeredAmount.toFixed(2)} $.`
+      );
+    })();
   }, [
     closeSimplifiedPaymentModal,
     bookingDrawerState.draft,
@@ -4039,9 +4838,12 @@ export default function AdminAgendaPlaygroundPage() {
     simplifiedPaymentAmountDraft,
     simplifiedPaymentMethodDraft,
     simplifiedPaymentPayerParticipantIdDraft,
+    simplifiedPaymentCoveredParticipantIdDraft,
+    simplifiedPaymentCoveredParticipantIdsDraft,
     simplifiedRemainingAfterQueue,
     singleChargeParticipantId,
     paymentMode,
+    participantDebtAmountById,
     participants,
     updateParticipant,
   ]);
@@ -4072,7 +4874,9 @@ export default function AdminAgendaPlaygroundPage() {
         );
       });
 
-      const nextMode: PaymentMode = 'Único';
+      const nextChargeMode: 'INDIVIDUAL' | 'SHARED' =
+        draft.billing.chargeMode === 'SHARED' ? 'SHARED' : 'INDIVIDUAL';
+      const nextMode: PaymentMode = nextChargeMode === 'SHARED' ? 'Dividido' : 'Único';
       const confirmedByAssignment = new Map<string, number>();
       draft.billing.payments
         .filter((payment) => payment.status === 'CONFIRMED' && payment.assignmentId)
@@ -4134,44 +4938,114 @@ export default function AdminAgendaPlaygroundPage() {
         participantRef:
           participantRefById.get(String(assignment.participantId)) ||
           `guest:${String(assignment.participantId)}`,
+        isChargeable: Boolean(assignment.isChargeable),
+        assignedAmount: Number(Number(assignment.assignedAmount || 0).toFixed(2)),
         participantLinkState: (
           assignment.participantLinkState === 'ARCHIVED_REFERENCE'
             ? 'ARCHIVED_REFERENCE'
             : 'ACTIVE'
         ) as 'ACTIVE' | 'ARCHIVED_REFERENCE',
       }));
-      const chargeableAssignmentId =
-        assignmentRows.find(
+      let payloadAssignments: Array<{
+        id: string;
+        participantRef: string;
+        isChargeable: boolean;
+        assignedAmount: number;
+        participantLinkState: 'ACTIVE' | 'ARCHIVED_REFERENCE';
+      }> = [];
+      let chargeResponsibleRef: string | undefined;
+
+      if (nextChargeMode === 'INDIVIDUAL') {
+        const chargeableAssignmentId =
+          assignmentRows.find(
+            (assignment) =>
+              assignment.participantId === String(resolvedResponsibleParticipantId || '') &&
+              assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
+          )?.id ||
+          assignmentRows.find(
+            (assignment) => assignment.participantId === String(resolvedResponsibleParticipantId || '')
+          )?.id ||
+          assignmentRows.find((assignment) => assignment.participantLinkState !== 'ARCHIVED_REFERENCE')?.id ||
+          assignmentRows[0]?.id;
+
+        payloadAssignments = assignmentRows.map((assignment) => {
+          const isChargeable = Boolean(chargeableAssignmentId) && assignment.id === chargeableAssignmentId;
+          return {
+            id: assignment.id,
+            participantRef: assignment.participantRef,
+            isChargeable,
+            assignedAmount: isChargeable ? totalChargeableAmount : 0,
+            participantLinkState: assignment.participantLinkState,
+          };
+        });
+
+        chargeResponsibleRef =
+          (resolvedResponsibleParticipantId
+            ? participantRefById.get(String(resolvedResponsibleParticipantId))
+            : undefined) ||
+          payloadAssignments.find((assignment) => assignment.isChargeable)?.participantRef ||
+          payloadAssignments[0]?.participantRef;
+
+        if (!chargeResponsibleRef && resolvedResponsibleParticipantId) {
+          chargeResponsibleRef = `guest:${String(resolvedResponsibleParticipantId)}`;
+        }
+      } else {
+        const activeAmountByParticipantId = new Map<string, number>();
+        nextParticipants.forEach((participant) => {
+          activeAmountByParticipantId.set(
+            String(participant.id),
+            roundMoney(resolveParticipantPrice(participant))
+          );
+        });
+
+        payloadAssignments = assignmentRows.map((assignment) => {
+          const activeAmount = Number(activeAmountByParticipantId.get(assignment.participantId) || 0);
+          const isActiveAssignment = assignment.participantLinkState !== 'ARCHIVED_REFERENCE';
+          const isChargeable = isActiveAssignment && activeAmount > 0.009;
+          return {
+            id: assignment.id,
+            participantRef: assignment.participantRef,
+            isChargeable,
+            assignedAmount: isChargeable ? activeAmount : 0,
+            participantLinkState: assignment.participantLinkState,
+          };
+        });
+
+        const hasChargeable = payloadAssignments.some(
           (assignment) =>
-            assignment.participantId === String(resolvedResponsibleParticipantId || '') &&
-            assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
-        )?.id ||
-        assignmentRows.find(
-          (assignment) => assignment.participantId === String(resolvedResponsibleParticipantId || '')
-        )?.id ||
-        assignmentRows.find((assignment) => assignment.participantLinkState !== 'ARCHIVED_REFERENCE')?.id ||
-        assignmentRows[0]?.id;
+            assignment.isChargeable && assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
+        );
+        if (!hasChargeable) {
+          const fallbackAssignmentId =
+            assignmentRows.find((assignment) => assignment.participantLinkState !== 'ARCHIVED_REFERENCE')?.id ||
+            assignmentRows[0]?.id;
+          payloadAssignments = payloadAssignments.map((assignment) => {
+            const isFallback = assignment.id === fallbackAssignmentId;
+            return {
+              ...assignment,
+              isChargeable: isFallback,
+              assignedAmount: isFallback ? totalChargeableAmount : 0,
+            };
+          });
+        }
 
-      const payloadAssignments = assignmentRows.map((assignment) => {
-        const isChargeable = Boolean(chargeableAssignmentId) && assignment.id === chargeableAssignmentId;
-        return {
-          id: assignment.id,
-          participantRef: assignment.participantRef,
-          isChargeable,
-          assignedAmount: isChargeable ? totalChargeableAmount : 0,
-          participantLinkState: assignment.participantLinkState,
-        };
-      });
-
-      let chargeResponsibleRef =
-        (resolvedResponsibleParticipantId
-          ? participantRefById.get(String(resolvedResponsibleParticipantId))
-          : undefined) ||
-        payloadAssignments.find((assignment) => assignment.isChargeable)?.participantRef ||
-        payloadAssignments[0]?.participantRef;
-
-      if (!chargeResponsibleRef && resolvedResponsibleParticipantId) {
-        chargeResponsibleRef = `guest:${String(resolvedResponsibleParticipantId)}`;
+        const chargeableIndexes: number[] = [];
+        let chargeableSum = 0;
+        payloadAssignments.forEach((assignment, index) => {
+          if (!assignment.isChargeable) return;
+          chargeableIndexes.push(index);
+          chargeableSum += Number(assignment.assignedAmount || 0);
+        });
+        const normalizedSum = roundMoney(chargeableSum);
+        const delta = roundMoney(totalChargeableAmount - normalizedSum);
+        if (Math.abs(delta) > 0.009 && chargeableIndexes.length > 0) {
+          const firstIndex = chargeableIndexes[0];
+          const firstAssignment = payloadAssignments[firstIndex];
+          payloadAssignments[firstIndex] = {
+            ...firstAssignment,
+            assignedAmount: roundMoney(Math.max(0, Number(firstAssignment.assignedAmount || 0) + delta)),
+          };
+        }
       }
       const sidebarParticipantsMetadata = buildSidebarParticipantsMetadata(nextParticipants);
       const sidebarNotesValue = String(notes || '');
@@ -4179,7 +5053,7 @@ export default function AdminAgendaPlaygroundPage() {
       let backendPersisted = false;
       try {
         const savedConfig = await updateBookingBillingConfig(bookingId, {
-          chargeMode: 'INDIVIDUAL',
+          chargeMode: nextChargeMode,
           chargeResponsibleRef,
           assignments: payloadAssignments,
           metadata: {
@@ -4196,8 +5070,10 @@ export default function AdminAgendaPlaygroundPage() {
         remoteBillingConfigRequestSeqRef.current += 1;
         setRemoteBillingConfig(savedConfig);
         backendPersisted = true;
-      } catch (error) {
+      } catch (error: any) {
         reportUiError({ area: 'AgendaPlayground', action: 'updateBillingConfig' }, error);
+        const message = toUserSafeMessage(error?.message, 'No se pudo guardar la configuración de cobro.');
+        showCalendarNotice(message);
       }
 
       setPaymentMode(nextMode);
@@ -4208,7 +5084,16 @@ export default function AdminAgendaPlaygroundPage() {
       reportUiError({ area: 'AgendaPlayground', action: 'persistBillingConfig' }, error);
       return false;
     }
-  }, [bookingDrawerState.draft, editingBooking?.clientId, editingBooking?.userId, notes, participants, totalPrice]);
+  }, [
+    bookingDrawerState.draft,
+    editingBooking?.clientId,
+    editingBooking?.userId,
+    notes,
+    participants,
+    resolveParticipantPrice,
+    showCalendarNotice,
+    totalPrice,
+  ]);
 
   const persistNewBookingDraftState = useCallback(
     async (
@@ -4276,7 +5161,27 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
 
-    if (isSelectionInPast) {
+    if (quoteLoading) {
+      setBlockingFieldError('time', 'Esperá un instante: estamos validando disponibilidad.');
+      return;
+    }
+
+    if (shouldBlockSaveByQuote) {
+      setBlockingFieldError('time', quoteError || 'El horario seleccionado no está disponible.');
+      return;
+    }
+
+    if (isCompletedReservation && hasScheduleChanges) {
+      setBlockingFieldError('time', 'No podés reprogramar una reserva completada.');
+      return;
+    }
+
+    if (isCompletedReservation && hasSidebarParticipantsChanges) {
+      setBlockingFieldError('participants', 'No podés modificar participantes en una reserva completada.');
+      return;
+    }
+
+    if (isSelectionInPastBlocking) {
       setBlockingFieldError('time', 'No se pueden reservar turnos en el pasado.');
       return;
     }
@@ -4802,7 +5707,7 @@ export default function AdminAgendaPlaygroundPage() {
   }, []);
 
   useEffect(() => {
-    if (!drawerOpen || paymentMode !== 'Único') return;
+    if (!drawerOpen) return;
     if (!editingBookingId) {
       setSimplifiedOwnerAdded(false);
       setSimplifiedOwnerPaymentMethodDraft('');
@@ -4813,10 +5718,10 @@ export default function AdminAgendaPlaygroundPage() {
       setSimplifiedNewParticipantContact('');
       closeSimplifiedPaymentModal();
     }
-  }, [closeSimplifiedPaymentModal, drawerOpen, editingBookingId, paymentMode]);
+  }, [closeSimplifiedPaymentModal, drawerOpen, editingBookingId]);
 
   useEffect(() => {
-    if (!drawerOpen || paymentMode !== 'Único' || !editingBookingId) return;
+    if (!drawerOpen || !editingBookingId) return;
     const namedOwner = participants.find(
       (participant) => participant.isOwner && participant.name.trim().length > 0
     );
@@ -4828,17 +5733,11 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedNewParticipantOpen(false);
     setSimplifiedNewParticipantName('');
     setSimplifiedNewParticipantContact('');
-  }, [drawerOpen, editingBookingId, participants, paymentMode]);
+  }, [drawerOpen, editingBookingId, participants]);
 
   const simplifiedParticipantWithPaymentControlsIdSet = useMemo(() => {
-    if (paymentMode === 'Único') {
-      const paidIds = participants.filter((participant) => participant.paid).map((participant) => participant.id);
-      if (paidIds.length > 0) {
-        return new Set(paidIds);
-      }
-    }
     return new Set(chargedParticipantIdSet);
-  }, [chargedParticipantIdSet, participants, paymentMode]);
+  }, [chargedParticipantIdSet]);
 
   useEffect(() => {
     if (!simplifiedEditingParticipantId) return;
@@ -4867,13 +5766,13 @@ export default function AdminAgendaPlaygroundPage() {
   }, [simplifiedNewParticipantOpen, simplifiedOwnerAdded]);
 
   useEffect(() => {
-    if (drawerOpen && paymentMode === 'Único') return;
+    if (drawerOpen) return;
     closeSimplifiedPaymentModal();
-  }, [closeSimplifiedPaymentModal, drawerOpen, paymentMode]);
+  }, [closeSimplifiedPaymentModal, drawerOpen]);
 
   useEffect(() => {
     if (!drawerOpen || bookingKind === 'block' || paymentMode !== 'Único') return;
-    if (!latestPaymentPayerRef) return;
+    if (!latestPaymentCoveredRef) return;
 
     const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
     const bookingUserIdRaw = Number(editingBooking?.userId || 0);
@@ -4885,7 +5784,7 @@ export default function AdminAgendaPlaygroundPage() {
     setParticipants((previous) => {
       const matchedPayer = previous.find(
         (participant) =>
-          buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === latestPaymentPayerRef
+          buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === latestPaymentCoveredRef
       );
       if (!matchedPayer) return previous;
 
@@ -4903,7 +5802,7 @@ export default function AdminAgendaPlaygroundPage() {
     drawerOpen,
     editingBooking?.clientId,
     editingBooking?.userId,
-    latestPaymentPayerRef,
+    latestPaymentCoveredRef,
     participants,
     paymentMode,
   ]);
@@ -4924,8 +5823,8 @@ export default function AdminAgendaPlaygroundPage() {
     selectedRecurringCourts.length === 0
       ? 'Seleccionar canchas'
       : selectedRecurringCourts.map((court) => court.name).join(', ');
-  const useSimplifiedBookingSidebar = paymentMode === 'Único';
-  const simplifiedIsEditingReservation = useSimplifiedBookingSidebar && Boolean(editingBookingId);
+  const useSimplifiedBookingSidebar = true;
+  const simplifiedIsEditingReservation = Boolean(editingBookingId);
   const simplifiedHeaderDateLabel = selectedDate
     .toLocaleDateString('es-AR', {
       weekday: 'long',
@@ -5004,11 +5903,82 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedResolvedPayerParticipant = participants.find(
     (participant) => participant.id === simplifiedResolvedPayerParticipantId
   ) || null;
+  const simplifiedResolvedCoveredParticipantIds = (() => {
+    if (paymentMode === 'Único') {
+      const explicitResponsible = String(singleChargeParticipantId || '').trim();
+      if (explicitResponsible && simplifiedPayerCandidates.some((participant) => participant.id === explicitResponsible)) {
+        return [explicitResponsible];
+      }
+      return simplifiedResolvedPayerParticipantId ? [simplifiedResolvedPayerParticipantId] : [];
+    }
+
+    const draftManyIdSet = new Set(
+      (Array.isArray(simplifiedPaymentCoveredParticipantIdsDraft)
+        ? simplifiedPaymentCoveredParticipantIdsDraft
+        : []
+      )
+        .map((value) => String(value || '').trim())
+        .filter(
+          (value) =>
+            value.length > 0 &&
+            simplifiedPayerCandidates.some((participant) => participant.id === value) &&
+            Number(participantDebtAmountById.get(value) || 0) > 0.009
+        )
+    );
+    if (draftManyIdSet.size > 0) {
+      return simplifiedPayerCandidates
+        .map((participant) => participant.id)
+        .filter((participantId) => draftManyIdSet.has(participantId));
+    }
+
+    const draftCovered = String(simplifiedPaymentCoveredParticipantIdDraft || '').trim();
+    if (
+      draftCovered &&
+      simplifiedPayerCandidates.some((participant) => participant.id === draftCovered) &&
+      Number(participantDebtAmountById.get(draftCovered) || 0) > 0.009
+    ) {
+      return [draftCovered];
+    }
+    if (
+      simplifiedResolvedPayerParticipantId &&
+      Number(participantDebtAmountById.get(simplifiedResolvedPayerParticipantId) || 0) > 0.009
+    ) {
+      return [simplifiedResolvedPayerParticipantId];
+    }
+    const firstWithDebt = simplifiedPayerCandidates.find(
+      (participant) => Number(participantDebtAmountById.get(participant.id) || 0) > 0.009
+    );
+    return firstWithDebt?.id ? [firstWithDebt.id] : [];
+  })();
+  const simplifiedResolvedCoveredParticipantId = simplifiedResolvedCoveredParticipantIds[0] || '';
+  const simplifiedResolvedCoveredParticipant = participants.find(
+    (participant) => participant.id === simplifiedResolvedCoveredParticipantId
+  ) || null;
+  const simplifiedResolvedCoveredParticipantsDebt = Number(
+    simplifiedResolvedCoveredParticipantIds
+      .reduce((sum, participantId) => sum + Number(participantDebtAmountById.get(participantId) || 0), 0)
+      .toFixed(2)
+  );
+  const simplifiedPaymentMaxAmount = Number(
+    (
+      paymentMode === 'Dividido'
+        ? Math.max(
+            0,
+            Math.min(
+              simplifiedRemainingAfterQueue,
+              simplifiedResolvedCoveredParticipantsDebt > 0.009
+                ? simplifiedResolvedCoveredParticipantsDebt
+                : simplifiedRemainingAfterQueue
+            )
+          )
+        : simplifiedRemainingAfterQueue
+    ).toFixed(2)
+  );
   const simplifiedPaymentAmountParsed = Number(String(simplifiedPaymentAmountDraft || '').replace(',', '.'));
   const hasValidSimplifiedPaymentAmount =
     Number.isFinite(simplifiedPaymentAmountParsed) &&
     simplifiedPaymentAmountParsed > 0.009 &&
-    simplifiedPaymentAmountParsed <= simplifiedRemainingAfterQueue + 0.009;
+    simplifiedPaymentAmountParsed <= simplifiedPaymentMaxAmount + 0.009;
   const hasValidSimplifiedPaymentMethod = isParticipantPaymentMethod(simplifiedPaymentMethodDraft);
   const simplifiedCanRegisterPayment =
     Boolean(persistedEditingBookingId) &&
@@ -5169,12 +6139,20 @@ export default function AdminAgendaPlaygroundPage() {
         const channelRaw = String((payload as any)?.channel || '').trim();
         const payerNameRaw = String((payload as any)?.payerParticipantName || '').trim();
         const payerRefRaw = String((payload as any)?.payerParticipantRef || '').trim();
+        const coveredNameRaw = String((payload as any)?.coveredParticipantName || '').trim();
+        const coveredRefRaw = String((payload as any)?.coveredParticipantRef || '').trim();
         const payerLabel = payerNameRaw || (payerRefRaw ? formatResponsibleRefLabel(payerRefRaw) : '');
+        const coveredLabel =
+          coveredNameRaw ||
+          (coveredRefRaw
+            ? formatResponsibleRefLabel(coveredRefRaw)
+            : (payerLabel || 'Sin asignar'));
         title = Number.isFinite(amount) && amount > 0.009
           ? `Pago recibido (${amount.toFixed(2)} $)`
           : 'Pago recibido';
         const detailParts = [
           payerLabel ? `Pagador: ${payerLabel}` : '',
+          coveredLabel ? `Imputado a: ${coveredLabel}` : '',
           methodRaw ? `Método: ${formatPaymentMethodLabel(methodRaw)}` : '',
           sourceRaw ? `Origen: ${formatTimelineSourceLabel(sourceRaw)}` : '',
           channelRaw ? `Canal: ${formatTimelineChannelLabel(channelRaw)}` : '',
@@ -5683,7 +6661,7 @@ export default function AdminAgendaPlaygroundPage() {
                                               {visibility.showBadge && (
                                                 <div className="mb-0.5 flex flex-wrap gap-1">
                                                   {draggingBookingMeta.isRecurring && (
-                                                    <Repeat size={12} className="text-black" />
+                                                    <Repeat size={12} className="text-current" />
                                                   )}
                                                   <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingBadgeColor(draggingBookingMeta.state)}`}>
                                                     {bookingStatusLabel(draggingBookingMeta.state)}
@@ -5765,7 +6743,7 @@ export default function AdminAgendaPlaygroundPage() {
                                               {visibility.showBadge && (
                                                 <div className="mb-0.5 flex flex-wrap gap-1">
                                                   {booking.isRecurring && (
-                                                    <Repeat size={12} className="text-black" />
+                                                    <Repeat size={12} className="text-current" />
                                                   )}
                                                   <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingBadgeColor(booking.state)}`}>
                                                     {bookingStatusLabel(booking.state)}
@@ -5799,7 +6777,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {bookingHoverPreview && !draggingBookingId && !draggingBookingMeta && !isDragging && (
               <div
-                className="pointer-events-none fixed z-40 hidden w-[240px] rounded-xl border border-[#e3e8f2] bg-white shadow-xl text-[#1f2738] lg:block"
+                className="pointer-events-none fixed z-40 hidden w-[280px] rounded-xl border border-[#e3e8f2] bg-white shadow-xl text-[#1f2738] lg:block"
                 style={{ left: bookingHoverPreview.x, top: bookingHoverPreview.y }}
               >
                 <div className="px-3 py-2 border-b border-[#eef1f5] text-[12px] font-bold">
@@ -5807,16 +6785,21 @@ export default function AdminAgendaPlaygroundPage() {
                 </div>
                 <div className="px-2 py-1.5">
                   {resolveHoverParticipantsForBooking(bookingHoverPreview.booking).map((participant) => (
-                    <div key={participant.id} className="grid grid-cols-[16px_1fr_auto] items-center gap-2 px-1 py-1">
+                    <div key={participant.id} className="grid grid-cols-[16px_1fr_auto] items-start gap-2 px-1 py-1.5">
                       <div className="h-4 w-4 rounded-full bg-[#e8edf7] text-[9px] font-bold text-[#41507a] grid place-items-center">
                         {participant.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
                         <p className="truncate text-[11px] font-semibold">{participant.name}</p>
                         <p className="text-[10px] text-[#7b8396]">{participant.roleLabel}</p>
+                        {participant.payable !== false && (
+                          <p className="text-[10px] text-[#7f8798]">
+                            Debía {Number(participant.shouldPayAmount || 0).toFixed(2)} $ · Pagó {Number(participant.paidAmount || 0).toFixed(2)} $ · Debe {Number(participant.debtAmount || 0).toFixed(2)} $
+                          </p>
+                        )}
                       </div>
                       <span
-                        className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                        className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold mt-0.5 ${
                           participant.payable === false
                             ? 'bg-[#f3f5f9] text-[#7c8598]'
                             : participant.status === 'PAID'
@@ -6670,16 +7653,25 @@ export default function AdminAgendaPlaygroundPage() {
                               <div className="mt-1 grid grid-cols-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
                                 <button
                                   type="button"
-                                  onClick={() => setPaymentMode('Único')}
-                                  className="h-11 rounded-lg bg-[#3053e2] text-[15px] font-semibold text-white"
+                                  onClick={() => handleBillingModeChange('INDIVIDUAL')}
+                                  disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
+                                  className={`h-11 rounded-lg text-[15px] font-semibold transition ${
+                                    paymentMode === 'Único'
+                                      ? 'bg-[#3053e2] text-white'
+                                      : 'text-[#7f879a] hover:bg-[#eceff8]'
+                                  } disabled:opacity-55`}
                                 >
                                   Pago único
                                 </button>
                                 <button
                                   type="button"
-                                  title="Próximamente"
-                                  disabled
-                                  className="h-11 rounded-lg text-[15px] font-semibold text-[#8e95a7] cursor-not-allowed"
+                                  onClick={() => handleBillingModeChange('SHARED')}
+                                  disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
+                                  className={`h-11 rounded-lg text-[15px] font-semibold transition ${
+                                    paymentMode === 'Dividido'
+                                      ? 'bg-[#3053e2] text-white'
+                                      : 'text-[#7f879a] hover:bg-[#eceff8]'
+                                  } disabled:opacity-55`}
                                 >
                                   Pago dividido
                                 </button>
@@ -6770,6 +7762,48 @@ export default function AdminAgendaPlaygroundPage() {
 
                       {showSimplifiedBillingSection && (
                       <>
+                      {simplifiedIsEditingReservation && (
+                        <section className="rounded-xl border border-[#dce2ee] bg-white p-3">
+                          <p className="text-[13px] font-semibold text-[#27314a]">Asignación de cobro</p>
+                          <div className="mt-2 grid grid-cols-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
+                            <button
+                              type="button"
+                              onClick={() => handleBillingModeChange('INDIVIDUAL')}
+                              disabled={isBookingFullyPaid || isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
+                              className={`h-10 rounded-lg text-[14px] font-semibold transition disabled:opacity-55 ${
+                                paymentMode === 'Único'
+                                  ? 'bg-[#3053e2] text-white'
+                                  : 'text-[#7f879a] hover:bg-[#eceff8]'
+                              }`}
+                            >
+                              Pago único
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBillingModeChange('SHARED')}
+                              disabled={isBookingFullyPaid || isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
+                              className={`h-10 rounded-lg text-[14px] font-semibold transition disabled:opacity-55 ${
+                                paymentMode === 'Dividido'
+                                  ? 'bg-[#3053e2] text-white'
+                                  : 'text-[#7f879a] hover:bg-[#eceff8]'
+                              }`}
+                            >
+                              Pago dividido
+                            </button>
+                          </div>
+                          <p className="mt-2 text-[11px] text-[#6f7890]">
+                            {paymentMode === 'Único'
+                              ? 'Una sola persona es responsable del cobro.'
+                              : 'Cualquiera puede pagar y cubrir saldo de otros participantes.'}
+                          </p>
+                          {isBillingConfigLockedByPayments && (
+                            <p className="mt-1 text-[11px] font-medium text-[#8b5c1a]">
+                              La asignación de cobro quedó bloqueada porque ya hay pagos registrados.
+                            </p>
+                          )}
+                        </section>
+                      )}
+
                       <section className="mt-5 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
                         <div className="flex items-center justify-between">
                           <p className="text-[14px] font-semibold text-[#27314a]">Pagos</p>
@@ -6841,9 +7875,17 @@ export default function AdminAgendaPlaygroundPage() {
                                   ? contactValue
                                   : 'Sin teléfono';
                                 const participantHasPaymentControls = simplifiedParticipantWithPaymentControlsIdSet.has(participant.id);
-                                const participantDisplayedPrice = paymentMode === 'Único'
-                                  ? Number((bookingFinancial?.total || totalPrice || 0).toFixed(2))
-                                  : Number(resolveParticipantPrice(participant).toFixed(2));
+                                const participantPaidComputed = participantPaidComputedIdSet.has(participant.id);
+                                const participantAssignedAmount = Number(participantAssignedAmountById.get(participant.id) || 0);
+                                const participantCoveredAmount = Number(participantCoverageAmountById.get(participant.id) || 0);
+                                const participantDebtAmount = Number(participantDebtAmountById.get(participant.id) || 0);
+                                const participantPaymentStatusLabel =
+                                  participantPaidComputed
+                                    ? 'Pagado'
+                                    : participantCoveredAmount > 0.009 && participantDebtAmount > 0.009
+                                      ? 'Parcial'
+                                      : 'Pendiente';
+                                const participantDisplayedPrice = Number(participantAssignedAmount.toFixed(2));
                                 return (
                                   <div key={`simplified-participant-${participant.id}`} className="border-b border-[#edf1f7] py-3 last:border-b-0">
                                     <div className={`grid ${participantHasPaymentControls ? 'grid-cols-[42px_1fr_auto_auto_auto]' : 'grid-cols-[42px_1fr_auto]'} gap-2 items-start`}>
@@ -6854,6 +7896,16 @@ export default function AdminAgendaPlaygroundPage() {
                                         <p className="text-[16px] font-semibold text-[#1f2638]">{participant.name}</p>
                                         <p className="text-[13px] text-[#5f6880]">{phoneValue}</p>
                                         <p className="text-[13px] text-[#5f6880]">{emailValue}</p>
+                                        {participantHasPaymentControls && (
+                                          <p className="mt-0.5 text-[11px] text-[#7a8398]">
+                                            {participantPaymentStatusLabel}
+                                          </p>
+                                        )}
+                                        {participantHasPaymentControls && (
+                                          <p className="mt-0.5 text-[11px] text-[#7a8398]">
+                                            Debía {participantDisplayedPrice.toFixed(2)} $ · Pagó {participantCoveredAmount.toFixed(2)} $ · Debe {participantDebtAmount.toFixed(2)} $
+                                          </p>
+                                        )}
                                       </div>
                                       {participantHasPaymentControls && (
                                         <div className="pt-0.5 text-right">
@@ -7614,6 +8666,16 @@ export default function AdminAgendaPlaygroundPage() {
                     <p className="mt-1 text-[12px] text-[#6f7890]">
                       Configurá la asignación de cobro y registrá pagos desde este bloque.
                     </p>
+                    {isCompletedReservation && (
+                      <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
+                        Reserva completada: podés cobrar y editar notas, pero no reprogramar ni modificar participantes.
+                      </p>
+                    )}
+                    {isBillingConfigLockedByPayments && !shouldHideBillingUntilConfirmed && (
+                      <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
+                        La asignación de cobro está bloqueada porque ya hay pagos registrados.
+                      </p>
+                    )}
                     {shouldHideBillingUntilConfirmed ? (
                       <div className="mt-3 rounded-xl border border-[#f2d6a8] bg-[#fff9ee] px-3 py-3">
                         <p className="text-[12px] font-semibold text-[#8b5c1a]">
@@ -7836,6 +8898,7 @@ export default function AdminAgendaPlaygroundPage() {
                     <div className="mt-3 space-y-3">
                       {participants.map((participant) => {
                         const participantIsCharged = chargedParticipantIdSet.has(participant.id);
+                        const participantPaidComputed = participantPaidComputedIdSet.has(participant.id);
                         const displayPrice = participantIsCharged ? resolveParticipantPrice(participant) : 0;
                         const isDuplicateParticipant = duplicateParticipantIds.has(participant.id);
                         return (
@@ -7964,7 +9027,7 @@ export default function AdminAgendaPlaygroundPage() {
                                 }}
                                 disabled={!isPaymentsTabActive || isBookingFullyPaid || !participantIsCharged || isPaymentLockedByManualPending || paymentInFlightId === participant.id}
                                 className={`h-11 rounded-xl border text-[15px] font-semibold ${
-                                  isBookingFullyPaid || participant.paid || !participantIsCharged
+                                  isBookingFullyPaid || participantPaidComputed || !participantIsCharged
                                     ? 'border-[#cbe6d0] bg-[#e9f8ec] text-[#16733f]'
                                     : 'border-[#dfe5f8] bg-[#edf1ff] text-[#3155df]'
                                 } disabled:opacity-60`}
@@ -7977,9 +9040,9 @@ export default function AdminAgendaPlaygroundPage() {
                                   ? 'Pagado'
                                   : paymentInFlightId === participant.id
                                   ? 'Procesando...'
-                                  : participant.paid
+                                  : participantPaidComputed
                                     ? 'Pagado'
-                                    : 'Marcar pago'}
+                                    : 'Pagar su parte'}
                               </button>
                               )}
                               <button
@@ -8047,7 +9110,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (participant.paid) {
+                                        if (participantPaidComputed) {
                                           markParticipantAsPending(participant.id);
                                         } else {
                                           if (isPaymentLockedByManualPending) return;
@@ -8057,7 +9120,7 @@ export default function AdminAgendaPlaygroundPage() {
                                       }}
                                       className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
                                     >
-                                      {participant.paid ? 'Marcar como pendiente' : 'Marcar como pagado'}
+                                      {participantPaidComputed ? 'Marcar como pendiente' : 'Pagar su parte'}
                                     </button>
                                     <div className="mt-1 border-t border-[#edf0f6] pt-1">
                                       <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-[#7a8398]">
@@ -8328,7 +9391,9 @@ export default function AdminAgendaPlaygroundPage() {
                 <div>
                   <p className="text-[18px] font-semibold text-[#1f2638]">Registrar pago</p>
                   <p className="text-[12px] text-[#707a92]">
-                    Pago único: una persona paga el total en uno o varios pagos parciales.
+                    {paymentMode === 'Único'
+                      ? 'Pago único: una persona paga el total en uno o varios pagos parciales.'
+                      : 'Pago dividido: cualquier participante puede registrar pagos y cubrir saldo del grupo.'}
                   </p>
                 </div>
                 <button
@@ -8362,7 +9427,7 @@ export default function AdminAgendaPlaygroundPage() {
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <label className="block">
                     <span className="text-[12px] font-medium text-[#79829a]">Quién paga</span>
                     <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
@@ -8381,6 +9446,33 @@ export default function AdminAgendaPlaygroundPage() {
                             return;
                           }
                           setSimplifiedPaymentPayerParticipantIdDraft(nextParticipantId);
+                          if (paymentMode === 'Dividido') {
+                            const preselectedCoveredId = (() => {
+                              const payerDebt = Number(participantDebtAmountById.get(nextParticipantId) || 0);
+                              if (payerDebt > 0.009) return nextParticipantId;
+                              const firstWithDebt = simplifiedPayerCandidates.find(
+                                (candidate) => Number(participantDebtAmountById.get(candidate.id) || 0) > 0.009
+                              );
+                              return String(firstWithDebt?.id || '');
+                            })();
+                            setSimplifiedPaymentCoveredParticipantIdDraft(preselectedCoveredId);
+                            setSimplifiedPaymentCoveredParticipantIdsDraft(
+                              preselectedCoveredId ? [preselectedCoveredId] : []
+                            );
+                            const nextDebt = Number(participantDebtAmountById.get(preselectedCoveredId) || 0);
+                            const nextAmount = Number(
+                              Math.max(
+                                0,
+                                Math.min(
+                                  simplifiedRemainingAfterQueue,
+                                  nextDebt > 0.009 ? nextDebt : simplifiedRemainingAfterQueue
+                                )
+                              ).toFixed(2)
+                            );
+                            setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
+                          } else if (!String(simplifiedPaymentCoveredParticipantIdDraft || '').trim()) {
+                            setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
+                          }
                           const nextPayer = participants.find((participant) => participant.id === nextParticipantId);
                           if (nextPayer) {
                             setSimplifiedPaymentMethodDraft(nextPayer.paymentMethod || 'CASH');
@@ -8413,6 +9505,95 @@ export default function AdminAgendaPlaygroundPage() {
                     {paymentMode === 'Único' && simplifiedLockedSinglePayerId && (
                       <p className="mt-1 text-[11px] text-[#7a8398]">
                         El pagador queda fijo después del primer pago confirmado.
+                      </p>
+                    )}
+                  </label>
+                  <label className="block">
+                    <span className="text-[12px] font-medium text-[#79829a]">Por quién paga</span>
+                    {paymentMode === 'Único' ? (
+                      <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
+                        <select
+                          value={simplifiedResolvedCoveredParticipantId}
+                          disabled
+                          className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
+                        >
+                          <option value={simplifiedResolvedCoveredParticipantId}>
+                            {simplifiedResolvedCoveredParticipant?.name?.trim() || 'Titular'}
+                          </option>
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="mt-1 max-h-[142px] overflow-auto rounded-xl border border-[#dce2ee] bg-white p-2">
+                        <div className="space-y-1">
+                          {simplifiedPayerCandidates.map((participant) => {
+                            const isChecked = simplifiedResolvedCoveredParticipantIds.includes(participant.id);
+                            const participantDebt = Number(participantDebtAmountById.get(participant.id) || 0);
+                            const participantSelectable = participantDebt > 0.009;
+                            return (
+                              <label
+                                key={`simplified-covered-multi-${participant.id}`}
+                                className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 ${
+                                  participantSelectable ? 'hover:bg-[#f5f7fc]' : 'opacity-55'
+                                }`}
+                              >
+                                <span className="min-w-0 flex items-center gap-2 text-[13px] text-[#2a3245]">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 accent-[#3053e2]"
+                                    disabled={!participantSelectable}
+                                    checked={isChecked}
+                                    onChange={(event) => {
+                                      if (!participantSelectable) return;
+                                      const nextChecked = event.target.checked;
+                                      const nextIdSet = new Set(
+                                        simplifiedResolvedCoveredParticipantIds.map((id) => String(id || '').trim()).filter(Boolean)
+                                      );
+                                      if (nextChecked) {
+                                        nextIdSet.add(participant.id);
+                                      } else {
+                                        nextIdSet.delete(participant.id);
+                                      }
+                                      const nextIds = simplifiedPayerCandidates
+                                        .map((entry) => entry.id)
+                                        .filter((id) => nextIdSet.has(id));
+                                      setSimplifiedPaymentCoveredParticipantIdsDraft(nextIds);
+                                      setSimplifiedPaymentCoveredParticipantIdDraft(nextIds[0] || '');
+                                      const nextDebtTotal = Number(
+                                        nextIds.reduce((sum, id) => sum + Number(participantDebtAmountById.get(id) || 0), 0).toFixed(2)
+                                      );
+                                      const nextAmount = Number(
+                                        Math.max(
+                                          0,
+                                          Math.min(
+                                            simplifiedRemainingAfterQueue,
+                                            nextDebtTotal > 0.009 ? nextDebtTotal : simplifiedRemainingAfterQueue
+                                          )
+                                        ).toFixed(2)
+                                      );
+                                      setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
+                                    }}
+                                  />
+                                  <span className="truncate">
+                                    {participant.optionLabel}
+                                    {participant.isOwner ? ' (titular)' : ''}
+                                    {!participantSelectable ? ' (sin deuda)' : ''}
+                                  </span>
+                                </span>
+                                <span className="text-[11px] text-[#7a8398]">{participantDebt.toFixed(2)} $</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {paymentMode === 'Único' && (
+                      <p className="mt-1 text-[11px] text-[#7a8398]">
+                        En pago único, la imputación sigue al responsable de cobro.
+                      </p>
+                    )}
+                    {paymentMode === 'Dividido' && (
+                      <p className="mt-1 text-[11px] text-[#7a8398]">
+                        Podés seleccionar uno o más participantes para imputar este pago.
                       </p>
                     )}
                   </label>
@@ -8451,6 +9632,18 @@ export default function AdminAgendaPlaygroundPage() {
                   <p className="mt-1 text-[11px] text-[#6f7890]">
                     Deuda pendiente disponible: {simplifiedRemainingAfterQueue.toFixed(2)} $
                   </p>
+                  {simplifiedResolvedCoveredParticipant && paymentMode === 'Único' && (
+                    <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                      Deuda de {String(simplifiedResolvedCoveredParticipant.name || '').trim() || 'participante'}:{' '}
+                      {simplifiedResolvedCoveredParticipantsDebt.toFixed(2)} $
+                    </p>
+                  )}
+                  {paymentMode === 'Dividido' && (
+                    <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                      Deuda seleccionada ({simplifiedResolvedCoveredParticipantIds.length}):{' '}
+                      {simplifiedResolvedCoveredParticipantsDebt.toFixed(2)} $
+                    </p>
+                  )}
                 </label>
 
                 <label className="block">
@@ -8479,6 +9672,7 @@ export default function AdminAgendaPlaygroundPage() {
                   onClick={queueSimplifiedPaymentFromModal}
                   disabled={
                     !simplifiedResolvedPayerParticipantId ||
+                    !simplifiedResolvedCoveredParticipantId ||
                     !hasValidSimplifiedPaymentMethod ||
                     !hasValidSimplifiedPaymentAmount ||
                     simplifiedRemainingAfterQueue <= 0.009

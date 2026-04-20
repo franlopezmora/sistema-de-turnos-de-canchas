@@ -164,6 +164,24 @@ const createBillingConfigApiError = (error: unknown): ApiError => {
             message
         });
     }
+    if (lower.includes('ya tiene pagos registrados')) {
+        return new ApiError({
+            statusCode: 400,
+            code: rawCode || 'BILLING_CONFIG_LOCKED_BY_PAYMENTS',
+            field: 'payment',
+            blocking: true,
+            message
+        });
+    }
+    if (lower.includes('reserva completada') && lower.includes('participantes')) {
+        return new ApiError({
+            statusCode: 400,
+            code: rawCode || 'BOOKING_COMPLETED_PARTICIPANTS_LOCKED',
+            field: 'participants',
+            blocking: true,
+            message
+        });
+    }
     if (lower.includes('reserva no encontrada')) {
         return new ApiError({
             statusCode: 404,

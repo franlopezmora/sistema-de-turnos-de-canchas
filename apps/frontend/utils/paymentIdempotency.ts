@@ -9,6 +9,8 @@ type PaymentFingerprintInput = {
   cashShiftId?: string;
   payerParticipantRef?: string;
   payerParticipantName?: string;
+  coveredParticipantRef?: string;
+  coveredParticipantName?: string;
   allocations?: Array<{
     accountItemId: string;
     amount: number;
@@ -40,6 +42,8 @@ const buildFingerprint = (input: PaymentFingerprintInput) => {
     cashShiftId: input.cashShiftId || null,
     payerParticipantRef: String(input.payerParticipantRef || '').trim() || null,
     payerParticipantName: String(input.payerParticipantName || '').trim() || null,
+    coveredParticipantRef: String(input.coveredParticipantRef || '').trim() || null,
+    coveredParticipantName: String(input.coveredParticipantName || '').trim() || null,
     allocations: normalizedAllocations
   });
 };

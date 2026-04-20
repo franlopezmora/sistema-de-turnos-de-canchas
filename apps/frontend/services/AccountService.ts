@@ -141,6 +141,8 @@ export const registerPayment = async (body: {
   cashShiftId?: string;
   payerParticipantRef?: string;
   payerParticipantName?: string;
+  coveredParticipantRef?: string;
+  coveredParticipantName?: string;
   allocations?: Array<{ accountItemId: string; amount: number }>;
 }) => {
   if (body.method === 'TRANSFER' && body.channel !== 'BANK_ACCOUNT' && body.channel !== 'VIRTUAL_WALLET') {
@@ -158,6 +160,8 @@ export const registerPayment = async (body: {
     cashShiftId: body.cashShiftId,
     payerParticipantRef: body.payerParticipantRef,
     payerParticipantName: body.payerParticipantName,
+    coveredParticipantRef: body.coveredParticipantRef,
+    coveredParticipantName: body.coveredParticipantName,
     allocations: body.allocations
   });
   const res = await fetchWithAuth(`${apiBase()}/accounts/${body.accountId}/payments`, {
@@ -176,6 +180,8 @@ export const registerPayment = async (body: {
       cashShiftId: body.cashShiftId,
       payerParticipantRef: body.payerParticipantRef,
       payerParticipantName: body.payerParticipantName,
+      coveredParticipantRef: body.coveredParticipantRef,
+      coveredParticipantName: body.coveredParticipantName,
       allocations: body.allocations
     })
   });
