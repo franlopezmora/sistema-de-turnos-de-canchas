@@ -1,5 +1,6 @@
 ﻿import Head from 'next/head';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type SetStateAction } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, MoreVertical, Pencil, Plus, Repeat, Search, User, Users, CreditCard, Settings, X, Receipt, BarChart3, Trophy, MessageSquare, ShoppingBag, FileText, GraduationCap, Lock, Trash2 } from 'lucide-react';
 import NotFound from '../../components/NotFound';
@@ -141,12 +142,16 @@ type ParticipantSuggestion = {
 
 type BookingKind = 'regular' | 'recurring' | 'privateClass' | 'courseClass' | 'block';
 type RecurringFrequencyPreset = 'weekly' | 'biweekly' | 'custom';
-type ComboOption = { value: string; label: string };
+type ComboOption = { value: string; label: string; secondary?: string };
 type SimplifiedSidebarSection = 'DETAILS' | 'BILLING' | 'HISTORY';
 type ParticipantUiState =
   | { mode: 'idle'; participantId: null }
   | { mode: 'menu'; participantId: string }
   | { mode: 'editing'; participantId: string };
+type SuggestionPlacement = {
+  openUp: boolean;
+  maxHeight: number;
+};
 
 
 const rowHeight = 120; // visual height per hour (zoom vertical para diferenciar mejor 15m vs 30m)
@@ -316,6 +321,7 @@ function PlaygroundCombo({
   onChange,
   compact = false,
   align = 'left',
+  variant = 'default',
   className = '',
 }: {
   value: string;
@@ -323,6 +329,7 @@ function PlaygroundCombo({
   onChange: (value: string) => void;
   compact?: boolean;
   align?: 'left' | 'right';
+  variant?: 'default' | 'participant';
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -356,11 +363,15 @@ function PlaygroundCombo({
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="truncate">{selected?.label || ''}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{selected?.label || ''}</span>
         <ChevronDown size={14} className={`playground-combo-chevron ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className={`playground-combo-menu ${align === 'right' ? 'right-0' : 'left-0'}`}>
+        <div
+          className={`playground-combo-menu ${align === 'right' ? 'right-0' : 'left-0'} ${
+            variant === 'participant' ? 'playground-combo-menu-participant' : ''
+          }`}
+        >
           <div className="max-h-64 overflow-y-auto py-1">
             {options.map((option) => {
               const active = option.value === value;
@@ -372,9 +383,14 @@ function PlaygroundCombo({
                     onChange(option.value);
                     setOpen(false);
                   }}
-                  className={`playground-combo-option ${active ? 'playground-combo-option-active' : ''}`}
+                  className={`playground-combo-option ${
+                    active ? 'playground-combo-option-active' : ''
+                  } ${variant === 'participant' ? 'playground-combo-option-participant' : ''}`}
                 >
-                  {option.label}
+                  <span className="playground-combo-option-primary">{option.label}</span>
+                  {option.secondary && (
+                    <span className="playground-combo-option-secondary">{option.secondary}</span>
+                  )}
                 </button>
               );
             })}
@@ -718,6 +734,15 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
       ? participants.find((participant) => participant.isOwner)
       : undefined);
   const payerParticipantIdSet = new Set<string>();
+  const payerAmountByParticipantId = new Map<string, number>();
+  const addPayerAmount = (participantId: string, amount: number) => {
+    if (!participantId) return;
+    if (!Number.isFinite(amount) || amount <= 0.009) return;
+    payerAmountByParticipantId.set(
+      participantId,
+      Number((Number(payerAmountByParticipantId.get(participantId) || 0) + amount).toFixed(2))
+    );
+  };
   normalizedPayerParticipants.forEach((payer) => {
     const hasAmount = Number.isFinite(payer.amount) && payer.amount > 0.009;
     if (!hasAmount) return;
@@ -729,9 +754,13 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
         : undefined);
     if (!matched) return;
     payerParticipantIdSet.add(matched.id);
+    addPayerAmount(matched.id, payer.amount);
   });
   if (payerParticipantIdSet.size === 0 && latestPayerParticipant) {
     payerParticipantIdSet.add(latestPayerParticipant.id);
+  }
+  if (payerAmountByParticipantId.size === 0 && latestPayerParticipant && paidAmount > 0.009) {
+    addPayerAmount(latestPayerParticipant.id, paidAmount);
   }
 
   const coveredAmountByParticipantId = new Map<string, number>();
@@ -786,17 +815,11 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
 
   return participants.map((participant) => {
     const isPayer = payerParticipantIdSet.has(participant.id);
+    const payerAmount = Number(payerAmountByParticipantId.get(participant.id) || 0);
     const assignedAmount = Number(assignedAmountByParticipantId.get(participant.id) || 0);
     const coveredAmount = Number(coveredAmountByParticipantId.get(participant.id) || 0);
     const remainingAmount = Number(Math.max(0, assignedAmount - coveredAmount).toFixed(2));
     const isPayable = assignedAmount > 0.009;
-    const roleLabel = !isPayable
-      ? 'Sin cargo'
-      : isPayer
-        ? 'Pagó'
-        : coveredAmount > 0.009
-          ? 'Cubierto'
-          : 'Debe';
     const participantStatus: Booking['hoverPayment']['status'] = !isPayable
       ? 'UNPAID'
       : status === 'PAID'
@@ -810,12 +833,13 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
     return {
       id: participant.id,
       name: participant.name,
-      roleLabel,
       modeLabel,
       status: participantStatus,
       isOwner: participant.isOwner,
       paymentMethod: '',
       payable: isPayable,
+      payer: isPayer || payerAmount > 0.009,
+      payerAmount,
       shouldPayAmount: assignedAmount,
       paidAmount: coveredAmount,
       debtAmount: remainingAmount,
@@ -1523,7 +1547,6 @@ export default function AdminAgendaPlaygroundPage() {
   const [participantPriceDraftById, setParticipantPriceDraftById] = useState<Record<string, string>>({});
   const [defaultPricePerParticipant, setDefaultPricePerParticipant] = useState(0);
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
-  const [coachSearchTerm, setProfesorSearchTerm] = useState('');
   const [simplifiedOwnerAdded, setSimplifiedOwnerAdded] = useState(false);
   const [simplifiedOwnerPaymentMethodDraft, setSimplifiedOwnerPaymentMethodDraft] = useState('');
   const [simplifiedEditingParticipantId, setSimplifiedEditingParticipantId] = useState<string | null>(null);
@@ -1531,6 +1554,24 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedNewParticipantOpen, setSimplifiedNewParticipantOpen] = useState(false);
   const [simplifiedNewParticipantName, setSimplifiedNewParticipantName] = useState('');
   const [simplifiedNewParticipantContact, setSimplifiedNewParticipantContact] = useState('');
+  const [simplifiedNewParticipantSourceTypeDraft, setSimplifiedNewParticipantSourceTypeDraft] =
+    useState<Participant['sourceType']>('guest');
+  const [simplifiedNewParticipantEntityRefDraft, setSimplifiedNewParticipantEntityRefDraft] = useState('');
+  const [simplifiedOwnerSuggestionsOpen, setSimplifiedOwnerSuggestionsOpen] = useState(false);
+  const [simplifiedOwnerSearchLoading, setSimplifiedOwnerSearchLoading] = useState(false);
+  const [simplifiedOwnerSuggestions, setSimplifiedOwnerSuggestions] = useState<ParticipantSuggestion[]>([]);
+  const [simplifiedNewParticipantSuggestionsOpen, setSimplifiedNewParticipantSuggestionsOpen] =
+    useState(false);
+  const [simplifiedNewParticipantSearchLoading, setSimplifiedNewParticipantSearchLoading] =
+    useState(false);
+  const [simplifiedNewParticipantSuggestions, setSimplifiedNewParticipantSuggestions] = useState<
+    ParticipantSuggestion[]
+  >([]);
+  const [simplifiedOwnerSuggestionsPlacement, setSimplifiedOwnerSuggestionsPlacement] =
+    useState<SuggestionPlacement | null>(null);
+  const [simplifiedNewParticipantSuggestionsPlacement, setSimplifiedNewParticipantSuggestionsPlacement] =
+    useState<SuggestionPlacement | null>(null);
+  const [simplifiedSuggestionsPositionTick, setSimplifiedSuggestionsPositionTick] = useState(0);
   const [simplifiedPaymentModalOpen, setSimplifiedPaymentModalOpen] = useState(false);
   const [simplifiedPaymentPayerParticipantIdDraft, setSimplifiedPaymentPayerParticipantIdDraft] = useState('');
   const [simplifiedPaymentCoveredParticipantIdDraft, setSimplifiedPaymentCoveredParticipantIdDraft] = useState('');
@@ -1538,6 +1579,7 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedPaymentAmountDraft, setSimplifiedPaymentAmountDraft] = useState('');
   const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState('');
   const [simplifiedPaymentNoteDraft, setSimplifiedPaymentNoteDraft] = useState('');
+  const [simplifiedSinglePaymentAdvancedOpen, setSimplifiedSinglePaymentAdvancedOpen] = useState(false);
   const [simplifiedSidebarSection, setSimplifiedSidebarSection] = useState<SimplifiedSidebarSection>('DETAILS');
   const [blockingTitle, setBlockingTitle] = useState('');
   const [formError, setFormError] = useState('');
@@ -1622,6 +1664,9 @@ export default function AdminAgendaPlaygroundPage() {
   const recurringCourtsMenuRef = useRef<HTMLDivElement | null>(null);
   const quickDateInputRef = useRef<HTMLInputElement | null>(null);
   const participantContactInputRef = useRef<HTMLInputElement | null>(null);
+  const simplifiedOwnerInputContainerRef = useRef<HTMLDivElement | null>(null);
+  const simplifiedNewParticipantInputContainerRef = useRef<HTMLDivElement | null>(null);
+  const simplifiedSidebarFooterRef = useRef<HTMLElement | null>(null);
   const agendaSurfaceRef = useRef<HTMLElement | null>(null);
   const drawerScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const calendarNoticeTimerRef = useRef<number | null>(null);
@@ -2784,6 +2829,95 @@ export default function AdminAgendaPlaygroundPage() {
     participants,
     persistedEditingBookingId,
   ]);
+  const participantPayerAmountById = useMemo(() => {
+    const totals = new Map<string, number>();
+    if (!persistedEditingBookingId || bookingKind === 'block' || participants.length === 0) return totals;
+
+    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
+    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
+    const bookingUserId =
+      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
+        ? bookingUserIdRaw
+        : undefined;
+
+    const participantIdByRef = new Map<string, string>();
+    const participantIdByName = new Map<string, string>();
+    const ownerParticipant = participants.find((participant) => participant.isOwner) || participants[0] || null;
+    const ownerId = String(ownerParticipant?.id || '').trim();
+
+    const registerRefAlias = (participantId: string, rawRef: string) => {
+      const normalizedRef = String(rawRef || '').trim().toLowerCase();
+      if (!participantId || !normalizedRef) return;
+      participantIdByRef.set(normalizedRef, participantId);
+    };
+
+    participants.forEach((participant) => {
+      const participantId = String(participant.id || '').trim();
+      if (!participantId) return;
+      const stableRef = buildStableParticipantRef(participant, { bookingClientId, bookingUserId });
+      registerRefAlias(participantId, stableRef);
+      registerRefAlias(participantId, participant.entityRef || '');
+      if (participant.isOwner) {
+        registerRefAlias(participantId, 'guest:owner');
+        registerRefAlias(participantId, 'guest:booking-responsible');
+        if (bookingClientId) registerRefAlias(participantId, `booking-client:${bookingClientId}`);
+        if (bookingUserId) registerRefAlias(participantId, `booking-user:${bookingUserId}`);
+      }
+      const normalizedName = String(participant.name || '').trim().toLowerCase();
+      if (normalizedName && !participantIdByName.has(normalizedName)) {
+        participantIdByName.set(normalizedName, participantId);
+      }
+    });
+
+    const addPayerAmount = (participantRefRaw: unknown, participantNameRaw: unknown, amountRaw: unknown) => {
+      const amount = Number(amountRaw || 0);
+      if (!Number.isFinite(amount) || amount <= 0.009) return;
+      const normalizedRef = String(participantRefRaw || '').trim().toLowerCase();
+      const normalizedName = String(participantNameRaw || '').trim().toLowerCase();
+      let participantId = normalizedRef ? participantIdByRef.get(normalizedRef) : undefined;
+      if (!participantId && normalizedName) participantId = participantIdByName.get(normalizedName);
+      if (!participantId && normalizedRef && isOwnerLikeParticipantRef(normalizedRef) && ownerId) {
+        participantId = ownerId;
+      }
+      if (!participantId) return;
+      totals.set(participantId, Number((Number(totals.get(participantId) || 0) + amount).toFixed(2)));
+    };
+
+    let usedTimelineEvents = 0;
+    (Array.isArray(bookingTimelineEvents) ? bookingTimelineEvents : []).forEach((event) => {
+      const normalizedType = String(event?.type || '').trim().toUpperCase();
+      if (normalizedType !== 'PAYMENT_RECEIVED') return;
+      const payload =
+        event?.payload && typeof event.payload === 'object'
+          ? (event.payload as Record<string, unknown>)
+          : {};
+      const amount = Number((payload as any)?.amount || 0);
+      if (!Number.isFinite(amount) || amount <= 0.009) return;
+      usedTimelineEvents += 1;
+      const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
+      const payerName = String((payload as any)?.payerParticipantName || '').trim();
+      addPayerAmount(payerRef, payerName, amount);
+    });
+
+    if (usedTimelineEvents === 0) {
+      const payerFallback = Array.isArray(editingBooking?.hoverPayment?.payerParticipants)
+        ? editingBooking?.hoverPayment?.payerParticipants
+        : [];
+      payerFallback.forEach((row) => {
+        addPayerAmount(row?.ref, row?.name, row?.amount);
+      });
+    }
+
+    return totals;
+  }, [
+    bookingKind,
+    bookingTimelineEvents,
+    editingBooking?.clientId,
+    editingBooking?.hoverPayment?.payerParticipants,
+    editingBooking?.userId,
+    participants,
+    persistedEditingBookingId,
+  ]);
   const participantAssignedAmountById = useMemo(() => {
     const assigned = new Map<string, number>();
     participants.forEach((participant) => {
@@ -3100,6 +3234,136 @@ export default function AdminAgendaPlaygroundPage() {
       }
     }
   }, [getClubSlug, updateParticipant]);
+
+  const fetchParticipantSuggestionsForDraft = useCallback(async (query: string) => {
+    const safeQuery = String(query || '').trim();
+    if (!safeQuery) return [] as ParticipantSuggestion[];
+    const guestSuggestion: ParticipantSuggestion = {
+      id: `guest-draft-${safeQuery}`,
+      label: safeQuery,
+      secondary: 'Invitado',
+      sourceType: 'guest',
+      entityRef: `guest:${toSlugToken(safeQuery)}`,
+      name: safeQuery,
+    };
+
+    const slug = getClubSlug();
+    if (!slug || safeQuery.length < 2) return [guestSuggestion];
+
+    try {
+      const clients = await ClubAdminService.getClients(slug, safeQuery);
+      const clientSuggestions: ParticipantSuggestion[] = (Array.isArray(clients) ? clients : [])
+        .slice(0, 6)
+        .map((client: any, index: number) => {
+          const phone = String(client?.phone || '').trim();
+          const email = String(client?.email || '').trim();
+          const sourceType: Participant['sourceType'] =
+            client?.sourceType === 'systemUser' ? 'systemUser' : 'clubClient';
+          const stableRef =
+            sourceType === 'systemUser'
+              ? (Number(client?.userId || 0) > 0 ? `user:${Number(client.userId)}` : undefined)
+              : (client?.id ? `client:${String(client.id)}` : undefined);
+          return {
+            id: `draft-${client?.id || index}`,
+            label: String(client?.name || safeQuery),
+            secondary:
+              phone || email || (sourceType === 'systemUser' ? 'Usuario del sistema' : 'Cliente del club'),
+            sourceType,
+            entityRef: stableRef,
+            name: String(client?.name || safeQuery),
+            contact: phone || email || '',
+          } satisfies ParticipantSuggestion;
+        });
+      return [...clientSuggestions, guestSuggestion];
+    } catch {
+      return [guestSuggestion];
+    }
+  }, [getClubSlug]);
+
+  const runSimplifiedOwnerSearch = useCallback(async (ownerId: string, rawValue: string) => {
+    updateParticipant(ownerId, {
+      name: rawValue,
+      contact: '',
+      sourceType: 'guest',
+      entityRef: undefined,
+    });
+    const query = String(rawValue || '').trim();
+    if (!query) {
+      setSimplifiedOwnerSuggestionsOpen(false);
+      setSimplifiedOwnerSearchLoading(false);
+      setSimplifiedOwnerSuggestions([]);
+      return;
+    }
+    setSimplifiedOwnerSuggestionsOpen(true);
+    setSimplifiedOwnerSearchLoading(true);
+    const suggestions = await fetchParticipantSuggestionsForDraft(query);
+    setSimplifiedOwnerSuggestions(suggestions);
+    setSimplifiedOwnerSearchLoading(false);
+  }, [fetchParticipantSuggestionsForDraft, updateParticipant]);
+
+  const applySimplifiedOwnerSuggestion = useCallback((ownerId: string, suggestion: ParticipantSuggestion) => {
+    updateParticipant(ownerId, {
+      name: suggestion.name,
+      contact: suggestion.contact || '',
+      sourceType: suggestion.sourceType,
+      entityRef: suggestion.entityRef,
+    });
+    setSimplifiedOwnerSuggestionsOpen(false);
+    setSimplifiedOwnerSearchLoading(false);
+    setSimplifiedOwnerSuggestions([]);
+    setFormError('');
+  }, [updateParticipant]);
+
+  const runSimplifiedNewParticipantSearch = useCallback(async (rawValue: string) => {
+    setSimplifiedNewParticipantName(rawValue);
+    setSimplifiedNewParticipantContact('');
+    setSimplifiedNewParticipantSourceTypeDraft('guest');
+    setSimplifiedNewParticipantEntityRefDraft('');
+    const query = String(rawValue || '').trim();
+    if (!query) {
+      setSimplifiedNewParticipantSuggestionsOpen(false);
+      setSimplifiedNewParticipantSearchLoading(false);
+      setSimplifiedNewParticipantSuggestions([]);
+      return;
+    }
+    setSimplifiedNewParticipantSuggestionsOpen(true);
+    setSimplifiedNewParticipantSearchLoading(true);
+    const suggestions = await fetchParticipantSuggestionsForDraft(query);
+    const existingRefs = new Set(
+      participants
+        .map((participant) => String(participant.entityRef || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const existingIdentityTokens = new Set(
+      participants
+        .filter((participant) => participant.name.trim().length > 0)
+        .flatMap((participant) => participantIdentityTokens(participant))
+    );
+    const filteredSuggestions = suggestions.filter((suggestion) => {
+      const suggestionRef = String(suggestion.entityRef || '').trim().toLowerCase();
+      if (suggestionRef && existingRefs.has(suggestionRef)) return false;
+      const suggestionTokens = participantIdentityTokens({
+        sourceType: suggestion.sourceType,
+        name: suggestion.name,
+        contact: suggestion.contact || '',
+      });
+      if (suggestionTokens.some((token) => existingIdentityTokens.has(token))) return false;
+      return true;
+    });
+    setSimplifiedNewParticipantSuggestions(filteredSuggestions);
+    setSimplifiedNewParticipantSearchLoading(false);
+  }, [fetchParticipantSuggestionsForDraft, participants]);
+
+  const applySimplifiedNewParticipantSuggestion = useCallback((suggestion: ParticipantSuggestion) => {
+    setSimplifiedNewParticipantName(suggestion.name);
+    setSimplifiedNewParticipantContact(String(suggestion.contact || '').trim());
+    setSimplifiedNewParticipantSourceTypeDraft(suggestion.sourceType);
+    setSimplifiedNewParticipantEntityRefDraft(String(suggestion.entityRef || '').trim());
+    setSimplifiedNewParticipantSuggestionsOpen(false);
+    setSimplifiedNewParticipantSearchLoading(false);
+    setSimplifiedNewParticipantSuggestions([]);
+    setFormError('');
+  }, []);
 
   const applyParticipantSuggestion = useCallback((participantId: string, suggestion: ParticipantSuggestion) => {
     const incomingTokens = participantIdentityTokens({
@@ -4521,6 +4785,7 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentAmountDraft('');
     setSimplifiedPaymentMethodDraft('');
     setSimplifiedPaymentNoteDraft('');
+    setSimplifiedSinglePaymentAdvancedOpen(false);
   }, []);
 
   const openSimplifiedPaymentModal = useCallback(async () => {
@@ -4641,6 +4906,7 @@ export default function AdminAgendaPlaygroundPage() {
       preferredAmount > 0.009 ? preferredAmount.toFixed(2) : ''
     );
     setSimplifiedPaymentNoteDraft('');
+    setSimplifiedSinglePaymentAdvancedOpen(false);
     setSimplifiedPaymentModalOpen(true);
     setFormError('');
   }, [
@@ -5660,6 +5926,10 @@ export default function AdminAgendaPlaygroundPage() {
         setRecurringOverlapModalOpen(false);
         setRecurringCreateConfirmOpen(false);
         setParticipantUiState({ mode: 'idle', participantId: null });
+        setSimplifiedOwnerSuggestionsOpen(false);
+        setSimplifiedOwnerSuggestionsPlacement(null);
+        setSimplifiedNewParticipantSuggestionsOpen(false);
+        setSimplifiedNewParticipantSuggestionsPlacement(null);
       }
     };
     document.addEventListener('keydown', onDocumentKeyDown);
@@ -5673,9 +5943,17 @@ export default function AdminAgendaPlaygroundPage() {
       setSimplifiedOwnerPaymentMethodDraft('');
       setSimplifiedEditingParticipantId(null);
       setSimplifiedEditPaymentMethodDraft('');
+      setSimplifiedOwnerSuggestionsOpen(false);
+      setSimplifiedOwnerSearchLoading(false);
+      setSimplifiedOwnerSuggestions([]);
       setSimplifiedNewParticipantOpen(false);
       setSimplifiedNewParticipantName('');
       setSimplifiedNewParticipantContact('');
+      setSimplifiedNewParticipantSourceTypeDraft('guest');
+      setSimplifiedNewParticipantEntityRefDraft('');
+      setSimplifiedNewParticipantSuggestionsOpen(false);
+      setSimplifiedNewParticipantSearchLoading(false);
+      setSimplifiedNewParticipantSuggestions([]);
       closeSimplifiedPaymentModal();
     }
   }, [closeSimplifiedPaymentModal, drawerOpen, editingBookingId]);
@@ -5690,9 +5968,17 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedOwnerPaymentMethodDraft(String(namedOwner.paymentMethod || ''));
     setSimplifiedEditingParticipantId(null);
     setSimplifiedEditPaymentMethodDraft('');
+    setSimplifiedOwnerSuggestionsOpen(false);
+    setSimplifiedOwnerSearchLoading(false);
+    setSimplifiedOwnerSuggestions([]);
     setSimplifiedNewParticipantOpen(false);
     setSimplifiedNewParticipantName('');
     setSimplifiedNewParticipantContact('');
+    setSimplifiedNewParticipantSourceTypeDraft('guest');
+    setSimplifiedNewParticipantEntityRefDraft('');
+    setSimplifiedNewParticipantSuggestionsOpen(false);
+    setSimplifiedNewParticipantSearchLoading(false);
+    setSimplifiedNewParticipantSuggestions([]);
   }, [drawerOpen, editingBookingId, participants]);
 
   const simplifiedParticipantWithPaymentControlsIdSet = useMemo(() => {
@@ -5723,12 +6009,91 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedNewParticipantOpen(false);
     setSimplifiedNewParticipantName('');
     setSimplifiedNewParticipantContact('');
+    setSimplifiedNewParticipantSourceTypeDraft('guest');
+    setSimplifiedNewParticipantEntityRefDraft('');
+    setSimplifiedNewParticipantSuggestionsOpen(false);
+    setSimplifiedNewParticipantSearchLoading(false);
+    setSimplifiedNewParticipantSuggestions([]);
   }, [simplifiedNewParticipantOpen, simplifiedOwnerAdded]);
 
   useEffect(() => {
     if (drawerOpen) return;
     closeSimplifiedPaymentModal();
   }, [closeSimplifiedPaymentModal, drawerOpen]);
+
+  const resolveSuggestionPlacement = useCallback((
+    anchor: HTMLDivElement | null,
+    options?: { itemCount?: number; loading?: boolean }
+  ): SuggestionPlacement => {
+    if (!anchor) return { openUp: false, maxHeight: 280 };
+    const rect = anchor.getBoundingClientRect();
+    const footerTop =
+      simplifiedSidebarFooterRef.current?.getBoundingClientRect().top ?? window.innerHeight;
+    const lowerBoundary = Math.min(window.innerHeight, footerTop) - 8;
+    const spaceBelow = Math.max(0, lowerBoundary - rect.bottom - 6);
+    const spaceAbove = Math.max(0, rect.top - 12);
+    const itemCount = Math.max(0, Number(options?.itemCount || 0));
+    const loadingRows = options?.loading ? 1 : 0;
+    const estimatedContentHeight = Math.max(120, Math.min(280, (itemCount + loadingRows) * 44 + 12));
+    // Si con su alto natural tocaría el footer, abrir arriba.
+    const openUp = spaceBelow < estimatedContentHeight;
+    const available = openUp ? spaceAbove : spaceBelow;
+    const maxHeight = Math.min(estimatedContentHeight, Math.max(96, available || 96));
+    return { openUp, maxHeight };
+  }, []);
+
+  useEffect(() => {
+    if (!simplifiedOwnerSuggestionsOpen) {
+      setSimplifiedOwnerSuggestionsPlacement(null);
+      return;
+    }
+    setSimplifiedOwnerSuggestionsPlacement(
+      resolveSuggestionPlacement(simplifiedOwnerInputContainerRef.current, {
+        itemCount: simplifiedOwnerSuggestions.length,
+        loading: simplifiedOwnerSearchLoading,
+      })
+    );
+  }, [
+    resolveSuggestionPlacement,
+    simplifiedOwnerSearchLoading,
+    simplifiedOwnerSuggestions.length,
+    simplifiedOwnerSuggestionsOpen,
+  ]);
+
+  useEffect(() => {
+    if (!simplifiedNewParticipantSuggestionsOpen) {
+      setSimplifiedNewParticipantSuggestionsPlacement(null);
+      return;
+    }
+    setSimplifiedNewParticipantSuggestionsPlacement(
+      resolveSuggestionPlacement(simplifiedNewParticipantInputContainerRef.current, {
+        itemCount: simplifiedNewParticipantSuggestions.length,
+        loading: simplifiedNewParticipantSearchLoading,
+      })
+    );
+  }, [
+    resolveSuggestionPlacement,
+    simplifiedNewParticipantSearchLoading,
+    simplifiedNewParticipantSuggestions.length,
+    simplifiedNewParticipantSuggestionsOpen,
+  ]);
+
+  useEffect(() => {
+    if (!simplifiedOwnerSuggestionsOpen && !simplifiedNewParticipantSuggestionsOpen) return;
+    const updatePosition = () => {
+      setSimplifiedSuggestionsPositionTick((previous) => previous + 1);
+    };
+    updatePosition();
+    const container = drawerScrollContainerRef.current;
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    container?.addEventListener('scroll', updatePosition, { passive: true });
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      container?.removeEventListener('scroll', updatePosition as EventListener);
+    };
+  }, [simplifiedNewParticipantSuggestionsOpen, simplifiedOwnerSuggestionsOpen]);
 
   useEffect(() => {
     if (!drawerOpen || bookingKind === 'block' || paymentMode !== 'Único') return;
@@ -5790,11 +6155,64 @@ export default function AdminAgendaPlaygroundPage() {
   });
   const simplifiedSummaryTimeLabel = `${slotToTimeAmPm(selectedStartSlot)} - ${slotToTimeAmPm(selectedEndSlot)}`;
   const ownerParticipant = participants.find((participant) => participant.isOwner) || participants[0] || null;
-  const ownerHasName = Boolean(ownerParticipant && ownerParticipant.name.trim().length > 0);
+  const ownerHasTypedName = Boolean(ownerParticipant && ownerParticipant.name.trim().length > 0);
+  const ownerHasName = Boolean(
+    ownerParticipant &&
+    ownerParticipant.name.trim().length > 0 &&
+    String(ownerParticipant.entityRef || '').trim().length > 0
+  );
   const simplifiedSummaryOwnerLabel = ownerParticipant?.name.trim() || 'Titular sin asignar';
   const simplifiedSummaryCourtLabel = selectedCourt?.name || 'Cancha no definida';
   const simplifiedNamedParticipants = participants.filter((participant) => participant.name.trim().length > 0);
-  const hasValidSimplifiedNewParticipantName = simplifiedNewParticipantName.trim().length > 0;
+  const simplifiedNewParticipantHasLinkedSelection =
+    String(simplifiedNewParticipantEntityRefDraft || '').trim().length > 0;
+  const hasValidSimplifiedNewParticipantName =
+    simplifiedNewParticipantName.trim().length > 0 &&
+    simplifiedNewParticipantEntityRefDraft.trim().length > 0;
+  const simplifiedOwnerSuggestionsFloatingStyle = (() => {
+    if (
+      !simplifiedOwnerSuggestionsOpen ||
+      !simplifiedOwnerInputContainerRef.current ||
+      !simplifiedOwnerSuggestionsPlacement
+    ) {
+      return null;
+    }
+    const rect = simplifiedOwnerInputContainerRef.current.getBoundingClientRect();
+    return {
+      position: 'fixed' as const,
+      top: simplifiedOwnerSuggestionsPlacement.openUp ? undefined : Math.round(rect.bottom + 6),
+      bottom: simplifiedOwnerSuggestionsPlacement.openUp
+        ? Math.round(window.innerHeight - rect.top + 6)
+        : undefined,
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+      maxHeight: Math.round(simplifiedOwnerSuggestionsPlacement.maxHeight),
+      zIndex: 90,
+    };
+  })();
+  const simplifiedNewParticipantSuggestionsFloatingStyle = (() => {
+    if (
+      !simplifiedNewParticipantSuggestionsOpen ||
+      !simplifiedNewParticipantInputContainerRef.current ||
+      !simplifiedNewParticipantSuggestionsPlacement
+    ) {
+      return null;
+    }
+    const rect = simplifiedNewParticipantInputContainerRef.current.getBoundingClientRect();
+    return {
+      position: 'fixed' as const,
+      top: simplifiedNewParticipantSuggestionsPlacement.openUp
+        ? undefined
+        : Math.round(rect.bottom + 6),
+      bottom: simplifiedNewParticipantSuggestionsPlacement.openUp
+        ? Math.round(window.innerHeight - rect.top + 6)
+        : undefined,
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+      maxHeight: Math.round(simplifiedNewParticipantSuggestionsPlacement.maxHeight),
+      zIndex: 90,
+    };
+  })();
   const ownerPaymentMethodOptions: Array<{ value: Participant['paymentMethod']; label: string }> = [
     { value: 'CASH', label: 'Efectivo' },
     { value: 'TRANSFER', label: 'Transferencia' },
@@ -5824,6 +6242,71 @@ export default function AdminAgendaPlaygroundPage() {
         (participant.isOwner ? 'Titular sin nombre' : `Participante ${index + 1}`),
     }));
   })();
+  const simplifiedPayerComboOptions: ComboOption[] = (() => {
+    const lockedSinglePayer =
+      paymentMode === 'Único' && simplifiedLockedSinglePayerId
+        ? simplifiedPayerCandidates.filter((participant) => participant.id === simplifiedLockedSinglePayerId)
+        : simplifiedPayerCandidates;
+    const resolved = lockedSinglePayer.map((participant) => ({
+      value: participant.id,
+      label: `${participant.optionLabel}${participant.isOwner ? ' (titular)' : ''}`,
+      secondary: String(participant.contact || '').trim() || undefined,
+    }));
+    return resolved;
+  })();
+  const simplifiedPaymentMethodComboOptions: ComboOption[] = [
+    ...ownerPaymentMethodOptions.map((option) => ({ value: option.value, label: option.label })),
+  ];
+  const handleSimplifiedPayerChange = useCallback((nextParticipantId: string) => {
+    if (
+      paymentMode === 'Único' &&
+      simplifiedLockedSinglePayerId &&
+      nextParticipantId &&
+      nextParticipantId !== simplifiedLockedSinglePayerId
+    ) {
+      showCalendarNotice('En pago único, después del primer pago queda fijo el pagador.');
+      return;
+    }
+    setSimplifiedPaymentPayerParticipantIdDraft(nextParticipantId);
+    if (paymentMode === 'Dividido') {
+      const preselectedCoveredId = (() => {
+        const payerDebt = Number(participantDebtAmountById.get(nextParticipantId) || 0);
+        if (payerDebt > 0.009) return nextParticipantId;
+        const firstWithDebt = simplifiedPayerCandidates.find(
+          (candidate) => Number(participantDebtAmountById.get(candidate.id) || 0) > 0.009
+        );
+        return String(firstWithDebt?.id || '');
+      })();
+      setSimplifiedPaymentCoveredParticipantIdDraft(preselectedCoveredId);
+      setSimplifiedPaymentCoveredParticipantIdsDraft(preselectedCoveredId ? [preselectedCoveredId] : []);
+      const nextDebt = Number(participantDebtAmountById.get(preselectedCoveredId) || 0);
+      const nextAmount = Number(
+        Math.max(
+          0,
+          Math.min(
+            simplifiedRemainingAfterQueue,
+            nextDebt > 0.009 ? nextDebt : simplifiedRemainingAfterQueue
+          )
+        ).toFixed(2)
+      );
+      setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
+    } else if (!String(simplifiedPaymentCoveredParticipantIdDraft || '').trim()) {
+      setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
+    }
+    const nextPayer = participants.find((participant) => participant.id === nextParticipantId);
+    if (nextPayer) {
+      setSimplifiedPaymentMethodDraft(nextPayer.paymentMethod || 'CASH');
+    }
+  }, [
+    participantDebtAmountById,
+    participants,
+    paymentMode,
+    showCalendarNotice,
+    simplifiedLockedSinglePayerId,
+    simplifiedPayerCandidates,
+    simplifiedPaymentCoveredParticipantIdDraft,
+    simplifiedRemainingAfterQueue,
+  ]);
   const simplifiedResolvedPayerParticipantId = (() => {
     if (paymentMode === 'Único' && simplifiedLockedSinglePayerId) {
       return simplifiedLockedSinglePayerId;
@@ -6587,16 +7070,24 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="truncate text-[11px] font-semibold">{participant.name}</p>
-                        <p className="text-[10px] text-[#7b8396]">{participant.roleLabel}</p>
                         {participant.payable !== false && (
                           <p className="text-[10px] text-[#7f8798]">
-                            Debía {Number(participant.shouldPayAmount || 0).toFixed(2)} $ · Pagó {Number(participant.paidAmount || 0).toFixed(2)} $ · Debe {Number(participant.debtAmount || 0).toFixed(2)} $
+                            {participant.status === 'PAID'
+                              ? 'Saldado'
+                              : `Debe ${Number(participant.debtAmount || 0).toFixed(2)} $`}
+                          </p>
+                        )}
+                        {participant.payable === false && participant.payer && participant.modeLabel === 'Pago único' && (
+                          <p className="text-[10px] text-[#5c6785]">
+                            Pagó {Number(participant.payerAmount || 0).toFixed(2)} $
                           </p>
                         )}
                       </div>
                       <span
                         className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold mt-0.5 ${
-                          participant.payable === false
+                          participant.payable === false && participant.payer && participant.modeLabel === 'Pago único'
+                            ? 'bg-[#e8eeff] text-[#3155df]'
+                            : participant.payable === false
                             ? 'bg-[#f3f5f9] text-[#7c8598]'
                             : participant.status === 'PAID'
                             ? 'bg-[#e8f8ed] text-[#1c7a44]'
@@ -6605,10 +7096,12 @@ export default function AdminAgendaPlaygroundPage() {
                               : 'bg-[#eef1f7] text-[#5c667f]'
                         }`}
                       >
-                        {participant.payable === false
+                        {participant.payable === false && participant.payer && participant.modeLabel === 'Pago único'
+                          ? 'Pagador'
+                          : participant.payable === false
                           ? 'Sin cargo'
                           : participant.status === 'PAID'
-                          ? 'Pagado'
+                          ? 'Saldado'
                           : participant.status === 'PARTIAL'
                             ? 'Parcial'
                             : 'Pendiente'}
@@ -7429,18 +7922,6 @@ export default function AdminAgendaPlaygroundPage() {
                                 <p className="mt-1 text-[12px] font-medium text-[#b42346]">{courtFieldError}</p>
                               )}
                             </label>
-                            <label className="block">
-                              <span className="text-[12px] font-medium text-[#7a8398]">Profesor</span>
-                              <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center gap-2">
-                                <input
-                                  value={coachSearchTerm}
-                                  onChange={(event) => setProfesorSearchTerm(event.target.value)}
-                                  placeholder="Buscar profesor"
-                                  className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
-                                />
-                                <Search size={18} className="text-[#8f96a8]" />
-                              </div>
-                            </label>
                           </div>
 
                           {simplifiedIsEditingReservation && (
@@ -7673,6 +8154,11 @@ export default function AdminAgendaPlaygroundPage() {
                                   setSimplifiedNewParticipantOpen(true);
                                   setSimplifiedNewParticipantName('');
                                   setSimplifiedNewParticipantContact('');
+                                  setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                  setSimplifiedNewParticipantEntityRefDraft('');
+                                  setSimplifiedNewParticipantSuggestionsOpen(false);
+                                  setSimplifiedNewParticipantSearchLoading(false);
+                                  setSimplifiedNewParticipantSuggestions([]);
                                   setFormError('');
                                 }}
                                 className="text-[14px] font-semibold text-[#3f57b0] hover:text-[#2f4fd8]"
@@ -7687,11 +8173,19 @@ export default function AdminAgendaPlaygroundPage() {
                           {simplifiedOwnerAdded && simplifiedNamedParticipants.length > 0 ? (
                             <div className="mt-3 space-y-3">
                               {simplifiedNamedParticipants.map((participant, index) => {
+                                const participantIsLinkedRecord =
+                                  participant.sourceType !== 'guest' ||
+                                  String(participant.entityRef || '').trim().length > 0;
                                 const participantHasPaymentControls = simplifiedParticipantWithPaymentControlsIdSet.has(participant.id);
                                 const participantPaidComputed = participantPaidComputedIdSet.has(participant.id);
                                 const participantAssignedAmount = Number(participantAssignedAmountById.get(participant.id) || 0);
                                 const participantCoveredAmount = Number(participantCoverageAmountById.get(participant.id) || 0);
+                                const participantPayerAmount = Number(participantPayerAmountById.get(participant.id) || 0);
                                 const participantDebtAmount = Number(participantDebtAmountById.get(participant.id) || 0);
+                                const participantHasPayerActivity =
+                                  paymentMode === 'Único' &&
+                                  !participantHasPaymentControls &&
+                                  participantPayerAmount > 0.009;
                                 const participantPaymentStatusLabel =
                                   participantPaidComputed
                                     ? 'Pagado'
@@ -7704,14 +8198,17 @@ export default function AdminAgendaPlaygroundPage() {
                                     : participantPaymentStatusLabel === 'Parcial'
                                       ? 'bg-[#fff4e5] text-[#9a5a00]'
                                       : 'bg-[#eef1f7] text-[#5c667f]';
-                                const participantDisplayedPrice = Number(participantAssignedAmount.toFixed(2));
+                                const participantDisplayedPrice = Number(
+                                  (participantHasPaymentControls ? participantAssignedAmount : participantPayerAmount).toFixed(2)
+                                );
+                                const shouldShowParticipantAmount = participantHasPaymentControls;
                                 return (
                                   <div
                                     key={`simplified-participant-${participant.id}`}
                                     data-participant-shell-id={participant.id}
                                     className="rounded-xl border border-[#e2e7f1] bg-white px-3 py-3"
                                   >
-                                    <div className={`grid ${participantHasPaymentControls ? 'grid-cols-[42px_minmax(0,1fr)_auto_32px]' : 'grid-cols-[42px_minmax(0,1fr)_32px]'} gap-2 items-start`}>
+                                    <div className={`grid ${shouldShowParticipantAmount ? 'grid-cols-[42px_minmax(0,1fr)_auto_32px]' : 'grid-cols-[42px_minmax(0,1fr)_32px]'} gap-2 items-start`}>
                                       <div className="h-10 w-10 rounded-full bg-[#e9edf8] text-[#4a5674] text-[14px] font-semibold grid place-items-center">
                                         {participant.name.trim().charAt(0).toUpperCase() || 'P'}
                                       </div>
@@ -7720,6 +8217,15 @@ export default function AdminAgendaPlaygroundPage() {
                                           <span className="inline-flex items-center rounded-full bg-[#eef2ff] px-2.5 py-1 text-[11px] font-semibold text-[#3a57b8]">
                                             {participant.isOwner ? 'Titular' : `Participante ${index + 1}`}
                                           </span>
+                                          <span
+                                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                              participant.sourceType === 'guest'
+                                                ? 'bg-[#f3f4f7] text-[#5f6880]'
+                                                : 'bg-[#e8f8ec] text-[#16733f]'
+                                            }`}
+                                          >
+                                            {participant.sourceType === 'guest' ? 'Invitado' : 'Vinculado'}
+                                          </span>
                                           {participantHasPaymentControls && (
                                             <span
                                               className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${participantPaymentStatusTone}`}
@@ -7727,10 +8233,20 @@ export default function AdminAgendaPlaygroundPage() {
                                               {participantPaymentStatusLabel}
                                             </span>
                                           )}
+                                          {participantHasPayerActivity && (
+                                            <span className="inline-flex items-center rounded-full bg-[#e8eeff] px-2.5 py-1 text-[11px] font-semibold text-[#3155df]">
+                                              Pagador
+                                            </span>
+                                          )}
                                         </div>
                                         <p className="text-[15px] font-semibold text-[#1f2638]">{participant.name}</p>
+                                        {participantHasPayerActivity && (
+                                          <p className="mt-0.5 text-[12px] text-[#5e6883]">
+                                            Pagó {participantPayerAmount.toFixed(2)} $
+                                          </p>
+                                        )}
                                       </div>
-                                      {participantHasPaymentControls && (
+                                      {shouldShowParticipantAmount && (
                                         <div className="pt-0.5 text-right">
                                           <p className="text-[15px] font-semibold text-[#1f2638]">
                                             {participantDisplayedPrice} $
@@ -7757,49 +8273,59 @@ export default function AdminAgendaPlaygroundPage() {
                                     </div>
                                     {expandedParticipantId === participant.id && (
                                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                                        <label className="block">
-                                          <span className="text-[12px] font-medium text-[#7a8398]">Nombre</span>
-                                          <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
-                                            <input
-                                              value={participant.name}
-                                              onChange={(event) =>
-                                                updateParticipant(participant.id, { name: event.target.value })
-                                              }
-                                              onKeyDown={(event) => {
-                                                if (event.key === 'Enter' || event.key === 'Escape') {
-                                                  event.preventDefault();
-                                                  setExpandedParticipantId((previous) =>
-                                                    previous === participant.id ? null : previous
-                                                  );
-                                                }
-                                              }}
-                                              placeholder="Nombre del participante"
-                                              className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
-                                            />
+                                        {participantIsLinkedRecord ? (
+                                          <div className="md:col-span-2 rounded-xl border border-[#dbe2ef] bg-[#f8fafc] px-3 py-2">
+                                            <p className="text-[12px] text-[#5f6880]">
+                                              Este participante está vinculado a un registro existente y no se puede editar manualmente.
+                                            </p>
                                           </div>
-                                        </label>
-                                        <label className="block">
-                                          <span className="text-[12px] font-medium text-[#7a8398]">Contacto</span>
-                                          <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
-                                            <input
-                                              ref={participantContactInputRef}
-                                              value={participant.contact}
-                                              onChange={(event) =>
-                                                updateParticipant(participant.id, { contact: event.target.value })
-                                              }
-                                              onKeyDown={(event) => {
-                                                if (event.key === 'Enter' || event.key === 'Escape') {
-                                                  event.preventDefault();
-                                                  setExpandedParticipantId((previous) =>
-                                                    previous === participant.id ? null : previous
-                                                  );
-                                                }
-                                              }}
-                                              placeholder="Correo o teléfono"
-                                              className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
-                                            />
-                                          </div>
-                                        </label>
+                                        ) : (
+                                          <>
+                                            <label className="block">
+                                              <span className="text-[12px] font-medium text-[#7a8398]">Nombre</span>
+                                              <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
+                                                <input
+                                                  value={participant.name}
+                                                  onChange={(event) =>
+                                                    updateParticipant(participant.id, { name: event.target.value })
+                                                  }
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === 'Enter' || event.key === 'Escape') {
+                                                      event.preventDefault();
+                                                      setExpandedParticipantId((previous) =>
+                                                        previous === participant.id ? null : previous
+                                                      );
+                                                    }
+                                                  }}
+                                                  placeholder="Nombre del participante"
+                                                  className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                                />
+                                              </div>
+                                            </label>
+                                            <label className="block">
+                                              <span className="text-[12px] font-medium text-[#7a8398]">Contacto</span>
+                                              <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
+                                                <input
+                                                  ref={participantContactInputRef}
+                                                  value={participant.contact}
+                                                  onChange={(event) =>
+                                                    updateParticipant(participant.id, { contact: event.target.value })
+                                                  }
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === 'Enter' || event.key === 'Escape') {
+                                                      event.preventDefault();
+                                                      setExpandedParticipantId((previous) =>
+                                                        previous === participant.id ? null : previous
+                                                      );
+                                                    }
+                                                  }}
+                                                  placeholder="Correo o teléfono"
+                                                  className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                                />
+                                              </div>
+                                            </label>
+                                          </>
+                                        )}
                                         <div className="md:col-span-2 flex justify-end gap-2">
                                           <button
                                             type="button"
@@ -7823,14 +8349,21 @@ export default function AdminAgendaPlaygroundPage() {
                                         <button
                                           type="button"
                                           onClick={() => {
+                                            if (participantIsLinkedRecord) {
+                                              setParticipantMenuId(null);
+                                              return;
+                                            }
                                             setExpandedParticipantId((previous) =>
                                               previous === participant.id ? null : participant.id
                                             );
                                             setParticipantMenuId(null);
                                           }}
-                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb] disabled:opacity-50 disabled:hover:bg-transparent"
+                                          disabled={participantIsLinkedRecord}
                                         >
-                                          {expandedParticipantId === participant.id
+                                          {participantIsLinkedRecord
+                                            ? 'Participante vinculado (sin edición manual)'
+                                            : expandedParticipantId === participant.id
                                             ? 'Finalizar edición'
                                             : 'Editar participante (nombre/contacto)'}
                                         </button>
@@ -7865,21 +8398,26 @@ export default function AdminAgendaPlaygroundPage() {
                                 <span>Nombre del cliente</span>
                               </div>
                               <div className="mt-2 grid grid-cols-1 gap-3">
+                                <div ref={simplifiedOwnerInputContainerRef} className="relative">
                                 <div className="h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center gap-2">
                                   <input
                                     value={ownerParticipant?.name || ''}
                                     onChange={(event) => {
                                       if (!ownerParticipant) return;
-                                      updateParticipant(ownerParticipant.id, {
-                                        name: event.target.value,
-                                        sourceType: 'guest',
-                                        entityRef: undefined,
-                                      });
+                                      void runSimplifiedOwnerSearch(ownerParticipant.id, event.target.value);
+                                    }}
+                                    onFocus={() => {
+                                      if ((ownerParticipant?.name || '').trim().length > 0) {
+                                        setSimplifiedOwnerSuggestionsOpen(true);
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      window.setTimeout(() => setSimplifiedOwnerSuggestionsOpen(false), 120);
                                     }}
                                     placeholder="Ingresá un nombre"
                                     className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
                                   />
-                                  {ownerHasName ? (
+                                  {ownerHasTypedName ? (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -7894,9 +8432,17 @@ export default function AdminAgendaPlaygroundPage() {
                                         setSimplifiedOwnerPaymentMethodDraft('');
                                         setSimplifiedEditingParticipantId(null);
                                         setSimplifiedEditPaymentMethodDraft('');
+                                        setSimplifiedOwnerSuggestionsOpen(false);
+                                        setSimplifiedOwnerSearchLoading(false);
+                                        setSimplifiedOwnerSuggestions([]);
                                         setSimplifiedNewParticipantOpen(false);
                                         setSimplifiedNewParticipantName('');
                                         setSimplifiedNewParticipantContact('');
+                                        setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                        setSimplifiedNewParticipantEntityRefDraft('');
+                                        setSimplifiedNewParticipantSuggestionsOpen(false);
+                                        setSimplifiedNewParticipantSearchLoading(false);
+                                        setSimplifiedNewParticipantSuggestions([]);
                                       }}
                                       className="h-7 w-7 rounded-full text-[#737c90] grid place-items-center hover:bg-[#f3f5fa]"
                                       title="Limpiar titular"
@@ -7906,6 +8452,45 @@ export default function AdminAgendaPlaygroundPage() {
                                   ) : (
                                     <Search size={18} className="text-[#8f96a8]" />
                                   )}
+                                </div>
+                                {simplifiedOwnerSuggestionsOpen &&
+                                  simplifiedOwnerSuggestionsFloatingStyle &&
+                                  createPortal(
+                                  <div
+                                    style={{
+                                      ...simplifiedOwnerSuggestionsFloatingStyle,
+                                      maxHeight: undefined,
+                                    }}
+                                    className="rounded-xl border border-[#dde3ef] bg-white shadow-lg overflow-hidden"
+                                  >
+                                    <div
+                                      style={{ maxHeight: simplifiedOwnerSuggestionsFloatingStyle.maxHeight }}
+                                      className="overflow-y-auto overscroll-contain p-1"
+                                    >
+                                      {simplifiedOwnerSearchLoading && (
+                                        <p className="px-2 py-1 text-[11px] text-[#7b8396]">Buscando...</p>
+                                      )}
+                                      {simplifiedOwnerSuggestions.slice(0, 8).map((suggestion) => (
+                                        <button
+                                          key={`owner-suggestion-${suggestion.id}`}
+                                          type="button"
+                                          onMouseDown={(event) => event.preventDefault()}
+                                          onClick={() => {
+                                            if (!ownerParticipant) return;
+                                            applySimplifiedOwnerSuggestion(ownerParticipant.id, suggestion);
+                                          }}
+                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                        >
+                                          <span className="block text-[12px] font-semibold text-[#273048]">{suggestion.label}</span>
+                                          {suggestion.secondary && (
+                                            <span className="block text-[11px] text-[#7b8396]">{suggestion.secondary}</span>
+                                          )}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>,
+                                  document.body
+                                )}
                                 </div>
                               </div>
                               {ownerFieldError && (
@@ -7941,9 +8526,17 @@ export default function AdminAgendaPlaygroundPage() {
                                   setSimplifiedOwnerAdded(true);
                                   setSimplifiedEditingParticipantId(null);
                                   setSimplifiedEditPaymentMethodDraft('');
+                                  setSimplifiedOwnerSuggestionsOpen(false);
+                                  setSimplifiedOwnerSearchLoading(false);
+                                  setSimplifiedOwnerSuggestions([]);
                                   setSimplifiedNewParticipantOpen(false);
                                   setSimplifiedNewParticipantName('');
                                   setSimplifiedNewParticipantContact('');
+                                  setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                  setSimplifiedNewParticipantEntityRefDraft('');
+                                  setSimplifiedNewParticipantSuggestionsOpen(false);
+                                  setSimplifiedNewParticipantSearchLoading(false);
+                                  setSimplifiedNewParticipantSuggestions([]);
                                   setFormError('');
                                 }}
                                 disabled={!ownerHasName}
@@ -7967,25 +8560,123 @@ export default function AdminAgendaPlaygroundPage() {
                               {simplifiedNewParticipantOpen && (
                                 <div className="mt-1 rounded-xl border border-[#e2e7f1] bg-white p-4">
                                   <p className="text-[15px] font-semibold text-[#1f2638]">Nuevo participante</p>
-                                  <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                                    <input
-                                      value={simplifiedNewParticipantName}
-                                      onChange={(event) => setSimplifiedNewParticipantName(event.target.value)}
-                                      placeholder="Nombre del participante"
-                                      className="h-11 rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] outline-none"
-                                    />
+                                  <div className="mt-3 space-y-2">
+                                    <div ref={simplifiedNewParticipantInputContainerRef} className="relative">
+                                      <input
+                                        value={simplifiedNewParticipantName}
+                                        onChange={(event) => {
+                                          if (simplifiedNewParticipantHasLinkedSelection) return;
+                                          void runSimplifiedNewParticipantSearch(event.target.value);
+                                        }}
+                                        onFocus={() => {
+                                          if (simplifiedNewParticipantHasLinkedSelection) return;
+                                          if (simplifiedNewParticipantName.trim().length > 0) {
+                                            setSimplifiedNewParticipantSuggestionsOpen(true);
+                                          }
+                                        }}
+                                        onBlur={() => {
+                                          window.setTimeout(() => setSimplifiedNewParticipantSuggestionsOpen(false), 120);
+                                        }}
+                                        readOnly={simplifiedNewParticipantHasLinkedSelection}
+                                        placeholder="Nombre del participante"
+                                        className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${
+                                          simplifiedNewParticipantHasLinkedSelection
+                                            ? 'border-[#e1e6f0] bg-[#f8fafc] text-[#5f6880] cursor-not-allowed'
+                                            : 'border-[#dce2ee] bg-white'
+                                        }`}
+                                      />
+                                      {simplifiedNewParticipantSuggestionsOpen &&
+                                        simplifiedNewParticipantSuggestionsFloatingStyle &&
+                                        createPortal(
+                                        <div
+                                          style={{
+                                            ...simplifiedNewParticipantSuggestionsFloatingStyle,
+                                            maxHeight: undefined,
+                                          }}
+                                          className="rounded-xl border border-[#dde3ef] bg-white shadow-lg overflow-hidden"
+                                        >
+                                          <div
+                                            style={{ maxHeight: simplifiedNewParticipantSuggestionsFloatingStyle.maxHeight }}
+                                            className="overflow-y-auto overscroll-contain p-1"
+                                          >
+                                            {simplifiedNewParticipantSearchLoading && (
+                                              <p className="px-2 py-1 text-[11px] text-[#7b8396]">Buscando...</p>
+                                            )}
+                                            {simplifiedNewParticipantSuggestions.slice(0, 8).map((suggestion) => (
+                                              <button
+                                                key={`new-suggestion-${suggestion.id}`}
+                                                type="button"
+                                                onMouseDown={(event) => event.preventDefault()}
+                                                onClick={() => applySimplifiedNewParticipantSuggestion(suggestion)}
+                                                className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                              >
+                                                <span className="block text-[12px] font-semibold text-[#273048]">{suggestion.label}</span>
+                                                {suggestion.secondary && (
+                                                  <span className="block text-[11px] text-[#7b8396]">{suggestion.secondary}</span>
+                                                )}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>,
+                                        document.body
+                                      )}
+                                    </div>
                                     <input
                                       value={simplifiedNewParticipantContact}
-                                      onChange={(event) => setSimplifiedNewParticipantContact(event.target.value)}
+                                      onChange={(event) => {
+                                        if (simplifiedNewParticipantHasLinkedSelection) return;
+                                        setSimplifiedNewParticipantContact(event.target.value);
+                                      }}
+                                      readOnly={simplifiedNewParticipantHasLinkedSelection}
                                       placeholder="Contacto (correo o teléfono)"
-                                      className="h-11 rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] outline-none"
+                                      className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${
+                                        simplifiedNewParticipantHasLinkedSelection
+                                          ? 'border-[#e1e6f0] bg-[#f8fafc] text-[#5f6880] cursor-not-allowed'
+                                          : 'border-[#dce2ee] bg-white'
+                                      }`}
                                     />
                                   </div>
+                                  {simplifiedNewParticipantHasLinkedSelection && (
+                                    <div className="mt-2 flex items-center justify-between gap-2">
+                                      <p className="text-[12px] text-[#6f7890]">
+                                        Registro asociado seleccionado. No se puede editar manualmente.
+                                      </p>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSimplifiedNewParticipantName('');
+                                          setSimplifiedNewParticipantContact('');
+                                          setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                          setSimplifiedNewParticipantEntityRefDraft('');
+                                          setSimplifiedNewParticipantSuggestionsOpen(false);
+                                          setSimplifiedNewParticipantSearchLoading(false);
+                                          setSimplifiedNewParticipantSuggestions([]);
+                                        }}
+                                        className="shrink-0 text-[12px] font-semibold text-[#3155df] hover:text-[#2748cc]"
+                                      >
+                                        Cambiar selección
+                                      </button>
+                                    </div>
+                                  )}
+                                  {simplifiedNewParticipantName.trim().length > 0 && !hasValidSimplifiedNewParticipantName && (
+                                    <p className="mt-2 text-[12px] text-[#7a8398]">
+                                      Seleccioná un registro de la lista (o Invitado) antes de agregar.
+                                    </p>
+                                  )}
                                   <div className="mt-3 flex items-center gap-3">
                                     <button
                                       type="button"
                                       onClick={() => {
                                         if (!hasValidSimplifiedNewParticipantName) return;
+                                        const normalizedEntityRef = simplifiedNewParticipantEntityRefDraft.trim();
+                                        const duplicateLinked = participants.some(
+                                          (participant) =>
+                                            String(participant.entityRef || '').trim() === normalizedEntityRef
+                                        );
+                                        if (normalizedEntityRef && duplicateLinked) {
+                                          setFormError('Ese participante ya está agregado en esta reserva.');
+                                          return;
+                                        }
                                         setParticipants((previous) => [
                                           ...previous,
                                           {
@@ -7994,15 +8685,20 @@ export default function AdminAgendaPlaygroundPage() {
                                             contact: simplifiedNewParticipantContact.trim(),
                                             paid: false,
                                             isOwner: false,
-                                            sourceType: 'guest',
+                                            sourceType: simplifiedNewParticipantSourceTypeDraft,
                                             paymentMethod: 'CASH',
-                                            entityRef: `guest:${toSlugToken(simplifiedNewParticipantName)}`,
+                                            entityRef: simplifiedNewParticipantEntityRefDraft,
                                             customPrice: null,
                                           },
                                         ]);
                                         setSimplifiedNewParticipantOpen(false);
                                         setSimplifiedNewParticipantName('');
                                         setSimplifiedNewParticipantContact('');
+                                        setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                        setSimplifiedNewParticipantEntityRefDraft('');
+                                        setSimplifiedNewParticipantSuggestionsOpen(false);
+                                        setSimplifiedNewParticipantSearchLoading(false);
+                                        setSimplifiedNewParticipantSuggestions([]);
                                         setFormError('');
                                       }}
                                       disabled={!hasValidSimplifiedNewParticipantName}
@@ -8020,6 +8716,11 @@ export default function AdminAgendaPlaygroundPage() {
                                         setSimplifiedNewParticipantOpen(false);
                                         setSimplifiedNewParticipantName('');
                                         setSimplifiedNewParticipantContact('');
+                                        setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                        setSimplifiedNewParticipantEntityRefDraft('');
+                                        setSimplifiedNewParticipantSuggestionsOpen(false);
+                                        setSimplifiedNewParticipantSearchLoading(false);
+                                        setSimplifiedNewParticipantSuggestions([]);
                                       }}
                                       className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[14px] font-semibold text-[#5f6880] hover:bg-[#f6f8fc]"
                                     >
@@ -8918,7 +9619,7 @@ export default function AdminAgendaPlaygroundPage() {
                   )}
                 </div>
 
-                <footer className="border-t border-[#eef0f5] bg-white p-4">
+                <footer ref={simplifiedSidebarFooterRef} className="border-t border-[#eef0f5] bg-white p-4">
                   {useSimplifiedBookingSidebar ? (
                     <div className="space-y-3">
                       {hasBlockingActionError && (
@@ -9080,7 +9781,7 @@ export default function AdminAgendaPlaygroundPage() {
             onClick={closeSimplifiedPaymentModal}
           >
             <div
-              className="w-full max-w-[560px] rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+              className="w-full max-w-[700px] rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
@@ -9123,103 +9824,64 @@ export default function AdminAgendaPlaygroundPage() {
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#79829a]">Quién paga</span>
-                    <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
-                      <select
-                        value={simplifiedResolvedPayerParticipantId}
-                        disabled={paymentMode === 'Único' && Boolean(simplifiedLockedSinglePayerId)}
-                        onChange={(event) => {
-                          const nextParticipantId = String(event.target.value || '');
-                          if (
-                            paymentMode === 'Único' &&
-                            simplifiedLockedSinglePayerId &&
-                            nextParticipantId &&
-                            nextParticipantId !== simplifiedLockedSinglePayerId
-                          ) {
-                            showCalendarNotice('En pago único, después del primer pago queda fijo el pagador.');
-                            return;
-                          }
-                          setSimplifiedPaymentPayerParticipantIdDraft(nextParticipantId);
-                          if (paymentMode === 'Dividido') {
-                            const preselectedCoveredId = (() => {
-                              const payerDebt = Number(participantDebtAmountById.get(nextParticipantId) || 0);
-                              if (payerDebt > 0.009) return nextParticipantId;
-                              const firstWithDebt = simplifiedPayerCandidates.find(
-                                (candidate) => Number(participantDebtAmountById.get(candidate.id) || 0) > 0.009
-                              );
-                              return String(firstWithDebt?.id || '');
-                            })();
-                            setSimplifiedPaymentCoveredParticipantIdDraft(preselectedCoveredId);
-                            setSimplifiedPaymentCoveredParticipantIdsDraft(
-                              preselectedCoveredId ? [preselectedCoveredId] : []
-                            );
-                            const nextDebt = Number(participantDebtAmountById.get(preselectedCoveredId) || 0);
-                            const nextAmount = Number(
-                              Math.max(
-                                0,
-                                Math.min(
-                                  simplifiedRemainingAfterQueue,
-                                  nextDebt > 0.009 ? nextDebt : simplifiedRemainingAfterQueue
-                                )
-                              ).toFixed(2)
-                            );
-                            setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
-                          } else if (!String(simplifiedPaymentCoveredParticipantIdDraft || '').trim()) {
-                            setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
-                          }
-                          const nextPayer = participants.find((participant) => participant.id === nextParticipantId);
-                          if (nextPayer) {
-                            setSimplifiedPaymentMethodDraft(nextPayer.paymentMethod || 'CASH');
-                          }
-                        }}
-                        className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
-                      >
-                        <option value="">Seleccionar participante</option>
-                        {simplifiedPayerCandidates.map((participant) => (
-                          <option
-                            key={`simplified-payer-${participant.id}`}
-                            value={participant.id}
-                            disabled={
-                              paymentMode === 'Único' &&
-                              Boolean(simplifiedLockedSinglePayerId) &&
-                              participant.id !== simplifiedLockedSinglePayerId
-                            }
-                          >
-                            {participant.optionLabel}
-                            {participant.isOwner ? ' (titular)' : ''}
-                            {paymentMode === 'Único' &&
-                            simplifiedLockedSinglePayerId &&
-                            participant.id !== simplifiedLockedSinglePayerId
-                              ? ' (bloqueado)'
-                              : ''}
-                          </option>
-                        ))}
-                      </select>
+                {paymentMode === 'Único' ? (
+                  <div className="space-y-3">
+                    <div className="block">
+                      <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+                      <PlaygroundCombo
+                        value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
+                        onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
+                        options={simplifiedPaymentMethodComboOptions}
+                        variant="participant"
+                        className="mt-1"
+                      />
                     </div>
-                    {paymentMode === 'Único' && simplifiedLockedSinglePayerId && (
-                      <p className="mt-1 text-[11px] text-[#7a8398]">
-                        El pagador queda fijo después del primer pago confirmado.
-                      </p>
-                    )}
-                  </label>
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#79829a]">Por quién paga</span>
-                    {paymentMode === 'Único' ? (
-                      <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
-                        <select
-                          value={simplifiedResolvedCoveredParticipantId}
-                          disabled
-                          className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
-                        >
-                          <option value={simplifiedResolvedCoveredParticipantId}>
-                            {simplifiedResolvedCoveredParticipant?.name?.trim() || 'Titular'}
-                          </option>
-                        </select>
-                      </div>
-                    ) : (
-                      <div className="mt-1 max-h-[142px] overflow-auto rounded-xl border border-[#dce2ee] bg-white p-2">
+                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setSimplifiedSinglePaymentAdvancedOpen((previous) => !previous)}
+                        className="flex w-full items-center justify-between text-left text-[12px] font-semibold text-[#3f4a64]"
+                      >
+                        <span>Opciones avanzadas</span>
+                        <ChevronDown
+                          size={14}
+                          className={`transition-transform ${simplifiedSinglePaymentAdvancedOpen ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                      {simplifiedSinglePaymentAdvancedOpen && (
+                        <div className="mt-2 border-t border-[#e3e8f2] pt-2">
+                          <span className="text-[12px] font-medium text-[#79829a]">Quién paga</span>
+                          <PlaygroundCombo
+                            value={simplifiedResolvedPayerParticipantId || simplifiedPayerComboOptions[0]?.value || ''}
+                            onChange={handleSimplifiedPayerChange}
+                            options={simplifiedPayerComboOptions}
+                            variant="participant"
+                            className="mt-1"
+                          />
+                          {simplifiedLockedSinglePayerId && (
+                            <p className="mt-1 text-[11px] text-[#7a8398]">
+                              El pagador queda fijo después del primer pago confirmado.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(180px,1fr)_minmax(280px,1.35fr)_minmax(170px,0.9fr)]">
+                    <div className="block">
+                      <span className="text-[12px] font-medium text-[#79829a]">Quién paga</span>
+                      <PlaygroundCombo
+                        value={simplifiedResolvedPayerParticipantId || simplifiedPayerComboOptions[0]?.value || ''}
+                        onChange={handleSimplifiedPayerChange}
+                        options={simplifiedPayerComboOptions}
+                        variant="participant"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="block">
+                      <span className="text-[12px] font-medium text-[#79829a]">Por quién paga</span>
+                      <div className="mt-1 max-h-[188px] overflow-auto rounded-xl border border-[#dce2ee] bg-white p-2">
                         <div className="space-y-1">
                           {simplifiedPayerCandidates.map((participant) => {
                             const isChecked = simplifiedResolvedCoveredParticipantIds.includes(participant.id);
@@ -9269,48 +9931,36 @@ export default function AdminAgendaPlaygroundPage() {
                                       setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
                                     }}
                                   />
-                                  <span className="truncate">
+                                  <span className="min-w-0 break-words leading-tight">
                                     {participant.optionLabel}
                                     {participant.isOwner ? ' (titular)' : ''}
                                     {!participantSelectable ? ' (sin deuda)' : ''}
                                   </span>
                                 </span>
-                                <span className="text-[11px] text-[#7a8398]">{participantDebt.toFixed(2)} $</span>
+                                <span className="shrink-0 whitespace-nowrap text-[12px] font-medium text-[#62708f]">
+                                  $ {participantDebt.toFixed(2)}
+                                </span>
                               </label>
                             );
                           })}
                         </div>
                       </div>
-                    )}
-                    {paymentMode === 'Único' && (
-                      <p className="mt-1 text-[11px] text-[#7a8398]">
-                        En pago único, la imputación sigue al responsable de cobro.
-                      </p>
-                    )}
-                    {paymentMode === 'Dividido' && (
                       <p className="mt-1 text-[11px] text-[#7a8398]">
                         Podés seleccionar uno o más participantes para imputar este pago.
                       </p>
-                    )}
-                  </label>
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#79829a]">Método</span>
-                    <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
-                      <select
-                        value={simplifiedPaymentMethodDraft}
-                        onChange={(event) => setSimplifiedPaymentMethodDraft(String(event.target.value || ''))}
-                        className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
-                      >
-                        <option value="">Seleccionar método de pago</option>
-                        {ownerPaymentMethodOptions.map((option) => (
-                          <option key={`modal-payment-method-${option.value}`} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
                     </div>
-                  </label>
-                </div>
+                    <div className="block">
+                      <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+                      <PlaygroundCombo
+                        value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
+                        onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
+                        options={simplifiedPaymentMethodComboOptions}
+                        variant="participant"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <label className="block">
                   <span className="text-[12px] font-medium text-[#79829a]">Monto</span>
@@ -9326,14 +9976,10 @@ export default function AdminAgendaPlaygroundPage() {
                     <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
                   </div>
                   <p className="mt-1 text-[11px] text-[#6f7890]">
-                    Deuda pendiente disponible: {simplifiedRemainingAfterQueue.toFixed(2)} $
+                    {paymentMode === 'Único'
+                      ? `Saldo pendiente de la reserva: ${simplifiedRemainingAfterQueue.toFixed(2)} $`
+                      : `Deuda pendiente disponible: ${simplifiedRemainingAfterQueue.toFixed(2)} $`}
                   </p>
-                  {simplifiedResolvedCoveredParticipant && paymentMode === 'Único' && (
-                    <p className="mt-0.5 text-[11px] text-[#6f7890]">
-                      Deuda de {String(simplifiedResolvedCoveredParticipant.name || '').trim() || 'participante'}:{' '}
-                      {simplifiedResolvedCoveredParticipantsDebt.toFixed(2)} $
-                    </p>
-                  )}
                   {paymentMode === 'Dividido' && (
                     <p className="mt-0.5 text-[11px] text-[#6f7890]">
                       Deuda seleccionada ({simplifiedResolvedCoveredParticipantIds.length}):{' '}
@@ -9393,6 +10039,7 @@ export default function AdminAgendaPlaygroundPage() {
         }
 
         .playground-combo-trigger {
+          position: relative;
           width: 100%;
           height: 44px;
           border: 1px solid #dce2ee;
@@ -9401,12 +10048,24 @@ export default function AdminAgendaPlaygroundPage() {
           color: #2a3348;
           font-size: 15px;
           font-weight: 500;
-          padding: 0 34px 0 12px;
+          padding: 0 30px 0 12px;
           display: inline-flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-start;
           gap: 8px;
           transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+        }
+
+        .playground-combo-chevron {
+          position: absolute;
+          right: 10px;
+          top: 50%;
+          transform: translateY(-50%);
+          transition: transform 0.16s ease;
+        }
+
+        .playground-combo-chevron.rotate-180 {
+          transform: translateY(-50%) rotate(180deg);
         }
 
         .playground-combo-trigger:hover {
@@ -9460,6 +10119,79 @@ export default function AdminAgendaPlaygroundPage() {
         .playground-combo-option-active {
           background: #2f63d0;
           color: #fff;
+        }
+
+        .playground-combo-menu-participant {
+          border-radius: 14px;
+          border-color: #d7deeb;
+          box-shadow: 0 14px 28px rgba(23, 31, 53, 0.14);
+          overflow: hidden;
+        }
+
+        .playground-combo-menu-participant > div {
+          max-height: 236px;
+          padding: 4px;
+          scrollbar-width: thin;
+          scrollbar-color: #8e99b3 #edf1f7;
+        }
+
+        .playground-combo-menu-participant > div::-webkit-scrollbar {
+          width: 10px;
+        }
+
+        .playground-combo-menu-participant > div::-webkit-scrollbar-track {
+          background: #edf1f7;
+          border-radius: 9999px;
+          margin: 6px 2px;
+        }
+
+        .playground-combo-menu-participant > div::-webkit-scrollbar-thumb {
+          background: #8e99b3;
+          border-radius: 9999px;
+          border: 2px solid #edf1f7;
+        }
+
+        .playground-combo-option-participant {
+          border-radius: 10px;
+          padding: 9px 10px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 2px;
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1.25;
+        }
+
+        .playground-combo-option-participant + .playground-combo-option-participant {
+          margin-top: 2px;
+        }
+
+        .playground-combo-option-primary {
+          color: inherit;
+          width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .playground-combo-option-secondary {
+          width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #6f7b97;
+          font-size: 12px;
+          font-weight: 500;
+        }
+
+        .playground-combo-option-participant:hover {
+          background: #edf1f8;
+        }
+
+        .playground-combo-option-participant.playground-combo-option-active {
+          background: #e3e9f7;
+          color: #25355d;
         }
       `}</style>
     </>
