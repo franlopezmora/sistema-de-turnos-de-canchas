@@ -145,9 +145,9 @@ type SimplifiedSidebarSection = 'DETAILS' | 'BILLING' | 'HISTORY';
 
 
 const sidebarItems = [
-  { label: 'Calendario', icon: CalendarDays, active: true },
-  { label: 'Clientes', icon: Users },
-  { label: 'Pagos', icon: CreditCard },
+  { label: 'Calendario', icon: CalendarDays, href: '/admin/agenda-playground2' },
+  { label: 'Clientes', icon: Users, href: '/admin/clientes-playground2' },
+  { label: 'Pagos', icon: CreditCard, href: '/admin/cash-playground2' },
   { label: 'Reservas', icon: Receipt },
   { label: 'Partidos', icon: Trophy },
   { label: 'Tienda', icon: ShoppingBag },
@@ -6347,10 +6347,17 @@ export default function AdminAgendaPlaygroundPage() {
               </span>
             </button>
             <nav className="w-full px-2 space-y-1">
-              {sidebarItems.map(({ label, icon: Icon, active }) => (
+              {sidebarItems.map(({ label, icon: Icon, href }) => {
+                const active = Boolean(href) && router.pathname === href;
+                return (
                 <button
                   key={label}
                   type="button"
+                  onClick={() => {
+                    if (href && router.pathname !== href) {
+                      void router.push(href);
+                    }
+                  }}
                   className={`w-full rounded-md py-2 text-[11px] transition-colors ${
                     active ? 'bg-[#eef1ff] text-[#2b3fa8]' : 'text-[#8b92a0] hover:bg-[#f4f5f7]'
                   } px-0 text-left`}
@@ -6369,7 +6376,8 @@ export default function AdminAgendaPlaygroundPage() {
                     </span>
                   </span>
                 </button>
-              ))}
+                );
+              })}
             </nav>
           </aside>
 
