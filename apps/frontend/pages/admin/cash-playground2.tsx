@@ -9,8 +9,8 @@ import {
   Landmark,
   Search,
   Wallet,
-  X,
 } from 'lucide-react';
+import AgendaLikeRightSidebar from '../../components/admin/AgendaLikeRightSidebar';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
@@ -850,50 +850,29 @@ export default function AdminCashPlayground2Page() {
         </div>
       </AdminPlaygroundShell>
 
-      {actionSidebarOpen && (
-        <button
-          type="button"
-          aria-label="Cerrar panel"
-          className="fixed inset-0 z-[2147483200] bg-[#0d1326]/45 backdrop-blur-[2px]"
-          onClick={closeActionSidebar}
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 right-0 z-[2147483300] w-full max-w-[560px] border-l border-[#dce2ee] bg-white shadow-[-16px_0_48px_rgba(22,31,55,0.18)] transition-transform duration-300 ${
-          actionSidebarOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
+      <AgendaLikeRightSidebar
+        open={actionSidebarOpen}
+        onClose={closeActionSidebar}
+        title={
+          <>
+            {sidebarView === 'open_shift' && 'Abrir caja'}
+            {sidebarView === 'close_shift' && 'Cerrar caja'}
+            {sidebarView === 'movement_create' && 'Registrar movimiento'}
+            {sidebarView === 'close_report' && 'Detalle de arqueo'}
+          </>
+        }
+        subtitle={
+          <>
+            {sidebarView === 'open_shift' && 'Configura caja registradora y monto inicial.'}
+            {sidebarView === 'close_shift' && 'Ingresa el efectivo contado para cerrar el turno.'}
+            {sidebarView === 'movement_create' && 'Crea ingresos o egresos sin saturar la vista principal.'}
+            {sidebarView === 'close_report' && 'Resumen ampliado del ultimo cierre registrado.'}
+          </>
+        }
+        statusChip={currentShift ? 'Caja abierta' : 'Caja cerrada'}
+        statusChipClassName={currentShift ? 'bg-[#e8f8ec] text-[#16733f]' : 'bg-[#edf1ff] text-[#3155df]'}
       >
-        <div className="flex h-full min-h-0 flex-col">
-          <header className="flex items-start justify-between gap-3 border-b border-[#eef0f5] px-6 py-5">
-            <div>
-              <h2 className="text-[25px] leading-none font-black tracking-[-0.02em] text-[#181d2f]">
-                {sidebarView === 'open_shift' && 'Abrir caja'}
-                {sidebarView === 'close_shift' && 'Cerrar caja'}
-                {sidebarView === 'movement_create' && 'Registrar movimiento'}
-                {sidebarView === 'close_report' && 'Detalle de arqueo'}
-              </h2>
-              <p className="mt-3 text-[13px] leading-snug text-[#7d879d]">
-                {sidebarView === 'open_shift' && 'Configura caja registradora y monto inicial.'}
-                {sidebarView === 'close_shift' && 'Ingresa el efectivo contado para cerrar el turno.'}
-                {sidebarView === 'movement_create' && 'Crea ingresos o egresos sin saturar la vista principal.'}
-                {sidebarView === 'close_report' && 'Resumen ampliado del ultimo cierre registrado.'}
-              </p>
-              <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${currentShift ? 'bg-[#e8f8ec] text-[#16733f]' : 'bg-[#edf1ff] text-[#3155df]'}`}>
-                {currentShift ? 'Caja abierta' : 'Caja cerrada'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={closeActionSidebar}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#e4e7ee] text-[#798194] hover:bg-[#f7f8fb]"
-              aria-label="Cerrar"
-            >
-              <X size={15} />
-            </button>
-          </header>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div>
             {sidebarView === 'open_shift' && (
               <form className="space-y-3" onSubmit={handleOpenShift}>
                 <div>
@@ -1072,8 +1051,7 @@ export default function AdminCashPlayground2Page() {
               </section>
             )}
           </div>
-        </div>
-      </aside>
+      </AgendaLikeRightSidebar>
     </>
   );
 }

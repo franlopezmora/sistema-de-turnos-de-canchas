@@ -288,7 +288,7 @@ export default function AdminPlaygroundShell({
           </aside>
 
           <main
-            className={`h-full min-w-0 flex-1 overflow-hidden rounded-tl-[12px] bg-[#f5f6f8] transition ${
+            className={`relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-[#f5f6f8] transition ${
               contentMuted ? 'pointer-events-none select-none opacity-80' : 'opacity-100'
             }`}
           >

@@ -1280,18 +1280,6 @@ function parseSidebarParticipantsFromMetadata(
   return mapped;
 }
 
-function parseSidebarNotesFromMetadata(metadata: BookingBillingConfig['metadata'] | undefined): string | null {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const metadataRecord = metadata as Record<string, unknown>;
-  const sidebarBlock =
-    metadataRecord.sidebar && typeof metadataRecord.sidebar === 'object'
-      ? (metadataRecord.sidebar as Record<string, unknown>)
-      : null;
-  if (typeof metadataRecord.sidebarNotes === 'string') return metadataRecord.sidebarNotes;
-  if (typeof sidebarBlock?.notes === 'string') return sidebarBlock.notes;
-  return null;
-}
-
 function buildSidebarParticipantsMetadata(participants: Participant[]) {
   return participants.map((participant) => ({
     id: String(participant.id || ''),
@@ -1561,8 +1549,6 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState('');
   const [simplifiedPaymentNoteDraft, setSimplifiedPaymentNoteDraft] = useState('');
   const [simplifiedSidebarSection, setSimplifiedSidebarSection] = useState<SimplifiedSidebarSection>('DETAILS');
-  const [notes, setNotes] = useState('');
-  const [notesTouchedByUser, setNotesTouchedByUser] = useState(false);
   const [blockingTitle, setBlockingTitle] = useState('');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -1747,11 +1733,6 @@ export default function AdminAgendaPlaygroundPage() {
     });
   }, []);
 
-  const handleNotesChange = useCallback((value: string) => {
-    setNotesTouchedByUser(true);
-    setNotes(value);
-  }, []);
-
   useEffect(() => {
     if (formError.trim().length > 0) return;
     if (Object.keys(fieldErrors).length === 0) return;
@@ -1875,8 +1856,6 @@ export default function AdminAgendaPlaygroundPage() {
       participant.isOwner ? participant : { ...participant, customPrice: null }
     );
     setParticipants(resolvedParticipants);
-    setNotes('');
-    setNotesTouchedByUser(false);
     setParticipantPriceDraftById({});
     setPaymentMode('Único');
     setSimplifiedSidebarSection('DETAILS');
@@ -2197,13 +2176,6 @@ export default function AdminAgendaPlaygroundPage() {
       }
     }
 
-    const resolvedNotes = parseSidebarNotesFromMetadata(metadata);
-    if (resolvedNotes != null && !notesTouchedByUser) {
-      setNotes(resolvedNotes);
-      setNotesTouchedByUser(false);
-      shouldRebaseDrawerSource = true;
-    }
-
     if (shouldRebaseDrawerSource) {
       bookingDrawerLoadKeyRef.current = '';
       bookingDrawerFormSyncSignatureRef.current = '';
@@ -2216,7 +2188,6 @@ export default function AdminAgendaPlaygroundPage() {
     bookingKind,
     drawerOpen,
     editingBooking,
-    notesTouchedByUser,
     persistedEditingBookingId,
     remoteBillingConfig,
     remoteBillingConfig?.metadata,
@@ -2391,8 +2362,6 @@ export default function AdminAgendaPlaygroundPage() {
         setSelectedStartSlot(range.start);
         setSelectedEndSlot(range.end);
         setParticipants(initialParticipants.map((participant) => ({ ...participant })));
-        setNotes('');
-        setNotesTouchedByUser(false);
         setPaymentMode('Único');
         setSimplifiedSidebarSection('DETAILS');
         setParticipantPriceDraftById({});
@@ -3360,7 +3329,6 @@ export default function AdminAgendaPlaygroundPage() {
               participantRefById.get(String(effectiveParticipantId)) ||
               `guest:${String(effectiveParticipantId)}`;
             const sidebarParticipantsMetadata = buildSidebarParticipantsMetadata(participants);
-            const sidebarNotesValue = String(notes || '');
 
             const savedConfig = await updateBookingBillingConfig(persistedEditingBookingId, {
               chargeMode: 'INDIVIDUAL',
@@ -3370,10 +3338,8 @@ export default function AdminAgendaPlaygroundPage() {
                 schemaVersion: 1,
                 client: 'agenda-playground-v2',
                 sidebarParticipants: sidebarParticipantsMetadata,
-                sidebarNotes: sidebarNotesValue,
                 sidebar: {
                   participants: sidebarParticipantsMetadata,
-                  notes: sidebarNotesValue,
                 },
               },
             });
@@ -3409,7 +3375,6 @@ export default function AdminAgendaPlaygroundPage() {
     persistedEditingBookingId,
     refreshBookingFinancial,
     reloadSchedule,
-    notes,
     singleChargeParticipantId,
     showCalendarNotice,
   ]);
@@ -3937,7 +3902,6 @@ export default function AdminAgendaPlaygroundPage() {
               : editingBooking?.state === 'blocked'
                 ? 'CANCELLED'
                 : 'PENDING',
-        notes: notes || '',
         bookingResponsibleParticipantId: ownerId,
       },
       participants: participantsDraft,
@@ -3966,7 +3930,6 @@ export default function AdminAgendaPlaygroundPage() {
     editingBooking?.state,
     editingBooking?.userId,
     editingBookingId,
-    notes,
     participants,
     paymentMode,
     remoteBillingConfig,
@@ -4121,11 +4084,6 @@ export default function AdminAgendaPlaygroundPage() {
     return '';
   }, [fieldErrors.participants, hasDuplicateParticipants]);
   const paymentFieldError = String(fieldErrors.payment || '').trim();
-  const notesFieldError = String(fieldErrors.notes || '').trim();
-  const persistedSidebarNotes = useMemo(
-    () => parseSidebarNotesFromMetadata(remoteBillingConfig?.metadata) || '',
-    [remoteBillingConfig?.metadata]
-  );
   const persistedSidebarParticipantsComparable = useMemo(() => {
     if (!editingBookingId || bookingKind === 'block') return [];
     if (!editingBooking) return [];
@@ -4150,10 +4108,6 @@ export default function AdminAgendaPlaygroundPage() {
     editingBookingId,
     persistedSidebarParticipantsComparable,
   ]);
-  const hasSidebarNotesChanges = useMemo(() => {
-    if (!editingBookingId || bookingKind === 'block') return false;
-    return String(notes || '') !== String(persistedSidebarNotes);
-  }, [bookingKind, editingBookingId, notes, persistedSidebarNotes]);
   const sourceBillingComparable = useMemo(
     () => buildComparableBillingFromDrawerDraft(bookingDrawerState.source as NewBookingDrawerDraft | null),
     [bookingDrawerState.source]
@@ -4173,7 +4127,6 @@ export default function AdminAgendaPlaygroundPage() {
     if (bookingKind === 'block') return hasScheduleChanges;
     return (
       hasScheduleChanges ||
-      hasSidebarNotesChanges ||
       hasSidebarParticipantsChanges ||
       hasUserBillingConfigChanges
     );
@@ -4182,7 +4135,6 @@ export default function AdminAgendaPlaygroundPage() {
     editingBookingId,
     hasScheduleChanges,
     hasSidebarParticipantsChanges,
-    hasSidebarNotesChanges,
     hasUserBillingConfigChanges,
   ]);
   const primaryActionDisabled =
@@ -5048,7 +5000,6 @@ export default function AdminAgendaPlaygroundPage() {
         }
       }
       const sidebarParticipantsMetadata = buildSidebarParticipantsMetadata(nextParticipants);
-      const sidebarNotesValue = String(notes || '');
 
       let backendPersisted = false;
       try {
@@ -5060,10 +5011,8 @@ export default function AdminAgendaPlaygroundPage() {
             schemaVersion: 1,
             client: 'agenda-playground-v2',
             sidebarParticipants: sidebarParticipantsMetadata,
-            sidebarNotes: sidebarNotesValue,
             sidebar: {
               participants: sidebarParticipantsMetadata,
-              notes: sidebarNotesValue,
             },
           },
         });
@@ -5088,7 +5037,6 @@ export default function AdminAgendaPlaygroundPage() {
     bookingDrawerState.draft,
     editingBooking?.clientId,
     editingBooking?.userId,
-    notes,
     participants,
     resolveParticipantPrice,
     showCalendarNotice,
@@ -5233,7 +5181,7 @@ export default function AdminAgendaPlaygroundPage() {
     }
 
     if (editingBookingId) {
-      if (!hasScheduleChanges && !hasUserBillingConfigChanges && !hasSidebarNotesChanges && !hasSidebarParticipantsChanges) {
+      if (!hasScheduleChanges && !hasUserBillingConfigChanges && !hasSidebarParticipantsChanges) {
         setDrawerOpen(false);
         setFormError('');
         setEditingBookingId(null);
@@ -5647,8 +5595,6 @@ export default function AdminAgendaPlaygroundPage() {
       }
       setDrawerOpen(false);
       setFormError('');
-      setNotes('');
-      setNotesTouchedByUser(false);
       setParticipants(initialParticipants.map((participant) => ({ ...participant })));
       setParticipantPriceDraftById({});
       setEditingBookingId(null);
@@ -6225,10 +6171,6 @@ export default function AdminAgendaPlaygroundPage() {
           );
         }
         detail = detailParts.join(' - ');
-      } else if (normalizedType === 'BOOKING_NOTES_UPDATED') {
-        const notes = String((payload as any)?.notes || '').trim();
-        title = 'Notas actualizadas';
-        detail = notes ? 'Se actualizaron las notas privadas.' : 'Se limpiaron las notas privadas.';
       } else {
         detail = 'Se registró una actualización.';
       }
@@ -8292,24 +8234,6 @@ export default function AdminAgendaPlaygroundPage() {
                         </div>
                       </section>
 
-                      <section className="mt-6">
-                        <p className="text-[17px] font-semibold text-[#1f2638]">Notas</p>
-                        <div className="mt-3 rounded-xl border border-[#e9edf5] bg-white p-4">
-                          <label className="block">
-                            <span className="text-[13px] text-[#727b90]">Notas privadas</span>
-                            <textarea
-                              value={notes}
-                              onChange={(event) => handleNotesChange(event.target.value)}
-                              placeholder="Las notas privadas son visibles solo para administradores del club"
-                              rows={3}
-                              className="mt-2 w-full rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[15px] resize-none"
-                            />
-                          </label>
-                          {notesFieldError && (
-                            <p className="mt-1 text-[12px] font-medium text-[#b42346]">{notesFieldError}</p>
-                          )}
-                        </div>
-                      </section>
                       </>
                       )}
                     </section>
@@ -8440,19 +8364,6 @@ export default function AdminAgendaPlaygroundPage() {
                         </div>
                       </section>
 
-                      <section className="pt-6">
-                        <p className="text-[19px] font-semibold tracking-[-0.01em] text-[#1f2638]">Notas</p>
-                        <label className="block mt-2">
-                          <span className="text-[13px] text-[#7c8598]">Notas privadas (opcional)</span>
-                          <textarea
-                            value={notes}
-                            onChange={(event) => handleNotesChange(event.target.value)}
-                            placeholder="Solo visible para administradores del club"
-                            rows={4}
-                            className="mt-2 w-full rounded-xl border border-[#dbe2ef] bg-white px-3 py-2 text-sm resize-none"
-                          />
-                        </label>
-                      </section>
                     </>
                   ) : (
                     <>
@@ -8668,7 +8579,7 @@ export default function AdminAgendaPlaygroundPage() {
                     </p>
                     {isCompletedReservation && (
                       <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
-                        Reserva completada: podés cobrar y editar notas, pero no reprogramar ni modificar participantes.
+                        Reserva completada: podés cobrar, pero no reprogramar ni modificar participantes.
                       </p>
                     )}
                     {isBillingConfigLockedByPayments && !shouldHideBillingUntilConfirmed && (
@@ -9200,19 +9111,6 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
                   </section>
 
-                  <section className="pt-6">
-                    <p className="text-[19px] font-semibold tracking-[-0.01em] text-[#1f2638]">Notas</p>
-                    <label className="block mt-2">
-                      <span className="text-[13px] text-[#7c8598]">Notas internas (opcional)</span>
-                      <textarea
-                        value={notes}
-                        onChange={(event) => handleNotesChange(event.target.value)}
-                        placeholder="Agregar observaciones internas"
-                        rows={4}
-                        className="mt-2 w-full rounded-xl border border-[#dbe2ef] bg-white px-3 py-2 text-sm resize-none"
-                      />
-                    </label>
-                  </section>
                   </fieldset>
                     </>
                   )}

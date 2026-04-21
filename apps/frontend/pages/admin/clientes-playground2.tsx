@@ -1316,20 +1316,20 @@ export default function AdminClientesPlayground2Page() {
         <button
           type="button"
           aria-label="Cerrar panel"
-          className="fixed inset-0 z-[2147483200] bg-[#0d1326]/45 backdrop-blur-[2px]"
+          className="fixed left-0 right-0 bottom-0 top-16 z-[2147483200] bg-[#101326]/20 lg:left-[192px] lg:rounded-tl-[12px]"
           onClick={closeActionSidebar}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-[2147483300] w-full max-w-[560px] border-l border-[#dce2ee] bg-white shadow-[-16px_0_48px_rgba(22,31,55,0.18)] transition-transform duration-300 ${
+        className={`fixed inset-y-0 right-0 top-16 z-[2147483300] w-full max-w-[620px] border-l border-[#e6e8ee] bg-white transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className="flex h-full min-h-0 flex-col">
-          <header className="flex items-start justify-between gap-3 border-b border-[#dce2ee] px-5 py-4">
+        <div className="relative h-full w-full flex flex-col">
+          <header className="border-b border-[#eef0f5] px-6 py-5 flex items-start justify-between">
             <div>
-              <h2 className="text-lg font-black tracking-[-0.01em] text-[#1f2638]">
+              <h2 className="text-[24px] leading-none font-semibold text-[#1f2638] tracking-[-0.015em]">
                 {sidebarView === 'client_create' && 'Nuevo cliente'}
                 {sidebarView === 'client_edit' && 'Editar cliente'}
                 {sidebarView === 'client_profile' && 'Perfil del cliente'}
@@ -1337,7 +1337,7 @@ export default function AdminClientesPlayground2Page() {
                 {sidebarView === 'debt_detail' && 'Detalle de cuenta'}
                 {sidebarView === 'debt_pay' && 'Cobrar cuenta pendiente'}
               </h2>
-              <p className="mt-1 text-[13px] text-[#4e5870]">
+              <p className="mt-3 text-[13px] leading-snug text-[#7d879d]">
                 {isClientFormView && 'Gestion de datos basicos del cliente.'}
                 {sidebarView === 'client_profile' && (selectedClient ? getClientName(selectedClient) : 'Sin cliente seleccionado')}
                 {sidebarView === 'client_delete' && 'Esta accion es permanente.'}
@@ -1347,14 +1347,14 @@ export default function AdminClientesPlayground2Page() {
             <button
               type="button"
               onClick={closeActionSidebar}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#dce2ee] text-[#6f7890] hover:bg-[#f8f9fd]"
+              className="h-9 w-9 rounded-full border border-[#e4e7ee] text-[#798194] grid place-items-center hover:bg-[#f7f8fb] shrink-0"
               aria-label="Cerrar"
             >
-              <X size={15} />
+              <X size={16} />
             </button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex-1 overflow-y-auto px-6 py-6">
             {isClientFormView && (
               <div className="space-y-2">
                 <input
@@ -1778,14 +1778,15 @@ export default function AdminClientesPlayground2Page() {
             )}
           </div>
 
-          <footer className="flex items-center justify-end gap-2 border-t border-[#dce2ee] px-5 py-4">
-            <button
-              type="button"
-              onClick={closeActionSidebar}
-              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
-            >
-              Cancelar
-            </button>
+          <footer className="border-t border-[#eef0f5] bg-white p-4">
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeActionSidebar}
+                className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+              >
+                Cancelar
+              </button>
 
             {isClientFormView && (
               <>
@@ -1851,16 +1852,17 @@ export default function AdminClientesPlayground2Page() {
               </button>
             )}
 
-            {sidebarView === 'debt_pay' && (
-              <button
-                type="button"
-                onClick={() => void processDebtPayment()}
-                disabled={paying || !selectedDebtEntry || currentPayAmount <= EPSILON}
-                className="h-10 rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {paying ? 'Registrando...' : currentPayAmount > EPSILON ? `Confirmar cobro ${formatMoney(currentPayAmount)}` : 'Seleccionar monto a cobrar'}
-              </button>
-            )}
+              {sidebarView === 'debt_pay' && (
+                <button
+                  type="button"
+                  onClick={() => void processDebtPayment()}
+                  disabled={paying || !selectedDebtEntry || currentPayAmount <= EPSILON}
+                  className="h-10 rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {paying ? 'Registrando...' : currentPayAmount > EPSILON ? `Confirmar cobro ${formatMoney(currentPayAmount)}` : 'Seleccionar monto a cobrar'}
+                </button>
+              )}
+            </div>
           </footer>
         </div>
       </aside>
