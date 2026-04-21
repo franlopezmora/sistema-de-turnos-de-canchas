@@ -1,22 +1,21 @@
 ﻿import Head from 'next/head';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type SetStateAction } from 'react';
 import { useRouter } from 'next/router';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, MoreVertical, Pencil, Plus, Repeat, Search, User, Users, CreditCard, Settings, X, Receipt, BarChart3, Trophy, MessageSquare, ShoppingBag, FileText, GraduationCap, Lock, Trash2, LogOut } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, MoreVertical, Pencil, Plus, Repeat, Search, User, Users, CreditCard, Settings, X, Receipt, BarChart3, Trophy, MessageSquare, ShoppingBag, FileText, GraduationCap, Lock, Trash2 } from 'lucide-react';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
-import { getPendingLogoutRedirect, logout } from '../../services/AuthService';
+import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { ClubAdminService, type BookingBillingConfig } from '../../services/ClubAdminService';
 import { cancelBooking, confirmBooking, createBooking, createFixedBooking, getAdminSchedule, getBookingBillingConfig, getBookingById, getBookingFinancialSummary, getBookingQuote, getBookingTimelineEvents, registerBookingPartialPayment, updateBookingBillingConfig, type BookingDomainEvent } from '../../services/BookingService';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import { reportUiError } from '../../utils/uiError';
-import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser, setActiveClubId } from '../../utils/session';
+import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
 import { normalizeApiError } from '../../utils/apiError';
 import { resolveBookingErrorBehavior } from '../../utils/bookingErrorMap';
 import BookingDrawerShell from '../../modules/admin/bookingDrawer/components/BookingDrawerShell';
 import { bookingDrawerReducer, initialBookingDrawerState } from '../../modules/admin/bookingDrawer/reducer';
 import type { BookingDrawerDraft as NewBookingDrawerDraft, BookingPayment as NewBookingPayment } from '../../modules/admin/bookingDrawer/types';
-import { PLAYGROUND_SIDEBAR_ITEMS } from '../../components/admin/playgroundNavigation';
 
 type SportFilter = string;
 
@@ -144,6 +143,10 @@ type BookingKind = 'regular' | 'recurring' | 'privateClass' | 'courseClass' | 'b
 type RecurringFrequencyPreset = 'weekly' | 'biweekly' | 'custom';
 type ComboOption = { value: string; label: string };
 type SimplifiedSidebarSection = 'DETAILS' | 'BILLING' | 'HISTORY';
+type ParticipantUiState =
+  | { mode: 'idle'; participantId: null }
+  | { mode: 'menu'; participantId: string }
+  | { mode: 'editing'; participantId: string };
 
 
 const rowHeight = 120; // visual height per hour (zoom vertical para diferenciar mejor 15m vs 30m)
@@ -1513,8 +1516,6 @@ export default function AdminAgendaPlaygroundPage() {
   const dragGrabOffsetSlotsRef = useRef<number>(0);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isSidebarAnimating, setIsSidebarAnimating] = useState(false);
   const [selectedCourtId, setSelectedCourtId] = useState<string>('');
   const [selectedStartSlot, setSelectedStartSlot] = useState(2);
   const [selectedEndSlot, setSelectedEndSlot] = useState(4);
@@ -1595,8 +1596,10 @@ export default function AdminAgendaPlaygroundPage() {
   const [bookingKindMenuOpen, setBookingKindMenuOpen] = useState(false);
   const [scheduleInputsDirty, setScheduleInputsDirty] = useState(false);
   const [paymentInFlightId, setPaymentInFlightId] = useState<string | null>(null);
-  const [participantMenuId, setParticipantMenuId] = useState<string | null>(null);
-  const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
+  const [participantUiState, setParticipantUiState] = useState<ParticipantUiState>({
+    mode: 'idle',
+    participantId: null,
+  });
   const [participantSearchOpenId, setParticipantSearchOpenId] = useState<string | null>(null);
   const [participantSearchLoadingId, setParticipantSearchLoadingId] = useState<string | null>(null);
   const [participantSuggestionsById, setParticipantSuggestionsById] = useState<Record<string, ParticipantSuggestion[]>>({});
@@ -1605,7 +1608,6 @@ export default function AdminAgendaPlaygroundPage() {
     bookingDrawerReducer,
     initialBookingDrawerState
   );
-  const [clubMenuOpen, setClubMenuOpen] = useState(false);
   const [recurringCourtsMenuOpen, setRecurringCourtsMenuOpen] = useState(false);
   const [selectedClubIdState, setSelectedClubIdState] = useState<number>(0);
   const [bookingHoverPreview, setBookingHoverPreview] = useState<{
@@ -1617,7 +1619,6 @@ export default function AdminAgendaPlaygroundPage() {
   const [participantLabelByRefCache, setParticipantLabelByRefCache] = useState<Record<string, string>>({});
   const [isQuickDatePickerOpen, setIsQuickDatePickerOpen] = useState(false);
   const participantSearchSeqRef = useRef(0);
-  const clubMenuRef = useRef<HTMLDivElement | null>(null);
   const recurringCourtsMenuRef = useRef<HTMLDivElement | null>(null);
   const quickDateInputRef = useRef<HTMLInputElement | null>(null);
   const participantContactInputRef = useRef<HTMLInputElement | null>(null);
@@ -1631,6 +1632,40 @@ export default function AdminAgendaPlaygroundPage() {
   const bookingDrawerLoadKeyRef = useRef<string>('');
   const bookingDrawerFormSyncSignatureRef = useRef<string>('');
   const pendingParticipantSaveNoticeRef = useRef<string>('');
+  const participantMenuId =
+    participantUiState.mode === 'menu' ? participantUiState.participantId : null;
+  const expandedParticipantId =
+    participantUiState.mode === 'editing' ? participantUiState.participantId : null;
+  const setParticipantMenuId = useCallback((value: SetStateAction<string | null>) => {
+    setParticipantUiState((previous) => {
+      const previousMenuId = previous.mode === 'menu' ? previous.participantId : null;
+      const nextMenuId =
+        typeof value === 'function'
+          ? (value as (previous: string | null) => string | null)(previousMenuId)
+          : value;
+      if (nextMenuId === previousMenuId) return previous;
+      if (!nextMenuId) {
+        if (previous.mode === 'menu') return { mode: 'idle', participantId: null };
+        return previous;
+      }
+      return { mode: 'menu', participantId: nextMenuId };
+    });
+  }, []);
+  const setExpandedParticipantId = useCallback((value: SetStateAction<string | null>) => {
+    setParticipantUiState((previous) => {
+      const previousEditingId = previous.mode === 'editing' ? previous.participantId : null;
+      const nextEditingId =
+        typeof value === 'function'
+          ? (value as (previous: string | null) => string | null)(previousEditingId)
+          : value;
+      if (nextEditingId === previousEditingId) return previous;
+      if (!nextEditingId) {
+        if (previous.mode === 'editing') return { mode: 'idle', participantId: null };
+        return previous;
+      }
+      return { mode: 'editing', participantId: nextEditingId };
+    });
+  }, []);
   const normalizedUser = useMemo(() => normalizeSessionUser((user as any) || null), [user]);
   const clubOptions = useMemo(
     () =>
@@ -1729,12 +1764,6 @@ export default function AdminAgendaPlaygroundPage() {
   }, [fieldErrors, formError]);
 
   useEffect(() => {
-    setIsSidebarAnimating(true);
-    const timerId = window.setTimeout(() => setIsSidebarAnimating(false), 220);
-    return () => window.clearTimeout(timerId);
-  }, [isSidebarCollapsed]);
-
-  useEffect(() => {
     if (!expandedParticipantId) return;
     const timerId = window.setTimeout(() => {
       const input = participantContactInputRef.current;
@@ -1744,6 +1773,28 @@ export default function AdminAgendaPlaygroundPage() {
     }, 0);
     return () => window.clearTimeout(timerId);
   }, [expandedParticipantId]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    if (participantUiState.mode === 'idle' || !participantUiState.participantId) return;
+    const activeParticipantId = participantUiState.participantId;
+    const onDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const activeShell = target?.closest('[data-participant-shell-id]');
+      if (
+        activeShell &&
+        String((activeShell as HTMLElement).getAttribute('data-participant-shell-id') || '') ===
+          activeParticipantId
+      ) {
+        return;
+      }
+      setParticipantUiState((previous) =>
+        previous.mode === 'idle' ? previous : { mode: 'idle', participantId: null }
+      );
+    };
+    document.addEventListener('mousedown', onDocumentMouseDown);
+    return () => document.removeEventListener('mousedown', onDocumentMouseDown);
+  }, [drawerOpen, participantUiState]);
 
   useEffect(() => {
     return () => {
@@ -4137,7 +4188,6 @@ export default function AdminAgendaPlaygroundPage() {
     shouldBlockSaveByQuote ||
     shouldShowScheduleConflict ||
     (paymentMode === 'Único' && !simplifiedOwnerAdded) ||
-    Boolean(simplifiedEditingParticipantId) ||
     simplifiedNewParticipantOpen ||
     (Boolean(editingBookingId) && isRemoteBillingConfigLoading) ||
     (Boolean(editingBookingId) && !hasEditChanges) ||
@@ -5078,11 +5128,6 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
 
-    if (simplifiedEditingParticipantId) {
-      setBlockingFieldError('participants', 'Terminá de editar el participante antes de guardar.');
-      return;
-    }
-
     if (simplifiedNewParticipantOpen) {
       setBlockingFieldError('participants', 'Terminá de agregar el nuevo participante antes de guardar.');
       return;
@@ -5596,29 +5641,9 @@ export default function AdminAgendaPlaygroundPage() {
     }
   };
 
-  const handleChangeActiveClub = async (clubId: number) => {
-    if (!Number.isInteger(clubId) || clubId <= 0) return;
-    if (clubId === selectedClubIdState) {
-      setClubMenuOpen(false);
-      return;
-    }
-    setSelectedClubIdState(clubId);
-    setClubMenuOpen(false);
-    setActiveClubId(clubId);
-    setDrawerOpen(false);
-    setEditingBookingId(null);
-    setEditingBaseline(null);
-    setFormError('');
-    await loadCourtsForActiveClub();
-    await reloadSchedule();
-  };
-
   useEffect(() => {
     const onDocumentMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (clubMenuRef.current && !clubMenuRef.current.contains(target)) {
-        setClubMenuOpen(false);
-      }
       if (recurringCourtsMenuRef.current && !recurringCourtsMenuRef.current.contains(target)) {
         setRecurringCourtsMenuOpen(false);
       }
@@ -5630,11 +5655,11 @@ export default function AdminAgendaPlaygroundPage() {
   useEffect(() => {
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setClubMenuOpen(false);
         setRecurringCourtsMenuOpen(false);
         setCustomRecurrenceModalOpen(false);
         setRecurringOverlapModalOpen(false);
         setRecurringCreateConfirmOpen(false);
+        setParticipantUiState({ mode: 'idle', participantId: null });
       }
     };
     document.addEventListener('keydown', onDocumentKeyDown);
@@ -5744,16 +5769,6 @@ export default function AdminAgendaPlaygroundPage() {
 
   if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
   if (!hasAdminAccess(user)) return <NotFound message="No tenés permiso para acceder al panel de administración." />;
-  const userInitial = String((user as any)?.firstName || (user as any)?.name || 'U')
-    .trim()
-    .charAt(0)
-    .toUpperCase() || 'U';
-  const sidebarWidthClass = isSidebarCollapsed ? 'w-[66px]' : 'w-[192px]';
-
-  const selectedClubLabel =
-    clubOptions.find((club) => club.id === selectedClubIdState)?.label ||
-    clubOptions[0]?.label ||
-    'Seleccionar club';
   const recurringCourtSelectionLabel =
     selectedRecurringCourts.length === 0
       ? 'Seleccionar canchas'
@@ -5779,17 +5794,6 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedSummaryOwnerLabel = ownerParticipant?.name.trim() || 'Titular sin asignar';
   const simplifiedSummaryCourtLabel = selectedCourt?.name || 'Cancha no definida';
   const simplifiedNamedParticipants = participants.filter((participant) => participant.name.trim().length > 0);
-  const simplifiedEditingParticipant = simplifiedEditingParticipantId
-    ? participants.find((participant) => participant.id === simplifiedEditingParticipantId) || null
-    : null;
-  const simplifiedEditingParticipantCanBeCharged = Boolean(
-    simplifiedEditingParticipant &&
-    simplifiedParticipantWithPaymentControlsIdSet.has(simplifiedEditingParticipant.id)
-  );
-  const simplifiedCanEditParticipantPaymentMethod =
-    simplifiedEditingParticipantCanBeCharged && !isBookingFullyPaid;
-  const hasValidSimplifiedOwnerPaymentMethod = isParticipantPaymentMethod(simplifiedOwnerPaymentMethodDraft);
-  const hasValidSimplifiedEditPaymentMethod = isParticipantPaymentMethod(simplifiedEditPaymentMethodDraft);
   const hasValidSimplifiedNewParticipantName = simplifiedNewParticipantName.trim().length > 0;
   const ownerPaymentMethodOptions: Array<{ value: Participant['paymentMethod']; label: string }> = [
     { value: 'CASH', label: 'Efectivo' },
@@ -6221,7 +6225,7 @@ export default function AdminAgendaPlaygroundPage() {
           appearance: textfield;
         }
       `}</style>
-      <AdminPlaygroundShell activeItem="Calendario" user={user} contentMuted={drawerOpen}>
+      <AdminPlaygroundShell activeItem="Calendario" user={user}>
 
           <section ref={agendaSurfaceRef} className="relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-[#f5f6f8]">
             {calendarNotice && (
@@ -7306,7 +7310,7 @@ export default function AdminAgendaPlaygroundPage() {
                         <>
                           <div className="rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4">
                             <div className="flex items-center">
-                              <p className="text-[16px] font-semibold text-[#1f2638]">Reserva del usuario</p>
+                              <p className="text-[18px] font-semibold text-[#1f2638]">Reserva del usuario</p>
                             </div>
                             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-3">
                               <div>
@@ -7348,7 +7352,7 @@ export default function AdminAgendaPlaygroundPage() {
                       ) : (
                         <>
                           <div className="rounded-xl border border-[#dce2ee] bg-[#f3f5ff] px-3 py-2.5 flex items-center justify-between">
-                            <div className="inline-flex items-center gap-2 text-[16px] font-medium text-[#4b5fa8]">
+                            <div className="inline-flex items-center gap-2 text-[15px] font-medium text-[#4b5fa8]">
                               <Clock3 size={16} />
                               <span>Reserva regular</span>
                             </div>
@@ -7357,7 +7361,7 @@ export default function AdminAgendaPlaygroundPage() {
                               onClick={() => {
                                 showCalendarNotice('Por ahora este panel funciona en reserva regular.');
                               }}
-                              className="text-[16px] text-[#4b5fa8] underline underline-offset-2 hover:text-[#3d4f91]"
+                              className="text-[14px] font-semibold text-[#4b5fa8] underline underline-offset-2 hover:text-[#3d4f91]"
                             >
                               Cambiar tipo
                             </button>
@@ -7432,100 +7436,104 @@ export default function AdminAgendaPlaygroundPage() {
                                   value={coachSearchTerm}
                                   onChange={(event) => setProfesorSearchTerm(event.target.value)}
                                   placeholder="Buscar profesor"
-                                  className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
+                                  className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
                                 />
                                 <Search size={18} className="text-[#8f96a8]" />
                               </div>
                             </label>
                           </div>
 
-                          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px]">
-                            <div>
-                              <p className="text-[12px] font-medium text-[#7a8398]">Tipo de pago</p>
-                              <div className="mt-1 grid grid-cols-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleBillingModeChange('INDIVIDUAL')}
-                                  disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
-                                  className={`h-11 rounded-lg text-[15px] font-semibold transition ${
-                                    paymentMode === 'Único'
-                                      ? 'bg-[#3053e2] text-white'
-                                      : 'text-[#7f879a] hover:bg-[#eceff8]'
-                                  } disabled:opacity-55`}
-                                >
-                                  Pago único
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleBillingModeChange('SHARED')}
-                                  disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
-                                  className={`h-11 rounded-lg text-[15px] font-semibold transition ${
-                                    paymentMode === 'Dividido'
-                                      ? 'bg-[#3053e2] text-white'
-                                      : 'text-[#7f879a] hover:bg-[#eceff8]'
-                                  } disabled:opacity-55`}
-                                >
-                                  Pago dividido
-                                </button>
+                          {simplifiedIsEditingReservation && (
+                            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px]">
+                              <div>
+                                <p className="text-[12px] font-medium text-[#7a8398]">Tipo de pago</p>
+                                <div className="mt-1 grid grid-cols-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleBillingModeChange('INDIVIDUAL')}
+                                    disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
+                                    className={`h-11 rounded-lg text-[15px] font-semibold transition ${
+                                      paymentMode === 'Único'
+                                        ? 'bg-[#3053e2] text-white'
+                                        : 'text-[#7f879a] hover:bg-[#eceff8]'
+                                    } disabled:opacity-55`}
+                                  >
+                                    Pago único
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleBillingModeChange('SHARED')}
+                                    disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
+                                    className={`h-11 rounded-lg text-[15px] font-semibold transition ${
+                                      paymentMode === 'Dividido'
+                                        ? 'bg-[#3053e2] text-white'
+                                        : 'text-[#7f879a] hover:bg-[#eceff8]'
+                                    } disabled:opacity-55`}
+                                  >
+                                    Pago dividido
+                                  </button>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-[12px] font-medium text-[#7a8398]">
+                                  {paymentMode === 'Único' ? 'Precio' : 'Precio por persona'}
+                                </p>
+                                <div className="mt-1 h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+                                  <input
+                                    type="number"
+                                    readOnly
+                                    value={isFinancialDisplayPending
+                                      ? ''
+                                      : paymentMode === 'Único'
+                                        ? Number(totalPrice.toFixed(2))
+                                        : Number((totalPrice / Math.max(chargedParticipantsCount, 1)).toFixed(2))}
+                                    className="w-full bg-transparent text-[18px] font-semibold text-[#2a3245] outline-none"
+                                  />
+                                  <span className="ml-2 text-[18px] font-semibold text-[#8a92a5]">$</span>
+                                </div>
+                                {paymentFieldError && (
+                                  <p className="mt-1 text-[12px] font-medium text-[#b42346]">{paymentFieldError}</p>
+                                )}
                               </div>
                             </div>
-                            <div>
-                              <p className="text-[12px] font-medium text-[#7a8398]">
-                                {paymentMode === 'Único' ? 'Precio' : 'Precio por persona'}
-                              </p>
-                              <div className="mt-1 h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
-                                <input
-                                  type="number"
-                                  readOnly
-                                  value={isFinancialDisplayPending
-                                    ? ''
-                                    : paymentMode === 'Único'
-                                      ? Number(totalPrice.toFixed(2))
-                                      : Number((totalPrice / Math.max(chargedParticipantsCount, 1)).toFixed(2))}
-                                  className="w-full bg-transparent text-[18px] font-semibold text-[#2a3245] outline-none"
-                                />
-                                <span className="ml-2 text-[18px] font-semibold text-[#8a92a5]">$</span>
-                              </div>
-                              {paymentFieldError && (
-                                <p className="mt-1 text-[12px] font-medium text-[#b42346]">{paymentFieldError}</p>
-                              )}
-                            </div>
-                          </div>
+                          )}
                         </>
                       ))}
 
                       {showSimplifiedHistorySection && (
-                        <section className="mt-5 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-4">
-                          <div className="px-1">
-                            <p className="text-[16px] font-semibold text-[#27314a]">Historial de la reserva</p>
-                          </div>
+                      <section
+                        className={`rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4 ${
+                          showSimplifiedDetailsSection ? 'mt-2' : 'mt-0'
+                        }`}
+                      >
+                          <p className="text-[18px] font-semibold text-[#1f2638]">Historial de la reserva</p>
 
                           {bookingTimelineLoading && simplifiedReservationHistoryTimeline.length > 0 && (
-                            <p className="mt-4 px-1 text-[12px] text-[#6f7890]">Actualizando historial...</p>
+                            <p className="mt-3 text-[12px] text-[#6f7890]">Actualizando historial...</p>
                           )}
                           {bookingTimelineError && (
-                            <p className="mt-4 px-1 text-[13px] text-[#a04747]">{bookingTimelineError}</p>
+                            <p className="mt-3 text-[13px] text-[#a04747]">{bookingTimelineError}</p>
                           )}
 
                           {bookingTimelineLoading && simplifiedReservationHistoryTimeline.length === 0 ? (
-                            <div className="mt-5 flex items-center justify-center gap-3 rounded-xl border border-[#dde4f3] bg-white px-4 py-5">
+                            <div className="mt-4 flex items-center justify-center gap-3 rounded-xl border border-[#dde4f3] bg-white px-4 py-5">
                               <div className="h-5 w-5 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
                               <p className="text-[13px] text-[#5f6880]">Cargando historial de la reserva...</p>
                             </div>
                           ) : simplifiedReservationHistoryTimeline.length === 0 ? (
-                            <p className="mt-4 px-1 text-[13px] text-[#6f7890]">Todavía no hay eventos en el historial.</p>
+                            <p className="mt-3 text-[13px] text-[#6f7890]">Todavía no hay eventos en el historial.</p>
                           ) : (
-                            <div className="mt-4 space-y-5">
+                            <div className="mt-3 space-y-4">
                               {simplifiedReservationHistoryTimeline.map((group) => (
                                 <div key={`history-group-${group.dateKey}`}>
-                                  <div className="inline-flex rounded-full border border-[#dde4f3] bg-white px-3 py-1 text-[12px] font-semibold text-[#3c4660]">
+                                  <div className="inline-flex rounded-full border border-[#dde4f3] bg-white px-3 py-1 text-[11px] font-semibold text-[#3c4660]">
                                     {group.dateLabel}
                                   </div>
-                                  <div className="mt-3 space-y-0">
+                                  <div className="mt-2 rounded-xl border border-[#e4e9f4] bg-white px-3 py-2 space-y-0">
                                     {group.events.map((event, index) => (
                                       <div
                                         key={`history-event-${event.id}`}
-                                        className="grid grid-cols-[18px_1fr_auto] gap-3"
+                                        className="grid grid-cols-[18px_1fr_auto] gap-2"
                                       >
                                         <div className="relative pt-1">
                                           <span className="absolute left-[4px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#4c68e6]" />
@@ -7534,12 +7542,12 @@ export default function AdminAgendaPlaygroundPage() {
                                           )}
                                         </div>
                                         <div className="pb-3">
-                                          <p className="text-[15px] font-semibold leading-[1.3] text-[#1f2638]">
+                                          <p className="text-[14px] font-semibold leading-[1.3] text-[#1f2638]">
                                             {event.title}
                                           </p>
-                                          <p className="mt-0.5 text-[13px] text-[#6d7690]">{event.detail}</p>
+                                          <p className="mt-0.5 text-[12px] text-[#6d7690]">{event.detail}</p>
                                         </div>
-                                        <p className="pt-0.5 text-[13px] font-semibold text-[#5c6580]">
+                                        <p className="pt-0.5 text-[12px] font-semibold text-[#5c6580]">
                                           {event.timeLabel}
                                         </p>
                                       </div>
@@ -7555,8 +7563,8 @@ export default function AdminAgendaPlaygroundPage() {
                       {showSimplifiedBillingSection && (
                       <>
                       {simplifiedIsEditingReservation && (
-                        <section className="rounded-xl border border-[#dce2ee] bg-white p-3">
-                          <p className="text-[13px] font-semibold text-[#27314a]">Asignación de cobro</p>
+                        <section className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                          <p className="text-[18px] font-semibold text-[#27314a]">Asignación de cobro</p>
                           <div className="mt-2 grid grid-cols-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
                             <button
                               type="button"
@@ -7583,24 +7591,25 @@ export default function AdminAgendaPlaygroundPage() {
                               Pago dividido
                             </button>
                           </div>
-                          <p className="mt-2 text-[11px] text-[#6f7890]">
+                          <p className="mt-2 text-[12px] text-[#6f7890]">
                             {paymentMode === 'Único'
                               ? 'Una sola persona es responsable del cobro.'
                               : 'Cualquiera puede pagar y cubrir saldo de otros participantes.'}
                           </p>
                           {isBillingConfigLockedByPayments && (
-                            <p className="mt-1 text-[11px] font-medium text-[#8b5c1a]">
+                            <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
                               La asignación de cobro quedó bloqueada porque ya hay pagos registrados.
                             </p>
                           )}
                         </section>
                       )}
 
-                      <section className="mt-5 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
+                      {simplifiedIsEditingReservation && (
+                      <section className="mt-4 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
                         <div className="flex items-center justify-between">
-                          <p className="text-[14px] font-semibold text-[#27314a]">Pagos</p>
+                          <p className="text-[18px] font-semibold text-[#27314a]">Pagos</p>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                               simplifiedPaymentStatusLabel === 'Pagado'
                                 ? 'bg-[#e8f8ec] text-[#16733f]'
                                 : simplifiedPaymentStatusLabel === 'Parcial'
@@ -7611,22 +7620,22 @@ export default function AdminAgendaPlaygroundPage() {
                             {simplifiedPaymentStatusLabel}
                           </span>
                         </div>
-                        <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
                           <div className="rounded-lg bg-white px-2 py-1.5">
                             <p>Total</p>
-                            <p className="text-[13px] font-semibold text-[#2a3245]">
+                            <p className="text-[15px] font-semibold text-[#2a3245]">
                               {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
                             </p>
                           </div>
                           <div className="rounded-lg bg-white px-2 py-1.5">
                             <p>Pagado</p>
-                            <p className="text-[13px] font-semibold text-[#16733f]">
+                            <p className="text-[15px] font-semibold text-[#16733f]">
                               {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
                             </p>
                           </div>
                           <div className="rounded-lg bg-white px-2 py-1.5">
                             <p>Deuda</p>
-                            <p className="text-[13px] font-semibold text-[#9a5a00]">
+                            <p className="text-[15px] font-semibold text-[#9a5a00]">
                               {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
                             </p>
                           </div>
@@ -7651,21 +7660,33 @@ export default function AdminAgendaPlaygroundPage() {
                           ) : null}
                         </div>
                       </section>
+                      )}
 
-                      <section className="mt-6">
-                        <p className="text-[17px] font-semibold text-[#1f2638]">Participantes</p>
-                        <div className="mt-3 rounded-xl border border-[#e9edf5] bg-white p-4">
+                      <section className="mt-4">
+                        <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-[18px] font-semibold text-[#1f2638]">Participantes</p>
+                            {simplifiedOwnerAdded && !simplifiedNewParticipantOpen && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSimplifiedNewParticipantOpen(true);
+                                  setSimplifiedNewParticipantName('');
+                                  setSimplifiedNewParticipantContact('');
+                                  setFormError('');
+                                }}
+                                className="text-[14px] font-semibold text-[#3f57b0] hover:text-[#2f4fd8]"
+                              >
+                                + Nuevo participante
+                              </button>
+                            )}
+                          </div>
                           {participantsFieldError && (
-                            <p className="mb-3 text-[12px] font-medium text-[#b42346]">{participantsFieldError}</p>
+                            <p className="mt-2 mb-3 text-[12px] font-medium text-[#b42346]">{participantsFieldError}</p>
                           )}
                           {simplifiedOwnerAdded && simplifiedNamedParticipants.length > 0 ? (
-                            <div className="space-y-2">
+                            <div className="mt-3 space-y-3">
                               {simplifiedNamedParticipants.map((participant, index) => {
-                                const contactValue = String(participant.contact || '').trim();
-                                const emailValue = contactValue.includes('@') ? contactValue : 'Sin correo';
-                                const phoneValue = contactValue && !contactValue.includes('@')
-                                  ? contactValue
-                                  : 'Sin teléfono';
                                 const participantHasPaymentControls = simplifiedParticipantWithPaymentControlsIdSet.has(participant.id);
                                 const participantPaidComputed = participantPaidComputedIdSet.has(participant.id);
                                 const participantAssignedAmount = Number(participantAssignedAmountById.get(participant.id) || 0);
@@ -7677,61 +7698,58 @@ export default function AdminAgendaPlaygroundPage() {
                                     : participantCoveredAmount > 0.009 && participantDebtAmount > 0.009
                                       ? 'Parcial'
                                       : 'Pendiente';
+                                const participantPaymentStatusTone =
+                                  participantPaymentStatusLabel === 'Pagado'
+                                    ? 'bg-[#e8f8ec] text-[#16733f]'
+                                    : participantPaymentStatusLabel === 'Parcial'
+                                      ? 'bg-[#fff4e5] text-[#9a5a00]'
+                                      : 'bg-[#eef1f7] text-[#5c667f]';
                                 const participantDisplayedPrice = Number(participantAssignedAmount.toFixed(2));
                                 return (
-                                  <div key={`simplified-participant-${participant.id}`} className="border-b border-[#edf1f7] py-3 last:border-b-0">
-                                    <div className={`grid ${participantHasPaymentControls ? 'grid-cols-[42px_1fr_auto_auto_auto]' : 'grid-cols-[42px_1fr_auto]'} gap-2 items-start`}>
+                                  <div
+                                    key={`simplified-participant-${participant.id}`}
+                                    data-participant-shell-id={participant.id}
+                                    className="rounded-xl border border-[#e2e7f1] bg-white px-3 py-3"
+                                  >
+                                    <div className={`grid ${participantHasPaymentControls ? 'grid-cols-[42px_minmax(0,1fr)_auto_32px]' : 'grid-cols-[42px_minmax(0,1fr)_32px]'} gap-2 items-start`}>
                                       <div className="h-10 w-10 rounded-full bg-[#e9edf8] text-[#4a5674] text-[14px] font-semibold grid place-items-center">
                                         {participant.name.trim().charAt(0).toUpperCase() || 'P'}
                                       </div>
                                       <div>
-                                        <p className="text-[16px] font-semibold text-[#1f2638]">{participant.name}</p>
-                                        <p className="text-[13px] text-[#5f6880]">{phoneValue}</p>
-                                        <p className="text-[13px] text-[#5f6880]">{emailValue}</p>
-                                        {participantHasPaymentControls && (
-                                          <p className="mt-0.5 text-[11px] text-[#7a8398]">
-                                            {participantPaymentStatusLabel}
-                                          </p>
-                                        )}
-                                        {participantHasPaymentControls && (
-                                          <p className="mt-0.5 text-[11px] text-[#7a8398]">
-                                            Debía {participantDisplayedPrice.toFixed(2)} $ · Pagó {participantCoveredAmount.toFixed(2)} $ · Debe {participantDebtAmount.toFixed(2)} $
-                                          </p>
-                                        )}
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="inline-flex items-center rounded-full bg-[#eef2ff] px-2.5 py-1 text-[11px] font-semibold text-[#3a57b8]">
+                                            {participant.isOwner ? 'Titular' : `Participante ${index + 1}`}
+                                          </span>
+                                          {participantHasPaymentControls && (
+                                            <span
+                                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${participantPaymentStatusTone}`}
+                                            >
+                                              {participantPaymentStatusLabel}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[15px] font-semibold text-[#1f2638]">{participant.name}</p>
                                       </div>
                                       {participantHasPaymentControls && (
                                         <div className="pt-0.5 text-right">
-                                          <p className="text-[16px] font-semibold text-[#1f2638]">
+                                          <p className="text-[15px] font-semibold text-[#1f2638]">
                                             {participantDisplayedPrice} $
                                           </p>
                                         </div>
-                                      )}
-                                      {participantHasPaymentControls && !isBookingFullyPaid && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setSimplifiedEditingParticipantId(participant.id);
-                                            setSimplifiedEditPaymentMethodDraft(
-                                              isParticipantPaymentMethod(participant.paymentMethod)
-                                                ? participant.paymentMethod
-                                                : ''
-                                            );
-                                          }}
-                                          className="h-8 w-8 rounded-full text-[#737c90] grid place-items-center hover:bg-[#f3f5fa]"
-                                          title="Editar participante"
-                                        >
-                                          <Pencil size={14} />
-                                        </button>
                                       )}
                                       <button
                                         type="button"
                                         onClick={(event) => {
                                           event.stopPropagation();
+                                          if (expandedParticipantId === participant.id) {
+                                            setExpandedParticipantId(null);
+                                            return;
+                                          }
                                           setParticipantMenuId((previous) =>
                                             previous === participant.id ? null : participant.id
                                           );
                                         }}
-                                        className="h-8 w-8 rounded-full text-[#737c90] grid place-items-center hover:bg-[#f3f5fa]"
+                                        className="h-8 w-8 justify-self-end rounded-full text-[#737c90] grid place-items-center hover:bg-[#f3f5fa]"
                                         title="Acciones del participante"
                                       >
                                         <MoreVertical size={15} />
@@ -7740,7 +7758,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     {expandedParticipantId === participant.id && (
                                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                                         <label className="block">
-                                          <span className="text-[11px] font-medium text-[#7a8398]">Nombre</span>
+                                          <span className="text-[12px] font-medium text-[#7a8398]">Nombre</span>
                                           <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
                                             <input
                                               value={participant.name}
@@ -7761,7 +7779,7 @@ export default function AdminAgendaPlaygroundPage() {
                                           </div>
                                         </label>
                                         <label className="block">
-                                          <span className="text-[11px] font-medium text-[#7a8398]">Contacto</span>
+                                          <span className="text-[12px] font-medium text-[#7a8398]">Contacto</span>
                                           <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
                                             <input
                                               ref={participantContactInputRef}
@@ -7782,6 +7800,22 @@ export default function AdminAgendaPlaygroundPage() {
                                             />
                                           </div>
                                         </label>
+                                        <div className="md:col-span-2 flex justify-end gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedParticipantId(null)}
+                                            className="h-8 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#5f6880] hover:bg-[#f6f8fc]"
+                                          >
+                                            Cancelar
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedParticipantId(null)}
+                                            className="h-8 rounded-lg bg-[#3155df] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc]"
+                                          >
+                                            Guardar
+                                          </button>
+                                        </div>
                                       </div>
                                     )}
                                     {participantMenuId === participant.id && (
@@ -7789,12 +7823,16 @@ export default function AdminAgendaPlaygroundPage() {
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            setExpandedParticipantId(participant.id);
+                                            setExpandedParticipantId((previous) =>
+                                              previous === participant.id ? null : participant.id
+                                            );
                                             setParticipantMenuId(null);
                                           }}
                                           className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
                                         >
-                                          Editar participante (nombre/contacto)
+                                          {expandedParticipantId === participant.id
+                                            ? 'Finalizar edición'
+                                            : 'Editar participante (nombre/contacto)'}
                                         </button>
                                         <div className="mt-1 border-t border-[#edf0f6] pt-1">
                                           <button
@@ -7822,12 +7860,11 @@ export default function AdminAgendaPlaygroundPage() {
                             </div>
                           ) : (
                             <>
-                              <p className="text-[16px] font-semibold text-[#2a3245]">Agregar titular</p>
-                              <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] font-medium text-[#79829a]">
+                              <p className="mt-3 text-[15px] font-semibold text-[#2a3245]">Agregar titular</p>
+                              <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] font-medium text-[#79829a]">
                                 <span>Nombre del cliente</span>
-                                <span>Pago</span>
                               </div>
-                              <div className="mt-2 grid grid-cols-[1fr_1fr] gap-3">
+                              <div className="mt-2 grid grid-cols-1 gap-3">
                                 <div className="h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center gap-2">
                                   <input
                                     value={ownerParticipant?.name || ''}
@@ -7870,55 +7907,37 @@ export default function AdminAgendaPlaygroundPage() {
                                     <Search size={18} className="text-[#8f96a8]" />
                                   )}
                                 </div>
-                                <div className="h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
-                                  <select
-                                    value={simplifiedOwnerPaymentMethodDraft}
-                                    onChange={(event) => {
-                                      const nextValue = String(event.target.value || '');
-                                      setSimplifiedOwnerPaymentMethodDraft(nextValue);
-                                      if (!ownerParticipant) return;
-                                      if (isParticipantPaymentMethod(nextValue)) {
-                                        updateParticipant(ownerParticipant.id, {
-                                          paymentMethod: nextValue,
-                                        });
-                                      }
-                                      setFormError('');
-                                    }}
-                                    className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
-                                  >
-                                    <option value="">Seleccionar método de pago</option>
-                                    {ownerPaymentMethodOptions.map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
                               </div>
                               {ownerFieldError && (
                                 <p className="mt-2 text-[12px] font-medium text-[#b42346]">{ownerFieldError}</p>
                               )}
-                              {paymentFieldError && (
-                                <p className="mt-1 text-[12px] font-medium text-[#b42346]">{paymentFieldError}</p>
-                              )}
 
-                              <div className="mt-4 rounded-xl bg-[#f3f4f7] px-4 py-3 flex items-center justify-between">
-                                <p className="text-[15px] text-[#2a3245]">
+                              <div className="mt-4 rounded-xl border border-[#e2e7f1] bg-white px-4 py-3 flex items-center justify-between">
+                                <p className="text-[12px] text-[#6f7890]">
                                   Precio total:{' '}
-                                  <strong>{isFinancialDisplayPending ? '--' : `${Number(totalPrice.toFixed(2))} $`}</strong>
+                                  <strong className="ml-1 text-[15px] font-semibold text-[#2a3245]">
+                                    {isFinancialDisplayPending ? '--' : `${Number(totalPrice.toFixed(2))} $`}
+                                  </strong>
                                 </p>
-                                <CircleAlert size={16} className="text-[#747d93]" />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    showCalendarNotice(
+                                      'Este total es estimado para crear la reserva. La asignación de cobro y el registro de pagos se habilitan al editar la reserva creada.'
+                                    )
+                                  }
+                                  className="grid h-7 w-7 place-items-center rounded-full text-[#747d93] transition hover:bg-[#e8ebf2]"
+                                  aria-label="Información del precio total"
+                                  title="Cómo se usa el precio total"
+                                >
+                                  <CircleAlert size={16} />
+                                </button>
                               </div>
 
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (!ownerHasName || !hasValidSimplifiedOwnerPaymentMethod) return;
-                                  if (ownerParticipant && isParticipantPaymentMethod(simplifiedOwnerPaymentMethodDraft)) {
-                                    updateParticipant(ownerParticipant.id, {
-                                      paymentMethod: simplifiedOwnerPaymentMethodDraft,
-                                    });
-                                  }
+                                  if (!ownerHasName) return;
                                   setSimplifiedOwnerAdded(true);
                                   setSimplifiedEditingParticipantId(null);
                                   setSimplifiedEditPaymentMethodDraft('');
@@ -7927,9 +7946,9 @@ export default function AdminAgendaPlaygroundPage() {
                                   setSimplifiedNewParticipantContact('');
                                   setFormError('');
                                 }}
-                                disabled={!ownerHasName || !hasValidSimplifiedOwnerPaymentMethod}
-                                className={`mt-5 h-11 w-full rounded-xl text-[15px] leading-none font-semibold transition ${
-                                  ownerHasName && hasValidSimplifiedOwnerPaymentMethod
+                                disabled={!ownerHasName}
+                                className={`mt-5 h-11 w-full rounded-xl text-[14px] leading-none font-semibold transition ${
+                                  ownerHasName
                                     ? 'bg-[#3053e2] text-white hover:bg-[#2748cc]'
                                     : 'border border-[#e2e6ef] bg-[#eef0f5] text-[#a0a7b9]'
                                 }`}
@@ -7939,85 +7958,15 @@ export default function AdminAgendaPlaygroundPage() {
                             </>
                           )}
 
-                          {simplifiedOwnerAdded && simplifiedCanEditParticipantPaymentMethod && simplifiedEditingParticipant && (
-                            <div className="mt-4 border-t border-[#e9edf5] pt-4">
-                              <p className="text-[14px] font-semibold text-[#1f2638]">
-                                {simplifiedEditingParticipant.name} {'>'} Editar
-                              </p>
-                              <label className="mt-3 block">
-                                <span className="text-[13px] text-[#79829a]">Pago</span>
-                                <div className="mt-1 h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center">
-                                  <select
-                                    value={simplifiedEditPaymentMethodDraft}
-                                    onChange={(event) => setSimplifiedEditPaymentMethodDraft(String(event.target.value || ''))}
-                                    className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
-                                  >
-                                    <option value="">Seleccionar método de pago</option>
-                                    {ownerPaymentMethodOptions.map((option) => (
-                                      <option key={`edit-payment-${option.value}`} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </label>
-                              <div className="mt-4 flex items-center gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!hasValidSimplifiedEditPaymentMethod) {
-                                      return;
-                                    }
-                                    updateParticipant(simplifiedEditingParticipant.id, {
-                                      paymentMethod: simplifiedEditPaymentMethodDraft,
-                                    });
-                                    setSimplifiedEditingParticipantId(null);
-                                    setSimplifiedEditPaymentMethodDraft('');
-                                    setFormError('');
-                                  }}
-                                  disabled={!hasValidSimplifiedEditPaymentMethod}
-                                  className={`h-11 min-w-[110px] rounded-xl px-5 text-[15px] font-semibold ${
-                                    hasValidSimplifiedEditPaymentMethod
-                                      ? 'bg-[#3053e2] text-white hover:bg-[#2748cc]'
-                                      : 'bg-[#eef0f5] text-[#a0a7b9]'
-                                  }`}
-                                >
-                                  Actualizar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSimplifiedEditingParticipantId(null);
-                                    setSimplifiedEditPaymentMethodDraft('');
-                                  }}
-                                  className="text-[15px] font-medium text-[#3f57b0] hover:text-[#2f4fd8]"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {simplifiedOwnerAdded && !simplifiedEditingParticipantCanBeCharged && (
-                            <>
-                              {!simplifiedNewParticipantOpen && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSimplifiedNewParticipantOpen(true);
-                                    setSimplifiedNewParticipantName('');
-                                    setSimplifiedNewParticipantContact('');
-                                    setFormError('');
-                                  }}
-                                  className="mt-3 text-[15px] font-medium text-[#3f57b0] hover:text-[#2f4fd8]"
-                                >
-                                  + Nuevo participante
-                                </button>
-                              )}
-
+                          {simplifiedOwnerAdded && (
+                            <div
+                              className={`border-t border-[#edf1f7] ${
+                                simplifiedNewParticipantOpen ? 'mt-2 pt-2' : 'mt-3 pt-3'
+                              }`}
+                            >
                               {simplifiedNewParticipantOpen && (
-                                <div className="mt-4 rounded-xl border border-[#e2e6ef] bg-white p-3">
-                                  <p className="text-[14px] font-semibold text-[#1f2638]">Nuevo participante</p>
+                                <div className="mt-1 rounded-xl border border-[#e2e7f1] bg-white p-4">
+                                  <p className="text-[15px] font-semibold text-[#1f2638]">Nuevo participante</p>
                                   <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                                     <input
                                       value={simplifiedNewParticipantName}
@@ -8072,14 +8021,14 @@ export default function AdminAgendaPlaygroundPage() {
                                         setSimplifiedNewParticipantName('');
                                         setSimplifiedNewParticipantContact('');
                                       }}
-                                      className="text-[14px] font-medium text-[#3f57b0] hover:text-[#2f4fd8]"
+                                      className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[14px] font-semibold text-[#5f6880] hover:bg-[#f6f8fc]"
                                     >
                                       Cancelar
                                     </button>
                                   </div>
                                 </div>
                               )}
-                            </>
+                            </div>
                           )}
                         </div>
                       </section>
@@ -8665,6 +8614,7 @@ export default function AdminAgendaPlaygroundPage() {
                         return (
                           <div
                             key={participant.id}
+                            data-participant-shell-id={participant.id}
                             className={`rounded-xl border bg-white p-2 ${
                               isDuplicateParticipant ? 'border-[#f2b7c3] bg-[#fff8fa]' : 'border-[#e3e8f2]'
                             }`}
@@ -8810,6 +8760,10 @@ export default function AdminAgendaPlaygroundPage() {
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
+                                  if (expandedParticipantId === participant.id) {
+                                    setExpandedParticipantId(null);
+                                    return;
+                                  }
                                   setParticipantMenuId((previous) =>
                                     previous === participant.id ? null : participant.id
                                   );
@@ -8843,6 +8797,22 @@ export default function AdminAgendaPlaygroundPage() {
                                     className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
                                   />
                                 </div>
+                                <div className="mt-2 flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedParticipantId(null)}
+                                    className="h-8 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#5f6880] hover:bg-[#f6f8fc]"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedParticipantId(null)}
+                                    className="h-8 rounded-lg bg-[#3155df] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc]"
+                                  >
+                                    Guardar
+                                  </button>
+                                </div>
                               </div>
                             ) : participant.contact.trim().length > 0 ? (
                               <p className="mt-2 text-[12px] text-[#6f7890]">
@@ -8859,12 +8829,16 @@ export default function AdminAgendaPlaygroundPage() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setExpandedParticipantId(participant.id);
+                                    setExpandedParticipantId((previous) =>
+                                      previous === participant.id ? null : participant.id
+                                    );
                                     setParticipantMenuId(null);
                                   }}
                                   className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
                                 >
-                                  Editar participante (nombre/contacto)
+                                  {expandedParticipantId === participant.id
+                                    ? 'Finalizar edición'
+                                    : 'Editar participante (nombre/contacto)'}
                                 </button>
                                 {!isModernBillingEnabled && !isBookingFullyPaid && participantIsCharged && isPaymentsTabActive && (
                                   <>
@@ -8883,30 +8857,6 @@ export default function AdminAgendaPlaygroundPage() {
                                     >
                                       {participantPaidComputed ? 'Marcar como pendiente' : 'Pagar su parte'}
                                     </button>
-                                    <div className="mt-1 border-t border-[#edf0f6] pt-1">
-                                      <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-[#7a8398]">
-                                        Método de pago
-                                      </p>
-                                      {([
-                                        { value: 'CASH', label: 'Efectivo' },
-                                        { value: 'TRANSFER', label: 'Transferencia' },
-                                        { value: 'CARD', label: 'Tarjeta' },
-                                      ] as const).map((option) => (
-                                        <button
-                                          key={option.value}
-                                          type="button"
-                                          onClick={() => {
-                                            updateParticipant(participant.id, { paymentMethod: option.value });
-                                            setParticipantMenuId(null);
-                                          }}
-                                          className={`w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb] ${
-                                            participant.paymentMethod === option.value ? 'text-[#2f53df] font-semibold' : ''
-                                          }`}
-                                        >
-                                          {option.label}
-                                        </button>
-                                      ))}
-                                    </div>
                                   </>
                                 )}
                                 <div className="mt-1 border-t border-[#edf0f6] pt-1">
