@@ -2,23 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/router';
 import {
-  BarChart3,
-  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CreditCard,
-  FileText,
   LogOut,
-  MessageSquare,
-  Receipt,
-  Settings,
-  ShoppingBag,
-  Trophy,
-  Users,
 } from 'lucide-react';
 import { logout } from '../../services/AuthService';
 import { normalizeSessionUser, setActiveClubId } from '../../utils/session';
+import { PLAYGROUND_SIDEBAR_ITEMS } from './playgroundNavigation';
 
 type AdminPlaygroundShellProps = {
   activeItem: string;
@@ -26,19 +17,6 @@ type AdminPlaygroundShellProps = {
   contentMuted?: boolean;
   user: any;
 };
-
-const sidebarItems = [
-  { label: 'Calendario', icon: CalendarDays, href: '/admin/agenda-playground2' },
-  { label: 'Clientes', icon: Users, href: '/admin/clientes-playground2' },
-  { label: 'Pagos', icon: CreditCard, href: '/admin/cash-playground2' },
-  { label: 'Reservas', icon: Receipt },
-  { label: 'Partidos', icon: Trophy },
-  { label: 'Tienda', icon: ShoppingBag },
-  { label: 'Mensajes', icon: MessageSquare },
-  { label: 'Facturación', icon: FileText },
-  { label: 'Informes', icon: BarChart3 },
-  { label: 'Ajustes', icon: Settings },
-];
 
 const humanizeClubSlug = (value: unknown) => {
   const slug = String(value || '').trim();
@@ -253,7 +231,7 @@ export default function AdminPlaygroundShell({
             </button>
 
             <nav className="w-full space-y-1 px-2">
-              {sidebarItems.map(({ label, icon: Icon, href }) => {
+              {PLAYGROUND_SIDEBAR_ITEMS.map(({ label, icon: Icon, href }) => {
                 const active = label === activeItem;
                 return (
                   <button

@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, MoreVertical, Pencil, Plus, Repeat, Search, User, Users, CreditCard, Settings, X, Receipt, BarChart3, Trophy, MessageSquare, ShoppingBag, FileText, GraduationCap, Lock, Trash2, LogOut } from 'lucide-react';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
+import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
 import { getPendingLogoutRedirect, logout } from '../../services/AuthService';
 import { ClubAdminService, type BookingBillingConfig } from '../../services/ClubAdminService';
 import { cancelBooking, confirmBooking, createBooking, createFixedBooking, getAdminSchedule, getBookingBillingConfig, getBookingById, getBookingFinancialSummary, getBookingQuote, getBookingTimelineEvents, registerBookingPartialPayment, updateBookingBillingConfig, type BookingDomainEvent } from '../../services/BookingService';
@@ -15,6 +16,7 @@ import { resolveBookingErrorBehavior } from '../../utils/bookingErrorMap';
 import BookingDrawerShell from '../../modules/admin/bookingDrawer/components/BookingDrawerShell';
 import { bookingDrawerReducer, initialBookingDrawerState } from '../../modules/admin/bookingDrawer/reducer';
 import type { BookingDrawerDraft as NewBookingDrawerDraft, BookingPayment as NewBookingPayment } from '../../modules/admin/bookingDrawer/types';
+import { PLAYGROUND_SIDEBAR_ITEMS } from '../../components/admin/playgroundNavigation';
 
 type SportFilter = string;
 
@@ -143,19 +145,6 @@ type RecurringFrequencyPreset = 'weekly' | 'biweekly' | 'custom';
 type ComboOption = { value: string; label: string };
 type SimplifiedSidebarSection = 'DETAILS' | 'BILLING' | 'HISTORY';
 
-
-const sidebarItems = [
-  { label: 'Calendario', icon: CalendarDays, href: '/admin/agenda-playground2' },
-  { label: 'Clientes', icon: Users, href: '/admin/clientes-playground2' },
-  { label: 'Pagos', icon: CreditCard, href: '/admin/cash-playground2' },
-  { label: 'Reservas', icon: Receipt },
-  { label: 'Partidos', icon: Trophy },
-  { label: 'Tienda', icon: ShoppingBag },
-  { label: 'Mensajes', icon: MessageSquare },
-  { label: 'Facturación', icon: FileText },
-  { label: 'Informes', icon: BarChart3 },
-  { label: 'Ajustes', icon: Settings },
-];
 
 const rowHeight = 120; // visual height per hour (zoom vertical para diferenciar mejor 15m vs 30m)
 const startHour = 8;
@@ -6232,154 +6221,7 @@ export default function AdminAgendaPlaygroundPage() {
           appearance: textfield;
         }
       `}</style>
-
-      <div className="h-screen w-full bg-[#f5f6f8] text-[#1a1a1a] overflow-hidden">
-        <div className="h-full w-full flex flex-col">
-          <header className="h-16 bg-white px-4 lg:px-6 flex items-center">
-            <div className={`hidden lg:flex w-[192px] items-center gap-2 transition-[width] duration-200 ease-out overflow-hidden`}>
-              <div className="h-8 w-8 rounded-lg border border-[#d9dfeb] bg-[#f5f7ff] grid place-items-center text-[11px] font-black text-[#2a2f5b]">
-                TC
-              </div>
-              <span
-                className={`text-[12px] font-black tracking-[0.22em] text-[#2a2f5b] whitespace-nowrap transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
-                  isSidebarCollapsed ? 'opacity-0 -translate-x-1 max-w-0 blur-[1px]' : 'opacity-100 translate-x-0 max-w-[140px] blur-0'
-                }`}
-              >
-                TUCANCHA
-              </span>
-            </div>
-            <div className="flex items-center gap-2 lg:hidden">
-              <div className="h-8 w-8 rounded-lg border border-[#d9dfeb] bg-[#f5f7ff] grid place-items-center text-[11px] font-black text-[#2a2f5b]">
-                TC
-              </div>
-              <span className="text-[12px] font-black tracking-[0.22em] text-[#2a2f5b]">TUCANCHA</span>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                className="h-9 rounded-lg px-3 text-sm font-semibold text-[#4a5eaa] hover:bg-[#f3f6ff]"
-              >
-                Ayuda
-              </button>
-              <div ref={clubMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setClubMenuOpen((previous) => !previous)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowDown') {
-                      event.preventDefault();
-                      setClubMenuOpen(true);
-                    }
-                  }}
-                  aria-haspopup="menu"
-                  aria-expanded={clubMenuOpen}
-                  className={`h-9 min-w-[180px] rounded-lg border px-3 text-sm font-semibold inline-flex items-center justify-between gap-2 bg-white shadow-sm transition outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dce6ff] focus-visible:ring-offset-0 ${
-                    clubMenuOpen
-                      ? 'border-[#bfc8da] ring-2 ring-[#ebf0ff] text-[#1f2a44]'
-                      : 'border-[#dfe4ee] text-[#2a3348] hover:border-[#cfd7e6]'
-                  }`}
-                >
-                  <span className="truncate">{selectedClubLabel}</span>
-                  <ChevronDown size={14} className={`text-[#7a8398] transition-transform ${clubMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {clubMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-[240px] rounded-xl border border-[#dbe2ef] bg-white shadow-xl z-40 p-1">
-                    {clubOptions.map((club) => {
-                      const active = club.id === selectedClubIdState;
-                      return (
-                        <button
-                          key={club.id}
-                          type="button"
-                          onClick={() => {
-                            setClubMenuOpen(false);
-                            void handleChangeActiveClub(club.id);
-                          }}
-                          className={`w-full rounded-lg px-3 py-2 text-left text-[13px] flex items-center justify-between transition ${
-                            active
-                              ? 'bg-[#edf1ff] text-[#2748cc] font-semibold'
-                              : 'text-[#3a435b] hover:bg-[#f5f7fb]'
-                          }`}
-                        >
-                          <span className="truncate">{club.label}</span>
-                          {active && <span className="text-[11px] font-bold">Activo</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="h-9 w-9 rounded-full border border-[#e5e7eb] bg-white text-sm font-bold text-[#2a3348] grid place-items-center"
-                title="Usuario actual"
-              >
-                {userInitial}
-              </button>
-              <button
-                type="button"
-                onClick={() => logout({ redirectTo: '/login' })}
-                className="h-9 w-9 rounded-lg border border-[#e5e7eb] bg-white text-[#58627a] grid place-items-center hover:bg-[#f8f9fc]"
-                title="Cerrar sesión"
-                aria-label="Cerrar sesión"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-          </header>
-
-          <div className="flex min-h-0 flex-1 bg-white">
-          <aside
-            className={`relative z-20 hidden lg:flex h-full ${sidebarWidthClass} bg-white flex-col items-center py-4 overflow-visible transition-[width,opacity] duration-200 ease-out will-change-[width] ${
-              drawerOpen ? 'opacity-40 pointer-events-none select-none' : 'opacity-100'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setIsSidebarCollapsed((previous) => !previous)}
-              className={`absolute z-30 -right-3 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full border border-[#dfe4ec] bg-white text-[#6f7890] grid place-items-center shadow-sm hover:bg-[#f7f9fc] transition-transform duration-200 ${
-                isSidebarAnimating ? 'scale-95' : 'scale-100'
-              }`}
-              title={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
-              aria-label={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
-            >
-              <span className={`transition-transform duration-200 ${isSidebarCollapsed ? 'rotate-0' : 'rotate-0'}`}>
-                {isSidebarCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-              </span>
-            </button>
-            <nav className="w-full px-2 space-y-1">
-              {sidebarItems.map(({ label, icon: Icon, href }) => {
-                const active = Boolean(href) && router.pathname === href;
-                return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => {
-                    if (href && router.pathname !== href) {
-                      void router.push(href);
-                    }
-                  }}
-                  className={`w-full rounded-md py-2 text-[11px] transition-colors ${
-                    active ? 'bg-[#eef1ff] text-[#2b3fa8]' : 'text-[#8b92a0] hover:bg-[#f4f5f7]'
-                  } px-0 text-left`}
-                  title={label}
-                >
-                  <span className="grid grid-cols-[48px_1fr] items-center">
-                    <span className="inline-flex w-full shrink-0 justify-center">
-                      <Icon size={14} />
-                    </span>
-                    <span
-                      className={`truncate whitespace-nowrap transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
-                        isSidebarCollapsed ? 'opacity-0 -translate-x-1 max-w-0 blur-[1px]' : 'opacity-100 translate-x-0 max-w-[124px] blur-0'
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  </span>
-                </button>
-                );
-              })}
-            </nav>
-          </aside>
+      <AdminPlaygroundShell activeItem="Calendario" user={user} contentMuted={drawerOpen}>
 
           <section ref={agendaSurfaceRef} className="relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-[#f5f6f8]">
             {calendarNotice && (
@@ -9272,10 +9114,8 @@ export default function AdminAgendaPlaygroundPage() {
                 </footer>
               </div>
             </aside>
-          </section>
-      </div>
-      </div>
-      </div>
+            </section>
+          </AdminPlaygroundShell>
 
       {simplifiedPaymentModalOpen && (
         <div className="fixed inset-0 z-[2147483200]">
