@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/router';
 import {
@@ -89,7 +89,15 @@ export default function AdminPlaygroundShell({
     };
   }, [clubMenuOpen]);
 
-  const sidebarWidthClass = isSidebarCollapsed ? 'w-[66px]' : 'w-[192px]';
+  useLayoutEffect(() => {
+    const nextLeft = isSidebarCollapsed ? '66px' : '168px';
+    document.documentElement.style.setProperty('--admin-playground-sidebar-left', nextLeft);
+    return () => {
+      document.documentElement.style.removeProperty('--admin-playground-sidebar-left');
+    };
+  }, [isSidebarCollapsed]);
+
+  const sidebarWidthClass = isSidebarCollapsed ? 'w-[66px]' : 'w-[168px]';
   const selectedClubLabel =
     clubOptions.find((club) => club.id === selectedClubId)?.label ||
     clubOptions[0]?.label ||
@@ -112,7 +120,7 @@ export default function AdminPlaygroundShell({
     <div className="h-screen w-full overflow-hidden bg-[#f5f6f8] text-[#1a1a1a]">
       <div className="flex h-full w-full flex-col">
         <header className="flex h-16 items-center bg-white px-4 lg:px-6">
-          <div className="hidden w-[192px] items-center gap-2 overflow-hidden transition-[width] duration-200 ease-out lg:flex">
+          <div className="hidden w-[168px] items-center gap-2 overflow-hidden transition-[width] duration-200 ease-out lg:flex">
             <div className="grid h-8 w-8 place-items-center rounded-lg border border-[#d9dfeb] bg-[#f5f7ff] text-[11px] font-black text-[#2a2f5b]">
               TC
             </div>
@@ -120,7 +128,7 @@ export default function AdminPlaygroundShell({
               className={`whitespace-nowrap text-[12px] font-black tracking-[0.22em] text-[#2a2f5b] transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
                 isSidebarCollapsed
                   ? 'max-w-0 -translate-x-1 opacity-0 blur-[1px]'
-                  : 'max-w-[140px] translate-x-0 opacity-100 blur-0'
+                  : 'max-w-[118px] translate-x-0 opacity-100 blur-0'
               }`}
             >
               TUCANCHA
@@ -216,14 +224,12 @@ export default function AdminPlaygroundShell({
 
         <div className="flex min-h-0 flex-1 bg-white">
           <aside
-            className={`relative z-20 hidden h-full ${sidebarWidthClass} flex-col items-center overflow-visible bg-white py-4 transition-[width,opacity] duration-200 ease-out will-change-[width] lg:flex ${
-              contentMuted ? 'pointer-events-none select-none opacity-40' : 'opacity-100'
-            }`}
+            className={`relative z-[120] hidden h-full ${sidebarWidthClass} flex-col items-center overflow-visible bg-white py-4 transition-[width,opacity] duration-200 ease-out will-change-[width] opacity-100 lg:flex`}
           >
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed((previous) => !previous)}
-              className="absolute -right-3 top-1/2 z-30 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-[#dfe4ec] bg-white text-[#6f7890] shadow-sm transition-transform duration-200 hover:bg-[#f7f9fc]"
+              className="absolute -right-3 top-1/2 z-[130] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-[#dfe4ec] bg-white text-[#6f7890] shadow-sm transition-transform duration-200 hover:bg-[#f7f9fc]"
               title={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
               aria-label={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
             >

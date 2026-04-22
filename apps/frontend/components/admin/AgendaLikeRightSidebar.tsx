@@ -30,13 +30,13 @@ export default function AgendaLikeRightSidebar({
         <button
           type="button"
           aria-label="Cerrar panel"
-          className="fixed left-0 right-0 bottom-0 top-16 z-[2147483200] bg-[#101326]/20 lg:left-[192px] lg:rounded-tl-[12px]"
+          className="fixed inset-x-0 bottom-0 top-16 z-[105] bg-[#101326]/20 transition-[left] duration-200 ease-out will-change-[left] lg:left-[var(--admin-playground-sidebar-left,168px)] lg:rounded-tl-[12px]"
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 top-16 z-[2147483300] w-full ${maxWidthClassName} border-l border-[#e6e8ee] bg-white transition-transform duration-300 ${
+        className={`fixed inset-y-0 right-0 top-16 z-[115] w-full ${maxWidthClassName} border-l border-[#e6e8ee] bg-white transition-transform duration-300 ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >

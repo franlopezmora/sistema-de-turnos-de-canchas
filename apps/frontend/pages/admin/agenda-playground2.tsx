@@ -6257,7 +6257,7 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedPaymentMethodComboOptions: ComboOption[] = [
     ...ownerPaymentMethodOptions.map((option) => ({ value: option.value, label: option.label })),
   ];
-  const handleSimplifiedPayerChange = useCallback((nextParticipantId: string) => {
+  const handleSimplifiedPayerChange = (nextParticipantId: string) => {
     if (
       paymentMode === 'Único' &&
       simplifiedLockedSinglePayerId &&
@@ -6297,16 +6297,7 @@ export default function AdminAgendaPlaygroundPage() {
     if (nextPayer) {
       setSimplifiedPaymentMethodDraft(nextPayer.paymentMethod || 'CASH');
     }
-  }, [
-    participantDebtAmountById,
-    participants,
-    paymentMode,
-    showCalendarNotice,
-    simplifiedLockedSinglePayerId,
-    simplifiedPayerCandidates,
-    simplifiedPaymentCoveredParticipantIdDraft,
-    simplifiedRemainingAfterQueue,
-  ]);
+  };
   const simplifiedResolvedPayerParticipantId = (() => {
     if (paymentMode === 'Único' && simplifiedLockedSinglePayerId) {
       return simplifiedLockedSinglePayerId;
