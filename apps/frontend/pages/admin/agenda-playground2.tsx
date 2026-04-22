@@ -7105,7 +7105,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {customRecurrenceModalOpen && (
               <div
-                className="fixed inset-0 z-50 bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
                 onClick={() => setCustomRecurrenceModalOpen(false)}
               >
                 <div
@@ -7298,7 +7298,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {recurringCreateConfirmOpen && (
               <div
-                className="fixed inset-0 z-50 bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
                 onClick={() => {
                   setRecurringCreateConfirmOpen(false);
                   setRecurringCreateConfirmed(false);
@@ -7358,7 +7358,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {recurringOverlapModalOpen && (
               <div
-                className="fixed inset-0 z-50 bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
                 onClick={() => setRecurringOverlapModalOpen(false)}
               >
                 <div
@@ -7431,7 +7431,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteBookingConfirmOpen && (
               <div
-                className="fixed inset-0 z-50 bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
                 onClick={() => setDeleteBookingConfirmOpen(false)}
               >
                 <div
@@ -7478,7 +7478,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteParticipantConfirm.open && (
               <div
-                className="fixed inset-0 z-50 bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
                 onClick={() => setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' })}
               >
                 <div
@@ -7534,7 +7534,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {blockingErrorModalOpen && (
               <div
-                className="fixed inset-0 z-50 bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
                 onClick={() => setBlockingErrorModalOpen(false)}
               >
                 <div
@@ -7574,7 +7574,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {bookingCreatedModalOpen && (
               <div
-                className="fixed inset-0 z-50 bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
                 onClick={() => setBookingCreatedModalOpen(false)}
               >
                 <div
