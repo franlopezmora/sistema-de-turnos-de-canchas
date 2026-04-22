@@ -9,6 +9,7 @@ import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 
 // IMPORTANTE: Aqui buscamos el archivo en la carpeta styles
 import '../styles/globals.css'; 
+import '../styles/playground.css';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || '';
 const LOGO_PATH = '/logo1.svg';
