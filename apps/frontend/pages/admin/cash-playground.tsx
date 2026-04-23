@@ -210,7 +210,7 @@ export default function AdminCashPlaygroundPage() {
   const [typeFilter, setTypeFilter] = useState<MovementTypeFilter>('ALL');
   const [methodFilter, setMethodFilter] = useState<MovementMethodFilter>('ALL');
   const [showFilters, setShowFilters] = useState(false);
-  const [denseMode, setDenseMode] = useState(true);
+  const denseMode = true;
   const [sidebarView, setSidebarView] = useState<CashActionSidebarView>('none');
   const [lastCloseReport, setLastCloseReport] = useState<CashShiftCloseReport | null>(null);
 
@@ -582,14 +582,6 @@ export default function AdminCashPlaygroundPage() {
                       </button>
                     ))}
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setDenseMode((prev) => !prev)}
-                    className="h-8 rounded-xl border border-[#dbe2ee] bg-white px-3 text-xs font-semibold text-[#334155] transition hover:bg-[#f8fafc]"
-                  >
-                    {denseMode ? 'Modo comodo' : 'Modo compacto'}
-                  </button>
 
                   <div className="flex items-center gap-1 rounded-xl border border-[#dbe2ee] bg-white px-1 py-1">
                     <button
