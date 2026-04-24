@@ -1753,6 +1753,8 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedPaymentConceptMode, setSimplifiedPaymentConceptMode] =
     useState<PaymentConceptMode>('AUTO');
   const [simplifiedPaymentSelectedItemIdsDraft, setSimplifiedPaymentSelectedItemIdsDraft] = useState<string[]>([]);
+  const [simplifiedPaymentCustomItemAmountDraftById, setSimplifiedPaymentCustomItemAmountDraftById] =
+    useState<Record<string, string>>({});
   const [simplifiedSinglePaymentAdvancedOpen, setSimplifiedSinglePaymentAdvancedOpen] = useState(false);
   const [playtomicResultModal, setPlaytomicResultModal] = useState<PlaytomicPaymentResultModal | null>(null);
   const [simplifiedSidebarSection, setSimplifiedSidebarSection] = useState<SimplifiedSidebarSection>('DETAILS');
@@ -4926,26 +4928,6 @@ export default function AdminAgendaPlaygroundPage() {
     });
     return map;
   }, [pendingAccountItems]);
-  const simplifiedPaymentConceptItems = useMemo(() => {
-    if (simplifiedPaymentConceptMode === 'COURT') return pendingCourtAccountItems;
-    if (simplifiedPaymentConceptMode === 'CONSUMPTIONS') return pendingConsumptionAccountItems;
-    if (simplifiedPaymentConceptMode === 'CUSTOM') {
-      return simplifiedPaymentSelectedItemIdsDraft
-        .map((id) => pendingAccountItemById.get(String(id)))
-        .filter((entry): entry is BookingConsumptionItem => Boolean(entry));
-    }
-    return pendingAccountItems;
-  }, [
-    pendingAccountItemById,
-    pendingAccountItems,
-    pendingConsumptionAccountItems,
-    pendingCourtAccountItems,
-    simplifiedPaymentConceptMode,
-    simplifiedPaymentSelectedItemIdsDraft,
-  ]);
-  const simplifiedPaymentConceptDebt = Number(
-    simplifiedPaymentConceptItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0).toFixed(2)
-  );
   const bookingCourtAmount = Number(
     (usesPersistedFinancialSummary
       ? Number(bookingFinancial?.courtTotal || 0)
@@ -4993,13 +4975,30 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedRemainingAfterQueue = simplifiedRemainingAmount;
   const computeConceptBasedMaxAmount = useCallback((
     conceptMode: PaymentConceptMode,
-    selectedItemIds?: string[]
+    selectedItemIds?: string[],
+    customAmountDraftById?: Record<string, string>
   ) => {
     const selectedIds = new Set(
       (Array.isArray(selectedItemIds) ? selectedItemIds : simplifiedPaymentSelectedItemIdsDraft)
         .map((value) => String(value || '').trim())
         .filter(Boolean)
     );
+    if (conceptMode === 'CUSTOM') {
+      const customDrafts = customAmountDraftById ?? simplifiedPaymentCustomItemAmountDraftById;
+      const customSelectedAmount = Array.from(selectedIds).reduce((sum, itemId) => {
+        const item = pendingAccountItemById.get(itemId);
+        if (!item) return sum;
+        const fallback = Number(item.remainingAmount || 0);
+        const rawDraft = String(customDrafts[itemId] ?? '').trim();
+        const parsed = Number(rawDraft.replace(',', '.'));
+        const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
+        const bounded = Math.max(0, Math.min(fallback, resolved));
+        return sum + bounded;
+      }, 0);
+      return Number(
+        Math.max(0, Math.min(simplifiedRemainingAfterQueue, Number(customSelectedAmount.toFixed(2)))).toFixed(2)
+      );
+    }
     const selectedItems = (() => {
       if (conceptMode === 'AUTO') return pendingAccountItems;
       if (conceptMode === 'COURT') return pendingCourtAccountItems;
@@ -5014,15 +5013,35 @@ export default function AdminAgendaPlaygroundPage() {
       Math.max(0, Math.min(simplifiedRemainingAfterQueue, conceptTarget)).toFixed(2)
     );
   }, [
+    pendingAccountItemById,
     pendingAccountItems,
     pendingConsumptionAccountItems,
     pendingCourtAccountItems,
+    simplifiedPaymentCustomItemAmountDraftById,
     simplifiedPaymentSelectedItemIdsDraft,
     simplifiedRemainingAfterQueue,
   ]);
   const formatPaymentAmountDraft = useCallback((amount: number) => {
     return amount > 0.009 ? Number(amount.toFixed(2)).toFixed(2) : '';
   }, []);
+  const computeCustomSelectedAmount = useCallback((
+    selectedItemIds: string[],
+    customAmountDraftById: Record<string, string>
+  ) => {
+    const total = selectedItemIds.reduce((sum, rawId) => {
+      const itemId = String(rawId || '').trim();
+      if (!itemId) return sum;
+      const item = pendingAccountItemById.get(itemId);
+      if (!item) return sum;
+      const fallback = Number(item.remainingAmount || 0);
+      const rawDraft = String(customAmountDraftById[itemId] ?? '').trim();
+      const parsed = Number(rawDraft.replace(',', '.'));
+      const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
+      const bounded = Math.max(0, Math.min(fallback, resolved));
+      return sum + bounded;
+    }, 0);
+    return Number(total.toFixed(2));
+  }, [pendingAccountItemById]);
   const simplifiedPaymentStatusLabel = isFinancialDisplayPending
     ? 'Cargando'
     : simplifiedRemainingAmount <= 0.009
@@ -5745,6 +5764,7 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
     setSimplifiedPaymentConceptMode('AUTO');
     setSimplifiedPaymentSelectedItemIdsDraft([]);
+    setSimplifiedPaymentCustomItemAmountDraftById({});
     setSimplifiedSinglePaymentAdvancedOpen(false);
     setPlaytomicResultModal(null);
   }, []);
@@ -5862,6 +5882,7 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentImputationMode('BY_CONCEPT');
     setSimplifiedPaymentConceptMode('AUTO');
     setSimplifiedPaymentSelectedItemIdsDraft([]);
+    setSimplifiedPaymentCustomItemAmountDraftById({});
     setSimplifiedSinglePaymentAdvancedOpen(false);
     setSimplifiedPaymentModalVariant('PLAYTOMIC');
     setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
@@ -6076,9 +6097,14 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
     const selectedConceptDebt = Number(
-      selectedConceptItems
-        .reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0)
-        .toFixed(2)
+      (
+        simplifiedPaymentConceptMode === 'CUSTOM'
+          ? computeCustomSelectedAmount(
+              selectedConceptItems.map((item) => String(item.id)),
+              simplifiedPaymentCustomItemAmountDraftById
+            )
+          : selectedConceptItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0)
+      ).toFixed(2)
     );
     if (isByConcept && simplifiedPaymentConceptMode !== 'AUTO' && effectiveAmount > selectedConceptDebt + 0.009) {
       if (!isPlaytomicFlow) {
@@ -6114,12 +6140,28 @@ export default function AdminAgendaPlaygroundPage() {
     const buildItemAllocationsForAmount = (amount: number) => {
       let remainingToAllocate = Number(amount.toFixed(2));
       const allocations: Array<{ accountItemId: string; amount: number }> = [];
+      const desiredByItemId = new Map<string, number>();
+      sortedConceptItems.forEach((item) => {
+        const itemId = String(item.id);
+        const maxRemaining = Number(item.remainingAmount || 0);
+        if (simplifiedPaymentConceptMode === 'CUSTOM') {
+          const rawDraft = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
+          const parsed = Number(rawDraft.replace(',', '.'));
+          const fallback = maxRemaining;
+          const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
+          desiredByItemId.set(itemId, Number(Math.max(0, Math.min(maxRemaining, resolved)).toFixed(2)));
+          return;
+        }
+        desiredByItemId.set(itemId, maxRemaining);
+      });
       sortedConceptItems.forEach((item) => {
         if (remainingToAllocate <= 0.009) return;
         const itemId = String(item.id);
         const available = Number(remainingByItemId.get(itemId) || 0);
         if (available <= 0.009) return;
-        const portion = Number(Math.min(available, remainingToAllocate).toFixed(2));
+        const desired = Number(desiredByItemId.get(itemId) || 0);
+        if (desired <= 0.009) return;
+        const portion = Number(Math.min(available, desired, remainingToAllocate).toFixed(2));
         if (portion <= 0.009) return;
         allocations.push({ accountItemId: itemId, amount: portion });
         remainingByItemId.set(itemId, Number((available - portion).toFixed(2)));
@@ -6264,6 +6306,7 @@ export default function AdminAgendaPlaygroundPage() {
     simplifiedPaymentCoveredParticipantIdDraft,
     simplifiedPaymentCoveredParticipantIdsDraft,
     simplifiedPaymentConceptMode,
+    simplifiedPaymentCustomItemAmountDraftById,
     simplifiedPaymentSelectedItemIdsDraft,
     simplifiedPaymentModalVariant,
     simplifiedRemainingAfterQueue,
@@ -6272,6 +6315,7 @@ export default function AdminAgendaPlaygroundPage() {
     pendingAccountItems,
     pendingCourtAccountItems,
     pendingConsumptionAccountItems,
+    computeCustomSelectedAmount,
     participantDebtAmountById,
     participants,
     updateParticipant,
@@ -7841,7 +7885,11 @@ export default function AdminAgendaPlaygroundPage() {
       setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
       setSimplifiedPaymentAmountDraft(
         formatPaymentAmountDraft(
-          computeConceptBasedMaxAmount('CUSTOM', simplifiedPaymentSelectedItemIdsDraft)
+          computeConceptBasedMaxAmount(
+            'CUSTOM',
+            simplifiedPaymentSelectedItemIdsDraft,
+            simplifiedPaymentCustomItemAmountDraftById
+          )
         )
       );
     } else if (!String(simplifiedPaymentCoveredParticipantIdDraft || '').trim()) {
@@ -7986,11 +8034,26 @@ export default function AdminAgendaPlaygroundPage() {
             : pendingAccountItems.filter((item) =>
                 simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id))
               );
+    const customDesiredAmountById = new Map<string, number>();
+    if (simplifiedPaymentConceptMode === 'CUSTOM') {
+      selectedItems.forEach((item) => {
+        const itemId = String(item.id);
+        const fallback = Number(item.remainingAmount || 0);
+        const rawDraft = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
+        const parsed = Number(rawDraft.replace(',', '.'));
+        const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
+        customDesiredAmountById.set(itemId, Number(Math.max(0, Math.min(fallback, resolved)).toFixed(2)));
+      });
+    }
     let remaining = playtomicPreviewRequestedAmount;
     return selectedItems
       .map((item) => {
         const available = Number(item.remainingAmount || 0);
-        const amount = Number(Math.max(0, Math.min(available, remaining)).toFixed(2));
+        const desired =
+          simplifiedPaymentConceptMode === 'CUSTOM'
+            ? Number(customDesiredAmountById.get(String(item.id)) || 0)
+            : available;
+        const amount = Number(Math.max(0, Math.min(available, desired, remaining)).toFixed(2));
         remaining = Number(Math.max(0, remaining - amount).toFixed(2));
         return {
           id: String(item.id),
@@ -8013,6 +8076,7 @@ export default function AdminAgendaPlaygroundPage() {
       if (preset === 'COURT_ONLY') {
         setSimplifiedPaymentConceptMode('COURT');
         setSimplifiedPaymentSelectedItemIdsDraft([]);
+        setSimplifiedPaymentCustomItemAmountDraftById({});
         setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('COURT')));
         return;
       }
@@ -8020,13 +8084,18 @@ export default function AdminAgendaPlaygroundPage() {
         setSimplifiedPaymentConceptMode('CUSTOM');
         setSimplifiedPaymentAmountDraft(
           formatPaymentAmountDraft(
-            computeConceptBasedMaxAmount('CUSTOM', simplifiedPaymentSelectedItemIdsDraft)
+            computeConceptBasedMaxAmount(
+              'CUSTOM',
+              simplifiedPaymentSelectedItemIdsDraft,
+              simplifiedPaymentCustomItemAmountDraftById
+            )
           )
         );
         return;
       }
       setSimplifiedPaymentConceptMode('AUTO');
       setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentCustomItemAmountDraftById({});
       setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('AUTO')));
       return;
     }
@@ -8034,6 +8103,7 @@ export default function AdminAgendaPlaygroundPage() {
       setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
       setSimplifiedPaymentConceptMode('AUTO');
       setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentCustomItemAmountDraftById({});
       setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
       setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
       const payerDebt = Number(participantDebtAmountById.get(payerId) || 0);
@@ -8045,6 +8115,7 @@ export default function AdminAgendaPlaygroundPage() {
       setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
       setSimplifiedPaymentConceptMode('AUTO');
       setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentCustomItemAmountDraftById({});
       setSimplifiedPaymentCoveredParticipantIdsDraft(participantIdsWithDebt);
       setSimplifiedPaymentCoveredParticipantIdDraft(participantIdsWithDebt[0] || payerId);
       setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(simplifiedRemainingAfterQueue));
@@ -8054,6 +8125,7 @@ export default function AdminAgendaPlaygroundPage() {
       setSimplifiedPaymentImputationMode('BY_CONCEPT');
       setSimplifiedPaymentConceptMode('COURT');
       setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentCustomItemAmountDraftById({});
       setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
       setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
       const nextAmount = computeConceptBasedMaxAmount('COURT');
@@ -8066,7 +8138,8 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
     const nextAmount = computeConceptBasedMaxAmount(
       'CUSTOM',
-      simplifiedPaymentSelectedItemIdsDraft
+      simplifiedPaymentSelectedItemIdsDraft,
+      simplifiedPaymentCustomItemAmountDraftById
     );
     setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
   };
@@ -12268,9 +12341,16 @@ export default function AdminAgendaPlaygroundPage() {
                               type="button"
                               onClick={() => {
                                 const nextIds = pendingAccountItems.map((item) => String(item.id));
+                                const nextCustomDrafts: Record<string, string> = {};
+                                pendingAccountItems.forEach((item) => {
+                                  nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
+                                });
                                 setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                setSimplifiedPaymentCustomItemAmountDraftById(nextCustomDrafts);
                                 setSimplifiedPaymentAmountDraft(
-                                  formatPaymentAmountDraft(computeConceptBasedMaxAmount('CUSTOM', nextIds))
+                                  formatPaymentAmountDraft(
+                                    computeConceptBasedMaxAmount('CUSTOM', nextIds, nextCustomDrafts)
+                                  )
                                 );
                               }}
                               className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
@@ -12281,6 +12361,7 @@ export default function AdminAgendaPlaygroundPage() {
                               type="button"
                               onClick={() => {
                                 setSimplifiedPaymentSelectedItemIdsDraft([]);
+                                setSimplifiedPaymentCustomItemAmountDraftById({});
                                 setSimplifiedPaymentAmountDraft('');
                               }}
                               className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
@@ -12290,7 +12371,10 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
                         </div>
                         <p className="mt-2 text-[11px] text-[#6f7890]">
-                          Deuda seleccionada: {simplifiedPaymentConceptDebt.toFixed(2)} $
+                          Total seleccionado: {computeCustomSelectedAmount(
+                            simplifiedPaymentSelectedItemIdsDraft,
+                            simplifiedPaymentCustomItemAmountDraftById
+                          ).toFixed(2)} $
                         </p>
                         <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
                           {pendingAccountItems.length === 0 ? (
@@ -12302,7 +12386,7 @@ export default function AdminAgendaPlaygroundPage() {
                               {pendingAccountItems.map((item) => {
                                 const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
                                 return (
-                                  <label
+                                  <div
                                     key={`payment-playtomic-concept-item-${item.id}`}
                                     className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
                                   >
@@ -12319,16 +12403,39 @@ export default function AdminAgendaPlaygroundPage() {
                                           );
                                           if (nextChecked) {
                                             nextSet.add(String(item.id));
+                                            const itemId = String(item.id);
+                                            const nextDrafts: Record<string, string> = {
+                                              ...simplifiedPaymentCustomItemAmountDraftById,
+                                            };
+                                            const prevDraft = String(nextDrafts[itemId] ?? '').trim();
+                                            if (!prevDraft) {
+                                              nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
+                                            }
+                                            const nextIds = Array.from(nextSet);
+                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                            setSimplifiedPaymentAmountDraft(
+                                              formatPaymentAmountDraft(
+                                                computeCustomSelectedAmount(nextIds, nextDrafts)
+                                              )
+                                            );
+                                            return;
                                           } else {
                                             nextSet.delete(String(item.id));
+                                            const nextDrafts: Record<string, string> = {
+                                              ...simplifiedPaymentCustomItemAmountDraftById,
+                                            };
+                                            delete nextDrafts[String(item.id)];
+                                            const nextIds = Array.from(nextSet);
+                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                            setSimplifiedPaymentAmountDraft(
+                                              formatPaymentAmountDraft(
+                                                computeCustomSelectedAmount(nextIds, nextDrafts)
+                                              )
+                                            );
+                                            return;
                                           }
-                                          const nextIds = Array.from(nextSet);
-                                          setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                          setSimplifiedPaymentAmountDraft(
-                                            formatPaymentAmountDraft(
-                                              computeConceptBasedMaxAmount('CUSTOM', nextIds)
-                                            )
-                                          );
                                         }}
                                         className="h-4 w-4 accent-[#3053e2]"
                                       />
@@ -12336,10 +12443,46 @@ export default function AdminAgendaPlaygroundPage() {
                                         {item.type === 'BOOKING' ? 'Cancha' : item.description}
                                       </span>
                                     </span>
-                                    <span className="text-[11px] font-semibold text-[#62708f]">
-                                      {Number(item.remainingAmount || 0).toFixed(2)} $
-                                    </span>
-                                  </label>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-[#dce2ee] bg-white px-2">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          disabled={!checked}
+                                          value={
+                                            checked
+                                              ? String(
+                                                  simplifiedPaymentCustomItemAmountDraftById[String(item.id)] ??
+                                                    Number(item.remainingAmount || 0).toFixed(2)
+                                                )
+                                              : ''
+                                          }
+                                          onChange={(event) => {
+                                            const itemId = String(item.id);
+                                            const nextDrafts: Record<string, string> = {
+                                              ...simplifiedPaymentCustomItemAmountDraftById,
+                                              [itemId]: event.target.value,
+                                            };
+                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                            setSimplifiedPaymentAmountDraft(
+                                              formatPaymentAmountDraft(
+                                                computeCustomSelectedAmount(
+                                                  simplifiedPaymentSelectedItemIdsDraft,
+                                                  nextDrafts
+                                                )
+                                              )
+                                            );
+                                          }}
+                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-[#2a3245] outline-none disabled:text-[#9ca5ba]"
+                                        />
+                                        <span className="ml-1 text-[11px] font-semibold text-[#8a92a5]">$</span>
+                                      </div>
+                                      <span className="w-[88px] text-right text-[11px] font-semibold text-[#62708f]">
+                                        {Number(item.remainingAmount || 0).toFixed(2)} $
+                                      </span>
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -12448,7 +12591,10 @@ export default function AdminAgendaPlaygroundPage() {
                       <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
                         <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a pagar</p>
                         <p className="mt-2 text-[11px] text-[#6f7890]">
-                          Deuda disponible en esta selección: {simplifiedPaymentConceptDebt.toFixed(2)} $
+                          Total seleccionado: {computeCustomSelectedAmount(
+                            simplifiedPaymentSelectedItemIdsDraft,
+                            simplifiedPaymentCustomItemAmountDraftById
+                          ).toFixed(2)} $
                         </p>
 
                         <div className="mt-2 max-h-[160px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
@@ -12459,7 +12605,7 @@ export default function AdminAgendaPlaygroundPage() {
                               {pendingAccountItems.map((item) => {
                                 const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
                                 return (
-                                  <label
+                                  <div
                                     key={`payment-concept-item-${item.id}`}
                                     className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
                                   >
@@ -12476,13 +12622,39 @@ export default function AdminAgendaPlaygroundPage() {
                                           );
                                           if (nextChecked) {
                                             nextSet.add(String(item.id));
+                                            const itemId = String(item.id);
+                                            const nextDrafts: Record<string, string> = {
+                                              ...simplifiedPaymentCustomItemAmountDraftById,
+                                            };
+                                            const prevDraft = String(nextDrafts[itemId] ?? '').trim();
+                                            if (!prevDraft) {
+                                              nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
+                                            }
+                                            const nextIds = Array.from(nextSet);
+                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                            setSimplifiedPaymentAmountDraft(
+                                              formatPaymentAmountDraft(
+                                                computeCustomSelectedAmount(nextIds, nextDrafts)
+                                              )
+                                            );
+                                            return;
                                           } else {
                                             nextSet.delete(String(item.id));
+                                            const nextDrafts: Record<string, string> = {
+                                              ...simplifiedPaymentCustomItemAmountDraftById,
+                                            };
+                                            delete nextDrafts[String(item.id)];
+                                            const nextIds = Array.from(nextSet);
+                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                            setSimplifiedPaymentAmountDraft(
+                                              formatPaymentAmountDraft(
+                                                computeCustomSelectedAmount(nextIds, nextDrafts)
+                                              )
+                                            );
+                                            return;
                                           }
-                                          const nextIds = Array.from(nextSet);
-                                          setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                          const nextMax = computeConceptBasedMaxAmount('CUSTOM', nextIds);
-                                          setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextMax));
                                         }}
                                         className="h-4 w-4 accent-[#3053e2]"
                                       />
@@ -12490,10 +12662,46 @@ export default function AdminAgendaPlaygroundPage() {
                                         {item.type === 'BOOKING' ? 'Cancha' : item.description}
                                       </span>
                                     </span>
-                                    <span className="text-[11px] font-semibold text-[#62708f]">
-                                      {Number(item.remainingAmount || 0).toFixed(2)} $
-                                    </span>
-                                  </label>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-[#dce2ee] bg-white px-2">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          disabled={!checked}
+                                          value={
+                                            checked
+                                              ? String(
+                                                  simplifiedPaymentCustomItemAmountDraftById[String(item.id)] ??
+                                                    Number(item.remainingAmount || 0).toFixed(2)
+                                                )
+                                              : ''
+                                          }
+                                          onChange={(event) => {
+                                            const itemId = String(item.id);
+                                            const nextDrafts: Record<string, string> = {
+                                              ...simplifiedPaymentCustomItemAmountDraftById,
+                                              [itemId]: event.target.value,
+                                            };
+                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                            setSimplifiedPaymentAmountDraft(
+                                              formatPaymentAmountDraft(
+                                                computeCustomSelectedAmount(
+                                                  simplifiedPaymentSelectedItemIdsDraft,
+                                                  nextDrafts
+                                                )
+                                              )
+                                            );
+                                          }}
+                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-[#2a3245] outline-none disabled:text-[#9ca5ba]"
+                                        />
+                                        <span className="ml-1 text-[11px] font-semibold text-[#8a92a5]">$</span>
+                                      </div>
+                                      <span className="w-[88px] text-right text-[11px] font-semibold text-[#62708f]">
+                                        {Number(item.remainingAmount || 0).toFixed(2)} $
+                                      </span>
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>

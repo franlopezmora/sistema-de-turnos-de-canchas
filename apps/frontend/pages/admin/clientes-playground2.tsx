@@ -277,6 +277,8 @@ export default function AdminClientesPlayground2Page() {
   const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState<PaymentMethod>('CASH');
   const [simplifiedPaymentQuickPreset, setSimplifiedPaymentQuickPreset] = useState<PaymentQuickPreset>('FULL');
   const [simplifiedPaymentSelectedItemIdsDraft, setSimplifiedPaymentSelectedItemIdsDraft] = useState<string[]>([]);
+  const [simplifiedPaymentCustomItemAmountDraftById, setSimplifiedPaymentCustomItemAmountDraftById] =
+    useState<Record<string, string>>({});
   const [simplifiedPaymentAmountDraft, setSimplifiedPaymentAmountDraft] = useState('');
   const [accountBreakdownById, setAccountBreakdownById] = useState<Record<string, PendingAccountBreakdown>>({});
   const [loadingAccountById, setLoadingAccountById] = useState<Record<string, boolean>>({});
@@ -585,6 +587,7 @@ export default function AdminClientesPlayground2Page() {
     setSimplifiedPaymentQuickPreset('FULL');
     const allIds = Object.keys(buildAutoPaymentAllocations(normalizedTotal, breakdown));
     setSimplifiedPaymentSelectedItemIdsDraft(allIds);
+    setSimplifiedPaymentCustomItemAmountDraftById({});
     setSimplifiedPaymentAmountDraft(String(normalizedTotal.toFixed(2)));
     setSidebarView('none');
     setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
@@ -922,11 +925,30 @@ export default function AdminClientesPlayground2Page() {
   );
 
   const computeConceptBasedMaxAmount = useCallback(
-    (preset: PaymentQuickPreset, selectedIds?: string[]) => {
+    (
+      preset: PaymentQuickPreset,
+      selectedIds?: string[],
+      customAmountDraftById?: Record<string, string>
+    ) => {
       const allowedIds =
         preset === 'CUSTOM_ITEMS'
           ? new Set((selectedIds || []).map((value) => String(value || '').trim()).filter(Boolean))
           : new Set(resolvePresetItemIds(preset));
+      if (preset === 'CUSTOM_ITEMS') {
+        const customDrafts = customAmountDraftById ?? simplifiedPaymentCustomItemAmountDraftById;
+        return Number(
+          pendingAccountItems
+            .filter((item) => allowedIds.has(String(item.id)))
+            .reduce((sum, item) => {
+              const fallback = Number(item.remainingAmount || 0);
+              const rawDraft = String(customDrafts[String(item.id)] ?? '').trim();
+              const parsed = Number(rawDraft.replace(',', '.'));
+              const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
+              return sum + Math.max(0, Math.min(fallback, resolved));
+            }, 0)
+            .toFixed(2)
+        );
+      }
       return Number(
         pendingAccountItems
           .filter((item) => allowedIds.has(String(item.id)))
@@ -934,7 +956,26 @@ export default function AdminClientesPlayground2Page() {
           .toFixed(2)
       );
     },
-    [pendingAccountItems, resolvePresetItemIds]
+    [pendingAccountItems, resolvePresetItemIds, simplifiedPaymentCustomItemAmountDraftById]
+  );
+
+  const computeCustomSelectedAmount = useCallback(
+    (selectedIds: string[], customAmountDraftById: Record<string, string>) => {
+      const selectedSet = new Set((selectedIds || []).map((value) => String(value || '').trim()).filter(Boolean));
+      return Number(
+        pendingAccountItems
+          .filter((item) => selectedSet.has(String(item.id)))
+          .reduce((sum, item) => {
+            const fallback = Number(item.remainingAmount || 0);
+            const rawDraft = String(customAmountDraftById[String(item.id)] ?? '').trim();
+            const parsed = Number(rawDraft.replace(',', '.'));
+            const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
+            return sum + Math.max(0, Math.min(fallback, resolved));
+          }, 0)
+          .toFixed(2)
+      );
+    },
+    [pendingAccountItems]
   );
 
   const applySimplifiedPaymentQuickPreset = useCallback(
@@ -943,15 +984,39 @@ export default function AdminClientesPlayground2Page() {
       const nextIds = preset === 'CUSTOM_ITEMS' ? simplifiedPaymentSelectedItemIdsDraft : resolvePresetItemIds(preset);
       if (preset !== 'CUSTOM_ITEMS') {
         setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+        setSimplifiedPaymentCustomItemAmountDraftById({});
       }
-      setSimplifiedPaymentAmountDraft(String(computeConceptBasedMaxAmount(preset, nextIds).toFixed(2)));
+      setSimplifiedPaymentAmountDraft(
+        String(
+          computeConceptBasedMaxAmount(
+            preset,
+            nextIds,
+            simplifiedPaymentCustomItemAmountDraftById
+          ).toFixed(2)
+        )
+      );
     },
-    [computeConceptBasedMaxAmount, resolvePresetItemIds, simplifiedPaymentSelectedItemIdsDraft]
+    [
+      computeConceptBasedMaxAmount,
+      resolvePresetItemIds,
+      simplifiedPaymentCustomItemAmountDraftById,
+      simplifiedPaymentSelectedItemIdsDraft,
+    ]
   );
 
   const simplifiedPaymentConceptDebt = useMemo(
-    () => computeConceptBasedMaxAmount(simplifiedPaymentQuickPreset, simplifiedPaymentSelectedItemIdsDraft),
-    [computeConceptBasedMaxAmount, simplifiedPaymentQuickPreset, simplifiedPaymentSelectedItemIdsDraft]
+    () =>
+      computeConceptBasedMaxAmount(
+        simplifiedPaymentQuickPreset,
+        simplifiedPaymentSelectedItemIdsDraft,
+        simplifiedPaymentCustomItemAmountDraftById
+      ),
+    [
+      computeConceptBasedMaxAmount,
+      simplifiedPaymentCustomItemAmountDraftById,
+      simplifiedPaymentQuickPreset,
+      simplifiedPaymentSelectedItemIdsDraft,
+    ]
   );
   const simplifiedPaymentMaxAmount = simplifiedPaymentConceptDebt;
   const simplifiedPaymentAmountNumber = Number(simplifiedPaymentAmountDraft || 0);
@@ -973,13 +1038,31 @@ export default function AdminClientesPlayground2Page() {
     for (const item of pendingAccountItems) {
       if (!selectedSet.has(String(item.id))) continue;
       if (remaining <= EPSILON) break;
-      const amount = Number(Math.min(Number(item.remainingAmount || 0), remaining).toFixed(2));
+      const itemId = String(item.id);
+      const maxForItem = Number(item.remainingAmount || 0);
+      const rawCustom = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
+      const parsedCustom = Number(rawCustom.replace(',', '.'));
+      const desiredForItem =
+        simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS'
+          ? Math.max(
+              0,
+              Math.min(maxForItem, rawCustom === '' ? 0 : Number.isFinite(parsedCustom) ? parsedCustom : maxForItem)
+            )
+          : maxForItem;
+      const amount = Number(Math.min(desiredForItem, remaining).toFixed(2));
       if (amount <= EPSILON) continue;
-      rows.push({ id: String(item.id), label: item.type === 'BOOKING' ? 'Cancha' : item.description, amount });
+      rows.push({ id: itemId, label: item.type === 'BOOKING' ? 'Cancha' : item.description, amount });
       remaining = Number((remaining - amount).toFixed(2));
     }
     return rows;
-  }, [pendingAccountItems, playtomicPreviewRequestedAmount, resolvePresetItemIds, simplifiedPaymentQuickPreset, simplifiedPaymentSelectedItemIdsDraft]);
+  }, [
+    pendingAccountItems,
+    playtomicPreviewRequestedAmount,
+    resolvePresetItemIds,
+    simplifiedPaymentCustomItemAmountDraftById,
+    simplifiedPaymentQuickPreset,
+    simplifiedPaymentSelectedItemIdsDraft,
+  ]);
   const playtomicPreviewConceptRows = previewRows;
   const playtomicPreviewRemainingAfter = Number(Math.max(0, simplifiedRemainingAmount - playtomicPreviewRequestedAmount).toFixed(2));
 
@@ -1004,9 +1087,20 @@ export default function AdminClientesPlayground2Page() {
         for (const item of pendingAccountItems) {
           if (!selectedSet.has(String(item.id))) continue;
           if (remaining <= EPSILON) break;
-          const amount = Number(Math.min(Number(item.remainingAmount || 0), remaining).toFixed(2));
+          const itemId = String(item.id);
+          const maxForItem = Number(item.remainingAmount || 0);
+          const rawCustom = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
+          const parsedCustom = Number(rawCustom.replace(',', '.'));
+          const desiredForItem =
+            simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS'
+              ? Math.max(
+                  0,
+                  Math.min(maxForItem, rawCustom === '' ? 0 : Number.isFinite(parsedCustom) ? parsedCustom : maxForItem)
+                )
+              : maxForItem;
+          const amount = Number(Math.min(desiredForItem, remaining).toFixed(2));
           if (amount <= EPSILON) continue;
-          allocations.push({ accountItemId: String(item.id), amount });
+          allocations.push({ accountItemId: itemId, amount });
           appliedItems.push({ label: item.type === 'BOOKING' ? 'Cancha' : item.description, amount });
           remaining = Number((remaining - amount).toFixed(2));
         }
@@ -1084,6 +1178,7 @@ export default function AdminClientesPlayground2Page() {
       simplifiedPaymentAmountNumber,
       simplifiedPaymentMethodDraft,
       simplifiedPaymentMethodLabel,
+      simplifiedPaymentCustomItemAmountDraftById,
       simplifiedPaymentQuickPreset,
       simplifiedPaymentSelectedItemIdsDraft,
       simplifiedRemainingAmount,
@@ -1111,6 +1206,7 @@ export default function AdminClientesPlayground2Page() {
     setSimplifiedPaymentMethodDraft('CASH');
     setSimplifiedPaymentQuickPreset('FULL');
     setSimplifiedPaymentSelectedItemIdsDraft([]);
+    setSimplifiedPaymentCustomItemAmountDraftById({});
     setSimplifiedPaymentAmountDraft('');
   }, [paying]);
 
@@ -1712,8 +1808,15 @@ export default function AdminClientesPlayground2Page() {
                               type="button"
                               onClick={() => {
                                 const nextIds = pendingAccountItems.map((item) => String(item.id));
+                                const nextCustomDrafts: Record<string, string> = {};
+                                pendingAccountItems.forEach((item) => {
+                                  nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
+                                });
                                 setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                setSimplifiedPaymentAmountDraft(String(computeConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds).toFixed(2)));
+                                setSimplifiedPaymentCustomItemAmountDraftById(nextCustomDrafts);
+                                setSimplifiedPaymentAmountDraft(
+                                  String(computeConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds, nextCustomDrafts).toFixed(2))
+                                );
                               }}
                               className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
                             >
@@ -1723,6 +1826,7 @@ export default function AdminClientesPlayground2Page() {
                               type="button"
                               onClick={() => {
                                 setSimplifiedPaymentSelectedItemIdsDraft([]);
+                                setSimplifiedPaymentCustomItemAmountDraftById({});
                                 setSimplifiedPaymentAmountDraft('');
                               }}
                               className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
@@ -1732,7 +1836,10 @@ export default function AdminClientesPlayground2Page() {
                           </div>
                         </div>
                         <p className="mt-2 text-[11px] text-[#6f7890]">
-                          Deuda seleccionada: {simplifiedPaymentConceptDebt.toFixed(2)} $
+                          Total seleccionado: {computeCustomSelectedAmount(
+                            simplifiedPaymentSelectedItemIdsDraft,
+                            simplifiedPaymentCustomItemAmountDraftById
+                          ).toFixed(2)} $
                         </p>
                         <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
                           {pendingAccountItems.length === 0 ? (
@@ -1742,7 +1849,7 @@ export default function AdminClientesPlayground2Page() {
                               {pendingAccountItems.map((item) => {
                                 const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
                                 return (
-                                  <label key={`payment-playtomic-concept-item-${item.id}`} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]">
+                                  <div key={`payment-playtomic-concept-item-${item.id}`} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]">
                                     <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
                                       <input
                                         type="checkbox"
@@ -1750,18 +1857,71 @@ export default function AdminClientesPlayground2Page() {
                                         onChange={(event) => {
                                           const nextChecked = event.target.checked;
                                           const nextSet = new Set(simplifiedPaymentSelectedItemIdsDraft.map((value) => String(value || '').trim()).filter(Boolean));
-                                          if (nextChecked) nextSet.add(String(item.id));
-                                          else nextSet.delete(String(item.id));
+                                          const itemId = String(item.id);
+                                          const nextDrafts: Record<string, string> = {
+                                            ...simplifiedPaymentCustomItemAmountDraftById,
+                                          };
+                                          if (nextChecked) {
+                                            nextSet.add(itemId);
+                                            const prevDraft = String(nextDrafts[itemId] ?? '').trim();
+                                            if (!prevDraft) {
+                                              nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
+                                            }
+                                          } else {
+                                            nextSet.delete(itemId);
+                                            delete nextDrafts[itemId];
+                                          }
                                           const nextIds = Array.from(nextSet);
                                           setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                          setSimplifiedPaymentAmountDraft(String(computeConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds).toFixed(2)));
+                                          setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                          setSimplifiedPaymentAmountDraft(
+                                            String(computeCustomSelectedAmount(nextIds, nextDrafts).toFixed(2))
+                                          );
                                         }}
                                         className="h-4 w-4 accent-[#3053e2]"
                                       />
                                       <span className="truncate">{item.type === 'BOOKING' ? 'Cancha' : item.description}</span>
                                     </span>
-                                    <span className="text-[11px] font-semibold text-[#62708f]">{Number(item.remainingAmount || 0).toFixed(2)} $</span>
-                                  </label>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-[#dce2ee] bg-white px-2">
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          disabled={!checked}
+                                          value={
+                                            checked
+                                              ? String(
+                                                  simplifiedPaymentCustomItemAmountDraftById[String(item.id)] ??
+                                                    Number(item.remainingAmount || 0).toFixed(2)
+                                                )
+                                              : ''
+                                          }
+                                          onChange={(event) => {
+                                            const itemId = String(item.id);
+                                            const nextDrafts: Record<string, string> = {
+                                              ...simplifiedPaymentCustomItemAmountDraftById,
+                                              [itemId]: event.target.value,
+                                            };
+                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+                                            setSimplifiedPaymentAmountDraft(
+                                              String(
+                                                computeCustomSelectedAmount(
+                                                  simplifiedPaymentSelectedItemIdsDraft,
+                                                  nextDrafts
+                                                ).toFixed(2)
+                                              )
+                                            );
+                                          }}
+                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-[#2a3245] outline-none disabled:text-[#9ca5ba]"
+                                        />
+                                        <span className="ml-1 text-[11px] font-semibold text-[#8a92a5]">$</span>
+                                      </div>
+                                      <span className="w-[88px] text-right text-[11px] font-semibold text-[#62708f]">
+                                        {Number(item.remainingAmount || 0).toFixed(2)} $
+                                      </span>
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>
