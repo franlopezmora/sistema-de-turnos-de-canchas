@@ -20,7 +20,7 @@ export type PlaygroundSidebarItem = {
 export const PLAYGROUND_SIDEBAR_ITEMS: PlaygroundSidebarItem[] = [
   { label: 'Calendario', icon: CalendarDays, href: '/admin/agenda-playground2' },
   { label: 'Clientes', icon: Users, href: '/admin/clientes-playground2' },
-  { label: 'Pagos', icon: CreditCard, href: '/admin/cash-playground2' },
+  { label: 'Pagos', icon: CreditCard, href: '/admin/pagos-playground' },
   { label: 'Reservas', icon: Receipt },
   { label: 'Partidos', icon: Trophy },
   { label: 'Tienda', icon: ShoppingBag },

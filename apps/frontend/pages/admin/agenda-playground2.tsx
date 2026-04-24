@@ -181,7 +181,28 @@ type ParticipantSuggestion = {
 type BookingKind = 'regular' | 'recurringV2' | 'privateClass' | 'courseClass' | 'block';
 type RecurringFrequencyPreset = 'weekly' | 'biweekly' | 'custom';
 type ComboOption = { value: string; label: string; secondary?: string };
-type SimplifiedSidebarSection = 'DETAILS' | 'BILLING' | 'HISTORY';
+type SimplifiedSidebarSection = 'DETAILS' | 'CONSUMPTIONS' | 'BILLING' | 'PLAYTOMIC' | 'HISTORY';
+type ClubProductOption = {
+  id: number;
+  name: string;
+  price: number;
+  stock: number | null;
+  isActive: boolean;
+};
+type BookingConsumptionItem = {
+  id: string;
+  productId: number | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  paidAmount: number;
+  remainingAmount: number;
+  type: string;
+};
+type PaymentImputationMode = 'BY_PARTICIPANT' | 'BY_CONCEPT';
+type PaymentConceptMode = 'AUTO' | 'COURT' | 'CONSUMPTIONS' | 'CUSTOM';
+type PaymentQuickPreset = 'MY_SHARE' | 'FULL' | 'COURT_ONLY' | 'CUSTOM_ITEMS';
 type ParticipantUiState =
   | { mode: 'idle'; participantId: null }
   | { mode: 'menu'; participantId: string }
@@ -189,6 +210,16 @@ type ParticipantUiState =
 type SuggestionPlacement = {
   openUp: boolean;
   maxHeight: number;
+};
+type PlaytomicPaymentResultModal = {
+  variant: 'success' | 'partial' | 'error';
+  title: string;
+  detail: string;
+  requestedAmount: number;
+  appliedAmount: number;
+  remainingAfter: number;
+  methodLabel: string;
+  appliedItems: Array<{ label: string; amount: number }>;
 };
 
 
@@ -1065,6 +1096,85 @@ function roundMoney(value: number) {
   return Number((Math.max(0, value) || 0).toFixed(2));
 }
 
+function normalizeClubProductOption(raw: any): ClubProductOption | null {
+  const id = Number(raw?.id || 0);
+  const name = String(raw?.name || '').trim();
+  const price = Number(raw?.price || 0);
+  const stockRaw = raw?.stock;
+  const stock =
+    stockRaw === null || stockRaw === undefined
+      ? null
+      : Number.isFinite(Number(stockRaw))
+        ? Number(stockRaw)
+        : null;
+  const isActive = raw?.isActive === undefined ? true : Boolean(raw?.isActive);
+  if (!Number.isFinite(id) || id <= 0 || name.length === 0) return null;
+  return {
+    id,
+    name,
+    price: Number.isFinite(price) ? roundMoney(price) : 0,
+    stock,
+    isActive,
+  };
+}
+
+function normalizeBookingConsumptionItem(raw: any): BookingConsumptionItem | null {
+  const type = String(raw?.type || raw?.itemType || raw?.kind || 'PRODUCT')
+    .trim()
+    .toUpperCase();
+  const fallbackId = `${type}-${String(raw?.productId || raw?.product?.id || 'x')}-${String(
+    raw?.description || raw?.name || raw?.title || 'item'
+  )
+    .trim()
+    .toLowerCase()}`;
+  const id = String(
+    raw?.id ??
+      raw?.accountItemId ??
+      raw?.itemId ??
+      raw?.bookingItemId ??
+      raw?.conceptId ??
+      fallbackId
+  ).trim();
+  if (!id) return null;
+
+  const quantity = Math.max(1, Math.round(Number(raw?.quantity ?? raw?.qty ?? 1)));
+  const unitPrice = roundMoney(Number(raw?.price ?? raw?.unitPrice ?? raw?.unitAmount ?? 0));
+  const paidAmount = roundMoney(
+    Number(raw?.paidAmount ?? raw?.paid ?? raw?.coveredAmount ?? 0)
+  );
+  const remainingAmountRaw = Number(
+    raw?.remainingAmount ?? raw?.remaining ?? raw?.pendingAmount ?? raw?.debt ?? NaN
+  );
+  const totalRaw = Number(raw?.totalPrice ?? raw?.total ?? raw?.amount ?? NaN);
+  const totalPrice = roundMoney(
+    Number.isFinite(totalRaw)
+      ? totalRaw
+      : Number.isFinite(remainingAmountRaw)
+        ? Math.max(0, remainingAmountRaw + paidAmount)
+        : Math.max(0, unitPrice * quantity)
+  );
+  const remainingAmount = roundMoney(
+    Number.isFinite(remainingAmountRaw)
+      ? remainingAmountRaw
+      : Math.max(0, totalPrice - paidAmount)
+  );
+  return {
+    id,
+    productId: Number.isFinite(Number(raw?.productId ?? raw?.product?.id))
+      ? Number(raw?.productId ?? raw?.product?.id)
+      : null,
+    description:
+      String(raw?.description || raw?.name || raw?.title || (type === 'BOOKING' ? 'Cancha' : 'Consumo')).trim() ||
+      (type === 'BOOKING' ? 'Cancha' : 'Consumo'),
+    quantity,
+    unitPrice,
+    totalPrice,
+    paidAmount,
+    remainingAmount,
+    type,
+  };
+}
+
 function clampParticipantPrice(value: number) {
   if (!Number.isFinite(value)) return 0;
   return roundMoney(Math.min(Math.max(0, value), MAX_MANUAL_PARTICIPANT_PRICE));
@@ -1631,9 +1741,40 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedPaymentCoveredParticipantIdsDraft, setSimplifiedPaymentCoveredParticipantIdsDraft] = useState<string[]>([]);
   const [simplifiedPaymentAmountDraft, setSimplifiedPaymentAmountDraft] = useState('');
   const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState('');
-  const [simplifiedPaymentNoteDraft, setSimplifiedPaymentNoteDraft] = useState('');
+  const [simplifiedPaymentModalVariant, setSimplifiedPaymentModalVariant] =
+    useState<'LEGACY' | 'PLAYTOMIC'>('LEGACY');
+  const [simplifiedPaymentQuickPreset, setSimplifiedPaymentQuickPreset] =
+    useState<PaymentQuickPreset>('MY_SHARE');
+  const [simplifiedPaymentImputationMode, setSimplifiedPaymentImputationMode] =
+    useState<PaymentImputationMode>('BY_PARTICIPANT');
+  const [simplifiedPaymentConceptMode, setSimplifiedPaymentConceptMode] =
+    useState<PaymentConceptMode>('AUTO');
+  const [simplifiedPaymentSelectedItemIdsDraft, setSimplifiedPaymentSelectedItemIdsDraft] = useState<string[]>([]);
   const [simplifiedSinglePaymentAdvancedOpen, setSimplifiedSinglePaymentAdvancedOpen] = useState(false);
+  const [playtomicPreConfirmOpen, setPlaytomicPreConfirmOpen] = useState(false);
+  const [playtomicResultModalOpen, setPlaytomicResultModalOpen] = useState(false);
+  const [playtomicResultModal, setPlaytomicResultModal] = useState<PlaytomicPaymentResultModal | null>(null);
   const [simplifiedSidebarSection, setSimplifiedSidebarSection] = useState<SimplifiedSidebarSection>('DETAILS');
+  const [consumptionProducts, setConsumptionProducts] = useState<ClubProductOption[]>([]);
+  const [consumptionProductsLoading, setConsumptionProductsLoading] = useState(false);
+  const [consumptionProductsError, setConsumptionProductsError] = useState('');
+  const [bookingConsumptionItems, setBookingConsumptionItems] = useState<BookingConsumptionItem[]>([]);
+  const [bookingAccountItems, setBookingAccountItems] = useState<BookingConsumptionItem[]>([]);
+  const [bookingConsumptionLoading, setBookingConsumptionLoading] = useState(false);
+  const [bookingConsumptionError, setBookingConsumptionError] = useState('');
+  const [consumptionProductDraft, setConsumptionProductDraft] = useState('');
+  const [consumptionQuantityDraft, setConsumptionQuantityDraft] = useState('1');
+  const [consumptionApplyDiscountDraft, setConsumptionApplyDiscountDraft] = useState(true);
+  const [consumptionQuoteLoading, setConsumptionQuoteLoading] = useState(false);
+  const [consumptionQuoteError, setConsumptionQuoteError] = useState('');
+  const [consumptionQuote, setConsumptionQuote] = useState<{
+    listTotal: number;
+    finalTotal: number;
+    discountAmount: number;
+    hasDiscount: boolean;
+  } | null>(null);
+  const [consumptionAddInFlight, setConsumptionAddInFlight] = useState(false);
+  const [consumptionRemovingId, setConsumptionRemovingId] = useState<string | null>(null);
   const [blockingTitle, setBlockingTitle] = useState('');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -1652,6 +1793,8 @@ export default function AdminAgendaPlaygroundPage() {
   const [bookingTimelineLoading, setBookingTimelineLoading] = useState(false);
   const [bookingTimelineError, setBookingTimelineError] = useState('');
   const [bookingFinancial, setBookingFinancial] = useState<{
+    courtTotal: number;
+    itemsTotal: number;
     total: number;
     paid: number;
     remaining: number;
@@ -1749,6 +1892,8 @@ export default function AdminAgendaPlaygroundPage() {
   const bookingFinancialRequestSeqRef = useRef(0);
   const bookingTimelineRequestSeqRef = useRef(0);
   const remoteBillingConfigRequestSeqRef = useRef(0);
+  const bookingConsumptionRequestSeqRef = useRef(0);
+  const consumptionQuoteRequestSeqRef = useRef(0);
   const bookingDrawerLoadKeyRef = useRef<string>('');
   const bookingDrawerFormSyncSignatureRef = useRef<string>('');
   const pendingParticipantSaveNoticeRef = useRef<string>('');
@@ -1969,6 +2114,27 @@ export default function AdminAgendaPlaygroundPage() {
     }
   }, [clubOptions, normalizedUser?.activeClubId]);
 
+  const resetConsumptionsDraft = useCallback(() => {
+    setBookingConsumptionItems([]);
+    setBookingAccountItems([]);
+    setBookingConsumptionError('');
+    setBookingConsumptionLoading(false);
+    setConsumptionProductDraft('');
+    setConsumptionQuantityDraft('1');
+    setConsumptionApplyDiscountDraft(true);
+    setConsumptionQuote(null);
+    setConsumptionQuoteError('');
+    setConsumptionQuoteLoading(false);
+    setConsumptionAddInFlight(false);
+    setConsumptionRemovingId(null);
+    setSimplifiedPaymentQuickPreset('MY_SHARE');
+    setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
+    setSimplifiedPaymentConceptMode('AUTO');
+    setSimplifiedPaymentSelectedItemIdsDraft([]);
+    bookingConsumptionRequestSeqRef.current += 1;
+    consumptionQuoteRequestSeqRef.current += 1;
+  }, []);
+
   const persistedEditingBookingId = useMemo(() => {
     const numeric = Number(editingBookingId);
     if (!Number.isFinite(numeric) || numeric <= 0) return null;
@@ -1997,6 +2163,7 @@ export default function AdminAgendaPlaygroundPage() {
     setBillingConfigTouchedByUser(false);
     setParticipantLabelByRefCache({});
     pendingParticipantSaveNoticeRef.current = '';
+    resetConsumptionsDraft();
     setQuotedListPrice(null);
     setQuotedFinalPrice(null);
     setQuotedDiscountAmount(0);
@@ -2029,7 +2196,7 @@ export default function AdminAgendaPlaygroundPage() {
     setDrawerOpen(true);
     setScheduleInputsDirty(false);
     setFormError('');
-  }, [resolveParticipantsForBooking]);
+  }, [resetConsumptionsDraft, resolveParticipantsForBooking]);
   const resetRecurringDraft = useCallback((baseDate: Date, fallbackCourtId?: string) => {
     const baseDay = baseDate.getDay();
     const firstCourtId =
@@ -2095,6 +2262,63 @@ export default function AdminAgendaPlaygroundPage() {
     }
   }, []);
 
+  const loadConsumptionProducts = useCallback(async () => {
+    const slug = getClubSlug();
+    if (!slug) {
+      setConsumptionProducts([]);
+      setConsumptionProductsError('No se pudo resolver el club activo para cargar productos.');
+      return [];
+    }
+    setConsumptionProductsLoading(true);
+    setConsumptionProductsError('');
+    try {
+      const data = await ClubAdminService.getProducts(slug);
+      const mapped = (Array.isArray(data) ? data : [])
+        .map(normalizeClubProductOption)
+        .filter((entry): entry is ClubProductOption => Boolean(entry))
+        .filter((entry) => entry.isActive);
+      setConsumptionProducts(mapped);
+      return mapped;
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'loadConsumptionProducts' }, error);
+      setConsumptionProducts([]);
+      setConsumptionProductsError(error?.message || 'No se pudieron cargar los productos del club.');
+      return [];
+    } finally {
+      setConsumptionProductsLoading(false);
+    }
+  }, [getClubSlug]);
+
+  const loadBookingConsumptions = useCallback(async (bookingId: number) => {
+    const requestSeq = bookingConsumptionRequestSeqRef.current + 1;
+    bookingConsumptionRequestSeqRef.current = requestSeq;
+    setBookingConsumptionLoading(true);
+    setBookingConsumptionError('');
+    try {
+      const rows = await ClubAdminService.getBookingItems(bookingId);
+      if (bookingConsumptionRequestSeqRef.current !== requestSeq) return [];
+      const normalized = (Array.isArray(rows) ? rows : [])
+        .map(normalizeBookingConsumptionItem)
+        .filter((entry): entry is BookingConsumptionItem => Boolean(entry));
+      setBookingAccountItems(normalized);
+      const onlyConsumptions = normalized.filter((entry) => entry.type !== 'BOOKING');
+      setBookingConsumptionItems(onlyConsumptions);
+      return onlyConsumptions;
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'loadBookingConsumptions' }, error);
+      if (bookingConsumptionRequestSeqRef.current === requestSeq) {
+        setBookingAccountItems([]);
+        setBookingConsumptionItems([]);
+        setBookingConsumptionError(error?.message || 'No se pudieron cargar los consumos.');
+      }
+      return [];
+    } finally {
+      if (bookingConsumptionRequestSeqRef.current === requestSeq) {
+        setBookingConsumptionLoading(false);
+      }
+    }
+  }, []);
+
   const loadCourtsForActiveClub = useCallback(async () => {
     try {
       const userStored = localStorage.getItem('user');
@@ -2155,6 +2379,8 @@ export default function AdminAgendaPlaygroundPage() {
       const summary = await getBookingFinancialSummary(bookingId);
       if (bookingFinancialRequestSeqRef.current !== requestSeq) return summary;
       setBookingFinancial({
+        courtTotal: Number(summary?.courtTotal || 0),
+        itemsTotal: Number(summary?.itemsTotal || 0),
         total: Number(summary?.total || 0),
         paid: Number(summary?.paid || 0),
         remaining: Number(summary?.remaining || 0),
@@ -2191,7 +2417,7 @@ export default function AdminAgendaPlaygroundPage() {
   useEffect(() => {
     if (!drawerOpen) return;
     setBookingHoverPreview(null);
-  }, [drawerOpen]);
+  }, [drawerOpen, resetConsumptionsDraft]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -2206,7 +2432,7 @@ export default function AdminAgendaPlaygroundPage() {
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [drawerOpen]);
+  }, [drawerOpen, resetConsumptionsDraft]);
 
   useEffect(() => {
     const clearCloseCleanupTimer = () => {
@@ -2241,6 +2467,7 @@ export default function AdminAgendaPlaygroundPage() {
       setIsBillingConfigHydrated(false);
       setBillingConfigLoadError('');
       setBillingConfigTouchedByUser(false);
+      resetConsumptionsDraft();
       setParticipantLabelByRefCache({});
       pendingParticipantSaveNoticeRef.current = '';
       setRecurringResult(null);
@@ -2265,12 +2492,90 @@ export default function AdminAgendaPlaygroundPage() {
     return () => {
       clearCloseCleanupTimer();
     };
-  }, [drawerOpen]);
+  }, [drawerOpen, resetConsumptionsDraft]);
 
   useEffect(() => {
     if (drawerOpen) return;
     bookingDrawerLoadKeyRef.current = '';
   }, [drawerOpen]);
+
+  useEffect(() => {
+    if (!drawerOpen || bookingKind === 'block') return;
+    void loadConsumptionProducts();
+  }, [bookingKind, drawerOpen, loadConsumptionProducts]);
+
+  useEffect(() => {
+    if (consumptionProducts.length === 0) return;
+    if (consumptionProductDraft && consumptionProducts.some((product) => String(product.id) === consumptionProductDraft)) return;
+    setConsumptionProductDraft(String(consumptionProducts[0].id));
+  }, [consumptionProductDraft, consumptionProducts]);
+
+  useEffect(() => {
+    if (!drawerOpen || bookingKind === 'block') return;
+    if (!persistedEditingBookingId) return;
+    void loadBookingConsumptions(persistedEditingBookingId);
+  }, [bookingKind, drawerOpen, persistedEditingBookingId, loadBookingConsumptions]);
+
+  useEffect(() => {
+    if (!drawerOpen || bookingKind === 'block' || !persistedEditingBookingId) {
+      setConsumptionQuote(null);
+      setConsumptionQuoteError('');
+      setConsumptionQuoteLoading(false);
+      return;
+    }
+    const productId = Number(consumptionProductDraft || 0);
+    const quantity = Math.max(1, Math.floor(Number(consumptionQuantityDraft || 1)));
+    if (!Number.isFinite(productId) || productId <= 0 || !Number.isFinite(quantity) || quantity <= 0) {
+      setConsumptionQuote(null);
+      setConsumptionQuoteError('');
+      setConsumptionQuoteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const requestSeq = consumptionQuoteRequestSeqRef.current + 1;
+    consumptionQuoteRequestSeqRef.current = requestSeq;
+    setConsumptionQuoteLoading(true);
+    setConsumptionQuoteError('');
+
+    const run = async () => {
+      try {
+        const result = await ClubAdminService.quoteBookingItem(
+          persistedEditingBookingId,
+          productId,
+          quantity,
+          { applyDiscount: consumptionApplyDiscountDraft }
+        );
+        if (cancelled || consumptionQuoteRequestSeqRef.current !== requestSeq) return;
+        setConsumptionQuote({
+          listTotal: roundMoney(Number(result?.listTotal || 0)),
+          finalTotal: roundMoney(Number(result?.finalTotal || 0)),
+          discountAmount: roundMoney(Number(result?.discountAmount || 0)),
+          hasDiscount: Boolean(result?.hasDiscount),
+        });
+      } catch (error: any) {
+        if (cancelled || consumptionQuoteRequestSeqRef.current !== requestSeq) return;
+        setConsumptionQuote(null);
+        setConsumptionQuoteError(error?.message || 'No se pudo cotizar el consumo.');
+      } finally {
+        if (!cancelled && consumptionQuoteRequestSeqRef.current === requestSeq) {
+          setConsumptionQuoteLoading(false);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bookingKind,
+    consumptionApplyDiscountDraft,
+    consumptionProductDraft,
+    consumptionQuantityDraft,
+    drawerOpen,
+    persistedEditingBookingId,
+  ]);
 
   useEffect(() => {
     if (!drawerOpen || bookingKind === 'block') return;
@@ -2583,6 +2888,7 @@ export default function AdminAgendaPlaygroundPage() {
         setIsBillingConfigHydrated(false);
         setBillingConfigLoadError('');
         setBillingConfigTouchedByUser(false);
+        resetConsumptionsDraft();
         setQuotedListPrice(null);
         setQuotedFinalPrice(null);
         setQuotedDiscountAmount(0);
@@ -2610,6 +2916,7 @@ export default function AdminAgendaPlaygroundPage() {
     isDragging,
     openBookingInDrawer,
     resetRecurringDraft,
+    resetConsumptionsDraft,
     persistBookingMove,
     reloadSchedule,
     selectedDate,
@@ -2683,6 +2990,7 @@ export default function AdminAgendaPlaygroundPage() {
       setIsBillingConfigHydrated(false);
       setBillingConfigLoadError('');
       setBillingConfigTouchedByUser(false);
+      resetConsumptionsDraft();
       setQuotedListPrice(null);
       setQuotedFinalPrice(null);
       setQuotedDiscountAmount(0);
@@ -2699,6 +3007,7 @@ export default function AdminAgendaPlaygroundPage() {
       selectedStartSlot,
       showCalendarNotice,
       resetRecurringDraft,
+      resetConsumptionsDraft,
     ]
   );
 
@@ -3714,6 +4023,7 @@ export default function AdminAgendaPlaygroundPage() {
     silentSuccessNotice?: boolean;
     participantId?: string;
     coveredParticipantId?: string;
+    itemAllocations?: Array<{ accountItemId: string; amount: number }>;
   }) => {
     const lockPaymentsNow = Boolean(
       persistedEditingBookingId &&
@@ -3829,7 +4139,7 @@ export default function AdminAgendaPlaygroundPage() {
         amount,
         input.method,
         paymentChannel,
-        undefined,
+        input.itemAllocations,
         {
           participantRef: payerParticipantRef,
           participantName: payerParticipantName,
@@ -3840,8 +4150,35 @@ export default function AdminAgendaPlaygroundPage() {
         }
       );
 
+      if (Array.isArray(input.itemAllocations) && input.itemAllocations.length > 0) {
+        const allocationByItemId = new Map<string, number>();
+        input.itemAllocations.forEach((allocation) => {
+          const itemId = String(allocation.accountItemId || '').trim();
+          if (!itemId) return;
+          const current = Number(allocationByItemId.get(itemId) || 0);
+          allocationByItemId.set(itemId, Number((current + Number(allocation.amount || 0)).toFixed(2)));
+        });
+        if (allocationByItemId.size > 0) {
+          setBookingAccountItems((previous) => {
+            const next = previous.map((item) => {
+              const allocated = Number(allocationByItemId.get(String(item.id)) || 0);
+              if (allocated <= 0.009) return item;
+              const nextPaid = Number((Number(item.paidAmount || 0) + allocated).toFixed(2));
+              const nextRemaining = Number(Math.max(0, Number(item.totalPrice || 0) - nextPaid).toFixed(2));
+              return {
+                ...item,
+                paidAmount: nextPaid,
+                remainingAmount: nextRemaining,
+              };
+            });
+            setBookingConsumptionItems(next.filter((entry) => entry.type !== 'BOOKING'));
+            return next;
+          });
+        }
+      }
       await reloadSchedule();
       const latestFinancialSummary = await refreshBookingFinancial(persistedEditingBookingId);
+      await loadBookingConsumptions(persistedEditingBookingId);
       setParticipants((previous) =>
         distributePaidByParticipants(
           previous,
@@ -3986,6 +4323,7 @@ export default function AdminAgendaPlaygroundPage() {
     paymentMode,
     participants,
     persistedEditingBookingId,
+    loadBookingConsumptions,
     refreshBookingFinancial,
     reloadSchedule,
     singleChargeParticipantId,
@@ -4558,6 +4896,67 @@ export default function AdminAgendaPlaygroundPage() {
   const showCollectMainAction = canShowMainAction && !isPaymentLockedByManualPending && !isBookingFullyPaid;
   const shouldHideBillingUntilConfirmed = isPaymentLockedByManualPending || shouldHideBillingUntilCreated;
   const isPaymentsTabActive = billingHubTab === 'PAYMENTS';
+  const bookingConsumptionsTotal = Number(
+    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0).toFixed(2)
+  );
+  const bookingConsumptionsPaid = Number(
+    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.paidAmount || 0), 0).toFixed(2)
+  );
+  const bookingConsumptionsRemaining = Number(
+    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0).toFixed(2)
+  );
+  const pendingAccountItems = useMemo(
+    () =>
+      bookingAccountItems.filter((item) => Number(item.remainingAmount || 0) > 0.009),
+    [bookingAccountItems]
+  );
+  const pendingCourtAccountItems = useMemo(
+    () => pendingAccountItems.filter((item) => item.type === 'BOOKING'),
+    [pendingAccountItems]
+  );
+  const pendingConsumptionAccountItems = useMemo(
+    () => pendingAccountItems.filter((item) => item.type !== 'BOOKING'),
+    [pendingAccountItems]
+  );
+  const pendingAccountItemById = useMemo(() => {
+    const map = new Map<string, BookingConsumptionItem>();
+    pendingAccountItems.forEach((item) => {
+      map.set(String(item.id), item);
+    });
+    return map;
+  }, [pendingAccountItems]);
+  const simplifiedPaymentConceptItems = useMemo(() => {
+    if (simplifiedPaymentConceptMode === 'COURT') return pendingCourtAccountItems;
+    if (simplifiedPaymentConceptMode === 'CONSUMPTIONS') return pendingConsumptionAccountItems;
+    if (simplifiedPaymentConceptMode === 'CUSTOM') {
+      return simplifiedPaymentSelectedItemIdsDraft
+        .map((id) => pendingAccountItemById.get(String(id)))
+        .filter((entry): entry is BookingConsumptionItem => Boolean(entry));
+    }
+    return pendingAccountItems;
+  }, [
+    pendingAccountItemById,
+    pendingAccountItems,
+    pendingConsumptionAccountItems,
+    pendingCourtAccountItems,
+    simplifiedPaymentConceptMode,
+    simplifiedPaymentSelectedItemIdsDraft,
+  ]);
+  const simplifiedPaymentConceptDebt = Number(
+    simplifiedPaymentConceptItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0).toFixed(2)
+  );
+  const bookingCourtAmount = Number(
+    (usesPersistedFinancialSummary
+      ? Number(bookingFinancial?.courtTotal || 0)
+      : Math.max(0, Number(totalPrice || 0) - bookingConsumptionsTotal)
+    ).toFixed(2)
+  );
+  const bookingItemsAmount = Number(
+    (usesPersistedFinancialSummary
+      ? Number(bookingFinancial?.itemsTotal || 0)
+      : bookingConsumptionsTotal
+    ).toFixed(2)
+  );
   const billingDraft = bookingDrawerState.draft?.billing || null;
   const billingSummary = billingDraft?.financialSummary
     ? billingDraft.financialSummary
@@ -4591,6 +4990,38 @@ export default function AdminAgendaPlaygroundPage() {
     ).toFixed(2)
   );
   const simplifiedRemainingAfterQueue = simplifiedRemainingAmount;
+  const computeConceptBasedMaxAmount = useCallback((
+    conceptMode: PaymentConceptMode,
+    selectedItemIds?: string[]
+  ) => {
+    const selectedIds = new Set(
+      (Array.isArray(selectedItemIds) ? selectedItemIds : simplifiedPaymentSelectedItemIdsDraft)
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    );
+    const selectedItems = (() => {
+      if (conceptMode === 'AUTO') return pendingAccountItems;
+      if (conceptMode === 'COURT') return pendingCourtAccountItems;
+      if (conceptMode === 'CONSUMPTIONS') return pendingConsumptionAccountItems;
+      return pendingAccountItems.filter((item) => selectedIds.has(String(item.id)));
+    })();
+    const debt = Number(
+      selectedItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0).toFixed(2)
+    );
+    const conceptTarget = conceptMode === 'AUTO' ? simplifiedRemainingAfterQueue : debt;
+    return Number(
+      Math.max(0, Math.min(simplifiedRemainingAfterQueue, conceptTarget)).toFixed(2)
+    );
+  }, [
+    pendingAccountItems,
+    pendingConsumptionAccountItems,
+    pendingCourtAccountItems,
+    simplifiedPaymentSelectedItemIdsDraft,
+    simplifiedRemainingAfterQueue,
+  ]);
+  const formatPaymentAmountDraft = useCallback((amount: number) => {
+    return amount > 0.009 ? Number(amount.toFixed(2)).toFixed(2) : '';
+  }, []);
   const simplifiedPaymentStatusLabel = isFinancialDisplayPending
     ? 'Cargando'
     : simplifiedRemainingAmount <= 0.009
@@ -5303,13 +5734,30 @@ export default function AdminAgendaPlaygroundPage() {
 
   const closeSimplifiedPaymentModal = useCallback(() => {
     setSimplifiedPaymentModalOpen(false);
+    setPlaytomicPreConfirmOpen(false);
+    setSimplifiedPaymentModalVariant('LEGACY');
     setSimplifiedPaymentPayerParticipantIdDraft('');
     setSimplifiedPaymentCoveredParticipantIdDraft('');
     setSimplifiedPaymentCoveredParticipantIdsDraft([]);
     setSimplifiedPaymentAmountDraft('');
     setSimplifiedPaymentMethodDraft('');
-    setSimplifiedPaymentNoteDraft('');
+    setSimplifiedPaymentQuickPreset('MY_SHARE');
+    setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
+    setSimplifiedPaymentConceptMode('AUTO');
+    setSimplifiedPaymentSelectedItemIdsDraft([]);
     setSimplifiedSinglePaymentAdvancedOpen(false);
+  }, []);
+  const modalBackdropPointerDownTargetRef = useRef<EventTarget | null>(null);
+  const handleModalBackdropPointerDown = useCallback((event: any) => {
+    modalBackdropPointerDownTargetRef.current = event.target;
+  }, []);
+  const handleModalBackdropPointerUp = useCallback((event: any, onClose: () => void) => {
+    const startedOnBackdrop = modalBackdropPointerDownTargetRef.current === event.currentTarget;
+    const endedOnBackdrop = event.target === event.currentTarget;
+    modalBackdropPointerDownTargetRef.current = null;
+    if (startedOnBackdrop && endedOnBackdrop) {
+      onClose();
+    }
   }, []);
 
   const openSimplifiedPaymentModal = useCallback(async () => {
@@ -5396,27 +5844,17 @@ export default function AdminAgendaPlaygroundPage() {
       if (paymentMode === 'Único') {
         return String(singleChargeParticipantId || preferredPayerId || '');
       }
-      const payerDebt = Number(participantDebtAmountById.get(String(preferredPayerId || '').trim()) || 0);
-      if (payerDebt > 0.009) {
-        return String(preferredPayerId || '').trim();
-      }
-      const firstWithDebt = participants.find(
-        (participant) => Number(participantDebtAmountById.get(participant.id) || 0) > 0.009
-      );
-      return String(firstWithDebt?.id || '');
+      return String(preferredPayerId || '').trim();
     })();
+    const isPlaytomicFlow = simplifiedSidebarSection === 'PLAYTOMIC';
     const preferredCoveredDebt = Number(participantDebtAmountById.get(preferredCoveredId) || 0);
     const preferredAmount = Number(
       (
-        paymentMode === 'Dividido'
-          ? Math.max(
-              0,
-              Math.min(
-                simplifiedRemainingAfterQueue,
-                preferredCoveredDebt > 0.009 ? preferredCoveredDebt : simplifiedRemainingAfterQueue
-              )
-            )
-          : simplifiedRemainingAfterQueue
+        isPlaytomicFlow
+          ? simplifiedRemainingAfterQueue
+          : paymentMode === 'Dividido'
+            ? Math.max(0, Math.min(simplifiedRemainingAfterQueue, preferredCoveredDebt))
+            : simplifiedRemainingAfterQueue
       ).toFixed(2)
     );
 
@@ -5429,8 +5867,12 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentAmountDraft(
       preferredAmount > 0.009 ? preferredAmount.toFixed(2) : ''
     );
-    setSimplifiedPaymentNoteDraft('');
+    setSimplifiedPaymentQuickPreset(isPlaytomicFlow ? 'FULL' : 'MY_SHARE');
+    setSimplifiedPaymentImputationMode(isPlaytomicFlow ? 'BY_CONCEPT' : 'BY_PARTICIPANT');
+    setSimplifiedPaymentConceptMode('AUTO');
+    setSimplifiedPaymentSelectedItemIdsDraft([]);
     setSimplifiedSinglePaymentAdvancedOpen(false);
+    setSimplifiedPaymentModalVariant(isPlaytomicFlow ? 'PLAYTOMIC' : 'LEGACY');
     setSimplifiedPaymentModalOpen(true);
     setFormError('');
   }, [
@@ -5447,9 +5889,10 @@ export default function AdminAgendaPlaygroundPage() {
     singleChargeParticipantId,
     latestPaymentPayerRef,
     paymentMode,
+    simplifiedSidebarSection,
   ]);
 
-  const queueSimplifiedPaymentFromModal = useCallback(() => {
+  const queueSimplifiedPaymentFromModal = useCallback((options?: { skipPlaytomicPreconfirm?: boolean }) => {
     if (isPaymentLockedByManualPending) {
       showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
       return;
@@ -5467,7 +5910,21 @@ export default function AdminAgendaPlaygroundPage() {
       showCalendarNotice('Seleccioná quién paga esta reserva.');
       return;
     }
+    const isPlaytomicFlow = simplifiedPaymentModalVariant === 'PLAYTOMIC';
+    const isByConcept = isPlaytomicFlow || simplifiedPaymentImputationMode === 'BY_CONCEPT';
     const coveredIds = (() => {
+      if (isPlaytomicFlow) {
+        return [payerId];
+      }
+      if (isByConcept) {
+        if (paymentMode === 'Único') {
+          return [String(singleChargeParticipantId || payerId).trim() || payerId].filter(Boolean);
+        }
+        const preferredCoveredId =
+          String(simplifiedPaymentCoveredParticipantIdDraft || '').trim() ||
+          payerId;
+        return [preferredCoveredId].filter(Boolean);
+      }
       if (paymentMode === 'Único') {
         return [String(singleChargeParticipantId || payerId).trim() || payerId].filter(Boolean);
       }
@@ -5505,11 +5962,11 @@ export default function AdminAgendaPlaygroundPage() {
       );
       return firstWithDebt?.id ? [firstWithDebt.id] : [];
     })();
-    if (coveredIds.length === 0) {
+    if (!isPlaytomicFlow && !isByConcept && coveredIds.length === 0) {
       showCalendarNotice('Seleccioná por quién se imputa el pago.');
       return;
     }
-    if (paymentMode === 'Único') {
+    if (!isPlaytomicFlow && paymentMode === 'Único') {
       const confirmedFromDraft = Boolean(
         bookingDrawerState.draft?.billing.payments.some(
           (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
@@ -5534,6 +5991,14 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
     const selectedMethod = simplifiedPaymentMethodDraft as Participant['paymentMethod'];
+    const selectedMethodLabel =
+      selectedMethod === 'CASH'
+        ? 'Efectivo'
+        : selectedMethod === 'TRANSFER'
+          ? 'Transferencia'
+          : selectedMethod === 'CARD'
+            ? 'Tarjeta'
+            : 'Otro';
 
     const amount = Number(String(simplifiedPaymentAmountDraft || '').replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0.009) {
@@ -5541,7 +6006,9 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
     const roundedAmount = Number(amount.toFixed(2));
-    if (paymentMode === 'Dividido') {
+    let effectiveAmount = roundedAmount;
+    let appliedClampReason = '';
+    if (!isPlaytomicFlow && paymentMode === 'Dividido' && !isByConcept) {
       const coveredDebtTotal = Number(
         coveredIds.reduce((sum, participantId) => sum + Number(participantDebtAmountById.get(participantId) || 0), 0).toFixed(2)
       );
@@ -5549,25 +6016,39 @@ export default function AdminAgendaPlaygroundPage() {
         showCalendarNotice('Los participantes seleccionados no tienen deuda pendiente.');
         return;
       }
-      if (roundedAmount > coveredDebtTotal + 0.009) {
-        showCalendarNotice(`El monto supera la deuda de los participantes seleccionados (${coveredDebtTotal.toFixed(2)} $).`);
-        return;
+      if (effectiveAmount > coveredDebtTotal + 0.009) {
+        if (!isPlaytomicFlow) {
+          showCalendarNotice(`El monto supera la deuda de los participantes seleccionados (${coveredDebtTotal.toFixed(2)} $).`);
+          return;
+        }
+        effectiveAmount = coveredDebtTotal;
+        appliedClampReason = 'participantes';
       }
     }
-    if (roundedAmount > simplifiedRemainingAfterQueue + 0.009) {
-      showCalendarNotice(`El monto supera la deuda pendiente (${simplifiedRemainingAfterQueue.toFixed(2)} $).`);
+    if (effectiveAmount > simplifiedRemainingAfterQueue + 0.009) {
+      if (!isPlaytomicFlow) {
+        showCalendarNotice(`El monto supera la deuda pendiente (${simplifiedRemainingAfterQueue.toFixed(2)} $).`);
+        return;
+      }
+      effectiveAmount = simplifiedRemainingAfterQueue;
+      appliedClampReason = 'reserva';
+    }
+    if (isPlaytomicFlow && !options?.skipPlaytomicPreconfirm) {
+      setPlaytomicPreConfirmOpen(true);
       return;
     }
 
     const paymentAllocations = (() => {
-      if (paymentMode === 'Único') {
-        const firstCovered = String(coveredIds[0] || '').trim();
-        if (!firstCovered) return [];
-        return [{ coveredParticipantId: firstCovered, amount: roundedAmount }];
+      if (isPlaytomicFlow) {
+        return [{ coveredParticipantId: payerId, amount: effectiveAmount }];
       }
-
+      const firstCovered = String(coveredIds[0] || '').trim() || payerId;
+      if (!firstCovered) return [];
+      if (isByConcept || paymentMode === 'Único') {
+        return [{ coveredParticipantId: firstCovered, amount: effectiveAmount }];
+      }
       return allocatePaymentProportionallyByDebt({
-        amount: roundedAmount,
+        amount: effectiveAmount,
         participantDebts: coveredIds.map((coveredParticipantId) => ({
           participantId: coveredParticipantId,
           debt: Number(participantDebtAmountById.get(coveredParticipantId) || 0),
@@ -5578,33 +6059,206 @@ export default function AdminAgendaPlaygroundPage() {
       showCalendarNotice('No se pudo distribuir el pago entre los participantes seleccionados.');
       return;
     }
+    const selectedConceptItems = (() => {
+      if (!isByConcept) {
+        return pendingAccountItems;
+      }
+      if (simplifiedPaymentConceptMode === 'AUTO') {
+        return pendingAccountItems;
+      }
+      if (simplifiedPaymentConceptMode === 'COURT') {
+        return pendingCourtAccountItems;
+      }
+      if (simplifiedPaymentConceptMode === 'CONSUMPTIONS') {
+        return pendingConsumptionAccountItems;
+      }
+      const selectedSet = new Set(
+        (Array.isArray(simplifiedPaymentSelectedItemIdsDraft)
+          ? simplifiedPaymentSelectedItemIdsDraft
+          : []
+        )
+          .map((value) => String(value || '').trim())
+          .filter(Boolean)
+      );
+      return pendingAccountItems.filter((item) => selectedSet.has(String(item.id)));
+    })();
+    if (isByConcept && simplifiedPaymentConceptMode !== 'AUTO' && selectedConceptItems.length === 0) {
+      showCalendarNotice('Seleccioná al menos un concepto para imputar este pago.');
+      return;
+    }
+    const selectedConceptDebt = Number(
+      selectedConceptItems
+        .reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0)
+        .toFixed(2)
+    );
+    if (isByConcept && simplifiedPaymentConceptMode !== 'AUTO' && effectiveAmount > selectedConceptDebt + 0.009) {
+      if (!isPlaytomicFlow) {
+        showCalendarNotice(
+          `El monto supera la deuda de los conceptos seleccionados (${selectedConceptDebt.toFixed(2)} $).`
+        );
+        return;
+      }
+      effectiveAmount = selectedConceptDebt;
+      appliedClampReason = 'conceptos';
+      if (effectiveAmount <= 0.009) {
+        showCalendarNotice('Los conceptos seleccionados no tienen deuda pendiente.');
+        return;
+      }
+    }
+    if (effectiveAmount <= 0.009) {
+      showCalendarNotice('No hay deuda pendiente para el alcance seleccionado.');
+      return;
+    }
+    const remainingByItemId = new Map<string, number>();
+    const sortedConceptItems = [...selectedConceptItems].sort((a, b) => {
+      const aIsCourt = String(a.type || '').toUpperCase() === 'BOOKING';
+      const bIsCourt = String(b.type || '').toUpperCase() === 'BOOKING';
+      if (aIsCourt !== bIsCourt) return aIsCourt ? -1 : 1;
+      const aNumeric = Number(a.id);
+      const bNumeric = Number(b.id);
+      if (Number.isFinite(aNumeric) && Number.isFinite(bNumeric)) return aNumeric - bNumeric;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    sortedConceptItems.forEach((item) => {
+      remainingByItemId.set(String(item.id), Number(item.remainingAmount || 0));
+    });
+    const buildItemAllocationsForAmount = (amount: number) => {
+      let remainingToAllocate = Number(amount.toFixed(2));
+      const allocations: Array<{ accountItemId: string; amount: number }> = [];
+      sortedConceptItems.forEach((item) => {
+        if (remainingToAllocate <= 0.009) return;
+        const itemId = String(item.id);
+        const available = Number(remainingByItemId.get(itemId) || 0);
+        if (available <= 0.009) return;
+        const portion = Number(Math.min(available, remainingToAllocate).toFixed(2));
+        if (portion <= 0.009) return;
+        allocations.push({ accountItemId: itemId, amount: portion });
+        remainingByItemId.set(itemId, Number((available - portion).toFixed(2)));
+        remainingToAllocate = Number((remainingToAllocate - portion).toFixed(2));
+      });
+      if (remainingToAllocate > 0.009) {
+        return null;
+      }
+      return allocations;
+    };
 
     updateParticipant(payerId, { paymentMethod: selectedMethod });
+    if (isPlaytomicFlow && appliedClampReason) {
+      const reasonLabel =
+        appliedClampReason === 'conceptos'
+            ? 'la deuda de los conceptos seleccionados'
+            : 'la deuda pendiente';
+      showCalendarNotice(`El monto se ajustó automáticamente al máximo permitido por ${reasonLabel}.`);
+    }
+    const openPlaytomicResult = (result: PlaytomicPaymentResultModal) => {
+      setPlaytomicPreConfirmOpen(false);
+      closeSimplifiedPaymentModal();
+      setPlaytomicResultModal(result);
+      setPlaytomicResultModalOpen(true);
+    };
     void (async () => {
       let registeredAmount = 0;
+      const appliedByItemId = new Map<string, number>();
+      const conceptLabelById = new Map<string, string>(
+        sortedConceptItems.map((item) => [
+          String(item.id),
+          item.type === 'BOOKING' ? 'Cancha' : item.description,
+        ])
+      );
       for (let index = 0; index < paymentAllocations.length; index += 1) {
         const allocation = paymentAllocations[index];
+        const itemAllocations = buildItemAllocationsForAmount(allocation.amount);
+        if (!itemAllocations || itemAllocations.length === 0) {
+          if (isPlaytomicFlow) {
+            const appliedItems = Array.from(appliedByItemId.entries()).map(([itemId, itemAmount]) => ({
+              label: conceptLabelById.get(itemId) || 'Concepto',
+              amount: itemAmount,
+            }));
+            openPlaytomicResult({
+              variant: registeredAmount > 0.009 ? 'partial' : 'error',
+              title: registeredAmount > 0.009 ? 'Cobro parcial registrado' : 'No se pudo registrar el cobro',
+              detail:
+                registeredAmount > 0.009
+                  ? 'Parte del monto se registró, pero no se pudo imputar todo a conceptos pendientes.'
+                  : 'No se pudo imputar el cobro a los conceptos seleccionados.',
+              requestedAmount: roundedAmount,
+              appliedAmount: registeredAmount,
+              remainingAfter: Number(Math.max(0, simplifiedRemainingAfterQueue - registeredAmount).toFixed(2)),
+              methodLabel: selectedMethodLabel,
+              appliedItems,
+            });
+          } else if (registeredAmount > 0.009) {
+            showCalendarNotice(
+              `Pago parcial registrado: ${registeredAmount.toFixed(2)} $. Faltó imputar parte del pago a conceptos.`
+            );
+          } else {
+            showCalendarNotice('No se pudo imputar el pago a los conceptos seleccionados.');
+          }
+          return;
+        }
         const ok = await registerPaymentNow({
           amount: allocation.amount,
           method: selectedMethod,
           participantId: payerId,
           coveredParticipantId: allocation.coveredParticipantId,
+          itemAllocations,
           silentSuccessNotice: paymentAllocations.length > 1,
         });
         if (!ok) {
-          if (registeredAmount > 0.009) {
+          if (isPlaytomicFlow) {
+            const appliedItems = Array.from(appliedByItemId.entries()).map(([itemId, itemAmount]) => ({
+              label: conceptLabelById.get(itemId) || 'Concepto',
+              amount: itemAmount,
+            }));
+            openPlaytomicResult({
+              variant: registeredAmount > 0.009 ? 'partial' : 'error',
+              title: registeredAmount > 0.009 ? 'Cobro parcial registrado' : 'No se pudo registrar el cobro',
+              detail:
+                registeredAmount > 0.009
+                  ? 'Se registró una parte del cobro, pero falló la confirmación completa.'
+                  : 'No se pudo confirmar el cobro. Revisá e intentá nuevamente.',
+              requestedAmount: roundedAmount,
+              appliedAmount: registeredAmount,
+              remainingAfter: Number(Math.max(0, simplifiedRemainingAfterQueue - registeredAmount).toFixed(2)),
+              methodLabel: selectedMethodLabel,
+              appliedItems,
+            });
+          } else if (registeredAmount > 0.009) {
             showCalendarNotice(
               `Pago parcial registrado: ${registeredAmount.toFixed(2)} $. Revisá el resto e intentá nuevamente.`
             );
           }
           return;
         }
+        itemAllocations.forEach((itemAllocation) => {
+          const itemId = String(itemAllocation.accountItemId);
+          const accumulated = Number(appliedByItemId.get(itemId) || 0);
+          appliedByItemId.set(itemId, Number((accumulated + Number(itemAllocation.amount || 0)).toFixed(2)));
+        });
         registeredAmount = Number((registeredAmount + allocation.amount).toFixed(2));
+      }
+      if (isPlaytomicFlow) {
+        const appliedItems = Array.from(appliedByItemId.entries()).map(([itemId, itemAmount]) => ({
+          label: conceptLabelById.get(itemId) || 'Concepto',
+          amount: itemAmount,
+        }));
+        openPlaytomicResult({
+          variant: 'success',
+          title: 'Cobro registrado',
+          detail: 'El cobro se registró correctamente.',
+          requestedAmount: roundedAmount,
+          appliedAmount: registeredAmount,
+          remainingAfter: Number(Math.max(0, simplifiedRemainingAfterQueue - registeredAmount).toFixed(2)),
+          methodLabel: selectedMethodLabel,
+          appliedItems,
+        });
+        setFormError('');
+        return;
       }
       closeSimplifiedPaymentModal();
       setFormError('');
       showCalendarNotice(
-        paymentAllocations.length > 1
+        !isPlaytomicFlow && paymentAllocations.length > 1
           ? `Pago registrado: ${registeredAmount.toFixed(2)} $ imputado a ${paymentAllocations.length} participantes.`
           : `Pago registrado: ${registeredAmount.toFixed(2)} $.`
       );
@@ -5618,12 +6272,19 @@ export default function AdminAgendaPlaygroundPage() {
     showCalendarNotice,
     simplifiedPaymentAmountDraft,
     simplifiedPaymentMethodDraft,
+    simplifiedPaymentImputationMode,
     simplifiedPaymentPayerParticipantIdDraft,
     simplifiedPaymentCoveredParticipantIdDraft,
     simplifiedPaymentCoveredParticipantIdsDraft,
+    simplifiedPaymentConceptMode,
+    simplifiedPaymentSelectedItemIdsDraft,
+    simplifiedPaymentModalVariant,
     simplifiedRemainingAfterQueue,
     singleChargeParticipantId,
     paymentMode,
+    pendingAccountItems,
+    pendingCourtAccountItems,
+    pendingConsumptionAccountItems,
     participantDebtAmountById,
     participants,
     updateParticipant,
@@ -5947,6 +6608,83 @@ export default function AdminAgendaPlaygroundPage() {
     },
     [bookingDrawerState.draft, bookingKind, persistBillingConfig]
   );
+
+  const handleAddConsumption = useCallback(async () => {
+    if (!persistedEditingBookingId) {
+      setBookingConsumptionError('Primero guardá la reserva para poder cargar consumos.');
+      return;
+    }
+    const productId = Number(consumptionProductDraft || 0);
+    const quantity = Math.max(1, Math.floor(Number(consumptionQuantityDraft || 1)));
+    const selectedProduct = consumptionProducts.find((product) => product.id === productId) || null;
+    if (!selectedProduct) {
+      setBookingConsumptionError('Seleccioná un producto válido.');
+      return;
+    }
+    if (selectedProduct.stock != null && selectedProduct.stock <= 0) {
+      setBookingConsumptionError('Ese producto no tiene stock disponible.');
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setBookingConsumptionError('La cantidad debe ser mayor a cero.');
+      return;
+    }
+    setConsumptionAddInFlight(true);
+    setBookingConsumptionError('');
+    try {
+      await ClubAdminService.addItemToBooking(
+        persistedEditingBookingId,
+        productId,
+        quantity,
+        'CASH',
+        { applyDiscount: consumptionApplyDiscountDraft }
+      );
+      await Promise.all([
+        loadBookingConsumptions(persistedEditingBookingId),
+        refreshBookingFinancial(persistedEditingBookingId),
+        reloadSchedule(),
+      ]);
+      setConsumptionQuantityDraft('1');
+      setConsumptionQuote(null);
+      setConsumptionQuoteError('');
+      showCalendarNotice('Consumo agregado correctamente.');
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'handleAddConsumption' }, error);
+      setBookingConsumptionError(error?.message || 'No se pudo agregar el consumo.');
+    } finally {
+      setConsumptionAddInFlight(false);
+    }
+  }, [
+    consumptionApplyDiscountDraft,
+    consumptionProductDraft,
+    consumptionProducts,
+    consumptionQuantityDraft,
+    loadBookingConsumptions,
+    persistedEditingBookingId,
+    refreshBookingFinancial,
+    reloadSchedule,
+    showCalendarNotice,
+  ]);
+
+  const handleRemoveConsumption = useCallback(async (itemId: string) => {
+    if (!persistedEditingBookingId || !itemId) return;
+    setConsumptionRemovingId(itemId);
+    setBookingConsumptionError('');
+    try {
+      await ClubAdminService.removeItemFromBooking(itemId);
+      await Promise.all([
+        loadBookingConsumptions(persistedEditingBookingId),
+        refreshBookingFinancial(persistedEditingBookingId),
+        reloadSchedule(),
+      ]);
+      showCalendarNotice('Consumo eliminado.');
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'handleRemoveConsumption' }, error);
+      setBookingConsumptionError(error?.message || 'No se pudo eliminar el consumo.');
+    } finally {
+      setConsumptionRemovingId((previous) => (previous === itemId ? null : previous));
+    }
+  }, [loadBookingConsumptions, persistedEditingBookingId, refreshBookingFinancial, reloadSchedule, showCalendarNotice]);
 
   const handleCreateBooking = async (forceCreateRecurring = false, editSeriesScope?: EditSeriesScope) => {
     let recurringSummaryError = '';
@@ -6964,6 +7702,11 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedSummaryCourtLabel = selectedCourt?.name || 'Cancha no definida';
   const sidebarTitle = (() => {
     if (simplifiedIsEditingReservation) {
+      if (simplifiedSidebarSection === 'PLAYTOMIC') {
+        return simplifiedIsEditingRecurringSeries
+          ? 'Editar serie recurrente · Pago Playtomic'
+          : 'Editar reserva · Pago Playtomic';
+      }
       if (bookingKind === 'block') return 'Editar bloqueo';
       if (simplifiedIsEditingRecurringSeries) return 'Editar serie recurrente';
       return 'Editar reserva';
@@ -7068,6 +7811,20 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedPaymentMethodComboOptions: ComboOption[] = [
     ...ownerPaymentMethodOptions.map((option) => ({ value: option.value, label: option.label })),
   ];
+  const simplifiedPaymentMethodLabel = (() => {
+    const selected = ownerPaymentMethodOptions.find(
+      (option) => option.value === simplifiedPaymentMethodDraft
+    );
+    return selected?.label || 'Sin método';
+  })();
+  const simplifiedCoveredParticipantComboOptions: ComboOption[] = simplifiedPayerCandidates.map((participant) => {
+    const debt = Number(participantDebtAmountById.get(participant.id) || 0);
+    return {
+      value: participant.id,
+      label: participant.optionLabel,
+      secondary: `Deuda ${debt.toFixed(2)} $`,
+    };
+  });
   const handleSimplifiedPayerChange = (nextParticipantId: string) => {
     if (
       paymentMode === 'Único' &&
@@ -7079,28 +7836,32 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
     setSimplifiedPaymentPayerParticipantIdDraft(nextParticipantId);
-    if (paymentMode === 'Dividido') {
-      const preselectedCoveredId = (() => {
-        const payerDebt = Number(participantDebtAmountById.get(nextParticipantId) || 0);
-        if (payerDebt > 0.009) return nextParticipantId;
-        const firstWithDebt = simplifiedPayerCandidates.find(
-          (candidate) => Number(participantDebtAmountById.get(candidate.id) || 0) > 0.009
-        );
-        return String(firstWithDebt?.id || '');
-      })();
+    if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'MY_SHARE') {
+      const preselectedCoveredId = String(nextParticipantId || '').trim();
       setSimplifiedPaymentCoveredParticipantIdDraft(preselectedCoveredId);
       setSimplifiedPaymentCoveredParticipantIdsDraft(preselectedCoveredId ? [preselectedCoveredId] : []);
       const nextDebt = Number(participantDebtAmountById.get(preselectedCoveredId) || 0);
-      const nextAmount = Number(
-        Math.max(
-          0,
-          Math.min(
-            simplifiedRemainingAfterQueue,
-            nextDebt > 0.009 ? nextDebt : simplifiedRemainingAfterQueue
-          )
-        ).toFixed(2)
-      );
+      const nextAmount = Number(Math.max(0, Math.min(simplifiedRemainingAfterQueue, nextDebt)).toFixed(2));
       setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
+    } else if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'FULL') {
+      const idsWithDebt = simplifiedPayerCandidates
+        .map((participant) => participant.id)
+        .filter((participantId) => Number(participantDebtAmountById.get(participantId) || 0) > 0.009);
+      setSimplifiedPaymentCoveredParticipantIdsDraft(idsWithDebt);
+      setSimplifiedPaymentCoveredParticipantIdDraft(idsWithDebt[0] || nextParticipantId);
+      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(simplifiedRemainingAfterQueue));
+    } else if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'COURT_ONLY') {
+      setSimplifiedPaymentCoveredParticipantIdsDraft(nextParticipantId ? [nextParticipantId] : []);
+      setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
+      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('COURT')));
+    } else if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS') {
+      setSimplifiedPaymentCoveredParticipantIdsDraft(nextParticipantId ? [nextParticipantId] : []);
+      setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
+      setSimplifiedPaymentAmountDraft(
+        formatPaymentAmountDraft(
+          computeConceptBasedMaxAmount('CUSTOM', simplifiedPaymentSelectedItemIdsDraft)
+        )
+      );
     } else if (!String(simplifiedPaymentCoveredParticipantIdDraft || '').trim()) {
       setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
     }
@@ -7183,9 +7944,14 @@ export default function AdminAgendaPlaygroundPage() {
       .reduce((sum, participantId) => sum + Number(participantDebtAmountById.get(participantId) || 0), 0)
       .toFixed(2)
   );
-  const simplifiedPaymentMaxAmount = Number(
+  const isPlaytomicPaymentModal = simplifiedPaymentModalVariant === 'PLAYTOMIC';
+  const isConceptImputationMode =
+    isPlaytomicPaymentModal || simplifiedPaymentImputationMode === 'BY_CONCEPT';
+  const simplifiedParticipantBasedMaxAmount = Number(
     (
-      paymentMode === 'Dividido'
+      isPlaytomicPaymentModal
+        ? simplifiedRemainingAfterQueue
+        : paymentMode === 'Dividido'
         ? Math.max(
             0,
             Math.min(
@@ -7198,6 +7964,12 @@ export default function AdminAgendaPlaygroundPage() {
         : simplifiedRemainingAfterQueue
     ).toFixed(2)
   );
+  const simplifiedConceptBasedMaxAmount = Number(
+    computeConceptBasedMaxAmount(simplifiedPaymentConceptMode).toFixed(2)
+  );
+  const simplifiedPaymentMaxAmount = Number(
+    (isConceptImputationMode ? simplifiedConceptBasedMaxAmount : simplifiedParticipantBasedMaxAmount).toFixed(2)
+  );
   const simplifiedPaymentAmountParsed = Number(String(simplifiedPaymentAmountDraft || '').replace(',', '.'));
   const hasValidSimplifiedPaymentAmount =
     Number.isFinite(simplifiedPaymentAmountParsed) &&
@@ -7209,11 +7981,143 @@ export default function AdminAgendaPlaygroundPage() {
     !isRemoteBillingConfigLoading &&
     !isPaymentLockedByManualPending &&
     simplifiedRemainingAfterQueue > 0.009;
+  const playtomicPreviewRequestedAmount = Number(
+    Math.max(
+      0,
+      Math.min(
+        Number.isFinite(simplifiedPaymentAmountParsed) ? simplifiedPaymentAmountParsed : 0,
+        simplifiedPaymentMaxAmount
+      )
+    ).toFixed(2)
+  );
+  const playtomicPreviewRemainingAfter = Number(
+    Math.max(0, simplifiedRemainingAfterQueue - playtomicPreviewRequestedAmount).toFixed(2)
+  );
+  const playtomicPreviewConceptRows = (() => {
+    const selectedItems =
+      simplifiedPaymentConceptMode === 'AUTO'
+        ? pendingAccountItems
+        : simplifiedPaymentConceptMode === 'COURT'
+          ? pendingCourtAccountItems
+          : simplifiedPaymentConceptMode === 'CONSUMPTIONS'
+            ? pendingConsumptionAccountItems
+            : pendingAccountItems.filter((item) =>
+                simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id))
+              );
+    let remaining = playtomicPreviewRequestedAmount;
+    return selectedItems
+      .map((item) => {
+        const available = Number(item.remainingAmount || 0);
+        const amount = Number(Math.max(0, Math.min(available, remaining)).toFixed(2));
+        remaining = Number(Math.max(0, remaining - amount).toFixed(2));
+        return {
+          id: String(item.id),
+          label: item.type === 'BOOKING' ? 'Cancha' : item.description,
+          amount,
+        };
+      })
+      .filter((row) => row.amount > 0.009);
+  })();
+  const participantIdsWithDebt = simplifiedPayerCandidates
+    .map((participant) => participant.id)
+    .filter((participantId) => Number(participantDebtAmountById.get(participantId) || 0) > 0.009);
+  const applySimplifiedPaymentQuickPreset = (preset: PaymentQuickPreset) => {
+    setSimplifiedPaymentQuickPreset(preset);
+    const payerId = String(simplifiedResolvedPayerParticipantId || '').trim();
+    if (isPlaytomicPaymentModal) {
+      setSimplifiedPaymentImputationMode('BY_CONCEPT');
+      setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
+      setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
+      if (preset === 'COURT_ONLY') {
+        setSimplifiedPaymentConceptMode('COURT');
+        setSimplifiedPaymentSelectedItemIdsDraft([]);
+        setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('COURT')));
+        return;
+      }
+      if (preset === 'CUSTOM_ITEMS') {
+        setSimplifiedPaymentConceptMode('CUSTOM');
+        setSimplifiedPaymentAmountDraft(
+          formatPaymentAmountDraft(
+            computeConceptBasedMaxAmount('CUSTOM', simplifiedPaymentSelectedItemIdsDraft)
+          )
+        );
+        return;
+      }
+      setSimplifiedPaymentConceptMode('AUTO');
+      setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('AUTO')));
+      return;
+    }
+    if (preset === 'MY_SHARE') {
+      setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
+      setSimplifiedPaymentConceptMode('AUTO');
+      setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
+      setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
+      const payerDebt = Number(participantDebtAmountById.get(payerId) || 0);
+      const nextAmount = Number(Math.max(0, Math.min(simplifiedRemainingAfterQueue, payerDebt)).toFixed(2));
+      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
+      return;
+    }
+    if (preset === 'FULL') {
+      setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
+      setSimplifiedPaymentConceptMode('AUTO');
+      setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentCoveredParticipantIdsDraft(participantIdsWithDebt);
+      setSimplifiedPaymentCoveredParticipantIdDraft(participantIdsWithDebt[0] || payerId);
+      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(simplifiedRemainingAfterQueue));
+      return;
+    }
+    if (preset === 'COURT_ONLY') {
+      setSimplifiedPaymentImputationMode('BY_CONCEPT');
+      setSimplifiedPaymentConceptMode('COURT');
+      setSimplifiedPaymentSelectedItemIdsDraft([]);
+      setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
+      setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
+      const nextAmount = computeConceptBasedMaxAmount('COURT');
+      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
+      return;
+    }
+    setSimplifiedPaymentImputationMode('BY_CONCEPT');
+    setSimplifiedPaymentConceptMode('CUSTOM');
+    setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
+    setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
+    const nextAmount = computeConceptBasedMaxAmount(
+      'CUSTOM',
+      simplifiedPaymentSelectedItemIdsDraft
+    );
+    setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
+  };
   const simplifiedSectionTabs: Array<{ id: SimplifiedSidebarSection; label: string }> = [
     { id: 'DETAILS', label: 'Detalle' },
+    ...(bookingKind === 'block'
+      ? []
+      : [{ id: 'CONSUMPTIONS' as const, label: 'Consumos' }]),
     { id: 'BILLING', label: 'Cobros y participantes' },
+    ...(simplifiedIsEditingReservation
+      ? [{ id: 'PLAYTOMIC' as const, label: 'Pago Playtomic' }]
+      : []),
     { id: 'HISTORY', label: 'Historial' },
   ];
+  const consumptionProductOptions: ComboOption[] = consumptionProducts.map((product) => ({
+    value: String(product.id),
+    label: product.name,
+    secondary:
+      product.stock == null
+        ? `${product.price.toFixed(2)} $`
+        : `${product.price.toFixed(2)} $ · Stock ${Math.max(0, Math.floor(product.stock))}`,
+  }));
+  const selectedConsumptionProduct = consumptionProducts.find(
+    (product) => String(product.id) === String(consumptionProductDraft)
+  ) || null;
+  const selectedConsumptionQuantity = Math.max(1, Math.floor(Number(consumptionQuantityDraft || 1)));
+  const canAddConsumption =
+    Boolean(persistedEditingBookingId) &&
+    !consumptionAddInFlight &&
+    !consumptionQuoteLoading &&
+    Boolean(selectedConsumptionProduct) &&
+    selectedConsumptionQuantity > 0 &&
+    (selectedConsumptionProduct?.stock == null || selectedConsumptionProduct.stock >= selectedConsumptionQuantity);
   const simplifiedReservationHistoryTimeline = (() => {
     const events: Array<{
       id: string;
@@ -7489,8 +8393,14 @@ export default function AdminAgendaPlaygroundPage() {
   })();
   const showSimplifiedDetailsSection =
     !simplifiedIsEditingReservation || simplifiedSidebarSection === 'DETAILS';
+  const showSimplifiedConsumptionsSection =
+    simplifiedIsEditingReservation &&
+    bookingKind !== 'block' &&
+    simplifiedSidebarSection === 'CONSUMPTIONS';
   const showSimplifiedBillingSection =
     !simplifiedIsEditingReservation || simplifiedSidebarSection === 'BILLING';
+  const showSimplifiedPlaytomicSection =
+    simplifiedIsEditingReservation && simplifiedSidebarSection === 'PLAYTOMIC';
   const showSimplifiedHistorySection =
     simplifiedIsEditingReservation && simplifiedSidebarSection === 'HISTORY';
 
@@ -7968,7 +8878,10 @@ export default function AdminAgendaPlaygroundPage() {
             {customRecurrenceModalOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => setCustomRecurrenceModalOpen(false)}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => setCustomRecurrenceModalOpen(false))
+                }
               >
                 <div
                   className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8161,10 +9074,13 @@ export default function AdminAgendaPlaygroundPage() {
             {recurringCreateConfirmOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => {
-                  setRecurringCreateConfirmOpen(false);
-                  setRecurringPreviewSummary(null);
-                }}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => {
+                    setRecurringCreateConfirmOpen(false);
+                    setRecurringPreviewSummary(null);
+                  })
+                }
               >
                 <div
                   className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8259,7 +9175,10 @@ export default function AdminAgendaPlaygroundPage() {
             {recurringOverlapModalOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => setRecurringOverlapModalOpen(false)}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => setRecurringOverlapModalOpen(false))
+                }
               >
                 <div
                   className="w-full max-w-[680px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8368,12 +9287,15 @@ export default function AdminAgendaPlaygroundPage() {
             {editSeriesScopeModalOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/40 flex items-center justify-center p-4"
-                onClick={() => {
-                  if (isSubmittingBooking) return;
-                  setEditSeriesScopeModalOpen(false);
-                  setSeriesEditPreviewScope(null);
-                  setSeriesEditPreviewSummary(null);
-                }}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => {
+                    if (isSubmittingBooking) return;
+                    setEditSeriesScopeModalOpen(false);
+                    setSeriesEditPreviewScope(null);
+                    setSeriesEditPreviewSummary(null);
+                  })
+                }
               >
                 <div
                   className="w-full max-w-[640px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8533,12 +9455,15 @@ export default function AdminAgendaPlaygroundPage() {
             {deleteSeriesScopeModalOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/40 flex items-center justify-center p-4"
-                onClick={() => {
-                  if (isDeletingBooking) return;
-                  setDeleteSeriesScopeModalOpen(false);
-                  setSeriesDeletePreviewScope(null);
-                  setSeriesDeletePreviewSummary(null);
-                }}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => {
+                    if (isDeletingBooking) return;
+                    setDeleteSeriesScopeModalOpen(false);
+                    setSeriesDeletePreviewScope(null);
+                    setSeriesDeletePreviewSummary(null);
+                  })
+                }
               >
                 <div
                   className="w-full max-w-[640px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8686,7 +9611,10 @@ export default function AdminAgendaPlaygroundPage() {
             {deleteBookingConfirmOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => setDeleteBookingConfirmOpen(false)}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => setDeleteBookingConfirmOpen(false))
+                }
               >
                 <div
                   className="w-full max-w-[520px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8733,7 +9661,10 @@ export default function AdminAgendaPlaygroundPage() {
             {seriesOperationResultOpen && seriesOperationResult && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => setSeriesOperationResultOpen(false)}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => setSeriesOperationResultOpen(false))
+                }
               >
                 <div
                   className="w-full max-w-[620px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8806,7 +9737,12 @@ export default function AdminAgendaPlaygroundPage() {
             {deleteParticipantConfirm.open && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' })}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () =>
+                    setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' })
+                  )
+                }
               >
                 <div
                   className="w-full max-w-[500px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -8862,7 +9798,10 @@ export default function AdminAgendaPlaygroundPage() {
             {blockingErrorModalOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => setBlockingErrorModalOpen(false)}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => setBlockingErrorModalOpen(false))
+                }
               >
                 <div
                   className="w-full max-w-[560px] rounded-2xl border border-[#efc8d2] bg-white shadow-2xl"
@@ -8902,7 +9841,10 @@ export default function AdminAgendaPlaygroundPage() {
             {bookingCreatedModalOpen && (
               <div
                 className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
-                onClick={() => setBookingCreatedModalOpen(false)}
+                onPointerDown={handleModalBackdropPointerDown}
+                onPointerUp={(event) =>
+                  handleModalBackdropPointerUp(event, () => setBookingCreatedModalOpen(false))
+                }
               >
                 <div
                   className="w-full max-w-[520px] rounded-2xl border border-[#d8e5ff] bg-white shadow-2xl"
@@ -9586,6 +10528,179 @@ export default function AdminAgendaPlaygroundPage() {
                         </>
                       ))}
 
+                      {showSimplifiedConsumptionsSection && (
+                        <section className="rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[18px] font-semibold text-[#1f2638]">Consumos</p>
+                              <p className="mt-0.5 text-[12px] text-[#6f7890]">
+                                Sumá productos a la reserva y se integran al saldo total.
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[11px] text-[#6f7890]">Total consumos</p>
+                              <p className="text-[18px] font-semibold text-[#27314a]">
+                                {bookingItemsAmount.toFixed(2)} $
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
+                            <div className="rounded-lg border border-[#e2e7f1] bg-white px-2 py-1.5">
+                              <p>Items</p>
+                              <p className="text-[15px] font-semibold text-[#273149]">
+                                {bookingConsumptionItems.length}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border border-[#e2e7f1] bg-white px-2 py-1.5">
+                              <p>Pagado</p>
+                              <p className="text-[15px] font-semibold text-[#16733f]">
+                                {bookingConsumptionsPaid.toFixed(2)} $
+                              </p>
+                            </div>
+                            <div className="rounded-lg border border-[#e2e7f1] bg-white px-2 py-1.5">
+                              <p>Pendiente</p>
+                              <p className="text-[15px] font-semibold text-[#9a5a00]">
+                                {bookingConsumptionsRemaining.toFixed(2)} $
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 rounded-xl border border-[#dce2ee] bg-white p-3">
+                            <p className="text-[13px] font-semibold text-[#2a3245]">Agregar consumo</p>
+                            <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-[minmax(220px,1fr)_112px_auto]">
+                              <div>
+                                <span className="text-[12px] font-medium text-[#79829a]">Producto</span>
+                                <PlaygroundCombo
+                                  value={consumptionProductDraft}
+                                  onChange={(value) => {
+                                    setConsumptionProductDraft(String(value || ''));
+                                    setBookingConsumptionError('');
+                                  }}
+                                  options={consumptionProductOptions}
+                                  variant="participant"
+                                  className="mt-1"
+                                />
+                              </div>
+                              <label className="block">
+                                <span className="text-[12px] font-medium text-[#79829a]">Cantidad</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={consumptionQuantityDraft}
+                                  onChange={(event) => {
+                                    setConsumptionQuantityDraft(event.target.value);
+                                    setBookingConsumptionError('');
+                                  }}
+                                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[14px] text-[#2a3245] outline-none"
+                                />
+                              </label>
+                              <div className="flex items-end">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleAddConsumption()}
+                                  disabled={!canAddConsumption}
+                                  className="h-10 w-full rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                                >
+                                  {consumptionAddInFlight ? 'Agregando...' : 'Agregar'}
+                                </button>
+                              </div>
+                            </div>
+
+                            <label className="mt-2 inline-flex items-center gap-2 text-[12px] text-[#5f6880]">
+                              <input
+                                type="checkbox"
+                                checked={consumptionApplyDiscountDraft}
+                                onChange={(event) => setConsumptionApplyDiscountDraft(event.target.checked)}
+                                className="h-4 w-4 accent-[#3053e2]"
+                              />
+                              Aplicar descuentos automáticos del cliente
+                            </label>
+
+                            <div className="mt-2 min-h-[20px]">
+                              {consumptionProductsLoading ? (
+                                <p className="text-[12px] text-[#6f7890]">Cargando productos...</p>
+                              ) : consumptionProductsError ? (
+                                <p className="text-[12px] text-[#b42346]">{consumptionProductsError}</p>
+                              ) : consumptionQuoteLoading ? (
+                                <p className="text-[12px] text-[#6f7890]">Cotizando...</p>
+                              ) : consumptionQuoteError ? (
+                                <p className="text-[12px] text-[#b42346]">{consumptionQuoteError}</p>
+                              ) : consumptionQuote ? (
+                                <p className="text-[12px] text-[#5f6880]">
+                                  Lista {consumptionQuote.listTotal.toFixed(2)} $ · Final {consumptionQuote.finalTotal.toFixed(2)} $
+                                  {consumptionQuote.hasDiscount && consumptionQuote.discountAmount > 0.009
+                                    ? ` · Descuento ${consumptionQuote.discountAmount.toFixed(2)} $`
+                                    : ''}
+                                </p>
+                              ) : selectedConsumptionProduct ? (
+                                <p className="text-[12px] text-[#5f6880]">
+                                  Subtotal estimado:{' '}
+                                  {roundMoney(selectedConsumptionProduct.price * selectedConsumptionQuantity).toFixed(2)} $
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {bookingConsumptionError && (
+                            <p className="mt-3 text-[12px] font-medium text-[#b42346]">{bookingConsumptionError}</p>
+                          )}
+
+                          <div className="mt-4 rounded-xl border border-[#dce2ee] bg-white">
+                            <div className="border-b border-[#edf0f6] px-3 py-2">
+                              <p className="text-[13px] font-semibold text-[#2a3245]">Consumos cargados</p>
+                            </div>
+                            {bookingConsumptionLoading ? (
+                              <div className="flex items-center justify-center py-6">
+                                <div className="h-5 w-5 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
+                              </div>
+                            ) : bookingConsumptionItems.length === 0 ? (
+                              <p className="px-3 py-4 text-[12px] text-[#6f7890]">Todavía no hay consumos cargados.</p>
+                            ) : (
+                              <div className="divide-y divide-[#edf0f6]">
+                                {bookingConsumptionItems.map((item) => (
+                                  <div
+                                    key={`booking-consumption-${item.id}`}
+                                    className="grid grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2.5"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="truncate text-[14px] font-semibold text-[#1f2638]">{item.description}</p>
+                                      <p className="text-[12px] text-[#6f7890]">
+                                        {item.quantity} x {item.unitPrice.toFixed(2)} $ · Total {item.totalPrice.toFixed(2)} $
+                                      </p>
+                                    </div>
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                        item.remainingAmount <= 0.009
+                                          ? 'bg-[#e8f8ec] text-[#16733f]'
+                                          : item.paidAmount > 0.009
+                                            ? 'bg-[#fff4e5] text-[#9a5a00]'
+                                            : 'bg-[#eef1f7] text-[#5c667f]'
+                                      }`}
+                                    >
+                                      {item.remainingAmount <= 0.009
+                                        ? 'Pagado'
+                                        : item.paidAmount > 0.009
+                                          ? 'Parcial'
+                                          : 'Pendiente'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleRemoveConsumption(item.id)}
+                                      disabled={consumptionRemovingId === item.id || item.paidAmount > 0.009}
+                                      className="h-8 rounded-lg border border-[#f0d6dd] px-2 text-[12px] font-semibold text-[#b42346] hover:bg-[#fff5f8] disabled:opacity-45"
+                                    >
+                                      {consumptionRemovingId === item.id ? '...' : 'Quitar'}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      )}
+
                       {showSimplifiedHistorySection && (
                       <section
                         className={`rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4 ${
@@ -9691,61 +10806,64 @@ export default function AdminAgendaPlaygroundPage() {
                       )}
 
                       {simplifiedIsEditingReservation && (
-                      <section className="mt-4 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[18px] font-semibold text-[#27314a]">Pagos</p>
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                              simplifiedPaymentStatusLabel === 'Pagado'
-                                ? 'bg-[#e8f8ec] text-[#16733f]'
-                                : simplifiedPaymentStatusLabel === 'Parcial'
-                                  ? 'bg-[#fff4e5] text-[#9a5a00]'
-                                  : 'bg-[#eef1f7] text-[#5c667f]'
-                            }`}
-                          >
-                            {simplifiedPaymentStatusLabel}
-                          </span>
-                        </div>
-                        <div className="mt-2 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
-                          <div className="rounded-lg bg-white px-2 py-1.5">
-                            <p>Total</p>
-                            <p className="text-[15px] font-semibold text-[#2a3245]">
-                              {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
-                            </p>
+                        <section className="mt-4 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[18px] font-semibold text-[#27314a]">Pagos</p>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                simplifiedPaymentStatusLabel === 'Pagado'
+                                  ? 'bg-[#e8f8ec] text-[#16733f]'
+                                  : simplifiedPaymentStatusLabel === 'Parcial'
+                                    ? 'bg-[#fff4e5] text-[#9a5a00]'
+                                    : 'bg-[#eef1f7] text-[#5c667f]'
+                              }`}
+                            >
+                              {simplifiedPaymentStatusLabel}
+                            </span>
                           </div>
-                          <div className="rounded-lg bg-white px-2 py-1.5">
-                            <p>Pagado</p>
-                            <p className="text-[15px] font-semibold text-[#16733f]">
-                              {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
-                            </p>
+                          <div className="mt-2 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
+                            <div className="rounded-lg bg-white px-2 py-1.5">
+                              <p>Total</p>
+                              <p className="text-[15px] font-semibold text-[#2a3245]">
+                                {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-white px-2 py-1.5">
+                              <p>Pagado</p>
+                              <p className="text-[15px] font-semibold text-[#16733f]">
+                                {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-white px-2 py-1.5">
+                              <p>Deuda</p>
+                              <p className="text-[15px] font-semibold text-[#9a5a00]">
+                                {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
+                              </p>
+                            </div>
                           </div>
-                          <div className="rounded-lg bg-white px-2 py-1.5">
-                            <p>Deuda</p>
-                            <p className="text-[15px] font-semibold text-[#9a5a00]">
-                              {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
-                            </p>
+                          <p className="mt-2 text-[12px] text-[#6f7890]">
+                            Cancha: {bookingCourtAmount.toFixed(2)} $ · Consumos: {bookingItemsAmount.toFixed(2)} $
+                          </p>
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={openSimplifiedPaymentModal}
+                              disabled={!simplifiedCanRegisterPayment}
+                              className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                            >
+                              Registrar pago
+                            </button>
+                            {!persistedEditingBookingId ? (
+                              <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
+                            ) : billingConfigLoadError ? (
+                              <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
+                            ) : isPaymentLockedByManualPending ? (
+                              <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
+                            ) : simplifiedRemainingAmount <= 0.009 ? (
+                              <p className="text-[12px] text-[#1c7a44]">No hay deuda pendiente.</p>
+                            ) : null}
                           </div>
-                        </div>
-                        <div className="mt-3 flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={openSimplifiedPaymentModal}
-                            disabled={!simplifiedCanRegisterPayment}
-                            className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
-                          >
-                            Registrar pago
-                          </button>
-                          {!persistedEditingBookingId ? (
-                            <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
-                          ) : billingConfigLoadError ? (
-                            <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
-                          ) : isPaymentLockedByManualPending ? (
-                            <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
-                          ) : simplifiedRemainingAmount <= 0.009 ? (
-                            <p className="text-[12px] text-[#1c7a44]">No hay deuda pendiente.</p>
-                          ) : null}
-                        </div>
-                      </section>
+                        </section>
                       )}
 
                       <section className="mt-4">
@@ -10340,6 +11458,131 @@ export default function AdminAgendaPlaygroundPage() {
                       </section>
 
                       </>
+                      )}
+
+                      {showSimplifiedPlaytomicSection && (
+                        <>
+                          <section className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[18px] font-semibold text-[#27314a]">Resumen de cobro</p>
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                  simplifiedPaymentStatusLabel === 'Pagado'
+                                    ? 'bg-[#e8f8ec] text-[#16733f]'
+                                    : simplifiedPaymentStatusLabel === 'Parcial'
+                                      ? 'bg-[#fff4e5] text-[#9a5a00]'
+                                      : 'bg-[#eef1f7] text-[#5c667f]'
+                                }`}
+                              >
+                                {simplifiedPaymentStatusLabel}
+                              </span>
+                            </div>
+                            <div className="mt-2 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
+                              <div className="rounded-lg bg-white px-2 py-1.5">
+                                <p>Total</p>
+                                <p className="text-[15px] font-semibold text-[#2a3245]">
+                                  {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
+                                </p>
+                              </div>
+                              <div className="rounded-lg bg-white px-2 py-1.5">
+                                <p>Pagado</p>
+                                <p className="text-[15px] font-semibold text-[#16733f]">
+                                  {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
+                                </p>
+                              </div>
+                              <div className="rounded-lg bg-white px-2 py-1.5">
+                                <p>Deuda</p>
+                                <p className="text-[15px] font-semibold text-[#9a5a00]">
+                                  {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="mt-2 text-[12px] text-[#6f7890]">
+                              Cancha: {bookingCourtAmount.toFixed(2)} $ · Consumos: {bookingItemsAmount.toFixed(2)} $
+                            </p>
+                            <div className="mt-3 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={openSimplifiedPaymentModal}
+                                disabled={!simplifiedCanRegisterPayment}
+                                className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                              >
+                                Registrar pago
+                              </button>
+                              {!persistedEditingBookingId ? (
+                                <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
+                              ) : billingConfigLoadError ? (
+                                <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
+                              ) : isPaymentLockedByManualPending ? (
+                                <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
+                              ) : simplifiedRemainingAmount <= 0.009 ? (
+                                <p className="text-[12px] text-[#1c7a44]">No hay deuda pendiente.</p>
+                              ) : null}
+                            </div>
+                          </section>
+
+                          <section className="mt-4 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[18px] font-semibold text-[#27314a]">Mi parte por participante</p>
+                              <span className="text-[11px] text-[#6f7890]">
+                                {paymentMode === 'Único' ? 'Pago único activo' : 'Pago dividido activo'}
+                              </span>
+                            </div>
+                            {simplifiedNamedParticipants.length === 0 ? (
+                              <p className="mt-3 text-[13px] text-[#6f7890]">
+                                Agregá participantes para calcular deuda individual.
+                              </p>
+                            ) : (
+                              <div className="mt-3 space-y-2">
+                                {simplifiedNamedParticipants.map((participant) => {
+                                  const assignedAmount = Number(participantAssignedAmountById.get(participant.id) || 0);
+                                  const coveredAmount = Number(participantCoverageAmountById.get(participant.id) || 0);
+                                  const debtAmount = Number(participantDebtAmountById.get(participant.id) || 0);
+                                  const statusTone =
+                                    debtAmount <= 0.009
+                                      ? 'bg-[#e8f8ec] text-[#16733f]'
+                                      : coveredAmount > 0.009
+                                        ? 'bg-[#fff4e5] text-[#9a5a00]'
+                                        : 'bg-[#eef1f7] text-[#5c667f]';
+                                  const statusLabel =
+                                    debtAmount <= 0.009 ? 'Pagado' : coveredAmount > 0.009 ? 'Parcial' : 'Pendiente';
+                                  return (
+                                    <div
+                                      key={`playtomic-participant-${participant.id}`}
+                                      className="rounded-xl border border-[#e2e7f1] bg-white px-3 py-2.5"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-[14px] font-semibold text-[#1f2638]">{participant.name}</p>
+                                          <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                                            {participant.isOwner ? 'Titular' : 'Participante'}
+                                          </p>
+                                        </div>
+                                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone}`}>
+                                          {statusLabel}
+                                        </span>
+                                      </div>
+                                      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
+                                        <div className="rounded-lg bg-[#f7f9fd] px-2 py-1.5">
+                                          <p>Asignado</p>
+                                          <p className="text-[13px] font-semibold text-[#2a3245]">{assignedAmount.toFixed(2)} $</p>
+                                        </div>
+                                        <div className="rounded-lg bg-[#f7f9fd] px-2 py-1.5">
+                                          <p>Pagado</p>
+                                          <p className="text-[13px] font-semibold text-[#16733f]">{coveredAmount.toFixed(2)} $</p>
+                                        </div>
+                                        <div className="rounded-lg bg-[#f7f9fd] px-2 py-1.5">
+                                          <p>Mi parte</p>
+                                          <p className="text-[13px] font-semibold text-[#9a5a00]">{debtAmount.toFixed(2)} $</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </section>
+                        </>
                       )}
                     </section>
                   ) : (
@@ -11197,24 +12440,26 @@ export default function AdminAgendaPlaygroundPage() {
           <button
             type="button"
             className="absolute inset-0 bg-[#0d1326]/45"
-            onClick={closeSimplifiedPaymentModal}
+            onPointerDown={handleModalBackdropPointerDown}
+            onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
             aria-label="Cerrar modal de cobro"
           />
-          <div
-            className="absolute inset-0 flex items-center justify-center p-4"
-            onClick={closeSimplifiedPaymentModal}
-          >
+          <div className="absolute inset-0 flex items-center justify-center p-4">
             <div
               className="w-full max-w-[700px] rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
                 <div>
-                  <p className="text-[18px] font-semibold text-[#1f2638]">Registrar pago</p>
+                  <p className="text-[18px] font-semibold text-[#1f2638]">
+                    {isPlaytomicPaymentModal ? 'Cobrar reserva (Playtomic)' : 'Registrar pago'}
+                  </p>
                   <p className="text-[12px] text-[#707a92]">
-                    {paymentMode === 'Único'
-                      ? 'Pago único: una persona paga el total en uno o varios pagos parciales.'
-                      : 'Pago dividido: cualquier participante puede registrar pagos y cubrir saldo del grupo.'}
+                    {isPlaytomicPaymentModal
+                      ? 'Cobro sobre deuda común de la reserva. Elegí método, conceptos y monto.'
+                      : paymentMode === 'Único'
+                        ? 'Pago único: una persona paga el total en uno o varios pagos parciales.'
+                        : 'Pago dividido: cualquier participante puede registrar pagos y cubrir saldo del grupo.'}
                   </p>
                 </div>
                 <button
@@ -11248,142 +12493,299 @@ export default function AdminAgendaPlaygroundPage() {
                     </p>
                   </div>
                 </div>
-                {paymentMode === 'Único' ? (
-                  <div className="space-y-3">
-                    <div className="block">
-                      <span className="text-[12px] font-medium text-[#79829a]">Método</span>
-                      <PlaygroundCombo
-                        value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
-                        onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
-                        options={simplifiedPaymentMethodComboOptions}
-                        variant="participant"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => setSimplifiedSinglePaymentAdvancedOpen((previous) => !previous)}
-                        className="flex w-full items-center justify-between text-left text-[12px] font-semibold text-[#3f4a64]"
-                      >
-                        <span>Opciones avanzadas</span>
-                        <ChevronDown
-                          size={14}
-                          className={`transition-transform ${simplifiedSinglePaymentAdvancedOpen ? 'rotate-180' : ''}`}
+
+                {isPlaytomicPaymentModal ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="block">
+                        <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+                        <PlaygroundCombo
+                          value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
+                          onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
+                          options={simplifiedPaymentMethodComboOptions}
+                          variant="participant"
+                          className="mt-1"
                         />
-                      </button>
-                      {simplifiedSinglePaymentAdvancedOpen && (
-                        <div className="mt-2 border-t border-[#e3e8f2] pt-2">
-                          <span className="text-[12px] font-medium text-[#79829a]">Quién paga</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                      <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a cobrar</p>
+                      <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                        {[
+                          { id: 'FULL', label: 'Todo pendiente' },
+                          { id: 'COURT_ONLY', label: 'Solo cancha' },
+                          { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
+                        ].map((option) => {
+                          const isActive = simplifiedPaymentQuickPreset === option.id;
+                          return (
+                            <button
+                              key={`payment-playtomic-preset-${option.id}`}
+                              type="button"
+                              onClick={() => applySimplifiedPaymentQuickPreset(option.id as PaymentQuickPreset)}
+                              className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
+                                isActive
+                                  ? 'border-[#3155df] bg-[#eef2ff] text-[#3155df]'
+                                  : 'border-[#dce2ee] bg-white text-[#5f6880] hover:bg-[#f5f7fc]'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-[11px] text-[#6f7890]">
+                        {simplifiedPaymentQuickPreset === 'FULL'
+                          ? 'Deuda común completa de la reserva.'
+                          : simplifiedPaymentQuickPreset === 'COURT_ONLY'
+                            ? 'Solo el saldo pendiente de cancha.'
+                            : 'Elegí manualmente qué conceptos cobrar en este pago.'}
+                      </p>
+                    </div>
+
+                    {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
+                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[12px] font-semibold text-[#44506b]">Selección manual</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextIds = pendingAccountItems.map((item) => String(item.id));
+                                setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                setSimplifiedPaymentAmountDraft(
+                                  formatPaymentAmountDraft(computeConceptBasedMaxAmount('CUSTOM', nextIds))
+                                );
+                              }}
+                              className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                            >
+                              Seleccionar todo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSimplifiedPaymentSelectedItemIdsDraft([]);
+                                setSimplifiedPaymentAmountDraft('');
+                              }}
+                              className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                            >
+                              Limpiar
+                            </button>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] text-[#6f7890]">
+                          Deuda seleccionada: {simplifiedPaymentConceptDebt.toFixed(2)} $
+                        </p>
+                        <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
+                          {pendingAccountItems.length === 0 ? (
+                            <p className="px-1 py-2 text-[12px] text-[#7a8398]">
+                              No hay conceptos con deuda pendiente.
+                            </p>
+                          ) : (
+                            <div className="space-y-1">
+                              {pendingAccountItems.map((item) => {
+                                const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
+                                return (
+                                  <label
+                                    key={`payment-playtomic-concept-item-${item.id}`}
+                                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
+                                  >
+                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={(event) => {
+                                          const nextChecked = event.target.checked;
+                                          const nextSet = new Set(
+                                            simplifiedPaymentSelectedItemIdsDraft
+                                              .map((value) => String(value || '').trim())
+                                              .filter(Boolean)
+                                          );
+                                          if (nextChecked) {
+                                            nextSet.add(String(item.id));
+                                          } else {
+                                            nextSet.delete(String(item.id));
+                                          }
+                                          const nextIds = Array.from(nextSet);
+                                          setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                          setSimplifiedPaymentAmountDraft(
+                                            formatPaymentAmountDraft(
+                                              computeConceptBasedMaxAmount('CUSTOM', nextIds)
+                                            )
+                                          );
+                                        }}
+                                        className="h-4 w-4 accent-[#3053e2]"
+                                      />
+                                      <span className="truncate">
+                                        {item.type === 'BOOKING' ? 'Cancha' : item.description}
+                                      </span>
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#62708f]">
+                                      {Number(item.remainingAmount || 0).toFixed(2)} $
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="block">
+                        <span className="text-[12px] font-medium text-[#79829a]">Pagador</span>
+                        <PlaygroundCombo
+                          value={simplifiedResolvedPayerParticipantId || simplifiedPayerComboOptions[0]?.value || ''}
+                          onChange={handleSimplifiedPayerChange}
+                          options={simplifiedPayerComboOptions}
+                          variant="participant"
+                          className="mt-1"
+                        />
+                        {simplifiedLockedSinglePayerId && (
+                          <p className="mt-1 text-[11px] text-[#7a8398]">
+                            El pagador queda fijo después del primer pago confirmado.
+                          </p>
+                        )}
+                      </div>
+                      <div className="block">
+                        <span className="text-[12px] font-medium text-[#79829a]">Imputar pago a</span>
+                        {paymentMode === 'Único' ? (
+                          <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-[#f7f9fd] px-3 flex items-center text-[14px] font-medium text-[#4a546f]">
+                            {simplifiedResolvedCoveredParticipant?.name || simplifiedResolvedPayerParticipant?.name || 'Titular'}
+                          </div>
+                        ) : (
                           <PlaygroundCombo
-                            value={simplifiedResolvedPayerParticipantId || simplifiedPayerComboOptions[0]?.value || ''}
-                            onChange={handleSimplifiedPayerChange}
-                            options={simplifiedPayerComboOptions}
+                            value={simplifiedResolvedCoveredParticipantId || simplifiedCoveredParticipantComboOptions[0]?.value || ''}
+                            onChange={(value) => {
+                              const nextCoveredId = String(value || '').trim();
+                              setSimplifiedPaymentCoveredParticipantIdDraft(nextCoveredId);
+                              setSimplifiedPaymentCoveredParticipantIdsDraft(nextCoveredId ? [nextCoveredId] : []);
+                              setSimplifiedPaymentQuickPreset('MY_SHARE');
+                              setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
+                              setSimplifiedPaymentConceptMode('AUTO');
+                              const nextDebt = Number(participantDebtAmountById.get(nextCoveredId) || 0);
+                              const nextAmount = Number(
+                                Math.max(0, Math.min(simplifiedRemainingAfterQueue, nextDebt)).toFixed(2)
+                              );
+                              setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
+                            }}
+                            options={simplifiedCoveredParticipantComboOptions}
                             variant="participant"
                             className="mt-1"
                           />
-                          {simplifiedLockedSinglePayerId && (
-                            <p className="mt-1 text-[11px] text-[#7a8398]">
-                              El pagador queda fijo después del primer pago confirmado.
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(180px,1fr)_minmax(280px,1.35fr)_minmax(170px,0.9fr)]">
-                    <div className="block">
-                      <span className="text-[12px] font-medium text-[#79829a]">Quién paga</span>
-                      <PlaygroundCombo
-                        value={simplifiedResolvedPayerParticipantId || simplifiedPayerComboOptions[0]?.value || ''}
-                        onChange={handleSimplifiedPayerChange}
-                        options={simplifiedPayerComboOptions}
-                        variant="participant"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="block">
-                      <span className="text-[12px] font-medium text-[#79829a]">Por quién paga</span>
-                      <div className="mt-1 max-h-[188px] overflow-auto rounded-xl border border-[#dce2ee] bg-white p-2">
-                        <div className="space-y-1">
-                          {simplifiedPayerCandidates.map((participant) => {
-                            const isChecked = simplifiedResolvedCoveredParticipantIds.includes(participant.id);
-                            const participantDebt = Number(participantDebtAmountById.get(participant.id) || 0);
-                            const participantSelectable = participantDebt > 0.009;
-                            return (
-                              <label
-                                key={`simplified-covered-multi-${participant.id}`}
-                                className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 ${
-                                  participantSelectable ? 'hover:bg-[#f5f7fc]' : 'opacity-55'
-                                }`}
-                              >
-                                <span className="min-w-0 flex items-center gap-2 text-[13px] text-[#2a3245]">
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4 accent-[#3053e2]"
-                                    disabled={!participantSelectable}
-                                    checked={isChecked}
-                                    onChange={(event) => {
-                                      if (!participantSelectable) return;
-                                      const nextChecked = event.target.checked;
-                                      const nextIdSet = new Set(
-                                        simplifiedResolvedCoveredParticipantIds.map((id) => String(id || '').trim()).filter(Boolean)
-                                      );
-                                      if (nextChecked) {
-                                        nextIdSet.add(participant.id);
-                                      } else {
-                                        nextIdSet.delete(participant.id);
-                                      }
-                                      const nextIds = simplifiedPayerCandidates
-                                        .map((entry) => entry.id)
-                                        .filter((id) => nextIdSet.has(id));
-                                      setSimplifiedPaymentCoveredParticipantIdsDraft(nextIds);
-                                      setSimplifiedPaymentCoveredParticipantIdDraft(nextIds[0] || '');
-                                      const nextDebtTotal = Number(
-                                        nextIds.reduce((sum, id) => sum + Number(participantDebtAmountById.get(id) || 0), 0).toFixed(2)
-                                      );
-                                      const nextAmount = Number(
-                                        Math.max(
-                                          0,
-                                          Math.min(
-                                            simplifiedRemainingAfterQueue,
-                                            nextDebtTotal > 0.009 ? nextDebtTotal : simplifiedRemainingAfterQueue
-                                          )
-                                        ).toFixed(2)
-                                      );
-                                      setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
-                                    }}
-                                  />
-                                  <span className="min-w-0 break-words leading-tight">
-                                    {participant.optionLabel}
-                                    {participant.isOwner ? ' (titular)' : ''}
-                                    {!participantSelectable ? ' (sin deuda)' : ''}
-                                  </span>
-                                </span>
-                                <span className="shrink-0 whitespace-nowrap text-[12px] font-medium text-[#62708f]">
-                                  $ {participantDebt.toFixed(2)}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
+                        )}
                       </div>
-                      <p className="mt-1 text-[11px] text-[#7a8398]">
-                        Podés seleccionar uno o más participantes para imputar este pago.
+                      <div className="block">
+                        <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+                        <PlaygroundCombo
+                          value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
+                          onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
+                          options={simplifiedPaymentMethodComboOptions}
+                          variant="participant"
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                      <p className="text-[12px] font-semibold text-[#44506b]">Qué quiere pagar</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                        {[
+                          { id: 'MY_SHARE', label: 'Mi parte' },
+                          { id: 'FULL', label: 'Todo pendiente' },
+                          { id: 'COURT_ONLY', label: 'Solo cancha' },
+                          { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
+                        ].map((option) => {
+                          const isActive = simplifiedPaymentQuickPreset === option.id;
+                          return (
+                            <button
+                              key={`payment-quick-preset-${option.id}`}
+                              type="button"
+                              onClick={() => applySimplifiedPaymentQuickPreset(option.id as PaymentQuickPreset)}
+                              className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
+                                isActive
+                                  ? 'border-[#3155df] bg-[#eef2ff] text-[#3155df]'
+                                  : 'border-[#dce2ee] bg-white text-[#5f6880] hover:bg-[#f5f7fc]'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-[11px] text-[#6f7890]">
+                        {simplifiedPaymentQuickPreset === 'MY_SHARE'
+                          ? 'Cobra la deuda del participante imputado.'
+                          : simplifiedPaymentQuickPreset === 'FULL'
+                            ? 'Imputa el pago sobre todo el saldo pendiente de la reserva.'
+                            : simplifiedPaymentQuickPreset === 'COURT_ONLY'
+                              ? 'Imputa únicamente el saldo de cancha.'
+                              : 'Seleccioná manualmente los conceptos que quiere pagar.'}
                       </p>
                     </div>
-                    <div className="block">
-                      <span className="text-[12px] font-medium text-[#79829a]">Método</span>
-                      <PlaygroundCombo
-                        value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
-                        onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
-                        options={simplifiedPaymentMethodComboOptions}
-                        variant="participant"
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
+
+                    {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
+                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                        <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a pagar</p>
+                        <p className="mt-2 text-[11px] text-[#6f7890]">
+                          Deuda disponible en esta selección: {simplifiedPaymentConceptDebt.toFixed(2)} $
+                        </p>
+
+                        <div className="mt-2 max-h-[160px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
+                          {pendingAccountItems.length === 0 ? (
+                            <p className="px-1 py-2 text-[12px] text-[#7a8398]">No hay conceptos con deuda pendiente.</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {pendingAccountItems.map((item) => {
+                                const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
+                                return (
+                                  <label
+                                    key={`payment-concept-item-${item.id}`}
+                                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
+                                  >
+                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={(event) => {
+                                          const nextChecked = event.target.checked;
+                                          const nextSet = new Set(
+                                            simplifiedPaymentSelectedItemIdsDraft
+                                              .map((value) => String(value || '').trim())
+                                              .filter(Boolean)
+                                          );
+                                          if (nextChecked) {
+                                            nextSet.add(String(item.id));
+                                          } else {
+                                            nextSet.delete(String(item.id));
+                                          }
+                                          const nextIds = Array.from(nextSet);
+                                          setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                          const nextMax = computeConceptBasedMaxAmount('CUSTOM', nextIds);
+                                          setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextMax));
+                                        }}
+                                        className="h-4 w-4 accent-[#3053e2]"
+                                      />
+                                      <span className="truncate">
+                                        {item.type === 'BOOKING' ? 'Cancha' : item.description}
+                                      </span>
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#62708f]">
+                                      {Number(item.remainingAmount || 0).toFixed(2)} $
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <label className="block">
@@ -11400,29 +12802,23 @@ export default function AdminAgendaPlaygroundPage() {
                     <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
                   </div>
                   <p className="mt-1 text-[11px] text-[#6f7890]">
-                    {paymentMode === 'Único'
-                      ? `Saldo pendiente de la reserva: ${simplifiedRemainingAfterQueue.toFixed(2)} $`
-                      : `Deuda pendiente disponible: ${simplifiedRemainingAfterQueue.toFixed(2)} $`}
+                    {isPlaytomicPaymentModal
+                      ? `Máximo para este cobro: ${simplifiedPaymentMaxAmount.toFixed(2)} $`
+                      : simplifiedPaymentImputationMode === 'BY_CONCEPT'
+                        ? `Máximo por conceptos seleccionados: ${simplifiedPaymentMaxAmount.toFixed(2)} $`
+                        : paymentMode === 'Único'
+                          ? `Saldo pendiente de la reserva: ${simplifiedRemainingAfterQueue.toFixed(2)} $`
+                          : `Máximo por participantes seleccionados: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
                   </p>
-                  {paymentMode === 'Dividido' && (
-                    <p className="mt-0.5 text-[11px] text-[#6f7890]">
-                      Deuda seleccionada ({simplifiedResolvedCoveredParticipantIds.length}):{' '}
-                      {simplifiedResolvedCoveredParticipantsDebt.toFixed(2)} $
-                    </p>
-                  )}
+                  {!isPlaytomicPaymentModal &&
+                    paymentMode === 'Dividido' &&
+                    simplifiedPaymentImputationMode === 'BY_PARTICIPANT' && (
+                      <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                        Deuda seleccionada ({simplifiedResolvedCoveredParticipantIds.length}):{' '}
+                        {simplifiedResolvedCoveredParticipantsDebt.toFixed(2)} $
+                      </p>
+                    )}
                 </label>
-
-                <label className="block">
-                  <span className="text-[12px] font-medium text-[#79829a]">Nota (opcional)</span>
-                  <textarea
-                    value={simplifiedPaymentNoteDraft}
-                    onChange={(event) => setSimplifiedPaymentNoteDraft(event.target.value)}
-                    rows={2}
-                    className="mt-1 w-full rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[14px] text-[#2a3245] resize-none outline-none"
-                    placeholder="Ejemplo: primera cuota"
-                  />
-                </label>
-
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-4 py-3">
@@ -11435,18 +12831,184 @@ export default function AdminAgendaPlaygroundPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={queueSimplifiedPaymentFromModal}
+                  onClick={() => queueSimplifiedPaymentFromModal()}
                   disabled={
                     !simplifiedResolvedPayerParticipantId ||
-                    !simplifiedResolvedCoveredParticipantId ||
+                    (!isPlaytomicPaymentModal &&
+                      simplifiedPaymentImputationMode !== 'BY_CONCEPT' &&
+                      !simplifiedResolvedCoveredParticipantId) ||
                     !hasValidSimplifiedPaymentMethod ||
                     !hasValidSimplifiedPaymentAmount ||
                     simplifiedRemainingAfterQueue <= 0.009
                   }
                   className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
                 >
-                  Registrar pago
+                  {isPlaytomicPaymentModal ? 'Confirmar cobro' : 'Registrar pago'}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {playtomicPreConfirmOpen && isPlaytomicPaymentModal && (
+        <div
+          className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
+          onPointerDown={handleModalBackdropPointerDown}
+          onPointerUp={(event) => handleModalBackdropPointerUp(event, () => setPlaytomicPreConfirmOpen(false))}
+        >
+          <div
+            className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
+              <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cobro</h3>
+              <button
+                type="button"
+                onClick={() => setPlaytomicPreConfirmOpen(false)}
+                className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478]">
+                  <p>Monto a cobrar</p>
+                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRequestedAmount.toFixed(2)} $</p>
+                </div>
+                <div className="rounded-lg bg-[#eef6ff] px-3 py-2 text-xs text-[#3155df]">
+                  <p>Saldo luego del cobro</p>
+                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRemainingAfter.toFixed(2)} $</p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[#e0e5f2] bg-white px-3 py-2">
+                <p className="text-[12px] text-[#6f7890]">Método</p>
+                <p className="text-[14px] font-semibold text-[#2a3245]">{simplifiedPaymentMethodLabel}</p>
+              </div>
+              <div className="rounded-lg border border-[#e0e5f2] bg-white">
+                <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+                  Conceptos que cubre
+                </div>
+                {playtomicPreviewConceptRows.length === 0 ? (
+                  <p className="px-3 py-3 text-[12px] text-[#7a8398]">No hay conceptos seleccionados.</p>
+                ) : (
+                  <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
+                    {playtomicPreviewConceptRows.map((row) => (
+                      <div key={`playtomic-preview-row-${row.id}`} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
+                        <span className="truncate pr-2">{row.label}</span>
+                        <strong className="text-[#2a3245]">{row.amount.toFixed(2)} $</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPlaytomicPreConfirmOpen(false)}
+                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
+                  className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                >
+                  Confirmar cobro
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {playtomicResultModalOpen && playtomicResultModal && (
+        <div
+          className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
+          onPointerDown={handleModalBackdropPointerDown}
+          onPointerUp={(event) => handleModalBackdropPointerUp(event, () => setPlaytomicResultModalOpen(false))}
+        >
+          <div
+            className="w-full max-w-[580px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
+              <h3
+                className={`text-[22px] font-bold tracking-[-0.01em] ${
+                  playtomicResultModal.variant === 'success'
+                    ? 'text-[#22724a]'
+                    : playtomicResultModal.variant === 'partial'
+                      ? 'text-[#9a5a00]'
+                      : 'text-[#b42346]'
+                }`}
+              >
+                {playtomicResultModal.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPlaytomicResultModalOpen(false)}
+                className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <p className="text-[14px] text-[#4b556d]">{playtomicResultModal.detail}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                  <span>Solicitado</span>
+                  <strong>{playtomicResultModal.requestedAmount.toFixed(2)} $</strong>
+                </div>
+                <div className="rounded-lg bg-[#eef6ff] px-3 py-2 text-xs text-[#3155df] flex justify-between">
+                  <span>Aplicado</span>
+                  <strong>{playtomicResultModal.appliedAmount.toFixed(2)} $</strong>
+                </div>
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                  <span>Método</span>
+                  <strong>{playtomicResultModal.methodLabel}</strong>
+                </div>
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                  <span>Saldo actual</span>
+                  <strong>{playtomicResultModal.remainingAfter.toFixed(2)} $</strong>
+                </div>
+              </div>
+              {playtomicResultModal.appliedItems.length > 0 && (
+                <div className="rounded-lg border border-[#e0e5f2] bg-white">
+                  <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+                    Conceptos aplicados
+                  </div>
+                  <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
+                    {playtomicResultModal.appliedItems.map((row, index) => (
+                      <div key={`playtomic-result-row-${index}`} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
+                        <span className="truncate pr-2">{row.label}</span>
+                        <strong className="text-[#2a3245]">{row.amount.toFixed(2)} $</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPlaytomicResultModalOpen(false)}
+                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                >
+                  Entendido
+                </button>
+                {playtomicResultModal.variant !== 'success' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlaytomicResultModalOpen(false);
+                      void openSimplifiedPaymentModal();
+                    }}
+                    className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                  >
+                    Reintentar
+                  </button>
+                )}
               </div>
             </div>
           </div>
