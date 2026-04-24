@@ -1,6 +1,6 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DollarSign,
   X,
@@ -31,7 +31,7 @@ import {
 
 type ClientsView = 'directory' | 'debt' | 'history';
 type ClientScope = 'all' | 'debt_open';
-type ClientActionSidebarView = 'none' | 'client_create' | 'client_edit' | 'client_profile' | 'client_delete' | 'debt_detail' | 'debt_pay';
+type ClientActionSidebarView = 'none' | 'client_create' | 'client_edit' | 'client_profile' | 'client_delete' | 'debt_detail';
 
 type PendingAccountItem = {
   id: string;
@@ -62,6 +62,20 @@ type ItemSplit = {
 
 type PaymentTransferChannel = Extract<PaymentChannel, 'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>;
 type PayConceptView = 'all' | 'booking' | 'consumption' | 'selected';
+type PaymentQuickPreset = 'FULL' | 'COURT_ONLY' | 'CUSTOM_ITEMS';
+type PaymentModalState =
+  | { flow: 'playtomicPayment'; step: 'form' | 'preconfirm' | 'result' }
+  | null;
+type PlaytomicPaymentResultModal = {
+  variant: 'success' | 'partial' | 'error';
+  title: string;
+  detail: string;
+  requestedAmount: number;
+  appliedAmount: number;
+  remainingAfter: number;
+  methodLabel: string;
+  appliedItems: Array<{ label: string; amount: number }>;
+};
 
 const EPSILON = 0.009;
 
@@ -258,6 +272,12 @@ export default function AdminClientesPlayground2Page() {
   const [consumptionSearchTerm, setConsumptionSearchTerm] = useState('');
   const [payMethod, setPayMethod] = useState<PaymentMethod>('CASH');
   const [transferChannel, setTransferChannel] = useState<PaymentTransferChannel>('BANK_ACCOUNT');
+  const [activePaymentModal, setActivePaymentModal] = useState<PaymentModalState>(null);
+  const [playtomicResultModal, setPlaytomicResultModal] = useState<PlaytomicPaymentResultModal | null>(null);
+  const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState<PaymentMethod>('CASH');
+  const [simplifiedPaymentQuickPreset, setSimplifiedPaymentQuickPreset] = useState<PaymentQuickPreset>('FULL');
+  const [simplifiedPaymentSelectedItemIdsDraft, setSimplifiedPaymentSelectedItemIdsDraft] = useState<string[]>([]);
+  const [simplifiedPaymentAmountDraft, setSimplifiedPaymentAmountDraft] = useState('');
   const [accountBreakdownById, setAccountBreakdownById] = useState<Record<string, PendingAccountBreakdown>>({});
   const [loadingAccountById, setLoadingAccountById] = useState<Record<string, boolean>>({});
 
@@ -561,7 +581,13 @@ export default function AdminClientesPlayground2Page() {
     setConsumptionSearchTerm('');
     setPayMethod('CASH');
     setTransferChannel('BANK_ACCOUNT');
-    setSidebarView('debt_pay');
+    setSimplifiedPaymentMethodDraft('CASH');
+    setSimplifiedPaymentQuickPreset('FULL');
+    const allIds = Object.keys(buildAutoPaymentAllocations(normalizedTotal, breakdown));
+    setSimplifiedPaymentSelectedItemIdsDraft(allIds);
+    setSimplifiedPaymentAmountDraft(String(normalizedTotal.toFixed(2)));
+    setSidebarView('none');
+    setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
   };
 
   const recalculatePayAmountFromAllocations = (allocations: Record<string, number>) => {
@@ -782,6 +808,8 @@ export default function AdminClientesPlayground2Page() {
         allocations: allocations.length > 0 ? allocations : undefined,
       });
 
+      setActivePaymentModal(null);
+      setPlaytomicResultModal(null);
       setSidebarView('none');
       setDebtTargetAccountId('');
       setPayAmount('0');
@@ -859,11 +887,214 @@ export default function AdminClientesPlayground2Page() {
     [payItemsForList]
   );
 
+  const isPlaytomicPaymentModal = true;
+  const pendingAccountItems = useMemo(
+    () =>
+      selectedDebtBreakdown
+        ? [...selectedDebtBreakdown.bookingPendingItems, ...selectedDebtBreakdown.consumptionPendingItems].map((item) => ({
+            id: String(item.id),
+            type: item.type,
+            description: item.description,
+            remainingAmount: Number(item.remaining || 0),
+          }))
+        : [],
+    [selectedDebtBreakdown]
+  );
+  const isFinancialDisplayPending = Boolean(debtTargetAccountId && loadingAccountById[String(debtTargetAccountId)]) || !selectedDebtEntry;
+  const simplifiedFinancialTotal = Number(selectedDebtBreakdown?.total || selectedDebtEntry?.amount || 0);
+  const simplifiedPaidAmount = Number(selectedDebtBreakdown?.paid || 0);
+  const simplifiedRemainingAmount = Number(selectedDebtTotalPending || 0);
+  const ownerPaymentMethodOptions = [
+    { value: 'CASH', label: 'Efectivo' },
+    { value: 'TRANSFER', label: 'Transferencia' },
+    { value: 'CARD', label: 'Tarjeta' },
+  ] as const;
+  const simplifiedPaymentMethodLabel =
+    ownerPaymentMethodOptions.find((option) => option.value === simplifiedPaymentMethodDraft)?.label || 'Efectivo';
+
+  const resolvePresetItemIds = useCallback(
+    (preset: PaymentQuickPreset) => {
+      if (!selectedDebtBreakdown) return [] as string[];
+      if (preset === 'COURT_ONLY') return selectedDebtBreakdown.bookingPendingItems.map((item) => String(item.id));
+      return [...selectedDebtBreakdown.bookingPendingItems, ...selectedDebtBreakdown.consumptionPendingItems].map((item) => String(item.id));
+    },
+    [selectedDebtBreakdown]
+  );
+
+  const computeConceptBasedMaxAmount = useCallback(
+    (preset: PaymentQuickPreset, selectedIds?: string[]) => {
+      const allowedIds =
+        preset === 'CUSTOM_ITEMS'
+          ? new Set((selectedIds || []).map((value) => String(value || '').trim()).filter(Boolean))
+          : new Set(resolvePresetItemIds(preset));
+      return Number(
+        pendingAccountItems
+          .filter((item) => allowedIds.has(String(item.id)))
+          .reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0)
+          .toFixed(2)
+      );
+    },
+    [pendingAccountItems, resolvePresetItemIds]
+  );
+
+  const applySimplifiedPaymentQuickPreset = useCallback(
+    (preset: PaymentQuickPreset) => {
+      setSimplifiedPaymentQuickPreset(preset);
+      const nextIds = preset === 'CUSTOM_ITEMS' ? simplifiedPaymentSelectedItemIdsDraft : resolvePresetItemIds(preset);
+      if (preset !== 'CUSTOM_ITEMS') {
+        setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+      }
+      setSimplifiedPaymentAmountDraft(String(computeConceptBasedMaxAmount(preset, nextIds).toFixed(2)));
+    },
+    [computeConceptBasedMaxAmount, resolvePresetItemIds, simplifiedPaymentSelectedItemIdsDraft]
+  );
+
+  const simplifiedPaymentConceptDebt = useMemo(
+    () => computeConceptBasedMaxAmount(simplifiedPaymentQuickPreset, simplifiedPaymentSelectedItemIdsDraft),
+    [computeConceptBasedMaxAmount, simplifiedPaymentQuickPreset, simplifiedPaymentSelectedItemIdsDraft]
+  );
+  const simplifiedPaymentMaxAmount = simplifiedPaymentConceptDebt;
+  const simplifiedPaymentAmountNumber = Number(simplifiedPaymentAmountDraft || 0);
+  const hasValidSimplifiedPaymentMethod = Boolean(simplifiedPaymentMethodDraft);
+  const hasValidSimplifiedPaymentAmount =
+    Number.isFinite(simplifiedPaymentAmountNumber) &&
+    simplifiedPaymentAmountNumber > EPSILON &&
+    simplifiedPaymentAmountNumber <= simplifiedPaymentMaxAmount + EPSILON;
+
+  const playtomicPreviewRequestedAmount = Number(Math.max(0, simplifiedPaymentAmountNumber).toFixed(2));
+  const previewRows = useMemo(() => {
+    const selectedIds =
+      simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS'
+        ? simplifiedPaymentSelectedItemIdsDraft
+        : resolvePresetItemIds(simplifiedPaymentQuickPreset);
+    const selectedSet = new Set(selectedIds.map((value) => String(value || '').trim()).filter(Boolean));
+    let remaining = playtomicPreviewRequestedAmount;
+    const rows: Array<{ id: string; label: string; amount: number }> = [];
+    for (const item of pendingAccountItems) {
+      if (!selectedSet.has(String(item.id))) continue;
+      if (remaining <= EPSILON) break;
+      const amount = Number(Math.min(Number(item.remainingAmount || 0), remaining).toFixed(2));
+      if (amount <= EPSILON) continue;
+      rows.push({ id: String(item.id), label: item.type === 'BOOKING' ? 'Cancha' : item.description, amount });
+      remaining = Number((remaining - amount).toFixed(2));
+    }
+    return rows;
+  }, [pendingAccountItems, playtomicPreviewRequestedAmount, resolvePresetItemIds, simplifiedPaymentQuickPreset, simplifiedPaymentSelectedItemIdsDraft]);
+  const playtomicPreviewConceptRows = previewRows;
+  const playtomicPreviewRemainingAfter = Number(Math.max(0, simplifiedRemainingAmount - playtomicPreviewRequestedAmount).toFixed(2));
+
+  const queueSimplifiedPaymentFromModal = useCallback(
+    async (options?: { skipPlaytomicPreconfirm?: boolean }) => {
+      if (!selectedDebtEntry) return;
+      if (!options?.skipPlaytomicPreconfirm) {
+        setActivePaymentModal({ flow: 'playtomicPayment', step: 'preconfirm' });
+        return;
+      }
+      try {
+        setPaying(true);
+        setErrorMessage('');
+        const selectedIds =
+          simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS'
+            ? simplifiedPaymentSelectedItemIdsDraft
+            : resolvePresetItemIds(simplifiedPaymentQuickPreset);
+        const selectedSet = new Set(selectedIds.map((value) => String(value || '').trim()).filter(Boolean));
+        let remaining = Number(Math.max(0, simplifiedPaymentAmountNumber).toFixed(2));
+        const allocations: Array<{ accountItemId: string; amount: number }> = [];
+        const appliedItems: Array<{ label: string; amount: number }> = [];
+        for (const item of pendingAccountItems) {
+          if (!selectedSet.has(String(item.id))) continue;
+          if (remaining <= EPSILON) break;
+          const amount = Number(Math.min(Number(item.remainingAmount || 0), remaining).toFixed(2));
+          if (amount <= EPSILON) continue;
+          allocations.push({ accountItemId: String(item.id), amount });
+          appliedItems.push({ label: item.type === 'BOOKING' ? 'Cancha' : item.description, amount });
+          remaining = Number((remaining - amount).toFixed(2));
+        }
+        const appliedAmount = Number(allocations.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(2));
+        if (appliedAmount <= EPSILON) {
+          setPlaytomicResultModal({
+            variant: 'error',
+            title: 'No se pudo registrar el cobro',
+            detail: 'No hay conceptos seleccionados para aplicar el pago.',
+            requestedAmount: playtomicPreviewRequestedAmount,
+            appliedAmount: 0,
+            remainingAfter: simplifiedRemainingAmount,
+            methodLabel: simplifiedPaymentMethodLabel,
+            appliedItems: [],
+          });
+          setActivePaymentModal({ flow: 'playtomicPayment', step: 'result' });
+          return;
+        }
+
+        await registerPayment({
+          accountId: String(selectedDebtEntry.id),
+          amount: appliedAmount,
+          method: simplifiedPaymentMethodDraft,
+          channel: simplifiedPaymentMethodDraft === 'TRANSFER' ? transferChannel : undefined,
+          allocations,
+        });
+
+        const updated = await loadClients();
+        const stillExists = updated.find((client: any) => String(client.id) === String(selectedClientId));
+        if (!stillExists && updated.length > 0) setSelectedClientId(String(updated[0].id));
+        setAccountBreakdownById((prev) => {
+          const next = { ...prev };
+          delete next[String(selectedDebtEntry.id)];
+          return next;
+        });
+        const remainingAfter = Number(Math.max(0, simplifiedRemainingAmount - appliedAmount).toFixed(2));
+        setPlaytomicResultModal({
+          variant: appliedAmount + EPSILON < playtomicPreviewRequestedAmount ? 'partial' : 'success',
+          title: appliedAmount + EPSILON < playtomicPreviewRequestedAmount ? 'Cobro parcial aplicado' : 'Cobro registrado',
+          detail: appliedAmount + EPSILON < playtomicPreviewRequestedAmount
+            ? 'Se aplicó parcialmente por límite de conceptos seleccionados.'
+            : 'El cobro se registró correctamente.',
+          requestedAmount: playtomicPreviewRequestedAmount,
+          appliedAmount,
+          remainingAfter,
+          methodLabel: simplifiedPaymentMethodLabel,
+          appliedItems,
+        });
+        setActivePaymentModal({ flow: 'playtomicPayment', step: 'result' });
+        setSuccessMessage('Pago registrado correctamente.');
+      } catch (error: any) {
+        reportUiError({ area: 'ClientesPlayground', action: 'queueSimplifiedPaymentFromModal' }, error);
+        setPlaytomicResultModal({
+          variant: 'error',
+          title: 'No se pudo registrar el cobro',
+          detail: String(error?.message || 'Ocurrió un error al registrar el pago.'),
+          requestedAmount: playtomicPreviewRequestedAmount,
+          appliedAmount: 0,
+          remainingAfter: simplifiedRemainingAmount,
+          methodLabel: simplifiedPaymentMethodLabel,
+          appliedItems: [],
+        });
+        setActivePaymentModal({ flow: 'playtomicPayment', step: 'result' });
+      } finally {
+        setPaying(false);
+      }
+    },
+    [
+      loadClients,
+      pendingAccountItems,
+      playtomicPreviewRequestedAmount,
+      resolvePresetItemIds,
+      selectedClientId,
+      selectedDebtEntry,
+      simplifiedPaymentAmountNumber,
+      simplifiedPaymentMethodDraft,
+      simplifiedPaymentMethodLabel,
+      simplifiedPaymentQuickPreset,
+      simplifiedPaymentSelectedItemIdsDraft,
+      simplifiedRemainingAmount,
+      transferChannel,
+    ]
+  );
+
   const sidebarOpen = sidebarView !== 'none';
   const isClientFormView = sidebarView === 'client_create' || sidebarView === 'client_edit';
   const isDebtDetailView = sidebarView === 'debt_detail';
-  const isDebtPayView = sidebarView === 'debt_pay';
-  const isDebtView = isDebtDetailView || isDebtPayView;
+  const isDebtView = isDebtDetailView;
   const debtLoading = Boolean(debtTargetAccountId && loadingAccountById[String(debtTargetAccountId)]);
 
   const closeActionSidebar = useCallback(() => {
@@ -872,6 +1103,30 @@ export default function AdminClientesPlayground2Page() {
     setDebtTargetAccountId('');
     setPayItemAllocations({});
   }, [deletingClient, paying, submittingClient]);
+
+  const closeSimplifiedPaymentModal = useCallback(() => {
+    if (paying) return;
+    setActivePaymentModal(null);
+    setPlaytomicResultModal(null);
+    setSimplifiedPaymentMethodDraft('CASH');
+    setSimplifiedPaymentQuickPreset('FULL');
+    setSimplifiedPaymentSelectedItemIdsDraft([]);
+    setSimplifiedPaymentAmountDraft('');
+  }, [paying]);
+
+  const modalBackdropPointerDownTargetRef = useRef<EventTarget | null>(null);
+  const handleModalBackdropPointerDown = useCallback((event: any) => {
+    modalBackdropPointerDownTargetRef.current = event.target;
+  }, []);
+  const handleModalBackdropPointerUp = useCallback((event: any, onClose: () => void) => {
+    const startedOnBackdrop = modalBackdropPointerDownTargetRef.current === event.currentTarget;
+    const endedOnBackdrop = event.target === event.currentTarget;
+    modalBackdropPointerDownTargetRef.current = null;
+    if (startedOnBackdrop && endedOnBackdrop) {
+      onClose();
+    }
+  }, []);
+
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -882,6 +1137,17 @@ export default function AdminClientesPlayground2Page() {
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [sidebarOpen, closeActionSidebar]);
+
+  useEffect(() => {
+    if (!activePaymentModal) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      closeSimplifiedPaymentModal();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [activePaymentModal, closeSimplifiedPaymentModal]);
+
 
   useEffect(() => {
     const run = async () => {
@@ -1312,6 +1578,413 @@ export default function AdminClientesPlayground2Page() {
         </div>
       </AdminPlaygroundShell>
 
+      {activePaymentModal?.flow === 'playtomicPayment' && activePaymentModal.step === 'form' && (
+        <div className="fixed inset-0 z-[2147483200]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-[#0d1326]/45"
+            onPointerDown={handleModalBackdropPointerDown}
+            onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
+            aria-label="Cerrar modal de cobro"
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div
+              className="flex max-h-[85vh] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
+                <div>
+                  <p className="text-[18px] font-semibold text-[#1f2638]">
+                    {isPlaytomicPaymentModal ? 'Registrar cobro' : 'Registrar pago'}
+                  </p>
+                  <p className="text-[12px] text-[#707a92]">
+                    Cobro sobre deuda común de la reserva. Elegí método, conceptos y monto.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeSimplifiedPaymentModal}
+                  className="h-8 w-8 rounded-full text-[#7e879c] grid place-items-center hover:bg-[#f3f5fa]"
+                  aria-label="Cerrar"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-4 overflow-y-auto px-4 py-4">
+                {debtLoading ? (
+                  <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Cargando detalle de cuenta...</div>
+                ) : !selectedDebtEntry ? (
+                  <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Selecciona una cuenta para cobrar.</div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
+                      <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                        <p>Total</p>
+                        <p className="text-[13px] font-semibold text-[#273149]">
+                          {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                        <p>Pagado</p>
+                        <p className="text-[13px] font-semibold text-[#16733f]">
+                          {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                        <p>Deuda</p>
+                        <p className="text-[13px] font-semibold text-[#9a5a00]">
+                          {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="block">
+                        <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+                        <select
+                          value={simplifiedPaymentMethodDraft}
+                          onChange={(event) => setSimplifiedPaymentMethodDraft(event.target.value as PaymentMethod)}
+                          className="mt-1 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[14px] text-[#2a3245] outline-none focus:border-[#3053e2]"
+                        >
+                          {ownerPaymentMethodOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {simplifiedPaymentMethodDraft === 'TRANSFER' && (
+                        <div>
+                          <label className="text-[12px] font-medium text-[#79829a]">Canal de transferencia</label>
+                          <select
+                            value={transferChannel}
+                            onChange={(event) => setTransferChannel(event.target.value as PaymentTransferChannel)}
+                            className="mt-1 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] outline-none focus:border-[#3053e2]"
+                          >
+                            <option value="BANK_ACCOUNT">Cuenta bancaria</option>
+                            <option value="VIRTUAL_WALLET">Billetera virtual</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                      <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a cobrar</p>
+                      <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                        {[
+                          { id: 'FULL', label: 'Todo pendiente' },
+                          { id: 'COURT_ONLY', label: 'Solo cancha' },
+                          { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
+                        ].map((option) => {
+                          const isActive = simplifiedPaymentQuickPreset === option.id;
+                          return (
+                            <button
+                              key={`payment-playtomic-preset-${option.id}`}
+                              type="button"
+                              onClick={() => applySimplifiedPaymentQuickPreset(option.id as PaymentQuickPreset)}
+                              className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
+                                isActive
+                                  ? 'border-[#3155df] bg-[#eef2ff] text-[#3155df]'
+                                  : 'border-[#dce2ee] bg-white text-[#5f6880] hover:bg-[#f5f7fc]'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-[11px] text-[#6f7890]">
+                        {simplifiedPaymentQuickPreset === 'FULL'
+                          ? 'Deuda común completa de la reserva.'
+                          : simplifiedPaymentQuickPreset === 'COURT_ONLY'
+                            ? 'Solo el saldo pendiente de cancha.'
+                            : 'Elegí manualmente qué conceptos cobrar en este pago.'}
+                      </p>
+                    </div>
+
+                    {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
+                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[12px] font-semibold text-[#44506b]">Selección manual</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextIds = pendingAccountItems.map((item) => String(item.id));
+                                setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                setSimplifiedPaymentAmountDraft(String(computeConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds).toFixed(2)));
+                              }}
+                              className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                            >
+                              Seleccionar todo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSimplifiedPaymentSelectedItemIdsDraft([]);
+                                setSimplifiedPaymentAmountDraft('');
+                              }}
+                              className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                            >
+                              Limpiar
+                            </button>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] text-[#6f7890]">
+                          Deuda seleccionada: {simplifiedPaymentConceptDebt.toFixed(2)} $
+                        </p>
+                        <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
+                          {pendingAccountItems.length === 0 ? (
+                            <p className="px-1 py-2 text-[12px] text-[#7a8398]">No hay conceptos con deuda pendiente.</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {pendingAccountItems.map((item) => {
+                                const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
+                                return (
+                                  <label key={`payment-playtomic-concept-item-${item.id}`} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]">
+                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={(event) => {
+                                          const nextChecked = event.target.checked;
+                                          const nextSet = new Set(simplifiedPaymentSelectedItemIdsDraft.map((value) => String(value || '').trim()).filter(Boolean));
+                                          if (nextChecked) nextSet.add(String(item.id));
+                                          else nextSet.delete(String(item.id));
+                                          const nextIds = Array.from(nextSet);
+                                          setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+                                          setSimplifiedPaymentAmountDraft(String(computeConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds).toFixed(2)));
+                                        }}
+                                        className="h-4 w-4 accent-[#3053e2]"
+                                      />
+                                      <span className="truncate">{item.type === 'BOOKING' ? 'Cancha' : item.description}</span>
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-[#62708f]">{Number(item.remainingAmount || 0).toFixed(2)} $</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <label className="block">
+                      <span className="text-[12px] font-medium text-[#79829a]">Monto</span>
+                      <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={simplifiedPaymentAmountDraft}
+                          onChange={(event) => setSimplifiedPaymentAmountDraft(event.target.value)}
+                          className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
+                        />
+                        <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-[#6f7890]">
+                        Máximo para este cobro: {simplifiedPaymentMaxAmount.toFixed(2)} $
+                      </p>
+                    </label>
+
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-4 py-3">
+                <button
+                  type="button"
+                  onClick={closeSimplifiedPaymentModal}
+                  className="h-10 rounded-xl border border-[#dce2ee] px-4 text-[14px] font-semibold text-[#5d667f] hover:bg-[#f7f9fc]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void queueSimplifiedPaymentFromModal()}
+                  disabled={!hasValidSimplifiedPaymentMethod || !hasValidSimplifiedPaymentAmount}
+                  className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                >
+                  {isPlaytomicPaymentModal ? 'Continuar' : 'Registrar pago'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activePaymentModal?.flow === 'playtomicPayment' &&
+        activePaymentModal.step === 'preconfirm' &&
+        isPlaytomicPaymentModal && (
+        <div
+          className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
+          onPointerDown={handleModalBackdropPointerDown}
+          onPointerUp={(event) =>
+            handleModalBackdropPointerUp(event, () =>
+              setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })
+            )
+          }
+        >
+          <div
+            className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
+              <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cobro</h3>
+              <button
+                type="button"
+                onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+                className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478]">
+                  <p>Monto a cobrar</p>
+                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRequestedAmount.toFixed(2)} $</p>
+                </div>
+                <div className="rounded-lg bg-[#eef6ff] px-3 py-2 text-xs text-[#3155df]">
+                  <p>Saldo luego del cobro</p>
+                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRemainingAfter.toFixed(2)} $</p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[#e0e5f2] bg-white px-3 py-2">
+                <p className="text-[12px] text-[#6f7890]">Método</p>
+                <p className="text-[14px] font-semibold text-[#2a3245]">{simplifiedPaymentMethodLabel}</p>
+              </div>
+              <div className="rounded-lg border border-[#e0e5f2] bg-white">
+                <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+                  Conceptos que cubre
+                </div>
+                {playtomicPreviewConceptRows.length === 0 ? (
+                  <p className="px-3 py-3 text-[12px] text-[#7a8398]">No hay conceptos seleccionados.</p>
+                ) : (
+                  <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
+                    {playtomicPreviewConceptRows.map((row) => (
+                      <div key={`playtomic-preview-row-${row.id}`} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
+                        <span className="truncate pr-2">{row.label}</span>
+                        <strong className="text-[#2a3245]">{row.amount.toFixed(2)} $</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
+                  className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                >
+                  Confirmar cobro
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activePaymentModal?.flow === 'playtomicPayment' &&
+        activePaymentModal.step === 'result' &&
+        playtomicResultModal && (
+        <div
+          className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
+          onPointerDown={handleModalBackdropPointerDown}
+          onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
+        >
+          <div
+            className="w-full max-w-[580px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
+              <h3
+                className={`text-[22px] font-bold tracking-[-0.01em] ${
+                  playtomicResultModal.variant === 'success'
+                    ? 'text-[#22724a]'
+                    : playtomicResultModal.variant === 'partial'
+                      ? 'text-[#9a5a00]'
+                      : 'text-[#b42346]'
+                }`}
+              >
+                {playtomicResultModal.title}
+              </h3>
+              <button
+                type="button"
+                onClick={closeSimplifiedPaymentModal}
+                className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <p className="text-[14px] text-[#4b556d]">{playtomicResultModal.detail}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                  <span>Solicitado</span>
+                  <strong>{playtomicResultModal.requestedAmount.toFixed(2)} $</strong>
+                </div>
+                <div className="rounded-lg bg-[#eef6ff] px-3 py-2 text-xs text-[#3155df] flex justify-between">
+                  <span>Aplicado</span>
+                  <strong>{playtomicResultModal.appliedAmount.toFixed(2)} $</strong>
+                </div>
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                  <span>Método</span>
+                  <strong>{playtomicResultModal.methodLabel}</strong>
+                </div>
+                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                  <span>Saldo actual</span>
+                  <strong>{playtomicResultModal.remainingAfter.toFixed(2)} $</strong>
+                </div>
+              </div>
+              {playtomicResultModal.appliedItems.length > 0 && (
+                <div className="rounded-lg border border-[#e0e5f2] bg-white">
+                  <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+                    Conceptos aplicados
+                  </div>
+                  <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
+                    {playtomicResultModal.appliedItems.map((row, index) => (
+                      <div key={`playtomic-result-row-${index}`} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
+                        <span className="truncate pr-2">{row.label}</span>
+                        <strong className="text-[#2a3245]">{row.amount.toFixed(2)} $</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeSimplifiedPaymentModal}
+                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                >
+                  Entendido
+                </button>
+                {playtomicResultModal.variant !== 'success' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
+                    }}
+                    className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                  >
+                    Reintentar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {sidebarOpen && (
         <button
           type="button"
@@ -1335,7 +2008,6 @@ export default function AdminClientesPlayground2Page() {
                 {sidebarView === 'client_profile' && 'Perfil del cliente'}
                 {sidebarView === 'client_delete' && 'Eliminar cliente'}
                 {sidebarView === 'debt_detail' && 'Detalle de cuenta'}
-                {sidebarView === 'debt_pay' && 'Cobrar cuenta pendiente'}
               </h2>
               <p className="mt-3 text-[13px] leading-snug text-[#7d879d]">
                 {isClientFormView && 'Gestion de datos basicos del cliente.'}
@@ -1528,7 +2200,7 @@ export default function AdminClientesPlayground2Page() {
                       </>
                     )}
 
-                    {isDebtPayView && (
+                    {false && (
                       <div className="space-y-3 rounded-xl border border-[#dce2ee] bg-[#fbfdff] p-3">
                         <div className="rounded-xl border border-[#dce2ee] bg-white p-3">
                           <div className="flex items-start justify-between gap-3">
@@ -1852,16 +2524,6 @@ export default function AdminClientesPlayground2Page() {
               </button>
             )}
 
-              {sidebarView === 'debt_pay' && (
-                <button
-                  type="button"
-                  onClick={() => void processDebtPayment()}
-                  disabled={paying || !selectedDebtEntry || currentPayAmount <= EPSILON}
-                  className="h-10 rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {paying ? 'Registrando...' : currentPayAmount > EPSILON ? `Confirmar cobro ${formatMoney(currentPayAmount)}` : 'Seleccionar monto a cobrar'}
-                </button>
-              )}
             </div>
           </footer>
         </div>

@@ -181,7 +181,7 @@ type ParticipantSuggestion = {
 type BookingKind = 'regular' | 'recurringV2' | 'privateClass' | 'courseClass' | 'block';
 type RecurringFrequencyPreset = 'weekly' | 'biweekly' | 'custom';
 type ComboOption = { value: string; label: string; secondary?: string };
-type SimplifiedSidebarSection = 'DETAILS' | 'CONSUMPTIONS' | 'BILLING' | 'PLAYTOMIC' | 'HISTORY';
+type SimplifiedSidebarSection = 'DETAILS' | 'CONSUMPTIONS' | 'BILLING' | 'HISTORY';
 type ClubProductOption = {
   id: number;
   name: string;
@@ -221,6 +221,9 @@ type PlaytomicPaymentResultModal = {
   methodLabel: string;
   appliedItems: Array<{ label: string; amount: number }>;
 };
+type PaymentModalState =
+  | { flow: 'playtomicPayment'; step: 'form' | 'preconfirm' | 'result' }
+  | null;
 
 
 const rowHeight = 120; // visual height per hour (zoom vertical para diferenciar mejor 15m vs 30m)
@@ -1735,14 +1738,14 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedNewParticipantSuggestionsPlacement, setSimplifiedNewParticipantSuggestionsPlacement] =
     useState<SuggestionPlacement | null>(null);
   const [simplifiedSuggestionsPositionTick, setSimplifiedSuggestionsPositionTick] = useState(0);
-  const [simplifiedPaymentModalOpen, setSimplifiedPaymentModalOpen] = useState(false);
+  const [activePaymentModal, setActivePaymentModal] = useState<PaymentModalState>(null);
   const [simplifiedPaymentPayerParticipantIdDraft, setSimplifiedPaymentPayerParticipantIdDraft] = useState('');
   const [simplifiedPaymentCoveredParticipantIdDraft, setSimplifiedPaymentCoveredParticipantIdDraft] = useState('');
   const [simplifiedPaymentCoveredParticipantIdsDraft, setSimplifiedPaymentCoveredParticipantIdsDraft] = useState<string[]>([]);
   const [simplifiedPaymentAmountDraft, setSimplifiedPaymentAmountDraft] = useState('');
   const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState('');
   const [simplifiedPaymentModalVariant, setSimplifiedPaymentModalVariant] =
-    useState<'LEGACY' | 'PLAYTOMIC'>('LEGACY');
+    useState<'LEGACY' | 'PLAYTOMIC'>('PLAYTOMIC');
   const [simplifiedPaymentQuickPreset, setSimplifiedPaymentQuickPreset] =
     useState<PaymentQuickPreset>('MY_SHARE');
   const [simplifiedPaymentImputationMode, setSimplifiedPaymentImputationMode] =
@@ -1751,8 +1754,6 @@ export default function AdminAgendaPlaygroundPage() {
     useState<PaymentConceptMode>('AUTO');
   const [simplifiedPaymentSelectedItemIdsDraft, setSimplifiedPaymentSelectedItemIdsDraft] = useState<string[]>([]);
   const [simplifiedSinglePaymentAdvancedOpen, setSimplifiedSinglePaymentAdvancedOpen] = useState(false);
-  const [playtomicPreConfirmOpen, setPlaytomicPreConfirmOpen] = useState(false);
-  const [playtomicResultModalOpen, setPlaytomicResultModalOpen] = useState(false);
   const [playtomicResultModal, setPlaytomicResultModal] = useState<PlaytomicPaymentResultModal | null>(null);
   const [simplifiedSidebarSection, setSimplifiedSidebarSection] = useState<SimplifiedSidebarSection>('DETAILS');
   const [consumptionProducts, setConsumptionProducts] = useState<ClubProductOption[]>([]);
@@ -5467,7 +5468,7 @@ export default function AdminAgendaPlaygroundPage() {
         ok: blockingBillingWarnings.size === 0,
         detail:
           blockingBillingWarnings.size > 0
-            ? 'Revisá asignación de cobro (sumas/responsable).'
+            ? 'Revisá la configuración de cobro.'
             : undefined,
       });
     }
@@ -5733,9 +5734,8 @@ export default function AdminAgendaPlaygroundPage() {
   }, [isBillingConfigLockedByPayments, showCalendarNotice]);
 
   const closeSimplifiedPaymentModal = useCallback(() => {
-    setSimplifiedPaymentModalOpen(false);
-    setPlaytomicPreConfirmOpen(false);
-    setSimplifiedPaymentModalVariant('LEGACY');
+    setActivePaymentModal(null);
+    setSimplifiedPaymentModalVariant('PLAYTOMIC');
     setSimplifiedPaymentPayerParticipantIdDraft('');
     setSimplifiedPaymentCoveredParticipantIdDraft('');
     setSimplifiedPaymentCoveredParticipantIdsDraft([]);
@@ -5746,6 +5746,7 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentConceptMode('AUTO');
     setSimplifiedPaymentSelectedItemIdsDraft([]);
     setSimplifiedSinglePaymentAdvancedOpen(false);
+    setPlaytomicResultModal(null);
   }, []);
   const modalBackdropPointerDownTargetRef = useRef<EventTarget | null>(null);
   const handleModalBackdropPointerDown = useCallback((event: any) => {
@@ -5846,17 +5847,7 @@ export default function AdminAgendaPlaygroundPage() {
       }
       return String(preferredPayerId || '').trim();
     })();
-    const isPlaytomicFlow = simplifiedSidebarSection === 'PLAYTOMIC';
-    const preferredCoveredDebt = Number(participantDebtAmountById.get(preferredCoveredId) || 0);
-    const preferredAmount = Number(
-      (
-        isPlaytomicFlow
-          ? simplifiedRemainingAfterQueue
-          : paymentMode === 'Dividido'
-            ? Math.max(0, Math.min(simplifiedRemainingAfterQueue, preferredCoveredDebt))
-            : simplifiedRemainingAfterQueue
-      ).toFixed(2)
-    );
+    const preferredAmount = Number(simplifiedRemainingAfterQueue.toFixed(2));
 
     setSimplifiedPaymentPayerParticipantIdDraft(preferredPayerId);
     setSimplifiedPaymentCoveredParticipantIdDraft(preferredCoveredId);
@@ -5867,13 +5858,13 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedPaymentAmountDraft(
       preferredAmount > 0.009 ? preferredAmount.toFixed(2) : ''
     );
-    setSimplifiedPaymentQuickPreset(isPlaytomicFlow ? 'FULL' : 'MY_SHARE');
-    setSimplifiedPaymentImputationMode(isPlaytomicFlow ? 'BY_CONCEPT' : 'BY_PARTICIPANT');
+    setSimplifiedPaymentQuickPreset('FULL');
+    setSimplifiedPaymentImputationMode('BY_CONCEPT');
     setSimplifiedPaymentConceptMode('AUTO');
     setSimplifiedPaymentSelectedItemIdsDraft([]);
     setSimplifiedSinglePaymentAdvancedOpen(false);
-    setSimplifiedPaymentModalVariant(isPlaytomicFlow ? 'PLAYTOMIC' : 'LEGACY');
-    setSimplifiedPaymentModalOpen(true);
+    setSimplifiedPaymentModalVariant('PLAYTOMIC');
+    setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
     setFormError('');
   }, [
     bookingDrawerState.draft,
@@ -5885,11 +5876,9 @@ export default function AdminAgendaPlaygroundPage() {
     persistedEditingBookingId,
     showCalendarNotice,
     simplifiedRemainingAfterQueue,
-    participantDebtAmountById,
     singleChargeParticipantId,
     latestPaymentPayerRef,
     paymentMode,
-    simplifiedSidebarSection,
   ]);
 
   const queueSimplifiedPaymentFromModal = useCallback((options?: { skipPlaytomicPreconfirm?: boolean }) => {
@@ -6034,7 +6023,7 @@ export default function AdminAgendaPlaygroundPage() {
       appliedClampReason = 'reserva';
     }
     if (isPlaytomicFlow && !options?.skipPlaytomicPreconfirm) {
-      setPlaytomicPreConfirmOpen(true);
+      setActivePaymentModal({ flow: 'playtomicPayment', step: 'preconfirm' });
       return;
     }
 
@@ -6151,10 +6140,8 @@ export default function AdminAgendaPlaygroundPage() {
       showCalendarNotice(`El monto se ajustó automáticamente al máximo permitido por ${reasonLabel}.`);
     }
     const openPlaytomicResult = (result: PlaytomicPaymentResultModal) => {
-      setPlaytomicPreConfirmOpen(false);
-      closeSimplifiedPaymentModal();
+      setActivePaymentModal({ flow: 'playtomicPayment', step: 'result' });
       setPlaytomicResultModal(result);
-      setPlaytomicResultModalOpen(true);
     };
     void (async () => {
       let registeredAmount = 0;
@@ -7702,11 +7689,6 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedSummaryCourtLabel = selectedCourt?.name || 'Cancha no definida';
   const sidebarTitle = (() => {
     if (simplifiedIsEditingReservation) {
-      if (simplifiedSidebarSection === 'PLAYTOMIC') {
-        return simplifiedIsEditingRecurringSeries
-          ? 'Editar serie recurrente · Pago Playtomic'
-          : 'Editar reserva · Pago Playtomic';
-      }
       if (bookingKind === 'block') return 'Editar bloqueo';
       if (simplifiedIsEditingRecurringSeries) return 'Editar serie recurrente';
       return 'Editar reserva';
@@ -8094,9 +8076,6 @@ export default function AdminAgendaPlaygroundPage() {
       ? []
       : [{ id: 'CONSUMPTIONS' as const, label: 'Consumos' }]),
     { id: 'BILLING', label: 'Cobros y participantes' },
-    ...(simplifiedIsEditingReservation
-      ? [{ id: 'PLAYTOMIC' as const, label: 'Pago Playtomic' }]
-      : []),
     { id: 'HISTORY', label: 'Historial' },
   ];
   const consumptionProductOptions: ComboOption[] = consumptionProducts.map((product) => ({
@@ -8399,8 +8378,6 @@ export default function AdminAgendaPlaygroundPage() {
     simplifiedSidebarSection === 'CONSUMPTIONS';
   const showSimplifiedBillingSection =
     !simplifiedIsEditingReservation || simplifiedSidebarSection === 'BILLING';
-  const showSimplifiedPlaytomicSection =
-    simplifiedIsEditingReservation && simplifiedSidebarSection === 'PLAYTOMIC';
   const showSimplifiedHistorySection =
     simplifiedIsEditingReservation && simplifiedSidebarSection === 'HISTORY';
 
@@ -10765,50 +10742,8 @@ export default function AdminAgendaPlaygroundPage() {
                       <>
                       {simplifiedIsEditingReservation && (
                         <section className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
-                          <p className="text-[18px] font-semibold text-[#27314a]">Asignación de cobro</p>
-                          <div className="mt-2 grid grid-cols-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
-                            <button
-                              type="button"
-                              onClick={() => handleBillingModeChange('INDIVIDUAL')}
-                              disabled={isBookingFullyPaid || isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
-                              className={`h-10 rounded-lg text-[14px] font-semibold transition disabled:opacity-55 ${
-                                paymentMode === 'Único'
-                                  ? 'bg-[#3053e2] text-white'
-                                  : 'text-[#7f879a] hover:bg-[#eceff8]'
-                              }`}
-                            >
-                              Pago único
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleBillingModeChange('SHARED')}
-                              disabled={isBookingFullyPaid || isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
-                              className={`h-10 rounded-lg text-[14px] font-semibold transition disabled:opacity-55 ${
-                                paymentMode === 'Dividido'
-                                  ? 'bg-[#3053e2] text-white'
-                                  : 'text-[#7f879a] hover:bg-[#eceff8]'
-                              }`}
-                            >
-                              Pago dividido
-                            </button>
-                          </div>
-                          <p className="mt-2 text-[12px] text-[#6f7890]">
-                            {paymentMode === 'Único'
-                              ? 'Una sola persona es responsable del cobro.'
-                              : 'Cualquiera puede pagar y cubrir saldo de otros participantes.'}
-                          </p>
-                          {isBillingConfigLockedByPayments && (
-                            <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
-                              La asignación de cobro quedó bloqueada porque ya hay pagos registrados.
-                            </p>
-                          )}
-                        </section>
-                      )}
-
-                      {simplifiedIsEditingReservation && (
-                        <section className="mt-4 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
                           <div className="flex items-center justify-between">
-                            <p className="text-[18px] font-semibold text-[#27314a]">Pagos</p>
+                            <p className="text-[18px] font-semibold text-[#27314a]">Cobro</p>
                             <span
                               className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                                 simplifiedPaymentStatusLabel === 'Pagado'
@@ -10859,8 +10794,6 @@ export default function AdminAgendaPlaygroundPage() {
                               <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
                             ) : isPaymentLockedByManualPending ? (
                               <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
-                            ) : simplifiedRemainingAmount <= 0.009 ? (
-                              <p className="text-[12px] text-[#1c7a44]">No hay deuda pendiente.</p>
                             ) : null}
                           </div>
                         </section>
@@ -11231,7 +11164,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   type="button"
                                   onClick={() =>
                                     showCalendarNotice(
-                                      'Este total es estimado para crear la reserva. La asignación de cobro y el registro de pagos se habilitan al editar la reserva creada.'
+                                      'Este total es estimado para crear la reserva. El registro de pagos se habilita al editar la reserva creada.'
                                     )
                                   }
                                   className="grid h-7 w-7 place-items-center rounded-full text-[#747d93] transition hover:bg-[#e8ebf2]"
@@ -11460,130 +11393,6 @@ export default function AdminAgendaPlaygroundPage() {
                       </>
                       )}
 
-                      {showSimplifiedPlaytomicSection && (
-                        <>
-                          <section className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[18px] font-semibold text-[#27314a]">Resumen de cobro</p>
-                              <span
-                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                  simplifiedPaymentStatusLabel === 'Pagado'
-                                    ? 'bg-[#e8f8ec] text-[#16733f]'
-                                    : simplifiedPaymentStatusLabel === 'Parcial'
-                                      ? 'bg-[#fff4e5] text-[#9a5a00]'
-                                      : 'bg-[#eef1f7] text-[#5c667f]'
-                                }`}
-                              >
-                                {simplifiedPaymentStatusLabel}
-                              </span>
-                            </div>
-                            <div className="mt-2 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
-                              <div className="rounded-lg bg-white px-2 py-1.5">
-                                <p>Total</p>
-                                <p className="text-[15px] font-semibold text-[#2a3245]">
-                                  {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
-                                </p>
-                              </div>
-                              <div className="rounded-lg bg-white px-2 py-1.5">
-                                <p>Pagado</p>
-                                <p className="text-[15px] font-semibold text-[#16733f]">
-                                  {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
-                                </p>
-                              </div>
-                              <div className="rounded-lg bg-white px-2 py-1.5">
-                                <p>Deuda</p>
-                                <p className="text-[15px] font-semibold text-[#9a5a00]">
-                                  {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
-                                </p>
-                              </div>
-                            </div>
-                            <p className="mt-2 text-[12px] text-[#6f7890]">
-                              Cancha: {bookingCourtAmount.toFixed(2)} $ · Consumos: {bookingItemsAmount.toFixed(2)} $
-                            </p>
-                            <div className="mt-3 flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={openSimplifiedPaymentModal}
-                                disabled={!simplifiedCanRegisterPayment}
-                                className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
-                              >
-                                Registrar pago
-                              </button>
-                              {!persistedEditingBookingId ? (
-                                <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
-                              ) : billingConfigLoadError ? (
-                                <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
-                              ) : isPaymentLockedByManualPending ? (
-                                <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
-                              ) : simplifiedRemainingAmount <= 0.009 ? (
-                                <p className="text-[12px] text-[#1c7a44]">No hay deuda pendiente.</p>
-                              ) : null}
-                            </div>
-                          </section>
-
-                          <section className="mt-4 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-[18px] font-semibold text-[#27314a]">Mi parte por participante</p>
-                              <span className="text-[11px] text-[#6f7890]">
-                                {paymentMode === 'Único' ? 'Pago único activo' : 'Pago dividido activo'}
-                              </span>
-                            </div>
-                            {simplifiedNamedParticipants.length === 0 ? (
-                              <p className="mt-3 text-[13px] text-[#6f7890]">
-                                Agregá participantes para calcular deuda individual.
-                              </p>
-                            ) : (
-                              <div className="mt-3 space-y-2">
-                                {simplifiedNamedParticipants.map((participant) => {
-                                  const assignedAmount = Number(participantAssignedAmountById.get(participant.id) || 0);
-                                  const coveredAmount = Number(participantCoverageAmountById.get(participant.id) || 0);
-                                  const debtAmount = Number(participantDebtAmountById.get(participant.id) || 0);
-                                  const statusTone =
-                                    debtAmount <= 0.009
-                                      ? 'bg-[#e8f8ec] text-[#16733f]'
-                                      : coveredAmount > 0.009
-                                        ? 'bg-[#fff4e5] text-[#9a5a00]'
-                                        : 'bg-[#eef1f7] text-[#5c667f]';
-                                  const statusLabel =
-                                    debtAmount <= 0.009 ? 'Pagado' : coveredAmount > 0.009 ? 'Parcial' : 'Pendiente';
-                                  return (
-                                    <div
-                                      key={`playtomic-participant-${participant.id}`}
-                                      className="rounded-xl border border-[#e2e7f1] bg-white px-3 py-2.5"
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                          <p className="text-[14px] font-semibold text-[#1f2638]">{participant.name}</p>
-                                          <p className="mt-0.5 text-[11px] text-[#6f7890]">
-                                            {participant.isOwner ? 'Titular' : 'Participante'}
-                                          </p>
-                                        </div>
-                                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone}`}>
-                                          {statusLabel}
-                                        </span>
-                                      </div>
-                                      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
-                                        <div className="rounded-lg bg-[#f7f9fd] px-2 py-1.5">
-                                          <p>Asignado</p>
-                                          <p className="text-[13px] font-semibold text-[#2a3245]">{assignedAmount.toFixed(2)} $</p>
-                                        </div>
-                                        <div className="rounded-lg bg-[#f7f9fd] px-2 py-1.5">
-                                          <p>Pagado</p>
-                                          <p className="text-[13px] font-semibold text-[#16733f]">{coveredAmount.toFixed(2)} $</p>
-                                        </div>
-                                        <div className="rounded-lg bg-[#f7f9fd] px-2 py-1.5">
-                                          <p>Mi parte</p>
-                                          <p className="text-[13px] font-semibold text-[#9a5a00]">{debtAmount.toFixed(2)} $</p>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </section>
-                        </>
-                      )}
                     </section>
                   ) : (
                     <>
@@ -11732,16 +11541,11 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                     </div>
                     <p className="mt-1 text-[12px] text-[#6f7890]">
-                      Configurá la asignación de cobro y registrá pagos desde este bloque.
+                      Registrá cobros de deuda común de la reserva desde este bloque.
                     </p>
                     {isCompletedReservation && (
                       <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
                         Reserva completada: podés cobrar, pero no reprogramar ni modificar participantes.
-                      </p>
-                    )}
-                    {isBillingConfigLockedByPayments && !shouldHideBillingUntilConfirmed && (
-                      <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
-                        La asignación de cobro está bloqueada porque ya hay pagos registrados.
                       </p>
                     )}
                     {shouldHideBillingUntilConfirmed ? (
@@ -11753,8 +11557,8 @@ export default function AdminAgendaPlaygroundPage() {
                         </p>
                         <p className="mt-1 text-[12px] text-[#926a2a]">
                           {shouldHideBillingUntilCreated
-                            ? 'Primero creá la reserva. Después podés definir asignación de cobro y registrar pagos.'
-                            : 'Confirmá esta reserva para habilitar asignación de cobro, registro de pagos y saldo.'}
+                            ? 'Primero creá la reserva. Después podés registrar pagos.'
+                            : 'Confirmá esta reserva para habilitar registro de pagos y saldo.'}
                         </p>
                         {!shouldHideBillingUntilCreated && (
                           <div className="mt-2 flex justify-end">
@@ -11770,139 +11574,51 @@ export default function AdminAgendaPlaygroundPage() {
                         )}
                       </div>
                     ) : (
-                      <>
-                        <BookingDrawerShell
-                          draft={bookingDrawerState.draft}
-                          activeTab={billingHubTab}
-                          paymentsLocked={isPaymentLockedByManualPending}
-                          paymentsLockedReason="Primero confirmá la reserva para poder registrar pagos."
-                          warnings={[
-                            ...(hasBlockingActionError ? ['CURRENT_VALIDATION_WARNING'] : []),
-                            ...(bookingDrawerState.ui.warnings || []),
-                          ]}
-                          onTabChange={(tab) => setBillingHubTab(tab)}
-                          onModeChange={handleBillingModeChange}
-                          onResponsibleChange={handleBillingResponsibleChange}
-                          onAssignmentAmountChange={handleBillingAssignmentAmountChange}
-                          onToggleChargeable={handleBillingToggleChargeable}
-                          onQueuePayment={(input) =>
-                            (() => {
-                              if (isPaymentLockedByManualPending) {
-                                showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
-                                return;
-                              }
-                              const draft = bookingDrawerState.draft;
-                              const remainingAmount = Number(
-                                Math.max(0, Number(draft?.billing.financialSummary.remainingAmount || 0)).toFixed(2)
-                              );
-                              const amount =
-                                draft?.billing.chargeMode === 'INDIVIDUAL'
-                                  ? remainingAmount
-                                  : Number(input.amount || 0);
-                              if (amount <= 0.009) {
-                                showCalendarNotice(
-                                  draft?.billing.chargeMode === 'INDIVIDUAL'
-                                    ? 'El saldo ya está cubierto. No hay cobro pendiente.'
-                                    : 'Ingresá un monto mayor a 0 para registrar pago.'
-                                );
-                                return;
-                              }
-                              void registerPaymentNow({
-                                amount: Number(amount.toFixed(2)),
-                                method: input.method,
-                                successMessage: `Pago registrado: ${Number(amount).toFixed(2)} $.`,
-                              });
-                            })()
-                          }
-                          onRemoveQueuedPayment={() => {
-                            showCalendarNotice('Cada pago se registra al instante. No hay cola local para remover.');
-                          }}
-                          onRegisterPayment={isBookingFullyPaid ? undefined : () => {
-                            setBillingHubTab('PAYMENTS');
-                            showCalendarNotice('Completá monto y método para registrar el pago.');
-                          }}
-                          onCollectRemaining={
-                            isBookingFullyPaid
-                              ? undefined
-                              : () => {
-                                  if (isPaymentLockedByManualPending) return;
-                                  queueRemainingPayment();
-                                }
-                          }
-                        />
-                        {bookingDrawerState.ui.warnings.length > 0 && (
-                          <div className="mt-2 rounded-lg border border-[#f2c7a8] bg-[#fff4ea] px-3 py-2 text-[12px] text-[#8a4f14]">
-                            {bookingDrawerState.ui.warnings.map((warning) => {
-                              const message =
-                                warning === 'UNATTRIBUTED_PAYMENTS'
-                                  ? 'Hay pagos sin imputar.'
-                                  : warning === 'ASSIGNMENT_SUM_MISMATCH'
-                                    ? 'La suma asignada no coincide con el total.'
-                                    : warning === 'CANCELLED_WITH_PAYMENTS'
-                                      ? 'La reserva está cancelada y tiene pagos.'
-                                      : warning === 'ARCHIVED_PARTICIPANT_WITH_HISTORY'
-                                        ? 'Hay participantes archivados con historial.'
-                                        : warning === 'INDIVIDUAL_WITHOUT_CHARGE_RESPONSIBLE'
-                                          ? 'En modo Individual falta responsable del cobro.'
-                                          : warning;
-                              return (
-                                <p key={`drawer-warning-${warning}`} className="leading-5">
-                                  â€¢ {message}
-                                </p>
-                              );
-                            })}
+                      <div className="mt-3 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                        <div className="grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
+                          <div className="rounded-lg bg-white px-2 py-1.5">
+                            <p>Total</p>
+                            <p className="text-[15px] font-semibold text-[#2a3245]">
+                              {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
+                            </p>
                           </div>
-                        )}
-                        {bookingDrawerState.ui.saveStatus === 'PARTIAL' && (
-                          <div className="mt-2 rounded-lg border border-[#f2c7a8] bg-[#fff4ea] px-3 py-2 text-[12px] text-[#8a4f14]">
-                            {bookingDrawerState.ui.saveMessage || 'Guardado parcial.'}
+                          <div className="rounded-lg bg-white px-2 py-1.5">
+                            <p>Pagado</p>
+                            <p className="text-[15px] font-semibold text-[#16733f]">
+                              {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
+                            </p>
                           </div>
-                        )}
-                        {bookingDrawerState.ui.saveStatus === 'FAILED' && (
-                          <div className="mt-2 rounded-lg border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2 text-[12px] text-[#b42346]">
-                            {bookingDrawerState.ui.saveMessage || 'No se pudo guardar.'}
+                          <div className="rounded-lg bg-white px-2 py-1.5">
+                            <p>Deuda</p>
+                            <p className="text-[15px] font-semibold text-[#9a5a00]">
+                              {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
+                            </p>
                           </div>
-                        )}
-                        {canShowMainAction && (
-                          <div className="mt-3 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
-                            {showCollectMainAction && (
-                              <>
-                                <p className="text-[12px] font-semibold text-[#44506b]">
-                                  Saldo pendiente: {`${Number(billingSummary.remainingAmount || 0).toFixed(2)} $`}
-                                </p>
-                                <div className="mt-2 flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={queueRemainingPayment}
-                                    disabled={isPaymentLockedByManualPending}
-                                    className="h-8 rounded-lg bg-[#3053e2] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-60"
-                                  >
-                                    Agregar saldo a pagos
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                            {isBookingFullyPaid && (
-                              <p className="text-[12px] font-semibold text-[#1c7a44]">
-                                Reserva saldada. No hay acciones de cobro disponibles.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </>
+                        </div>
+                        <p className="mt-2 text-[12px] text-[#6f7890]">
+                          Cancha: {bookingCourtAmount.toFixed(2)} $ · Consumos: {bookingItemsAmount.toFixed(2)} $
+                        </p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={openSimplifiedPaymentModal}
+                            disabled={!simplifiedCanRegisterPayment}
+                            className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                          >
+                            Registrar pago
+                          </button>
+                          {!persistedEditingBookingId ? (
+                            <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
+                          ) : billingConfigLoadError ? (
+                            <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
+                          ) : isPaymentLockedByManualPending ? (
+                            <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
+                          ) : null}
+                        </div>
+                      </div>
                     )}
                     {!isModernBillingEnabled && (
                     <div className="mt-3 grid grid-cols-2 gap-3">
-                      {!isBookingFullyPaid && (
-                        <div>
-                        <p className="text-[13px] text-[#727b90] inline-flex items-center gap-1">Asignación de cobro <CircleAlert size={13} /></p>
-                        <div className="mt-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
-                          <div className="h-9 rounded-lg bg-[#dfe4f4] text-[#2e58e5] text-[15px] font-semibold grid place-items-center">
-                            Pago único
-                          </div>
-                        </div>
-                        </div>
-                      )}
                       <div className={isBookingFullyPaid ? 'col-span-2' : ''}>
                         <p className="text-[13px] text-[#727b90]">{priceFieldLabel}</p>
                         <div className="mt-2 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between text-[16px] text-[#2c3448]">
@@ -12380,7 +12096,7 @@ export default function AdminAgendaPlaygroundPage() {
                       <div className="rounded-xl border border-[#f2d6a8] bg-[#fff9ee] px-3 py-2.5">
                         <p className="text-[12px] font-semibold text-[#8b5c1a]">Cobro pendiente de confirmación</p>
                         <p className="mt-1 text-[12px] text-[#926a2a]">
-                          Confirmá la reserva para habilitar asignación de cobro, pagos y saldo.
+                          Confirmá la reserva para habilitar pagos y saldo.
                         </p>
                       </div>
                     )}
@@ -12435,7 +12151,7 @@ export default function AdminAgendaPlaygroundPage() {
             </section>
           </AdminPlaygroundShell>
 
-      {simplifiedPaymentModalOpen && (
+      {activePaymentModal?.flow === 'playtomicPayment' && activePaymentModal.step === 'form' && (
         <div className="fixed inset-0 z-[2147483200]">
           <button
             type="button"
@@ -12452,7 +12168,7 @@ export default function AdminAgendaPlaygroundPage() {
               <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
                 <div>
                   <p className="text-[18px] font-semibold text-[#1f2638]">
-                    {isPlaytomicPaymentModal ? 'Cobrar reserva (Playtomic)' : 'Registrar pago'}
+                    {isPlaytomicPaymentModal ? 'Registrar cobro' : 'Registrar pago'}
                   </p>
                   <p className="text-[12px] text-[#707a92]">
                     {isPlaytomicPaymentModal
@@ -12843,7 +12559,7 @@ export default function AdminAgendaPlaygroundPage() {
                   }
                   className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
                 >
-                  {isPlaytomicPaymentModal ? 'Confirmar cobro' : 'Registrar pago'}
+                  {isPlaytomicPaymentModal ? 'Continuar' : 'Registrar pago'}
                 </button>
               </div>
             </div>
@@ -12851,11 +12567,17 @@ export default function AdminAgendaPlaygroundPage() {
         </div>
       )}
 
-      {playtomicPreConfirmOpen && isPlaytomicPaymentModal && (
+      {activePaymentModal?.flow === 'playtomicPayment' &&
+        activePaymentModal.step === 'preconfirm' &&
+        isPlaytomicPaymentModal && (
         <div
           className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
           onPointerDown={handleModalBackdropPointerDown}
-          onPointerUp={(event) => handleModalBackdropPointerUp(event, () => setPlaytomicPreConfirmOpen(false))}
+          onPointerUp={(event) =>
+            handleModalBackdropPointerUp(event, () =>
+              setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })
+            )
+          }
         >
           <div
             className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -12865,7 +12587,7 @@ export default function AdminAgendaPlaygroundPage() {
               <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cobro</h3>
               <button
                 type="button"
-                onClick={() => setPlaytomicPreConfirmOpen(false)}
+                onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
                 className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
               >
                 <X size={15} />
@@ -12906,7 +12628,7 @@ export default function AdminAgendaPlaygroundPage() {
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setPlaytomicPreConfirmOpen(false)}
+                  onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
                   className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
                 >
                   Volver
@@ -12924,11 +12646,13 @@ export default function AdminAgendaPlaygroundPage() {
         </div>
       )}
 
-      {playtomicResultModalOpen && playtomicResultModal && (
+      {activePaymentModal?.flow === 'playtomicPayment' &&
+        activePaymentModal.step === 'result' &&
+        playtomicResultModal && (
         <div
           className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
           onPointerDown={handleModalBackdropPointerDown}
-          onPointerUp={(event) => handleModalBackdropPointerUp(event, () => setPlaytomicResultModalOpen(false))}
+          onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
         >
           <div
             className="w-full max-w-[580px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
@@ -12948,7 +12672,7 @@ export default function AdminAgendaPlaygroundPage() {
               </h3>
               <button
                 type="button"
-                onClick={() => setPlaytomicResultModalOpen(false)}
+                onClick={closeSimplifiedPaymentModal}
                 className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
               >
                 <X size={15} />
@@ -12992,7 +12716,7 @@ export default function AdminAgendaPlaygroundPage() {
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setPlaytomicResultModalOpen(false)}
+                  onClick={closeSimplifiedPaymentModal}
                   className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
                 >
                   Entendido
@@ -13001,7 +12725,7 @@ export default function AdminAgendaPlaygroundPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setPlaytomicResultModalOpen(false);
+                      setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
                       void openSimplifiedPaymentModal();
                     }}
                     className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
