@@ -8,7 +8,6 @@ import {
   Plus,
   Search,
   Trash2,
-  Users,
 } from 'lucide-react';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
 import NotFound from '../../components/NotFound';
@@ -394,10 +393,6 @@ export default function AdminClientesPlayground2Page() {
 
   const totalClients = clients.length;
   const totalDebt = clients.reduce((sum, client) => sum + Number(client?.totalDebt || 0), 0);
-  const topClient = clients.reduce(
-    (best, current) => (Number(best?.totalBookings || 0) > Number(current?.totalBookings || 0) ? best : current),
-    { name: '-', totalBookings: 0 }
-  );
 
   const openCreateClient = () => {
     setEditingClientId('');
@@ -924,6 +919,20 @@ export default function AdminClientesPlayground2Page() {
     [selectedDebtBreakdown]
   );
 
+  const resolveCustomDraftAmount = useCallback(
+    (itemId: string, maxForItem: number, customDraftById: Record<string, string>) => {
+      const normalizedMax = Math.max(0, Number(maxForItem || 0));
+      const hasDraft = Object.prototype.hasOwnProperty.call(customDraftById, itemId);
+      if (!hasDraft) return normalizedMax;
+      const rawDraft = String(customDraftById[itemId] ?? '').trim();
+      if (rawDraft === '') return 0;
+      const parsed = Number(rawDraft.replace(',', '.'));
+      if (!Number.isFinite(parsed)) return normalizedMax;
+      return Math.max(0, Math.min(normalizedMax, parsed));
+    },
+    []
+  );
+
   const computeConceptBasedMaxAmount = useCallback(
     (
       preset: PaymentQuickPreset,
@@ -940,11 +949,10 @@ export default function AdminClientesPlayground2Page() {
           pendingAccountItems
             .filter((item) => allowedIds.has(String(item.id)))
             .reduce((sum, item) => {
+              const itemId = String(item.id);
               const fallback = Number(item.remainingAmount || 0);
-              const rawDraft = String(customDrafts[String(item.id)] ?? '').trim();
-              const parsed = Number(rawDraft.replace(',', '.'));
-              const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
-              return sum + Math.max(0, Math.min(fallback, resolved));
+              const resolved = resolveCustomDraftAmount(itemId, fallback, customDrafts);
+              return sum + resolved;
             }, 0)
             .toFixed(2)
         );
@@ -956,7 +964,7 @@ export default function AdminClientesPlayground2Page() {
           .toFixed(2)
       );
     },
-    [pendingAccountItems, resolvePresetItemIds, simplifiedPaymentCustomItemAmountDraftById]
+    [pendingAccountItems, resolveCustomDraftAmount, resolvePresetItemIds, simplifiedPaymentCustomItemAmountDraftById]
   );
 
   const computeCustomSelectedAmount = useCallback(
@@ -966,16 +974,15 @@ export default function AdminClientesPlayground2Page() {
         pendingAccountItems
           .filter((item) => selectedSet.has(String(item.id)))
           .reduce((sum, item) => {
+            const itemId = String(item.id);
             const fallback = Number(item.remainingAmount || 0);
-            const rawDraft = String(customAmountDraftById[String(item.id)] ?? '').trim();
-            const parsed = Number(rawDraft.replace(',', '.'));
-            const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
-            return sum + Math.max(0, Math.min(fallback, resolved));
+            const resolved = resolveCustomDraftAmount(itemId, fallback, customAmountDraftById);
+            return sum + resolved;
           }, 0)
           .toFixed(2)
       );
     },
-    [pendingAccountItems]
+    [pendingAccountItems, resolveCustomDraftAmount]
   );
 
   const applySimplifiedPaymentQuickPreset = useCallback(
@@ -1040,14 +1047,9 @@ export default function AdminClientesPlayground2Page() {
       if (remaining <= EPSILON) break;
       const itemId = String(item.id);
       const maxForItem = Number(item.remainingAmount || 0);
-      const rawCustom = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
-      const parsedCustom = Number(rawCustom.replace(',', '.'));
       const desiredForItem =
         simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS'
-          ? Math.max(
-              0,
-              Math.min(maxForItem, rawCustom === '' ? 0 : Number.isFinite(parsedCustom) ? parsedCustom : maxForItem)
-            )
+          ? resolveCustomDraftAmount(itemId, maxForItem, simplifiedPaymentCustomItemAmountDraftById)
           : maxForItem;
       const amount = Number(Math.min(desiredForItem, remaining).toFixed(2));
       if (amount <= EPSILON) continue;
@@ -1058,6 +1060,7 @@ export default function AdminClientesPlayground2Page() {
   }, [
     pendingAccountItems,
     playtomicPreviewRequestedAmount,
+    resolveCustomDraftAmount,
     resolvePresetItemIds,
     simplifiedPaymentCustomItemAmountDraftById,
     simplifiedPaymentQuickPreset,
@@ -1089,14 +1092,9 @@ export default function AdminClientesPlayground2Page() {
           if (remaining <= EPSILON) break;
           const itemId = String(item.id);
           const maxForItem = Number(item.remainingAmount || 0);
-          const rawCustom = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
-          const parsedCustom = Number(rawCustom.replace(',', '.'));
           const desiredForItem =
             simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS'
-              ? Math.max(
-                  0,
-                  Math.min(maxForItem, rawCustom === '' ? 0 : Number.isFinite(parsedCustom) ? parsedCustom : maxForItem)
-                )
+              ? resolveCustomDraftAmount(itemId, maxForItem, simplifiedPaymentCustomItemAmountDraftById)
               : maxForItem;
           const amount = Number(Math.min(desiredForItem, remaining).toFixed(2));
           if (amount <= EPSILON) continue;
@@ -1172,6 +1170,7 @@ export default function AdminClientesPlayground2Page() {
       loadClients,
       pendingAccountItems,
       playtomicPreviewRequestedAmount,
+      resolveCustomDraftAmount,
       resolvePresetItemIds,
       selectedClientId,
       selectedDebtEntry,
@@ -1284,23 +1283,14 @@ export default function AdminClientesPlayground2Page() {
   return (
     <>
       <Head>
-        <title>Clientes Playground 2 | TuCancha Admin</title>
+        <title>Clientes | TuCancha Admin</title>
       </Head>
 
       <AdminPlaygroundShell activeItem="Clientes" user={user} contentMuted={sidebarOpen}>
         <div className="flex h-full min-h-0 flex-col gap-4 p-4 lg:p-6">
-              <header className="rounded-xl border border-[#dce2ee] bg-white px-4 py-3 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
-                <div className="flex flex-wrap items-center gap-3 md:gap-4">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#3053e2] text-white shadow-[0_10px_24px_rgba(48,83,226,0.24)]">
-                    <Users size={18} />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-base font-semibold text-[#1f2638]">Clientes Playground</h1>
-                    <p className="text-[12px] text-[#6f7890]">Estructura nueva sin dependencia de la UI legacy, con funcionalidades existentes.</p>
-                  </div>
-
-                  <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white p-1">
+              <header className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+                <div className="overflow-x-auto">
+                  <div className="inline-flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white p-1 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={() => setActiveView('directory')}
@@ -1326,20 +1316,16 @@ export default function AdminClientesPlayground2Page() {
                         activeView === 'history' ? 'bg-[#edf1ff] text-[#3053e2]' : 'text-[#6f7890] hover:bg-[#f8f9fd]'
                       }`}
                     >
-                      Perfil e historial
+                      Perfil
                     </button>
                   </div>
                 </div>
               </header>
 
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Total clientes</p>
                   <p className="mt-2 text-lg font-semibold text-[#1f2638]">{totalClients}</p>
-                </article>
-                <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Cliente mas fiel</p>
-                  <p className="mt-2 truncate text-lg font-semibold text-[#1f2638]">{getClientName(topClient)}</p>
                 </article>
                 <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Deuda total</p>
@@ -1685,7 +1671,7 @@ export default function AdminClientesPlayground2Page() {
           />
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <div
-              className="flex max-h-[85vh] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+              className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
@@ -1694,7 +1680,7 @@ export default function AdminClientesPlayground2Page() {
                     {isPlaytomicPaymentModal ? 'Registrar cobro' : 'Registrar pago'}
                   </p>
                   <p className="text-[12px] text-[#707a92]">
-                    Cobro sobre deuda común de la reserva. Elegí método, conceptos y monto.
+                    Elegi metodo y monto. Si hace falta, ajusta conceptos.
                   </p>
                 </div>
                 <button
@@ -1707,35 +1693,14 @@ export default function AdminClientesPlayground2Page() {
                 </button>
               </div>
 
-              <div className="space-y-4 overflow-y-auto px-4 py-4">
+              <div className="space-y-3 overflow-hidden px-4 py-3">
                 {debtLoading ? (
                   <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Cargando detalle de cuenta...</div>
                 ) : !selectedDebtEntry ? (
                   <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Selecciona una cuenta para cobrar.</div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
-                      <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
-                        <p>Total</p>
-                        <p className="text-[13px] font-semibold text-[#273149]">
-                          {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
-                        <p>Pagado</p>
-                        <p className="text-[13px] font-semibold text-[#16733f]">
-                          {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
-                        <p>Deuda</p>
-                        <p className="text-[13px] font-semibold text-[#9a5a00]">
-                          {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
                       <div className="block">
                         <span className="text-[12px] font-medium text-[#79829a]">Método</span>
                         <select
@@ -1765,7 +1730,7 @@ export default function AdminClientesPlayground2Page() {
                       )}
                     </div>
 
-                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
                       <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a cobrar</p>
                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
                         {[
@@ -1790,19 +1755,18 @@ export default function AdminClientesPlayground2Page() {
                           );
                         })}
                       </div>
-                      <p className="mt-2 text-[11px] text-[#6f7890]">
-                        {simplifiedPaymentQuickPreset === 'FULL'
-                          ? 'Deuda común completa de la reserva.'
-                          : simplifiedPaymentQuickPreset === 'COURT_ONLY'
-                            ? 'Solo el saldo pendiente de cancha.'
-                            : 'Elegí manualmente qué conceptos cobrar en este pago.'}
-                      </p>
                     </div>
 
                     {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-[12px] font-semibold text-[#44506b]">Selección manual</p>
+                          <span className="text-[11px] font-semibold text-[#6f7890]">
+                            Total: {computeCustomSelectedAmount(
+                              simplifiedPaymentSelectedItemIdsDraft,
+                              simplifiedPaymentCustomItemAmountDraftById
+                            ).toFixed(2)} $
+                          </span>
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -1835,12 +1799,6 @@ export default function AdminClientesPlayground2Page() {
                             </button>
                           </div>
                         </div>
-                        <p className="mt-2 text-[11px] text-[#6f7890]">
-                          Total seleccionado: {computeCustomSelectedAmount(
-                            simplifiedPaymentSelectedItemIdsDraft,
-                            simplifiedPaymentCustomItemAmountDraftById
-                          ).toFixed(2)} $
-                        </p>
                         <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
                           {pendingAccountItems.length === 0 ? (
                             <p className="px-1 py-2 text-[12px] text-[#7a8398]">No hay conceptos con deuda pendiente.</p>
@@ -1931,7 +1889,7 @@ export default function AdminClientesPlayground2Page() {
                     )}
 
                     <label className="block">
-                      <span className="text-[12px] font-medium text-[#79829a]">Monto</span>
+                      <span className="text-[12px] font-medium text-[#79829a]">Monto final</span>
                       <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
                         <input
                           type="number"
@@ -1944,7 +1902,7 @@ export default function AdminClientesPlayground2Page() {
                         <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
                       </div>
                       <p className="mt-1 text-[11px] text-[#6f7890]">
-                        Máximo para este cobro: {simplifiedPaymentMaxAmount.toFixed(2)} $
+                        Maximo: {simplifiedPaymentMaxAmount.toFixed(2)} $
                       </p>
                     </label>
 
@@ -1953,6 +1911,7 @@ export default function AdminClientesPlayground2Page() {
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-4 py-3">
+                <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={closeSimplifiedPaymentModal}
@@ -1968,6 +1927,7 @@ export default function AdminClientesPlayground2Page() {
                 >
                   {isPlaytomicPaymentModal ? 'Continuar' : 'Registrar pago'}
                 </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1991,7 +1951,10 @@ export default function AdminClientesPlayground2Page() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-              <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cobro</h3>
+              <div>
+                <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cobro</h3>
+                <p className="mt-1 text-[12px] text-[#6f7890]">Revisa estos datos antes de confirmar.</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
@@ -2001,19 +1964,24 @@ export default function AdminClientesPlayground2Page() {
               </button>
             </div>
             <div className="px-5 py-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478]">
-                  <p>Monto a cobrar</p>
-                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRequestedAmount.toFixed(2)} $</p>
+              <div className="rounded-lg border border-[#e0e5f2] bg-white">
+                <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+                  Resumen final
                 </div>
-                <div className="rounded-lg bg-[#eef6ff] px-3 py-2 text-xs text-[#3155df]">
-                  <p>Saldo luego del cobro</p>
-                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRemainingAfter.toFixed(2)} $</p>
+                <div className="divide-y divide-[#eef2f8] text-[13px]">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[#6f7890]">Monto a cobrar</span>
+                    <strong className="text-[#1f2a44]">{playtomicPreviewRequestedAmount.toFixed(2)} $</strong>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[#6f7890]">Saldo luego del cobro</span>
+                    <strong className="text-[#1f2a44]">{playtomicPreviewRemainingAfter.toFixed(2)} $</strong>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[#6f7890]">Metodo</span>
+                    <strong className="text-[#1f2a44]">{simplifiedPaymentMethodLabel}</strong>
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-lg border border-[#e0e5f2] bg-white px-3 py-2">
-                <p className="text-[12px] text-[#6f7890]">Método</p>
-                <p className="text-[14px] font-semibold text-[#2a3245]">{simplifiedPaymentMethodLabel}</p>
               </div>
               <div className="rounded-lg border border-[#e0e5f2] bg-white">
                 <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
@@ -2038,7 +2006,7 @@ export default function AdminClientesPlayground2Page() {
                   onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
                   className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
                 >
-                  Volver
+                  Editar cobro
                 </button>
                 <button
                   type="button"
