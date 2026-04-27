@@ -7,6 +7,7 @@ import { formatRefundExecutionMethod, formatRefundStatus } from '../../modules/r
 import RefundList from './refunds/RefundList';
 import RefundLifecycleActions from './refunds/RefundLifecycleActions';
 import { formatAccountCode, formatPaymentCode, formatRefundCode } from '../../utils/displayCode';
+import { AdminPageHeader, AdminPanel } from './ui';
 
 const STATUS_OPTIONS: Array<{ value: 'ALL' | RefundStatus; label: string }> = [
   { value: 'ALL', label: 'Todos' },
@@ -35,18 +36,18 @@ const formatDateTime = (value?: string | null) => {
 
 function DetailItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="rounded-xl border border-[#347048]/10 bg-white px-3 py-2.5">
-      <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/55">{label}</p>
-      <p className={`mt-1 text-sm font-bold ${mono ? 'font-mono text-[12px] break-all' : ''}`}>{value || '-'}</p>
+    <div className="rounded-xl border border-[#e1e6f0] bg-white px-3 py-2.5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7a8499]">{label}</p>
+      <p className={`mt-1 text-sm font-bold text-[#1f2638] ${mono ? 'font-mono text-[12px] break-all' : ''}`}>{value || '-'}</p>
     </div>
   );
 }
 
 function DetailBlock({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
   return (
-    <div className="rounded-xl border border-[#347048]/10 bg-white px-3 py-3">
-      <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/55">{label}</p>
-      <p className={`mt-1 text-sm font-semibold whitespace-pre-wrap break-words ${mono ? 'font-mono text-[12px]' : ''}`}>
+    <div className="rounded-xl border border-[#e1e6f0] bg-white px-3 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7a8499]">{label}</p>
+      <p className={`mt-1 text-sm font-semibold whitespace-pre-wrap break-words text-[#1f2638] ${mono ? 'font-mono text-[12px]' : ''}`}>
         {value && value.trim() ? value : '-'}
       </p>
     </div>
@@ -149,27 +150,28 @@ export default function AdminTabRefunds() {
   };
 
   return (
-    <div className="bg-[#EBE1D8] border-4 border-white/60 rounded-[2rem] p-6 md:p-8 shadow-2xl shadow-[#347048]/25 text-[#347048] space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black uppercase italic tracking-tight">Bandeja de devoluciones</h2>
-          <p className="text-xs font-black uppercase tracking-widest text-[#347048]/60 mt-1">Solicitudes de cuentas y turnos en un solo flujo.</p>
-        </div>
-        <button
-          type="button"
-          onClick={load}
-          className="h-10 px-4 rounded-xl border border-[#347048]/20 bg-white text-xs font-black uppercase tracking-wide hover:border-[#347048]/35 transition-colors"
-        >
-          Recargar
-        </button>
-      </div>
+    <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-4">
+      <AdminPageHeader
+        eyebrow="Caja"
+        title="Devoluciones"
+        description="Solicitudes de cuentas y reservas en un flujo auditable."
+        actions={
+          <button
+            type="button"
+            onClick={load}
+            className="h-10 rounded-lg border border-[#dce2ee] bg-white px-4 text-xs font-bold uppercase tracking-[0.14em] text-[#46516a] transition hover:bg-[#f8faff]"
+          >
+            Recargar
+          </button>
+        }
+      />
 
-      <div className="rounded-2xl border border-[#347048]/15 bg-white/80 p-3 md:p-4">
+      <AdminPanel>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'ALL' | RefundStatus)}
-            className="h-10 border border-[#347048]/20 rounded-xl px-3 bg-white text-sm font-semibold"
+            className="h-10 rounded-lg border border-[#d9dfeb] bg-white px-3 text-sm font-semibold text-[#1f2638] outline-none focus:border-[#6f7edb] focus:ring-3 focus:ring-[#6f7edb]/10"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -181,13 +183,13 @@ export default function AdminTabRefunds() {
             value={paymentIdFilter}
             onChange={(e) => setPaymentIdFilter(e.target.value)}
             placeholder="Filtrar por pago"
-            className="h-10 border border-[#347048]/20 rounded-xl px-3 bg-white text-sm font-semibold placeholder:text-[#347048]/45"
+            className="h-10 rounded-lg border border-[#d9dfeb] bg-white px-3 text-sm font-semibold text-[#1f2638] placeholder:text-[#98a1b3] outline-none focus:border-[#6f7edb] focus:ring-3 focus:ring-[#6f7edb]/10"
           />
           <input
             value={accountIdFilter}
             onChange={(e) => setAccountIdFilter(e.target.value)}
             placeholder="Filtrar por cuenta"
-            className="h-10 border border-[#347048]/20 rounded-xl px-3 bg-white text-sm font-semibold placeholder:text-[#347048]/45"
+            className="h-10 rounded-lg border border-[#d9dfeb] bg-white px-3 text-sm font-semibold text-[#1f2638] placeholder:text-[#98a1b3] outline-none focus:border-[#6f7edb] focus:ring-3 focus:ring-[#6f7edb]/10"
           />
           <button
             type="button"
@@ -197,37 +199,39 @@ export default function AdminTabRefunds() {
               setAccountIdFilter('');
             }}
             disabled={!hasActiveFilters}
-            className="h-10 rounded-xl border border-[#347048]/20 bg-[#EBE1D8] text-xs font-black uppercase tracking-wide disabled:opacity-40"
+            className="h-10 rounded-lg border border-[#dce2ee] bg-[#f8faff] text-xs font-bold uppercase tracking-[0.14em] text-[#46516a] disabled:opacity-40"
           >
             Limpiar filtros
           </button>
         </div>
-      </div>
+      </AdminPanel>
 
       {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-600">{error}</div> : null}
 
-      <RefundList
-        refunds={refunds}
-        loading={loading}
-        emptyText="No hay devoluciones para los filtros seleccionados."
-        maxHeightClass="max-h-[65vh]"
-        actionBusyId={actionBusyId}
-        selectedRefundId={selectedRefundId}
-        onSelectRefund={(refund) => setSelectedRefundId(refund.id)}
-        renderActions={(refund, isBusy) => (
-          <RefundLifecycleActions
-            status={refund.status}
-            disabled={isBusy}
-            handlers={{
-              onApprove: (executeNow) => onApprove(refund, executeNow),
-              onExecute: () => onExecute(refund),
-              onRetry: (executeNow) => onRetry(refund, executeNow),
-              onFail: () => onFail(refund),
-              onCancel: () => onCancel(refund)
-            }}
-          />
-        )}
-      />
+      <AdminPanel title="Bandeja" description={`${refunds.length} devoluciones encontradas.`}>
+        <RefundList
+          refunds={refunds}
+          loading={loading}
+          emptyText="No hay devoluciones para los filtros seleccionados."
+          maxHeightClass="max-h-[65vh]"
+          actionBusyId={actionBusyId}
+          selectedRefundId={selectedRefundId}
+          onSelectRefund={(refund) => setSelectedRefundId(refund.id)}
+          renderActions={(refund, isBusy) => (
+            <RefundLifecycleActions
+              status={refund.status}
+              disabled={isBusy}
+              handlers={{
+                onApprove: (executeNow) => onApprove(refund, executeNow),
+                onExecute: () => onExecute(refund),
+                onRetry: (executeNow) => onRetry(refund, executeNow),
+                onFail: () => onFail(refund),
+                onCancel: () => onCancel(refund)
+              }}
+            />
+          )}
+        />
+      </AdminPanel>
 
       {mounted && selectedRefund && createPortal(
         <div

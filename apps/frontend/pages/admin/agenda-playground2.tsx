@@ -6,6 +6,17 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Cloc
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
+import AgendaBookingBlock from '../../components/admin/agenda/AgendaBookingBlock';
+import AgendaSelectionPreview from '../../components/admin/agenda/AgendaSelectionPreview';
+import AgendaSlotLayer from '../../components/admin/agenda/AgendaSlotLayer';
+import AgendaTimeGutter from '../../components/admin/agenda/AgendaTimeGutter';
+import AgendaToolbar from '../../components/admin/agenda/AgendaToolbar';
+import BookingHoverCard from '../../components/admin/agenda/BookingHoverCard';
+import {
+  AdminPaymentFormModal,
+  AdminPaymentPreconfirmModal,
+  AdminPaymentResultModal,
+} from '../../components/admin/payments/AdminPaymentFlowModals';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { ClubAdminService, type BookingBillingConfig } from '../../services/ClubAdminService';
 import { cancelBooking, cancelFixedBooking, confirmBooking, createBooking, createFixedBooking, getAdminSchedule, getBookingBillingConfig, getBookingById, getBookingFinancialSummary, getBookingQuote, getBookingTimelineEvents, registerBookingPartialPayment, rescheduleFixedBooking, updateBookingBillingConfig, type BookingDomainEvent } from '../../services/BookingService';
@@ -2420,7 +2431,7 @@ export default function AdminAgendaPlaygroundPage() {
   useEffect(() => {
     if (!drawerOpen) return;
     setBookingHoverPreview(null);
-  }, [drawerOpen, resetConsumptionsDraft]);
+  }, [drawerOpen, resetConsumptionsDraft, setExpandedParticipantId, setParticipantMenuId]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -2435,7 +2446,7 @@ export default function AdminAgendaPlaygroundPage() {
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [drawerOpen, resetConsumptionsDraft]);
+  }, [drawerOpen, resetConsumptionsDraft, setExpandedParticipantId, setParticipantMenuId]);
 
   useEffect(() => {
     const clearCloseCleanupTimer = () => {
@@ -2495,7 +2506,7 @@ export default function AdminAgendaPlaygroundPage() {
     return () => {
       clearCloseCleanupTimer();
     };
-  }, [drawerOpen, resetConsumptionsDraft]);
+  }, [drawerOpen, resetConsumptionsDraft, setExpandedParticipantId, setParticipantMenuId]);
 
   useEffect(() => {
     if (drawerOpen) return;
@@ -4480,6 +4491,8 @@ export default function AdminAgendaPlaygroundPage() {
     effectiveSingleChargeResponsibleParticipantId,
     participants,
     paymentMode,
+    setExpandedParticipantId,
+    setParticipantMenuId,
     simplifiedEditingParticipantId,
     simplifiedPaymentPayerParticipantIdDraft,
   ]);
@@ -8480,132 +8493,34 @@ export default function AdminAgendaPlaygroundPage() {
             )}
             <div className="h-full min-w-0">
               <div className="h-full flex flex-col p-4 lg:p-6 gap-4">
-                <div className="rounded-2xl border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
-                  <div className="min-w-0 flex-1 overflow-x-auto">
-                    <div className="flex w-max items-center gap-2 pr-1">
-                      {availableSports.map((sport) => (
-                        <button
-                          key={sport}
-                          type="button"
-                          onClick={() => setSportFilter(sport)}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            sportFilter === sport
-                              ? 'bg-[#1d2248] text-white shadow-sm'
-                              : 'bg-[#f5f6f8] text-[#6b7280] hover:bg-[#edf0f4]'
-                          }`}
-                        >
-                          {sport}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="shrink-0">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => moveDate(-1)}
-                        className="h-9 w-9 rounded-lg border border-[#e5e7eb] grid place-items-center text-[#727b8d] hover:bg-[#f7f8fb]"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <div className="relative h-9 w-[170px]">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const input = quickDateInputRef.current;
-                            if (!input) return;
-                            if (isQuickDatePickerOpen) {
-                              input.blur();
-                              setIsQuickDatePickerOpen(false);
-                              return;
-                            }
-                            const anyInput = input as HTMLInputElement & { showPicker?: () => void };
-                            if (typeof anyInput.showPicker === 'function') {
-                              setIsQuickDatePickerOpen(true);
-                              anyInput.showPicker();
-                            } else {
-                              setIsQuickDatePickerOpen(true);
-                              input.focus();
-                              input.click();
-                            }
-                          }}
-                          className="h-9 w-full px-3 rounded-lg border border-[#e5e7eb] text-sm font-medium text-[#232a3a] inline-flex items-center gap-2 bg-white hover:bg-[#f8f9fc]"
-                        >
-                        <CalendarDays size={14} className="text-[#7a8398]" />
-                        <span className="truncate tabular-nums">
-                          {selectedDate.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: 'short' })}
-                        </span>
-                        </button>
-                        <input
-                          ref={quickDateInputRef}
-                          type="date"
-                          value={formatLocalDate(selectedDate)}
-                          onFocus={() => setIsQuickDatePickerOpen(true)}
-                          onBlur={() => setIsQuickDatePickerOpen(false)}
-                          onChange={(event) => {
-                            const next = new Date(`${event.target.value}T12:00:00`);
-                            if (!Number.isNaN(next.getTime())) {
-                              setSelectedDate(next);
-                              setFormError('');
-                            }
-                            setIsQuickDatePickerOpen(false);
-                          }}
-                          className="absolute inset-0 opacity-0 pointer-events-none"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => moveDate(1)}
-                        className="h-9 w-9 rounded-lg border border-[#e5e7eb] grid place-items-center text-[#727b8d] hover:bg-[#f7f8fb]"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openQuickCreateBooking(visibleCourts[0]?.id)}
-                        className="h-9 rounded-lg bg-[#2f4fd8] px-3 text-sm font-semibold text-white inline-flex items-center gap-1.5 hover:bg-[#2746c1]"
-                      >
-                        <Plus size={14} />
-                        Crear reserva
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <AgendaToolbar
+                  availableSports={availableSports}
+                  sportFilter={sportFilter}
+                  selectedDate={selectedDate}
+                  quickDateInputRef={quickDateInputRef}
+                  isQuickDatePickerOpen={isQuickDatePickerOpen}
+                  onSportFilterChange={setSportFilter}
+                  onQuickDatePickerOpenChange={setIsQuickDatePickerOpen}
+                  onDateChange={(nextDate) => {
+                    setSelectedDate(nextDate);
+                    setFormError('');
+                  }}
+                  onMoveDate={moveDate}
+                  onCreateBooking={() => openQuickCreateBooking(visibleCourts[0]?.id)}
+                />
 
                 <div className="flex-1 rounded-2xl border border-[#e5e7eb] bg-white overflow-hidden">
                   <div className="h-full overflow-auto">
                     <div className="min-w-max p-4">
                       <div className="flex min-w-full">
-                        <div className="w-[78px] shrink-0">
-                          <div className="h-10 border-b border-[#eef1f3]" />
-                          <div className="relative" style={{ height: gridHeight }}>
-                            {Array.from({ length: totalSlots }).map((_, slot) => {
-                              const showHourLabel = slot % slotsPerHour === 0;
-                              return (
-                                <div
-                                  key={`time-${slot}`}
-                                  className={`absolute left-0 right-0 ${
-                                    (slot + 1) % slotsPerHour === 0 ? 'border-b border-[#edf0f2]' : ''
-                                  }`}
-                                  style={{ top: slot * slotHeight, height: slotHeight }}
-                                >
-                                  {showHourLabel && (
-                                    <span className="absolute top-[4px] left-0 text-[11px] font-medium text-[#8b93a2]">
-                                      {slotToTime(slot)}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            {nowLineTop != null && (
-                              <div
-                                className="pointer-events-none absolute right-[2px] -translate-y-1/2 h-2.5 w-2.5 rounded-full bg-[#3a66e0] shadow-[0_0_0_2px_#ffffff]"
-                                style={{ top: nowLineTop, zIndex: 25 }}
-                              />
-                            )}
-                          </div>
-                        </div>
+                        <AgendaTimeGutter
+                          gridHeight={gridHeight}
+                          nowLineTop={nowLineTop}
+                          slotHeight={slotHeight}
+                          slotsPerHour={slotsPerHour}
+                          totalSlots={totalSlots}
+                          slotToTime={slotToTime}
+                        />
 
                         <div className="flex min-w-0 flex-1">
                           {visibleCourts.map((court) => {
@@ -8615,33 +8530,18 @@ export default function AdminAgendaPlaygroundPage() {
                                 <div className="h-10 border-b border-[#eef1f3] grid place-items-center text-xs font-semibold text-[#4b5563]">
                                   {court.name}
                                 </div>
-                                <div className="relative select-none" style={{ height: gridHeight }}>
-                                  {Array.from({ length: totalSlots }).map((_, slot) => (
-                                    <div
-                                      key={`${court.id}-slot-${slot}`}
-                                      role="button"
-                                      tabIndex={-1}
-                                      onMouseDown={(event) => handleSlotMouseDown(event, court.id, slot)}
-                                      onMouseEnter={() => handleSlotMouseEnter(court.id, slot)}
-                                      className={`transition ${
-                                        draggingBookingId
-                                          ? 'bg-white'
-                                          : isDragging
-                                            ? 'bg-white'
-                                            : 'bg-white hover:bg-[#f8faff]'
-                                      }`}
-                                      style={{
-                                        height: slotHeight,
-                                        borderBottom: (slot + 1) % slotsPerHour === 0 ? '1px solid #eef1f3' : 'none',
-                                      }}
-                                    />
-                                  ))}
-                                  {nowLineTop != null && (
-                                    <div
-                                      className="pointer-events-none absolute left-0 right-0 border-t border-[#3a66e0]"
-                                      style={{ top: nowLineTop, zIndex: 24 }}
-                                    />
-                                  )}
+                                <AgendaSlotLayer
+                                  courtId={court.id}
+                                  draggingBookingId={draggingBookingId}
+                                  gridHeight={gridHeight}
+                                  isDragging={isDragging}
+                                  nowLineTop={nowLineTop}
+                                  slotHeight={slotHeight}
+                                  slotsPerHour={slotsPerHour}
+                                  totalSlots={totalSlots}
+                                  onSlotMouseDown={handleSlotMouseDown}
+                                  onSlotMouseEnter={handleSlotMouseEnter}
+                                >
 
                                   {(() => {
                                     const hasDragSelection = dragSelection && dragSelection.courtId === court.id;
@@ -8659,71 +8559,29 @@ export default function AdminAgendaPlaygroundPage() {
                                     const range = hasDragSelection
                                       ? toSelectionRange(dragSelection as DraftSelection)
                                       : { start: selectedStartSlot, end: selectedEndSlot };
-                                    const top = range.start * slotHeight + 2;
-                                    const height = (range.end - range.start) * slotHeight - 4;
-                                    const durationMinutes = (range.end - range.start) * slotMinutes;
-                                    const visibility = blockContentVisibility(height);
+                                    const previewHeight = (range.end - range.start) * slotHeight - 4;
+                                    const visibility = blockContentVisibility(previewHeight);
                                     const drawerPreviewIsConflicted = isEditingMovedBookingPreview && hasConflict;
                                     const editedState = editingBooking?.state || 'pending';
                                     const editedPaymentState = editingBooking?.paymentState || 'unpaid';
                                     return (
-                                      <div
-                                        className={`pointer-events-none absolute left-1 right-1 rounded-lg text-[10px] shadow-sm overflow-hidden ${
-                                          visibility.showDurationOnly
-                                            ? 'px-2 flex items-center'
-                                            : 'px-2 py-1.5 leading-tight'
-                                        } ${isEditingMovedBookingPreview
-                                          ? drawerPreviewIsConflicted
-                                            ? 'border border-[#d13d57] bg-[#ffe8ee] text-[#8b1f3a]'
-                                            : 'border border-[#2f4fd8] bg-[#2f4fd81a] text-[#1d2a66]'
-                                          : 'border border-[#2f4fd8] bg-[#2f4fd81a]'
-                                        }`}
-                                        style={{ top, height }}
-                                      >
-                                        {isEditingMovedBookingPreview ? (
-                                          visibility.showDurationOnly ? (
-                                            <p className="w-full truncate text-[11px] font-semibold leading-none">
-                                              {editingBooking?.title || 'Reserva'}
-                                            </p>
-                                          ) : (
-                                            <>
-                                              {visibility.showBadge && (
-                                                <div className="mb-0.5 flex flex-wrap gap-1">
-                                                  {editingBooking?.isRecurring && (
-                                                    <Repeat size={12} className="text-current" />
-                                                  )}
-                                                  <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingBadgeColor(editedState)}`}>
-                                                    {bookingStatusLabel(editedState)}
-                                                  </div>
-                                                  <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingPaymentBadgeColor(editedPaymentState)}`}>
-                                                    {bookingPaymentLabel(editedPaymentState)}
-                                                  </div>
-                                                </div>
-                                              )}
-                                              {visibility.showTitle && (
-                                                <p className="font-semibold truncate">{editingBooking?.title || 'Reserva'}</p>
-                                              )}
-                                              {drawerPreviewIsConflicted && visibility.showTimeRange && (
-                                                <p className="font-semibold text-[#b42346]">Superposición</p>
-                                              )}
-                                              {visibility.showTimeRange && (
-                                                <p className="opacity-70">
-                                                  {slotToTime(range.start)} - {slotToTime(range.end)}
-                                                </p>
-                                              )}
-                                            </>
-                                          )
-                                        ) : (
-                                          <>
-                                            <p className="text-[10px] font-bold leading-none text-[#1d2a66]">{durationMinutes} min</p>
-                                            {!visibility.showDurationOnly && visibility.showTimeRange && (
-                                              <p className="text-[10px] text-[#1d2a66]/80">
-                                                {slotToTime(range.start)} - {slotToTime(range.end)}
-                                              </p>
-                                            )}
-                                          </>
-                                        )}
-                                      </div>
+                                      <AgendaSelectionPreview
+                                        range={range}
+                                        slotHeight={slotHeight}
+                                        slotMinutes={slotMinutes}
+                                        visibility={visibility}
+                                        slotToTime={slotToTime}
+                                        isEditingMovedBookingPreview={isEditingMovedBookingPreview}
+                                        isConflict={drawerPreviewIsConflicted}
+                                        title={editingBooking?.title || 'Reserva'}
+                                        state={editedState}
+                                        paymentState={editedPaymentState}
+                                        isRecurring={editingBooking?.isRecurring}
+                                        bookingBadgeColor={bookingBadgeColor}
+                                        bookingStatusLabel={bookingStatusLabel}
+                                        bookingPaymentBadgeColor={bookingPaymentBadgeColor}
+                                        bookingPaymentLabel={bookingPaymentLabel}
+                                      />
                                     );
                                   })()}
 
@@ -8731,51 +8589,28 @@ export default function AdminAgendaPlaygroundPage() {
                                     (() => {
                                       const top = bookingDropPreview.startSlot * slotHeight + 2;
                                       const height = (bookingDropPreview.endSlot - bookingDropPreview.startSlot) * slotHeight - 4;
-                                      const durationMinutes = (bookingDropPreview.endSlot - bookingDropPreview.startSlot) * slotMinutes;
                                       const visibility = blockContentVisibility(height);
                                       const isDropConflicted = bookingDropHasConflict;
                                       return (
-                                        <div
-                                        className={`pointer-events-none absolute z-20 left-1 right-1 rounded-lg text-[10px] shadow-sm overflow-hidden ${
-                                          visibility.showDurationOnly
-                                              ? 'px-2 flex items-center'
-                                              : 'px-2 py-1.5 leading-tight'
-                                          } ${isDropConflicted ? 'border border-[#d13d57] bg-[#ffe8ee] text-[#8b1f3a]' : bookingColor(draggingBookingMeta.state)}`}
+                                        <AgendaBookingBlock
+                                          title={draggingBookingMeta.title}
+                                          state={draggingBookingMeta.state}
+                                          paymentState={draggingBookingMeta.paymentState}
+                                          isRecurring={draggingBookingMeta.isRecurring}
+                                          startSlot={bookingDropPreview.startSlot}
+                                          endSlot={bookingDropPreview.endSlot}
+                                          slotMinutes={slotMinutes}
+                                          visibility={visibility}
+                                          slotToTime={slotToTime}
+                                          bookingBadgeColor={bookingBadgeColor}
+                                          bookingStatusLabel={bookingStatusLabel}
+                                          bookingPaymentBadgeColor={bookingPaymentBadgeColor}
+                                          bookingPaymentLabel={bookingPaymentLabel}
+                                          colorClass={isDropConflicted ? 'border border-[#d13d57] bg-[#ffe8ee] text-[#8b1f3a]' : bookingColor(draggingBookingMeta.state)}
+                                          isConflict={isDropConflicted}
+                                          className="pointer-events-none z-20 overflow-hidden"
                                           style={{ top, height, opacity: isDropConflicted ? 0.9 : 1 }}
-                                        >
-                                          {visibility.showDurationOnly ? (
-                                            <p className="w-full truncate text-[11px] font-semibold leading-tight">
-                                              {isDropConflicted ? 'Superposición' : draggingBookingMeta.title}
-                                            </p>
-                                          ) : (
-                                            <>
-                                              {visibility.showBadge && (
-                                                <div className="mb-0.5 flex flex-wrap gap-1">
-                                                  {draggingBookingMeta.isRecurring && (
-                                                    <Repeat size={12} className="text-current" />
-                                                  )}
-                                                  <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingBadgeColor(draggingBookingMeta.state)}`}>
-                                                    {bookingStatusLabel(draggingBookingMeta.state)}
-                                                  </div>
-                                                  <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingPaymentBadgeColor(draggingBookingMeta.paymentState)}`}>
-                                                    {bookingPaymentLabel(draggingBookingMeta.paymentState)}
-                                                  </div>
-                                                </div>
-                                              )}
-                                              {visibility.showTitle && (
-                                                <p className="font-semibold truncate">{draggingBookingMeta.title}</p>
-                                              )}
-                                              {isDropConflicted && visibility.showTimeRange && (
-                                                <p className="font-semibold text-[#b42346]">Superposición</p>
-                                              )}
-                                              {visibility.showTimeRange && (
-                                                <p className="opacity-70">
-                                                  {slotToTime(bookingDropPreview.startSlot)} - {slotToTime(bookingDropPreview.endSlot)}
-                                                </p>
-                                              )}
-                                            </>
-                                          )}
-                                        </div>
+                                        />
                                       );
                                     })()
                                   )}
@@ -8785,12 +8620,25 @@ export default function AdminAgendaPlaygroundPage() {
                                     if (drawerOpen && editingBookingId && hasScheduleChanges && String(booking.id) === String(editingBookingId)) return null;
                                     const top = booking.startSlot * slotHeight + 2;
                                     const height = (booking.endSlot - booking.startSlot) * slotHeight - 4;
-                                    const durationMinutes = (booking.endSlot - booking.startSlot) * slotMinutes;
                                     const visibility = blockContentVisibility(height);
                                     const isHovered = bookingHoverPreview?.booking?.id === booking.id;
                                     return (
-                                      <div
+                                      <AgendaBookingBlock
                                         key={booking.id}
+                                        title={booking.title}
+                                        state={booking.state}
+                                        paymentState={booking.paymentState}
+                                        isRecurring={booking.isRecurring}
+                                        startSlot={booking.startSlot}
+                                        endSlot={booking.endSlot}
+                                        slotMinutes={slotMinutes}
+                                        visibility={visibility}
+                                        slotToTime={slotToTime}
+                                        bookingBadgeColor={bookingBadgeColor}
+                                        bookingStatusLabel={bookingStatusLabel}
+                                        bookingPaymentBadgeColor={bookingPaymentBadgeColor}
+                                        bookingPaymentLabel={bookingPaymentLabel}
+                                        colorClass={bookingColor(booking.state)}
                                         onMouseDown={(event) => handleBookingMouseDown(event, booking)}
                                         onMouseEnter={(event) => {
                                           if (draggingBookingMetaRef.current || isDragging) return;
@@ -8820,42 +8668,11 @@ export default function AdminAgendaPlaygroundPage() {
                                             current?.booking?.id === booking.id ? null : current
                                           )
                                         }
-                                        className={`absolute left-1 right-1 rounded-lg text-[10px] shadow-sm overflow-visible ${
-                                          visibility.showDurationOnly
-                                            ? 'px-2 flex items-center'
-                                            : 'px-2 py-1.5 leading-tight'
-                                        } ${bookingColor(booking.state)}`}
                                         style={{ top, height, cursor: draggingBookingId ? 'grabbing' : 'grab', zIndex: isHovered ? 26 : 12 }}
-                                      >
-                                        <div className={`h-full rounded-lg overflow-hidden ${visibility.showDurationOnly ? 'flex items-center' : ''}`}>
-                                          {visibility.showDurationOnly ? (
-                                            <p className="w-full truncate text-[11px] font-semibold leading-none">{booking.title}</p>
-                                          ) : (
-                                            <>
-                                              {visibility.showBadge && (
-                                                <div className="mb-0.5 flex flex-wrap gap-1">
-                                                  {booking.isRecurring && (
-                                                    <Repeat size={12} className="text-current" />
-                                                  )}
-                                                  <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingBadgeColor(booking.state)}`}>
-                                                    {bookingStatusLabel(booking.state)}
-                                                  </div>
-                                                  <div className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bookingPaymentBadgeColor(booking.paymentState)}`}>
-                                                    {bookingPaymentLabel(booking.paymentState)}
-                                                  </div>
-                                                </div>
-                                              )}
-                                              {visibility.showTitle && <p className="font-semibold truncate">{booking.title}</p>}
-                                              {visibility.showTimeRange && (
-                                                <p className="opacity-70">{slotToTime(booking.startSlot)} - {slotToTime(booking.endSlot)}</p>
-                                              )}
-                                            </>
-                                          )}
-                                        </div>
-                                      </div>
+                                      />
                                     );
                                   })}
-                                </div>
+                                </AgendaSlotLayer>
                               </div>
                             );
                           })}
@@ -8868,61 +8685,11 @@ export default function AdminAgendaPlaygroundPage() {
             </div>
 
             {bookingHoverPreview && !draggingBookingId && !draggingBookingMeta && !isDragging && (
-              <div
-                className="pointer-events-none fixed z-40 hidden w-[280px] rounded-xl border border-[#e3e8f2] bg-white shadow-xl text-[#1f2738] lg:block"
-                style={{ left: bookingHoverPreview.x, top: bookingHoverPreview.y }}
-              >
-                <div className="px-3 py-2 border-b border-[#eef1f5] text-[12px] font-bold">
-                  Reserva
-                </div>
-                <div className="px-2 py-1.5">
-                  {resolveHoverParticipantsForBooking(bookingHoverPreview.booking).map((participant) => (
-                    <div key={participant.id} className="grid grid-cols-[16px_1fr_auto] items-start gap-2 px-1 py-1.5">
-                      <div className="h-4 w-4 rounded-full bg-[#e8edf7] text-[9px] font-bold text-[#41507a] grid place-items-center">
-                        {participant.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-[11px] font-semibold">{participant.name}</p>
-                        {participant.payable !== false && (
-                          <p className="text-[10px] text-[#7f8798]">
-                            {participant.status === 'PAID'
-                              ? 'Saldado'
-                              : `Debe ${Number(participant.debtAmount || 0).toFixed(2)} $`}
-                          </p>
-                        )}
-                        {participant.payable === false && participant.payer && participant.modeLabel === 'Pago único' && (
-                          <p className="text-[10px] text-[#5c6785]">
-                            Pagó {Number(participant.payerAmount || 0).toFixed(2)} $
-                          </p>
-                        )}
-                      </div>
-                      <span
-                        className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold mt-0.5 ${
-                          participant.payable === false && participant.payer && participant.modeLabel === 'Pago único'
-                            ? 'bg-[#e8eeff] text-[#3155df]'
-                            : participant.payable === false
-                            ? 'bg-[#f3f5f9] text-[#7c8598]'
-                            : participant.status === 'PAID'
-                            ? 'bg-[#e8f8ed] text-[#1c7a44]'
-                            : participant.status === 'PARTIAL'
-                              ? 'bg-[#fff4e5] text-[#9a5a00]'
-                              : 'bg-[#eef1f7] text-[#5c667f]'
-                        }`}
-                      >
-                        {participant.payable === false && participant.payer && participant.modeLabel === 'Pago único'
-                          ? 'Pagador'
-                          : participant.payable === false
-                          ? 'Sin cargo'
-                          : participant.status === 'PAID'
-                          ? 'Saldado'
-                          : participant.status === 'PARTIAL'
-                            ? 'Parcial'
-                            : 'Pendiente'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <BookingHoverCard
+                x={bookingHoverPreview.x}
+                y={bookingHoverPreview.y}
+                participants={resolveHoverParticipantsForBooking(bookingHoverPreview.booking)}
+              />
             )}
 
             {customRecurrenceModalOpen && (
@@ -12235,7 +12002,7 @@ export default function AdminAgendaPlaygroundPage() {
           />
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <div
-              className="w-full max-w-[700px] rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+              className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
@@ -12245,7 +12012,7 @@ export default function AdminAgendaPlaygroundPage() {
                   </p>
                   <p className="text-[12px] text-[#707a92]">
                     {isPlaytomicPaymentModal
-                      ? 'Cobro sobre deuda común de la reserva. Elegí método, conceptos y monto.'
+                      ? 'Elegi metodo y monto. Si hace falta, ajusta conceptos.'
                       : paymentMode === 'Único'
                         ? 'Pago único: una persona paga el total en uno o varios pagos parciales.'
                         : 'Pago dividido: cualquier participante puede registrar pagos y cubrir saldo del grupo.'}
@@ -12261,40 +12028,46 @@ export default function AdminAgendaPlaygroundPage() {
                 </button>
               </div>
 
-              <div className="space-y-4 px-4 py-4">
-                <div className="grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
-                  <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
-                    <p>Total</p>
-                    <p className="text-[13px] font-semibold text-[#273149]">
-                      {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
-                    </p>
+              <div className="space-y-3 overflow-hidden px-4 py-3">
+                {!isPlaytomicPaymentModal && (
+                  <div className="grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
+                    <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                      <p>Total</p>
+                      <p className="text-[13px] font-semibold text-[#273149]">
+                        {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                      <p>Pagado</p>
+                      <p className="text-[13px] font-semibold text-[#16733f]">
+                        {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                      <p>Deuda</p>
+                      <p className="text-[13px] font-semibold text-[#9a5a00]">
+                        {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
-                    <p>Pagado</p>
-                    <p className="text-[13px] font-semibold text-[#16733f]">
-                      {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
-                    <p>Deuda</p>
-                    <p className="text-[13px] font-semibold text-[#9a5a00]">
-                      {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
-                    </p>
-                  </div>
-                </div>
+                )}
 
                 {isPlaytomicPaymentModal ? (
                   <>
                     <div className="grid grid-cols-1 gap-3">
                       <div className="block">
                         <span className="text-[12px] font-medium text-[#79829a]">Método</span>
-                        <PlaygroundCombo
+                        <select
                           value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
-                          onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
-                          options={simplifiedPaymentMethodComboOptions}
-                          variant="participant"
-                          className="mt-1"
-                        />
+                          onChange={(event) => setSimplifiedPaymentMethodDraft(String(event.target.value || ''))}
+                          className="mt-1 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[14px] text-[#2a3245] outline-none focus:border-[#3053e2]"
+                        >
+                          {ownerPaymentMethodOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
@@ -12323,19 +12096,18 @@ export default function AdminAgendaPlaygroundPage() {
                           );
                         })}
                       </div>
-                      <p className="mt-2 text-[11px] text-[#6f7890]">
-                        {simplifiedPaymentQuickPreset === 'FULL'
-                          ? 'Deuda común completa de la reserva.'
-                          : simplifiedPaymentQuickPreset === 'COURT_ONLY'
-                            ? 'Solo el saldo pendiente de cancha.'
-                            : 'Elegí manualmente qué conceptos cobrar en este pago.'}
-                      </p>
                     </div>
 
                     {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
                       <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-[12px] font-semibold text-[#44506b]">Selección manual</p>
+                          <span className="text-[11px] font-semibold text-[#6f7890]">
+                            Total: {computeCustomSelectedAmount(
+                              simplifiedPaymentSelectedItemIdsDraft,
+                              simplifiedPaymentCustomItemAmountDraftById
+                            ).toFixed(2)} $
+                          </span>
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -12370,12 +12142,6 @@ export default function AdminAgendaPlaygroundPage() {
                             </button>
                           </div>
                         </div>
-                        <p className="mt-2 text-[11px] text-[#6f7890]">
-                          Total seleccionado: {computeCustomSelectedAmount(
-                            simplifiedPaymentSelectedItemIdsDraft,
-                            simplifiedPaymentCustomItemAmountDraftById
-                          ).toFixed(2)} $
-                        </p>
                         <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
                           {pendingAccountItems.length === 0 ? (
                             <p className="px-1 py-2 text-[12px] text-[#7a8398]">
@@ -12490,6 +12256,24 @@ export default function AdminAgendaPlaygroundPage() {
                         </div>
                       </div>
                     )}
+
+                    <label className="block">
+                      <span className="text-[12px] font-medium text-[#79829a]">Monto final</span>
+                      <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={simplifiedPaymentAmountDraft}
+                          onChange={(event) => setSimplifiedPaymentAmountDraft(event.target.value)}
+                          className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
+                        />
+                        <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-[#6f7890]">
+                        Maximo: {simplifiedPaymentMaxAmount.toFixed(2)} $
+                      </p>
+                    </label>
 
                   </>
                 ) : (
@@ -12778,173 +12562,60 @@ export default function AdminAgendaPlaygroundPage() {
       {activePaymentModal?.flow === 'playtomicPayment' &&
         activePaymentModal.step === 'preconfirm' &&
         isPlaytomicPaymentModal && (
-        <div
-          className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
-          onPointerDown={handleModalBackdropPointerDown}
-          onPointerUp={(event) =>
+        <AdminPaymentPreconfirmModal
+          onBackdropPointerDown={handleModalBackdropPointerDown}
+          onBackdropPointerUp={(event) =>
             handleModalBackdropPointerUp(event, () =>
               setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })
             )
           }
-        >
-          <div
-            className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-              <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cobro</h3>
-              <button
-                type="button"
-                onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
-                className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <div className="px-5 py-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478]">
-                  <p>Monto a cobrar</p>
-                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRequestedAmount.toFixed(2)} $</p>
-                </div>
-                <div className="rounded-lg bg-[#eef6ff] px-3 py-2 text-xs text-[#3155df]">
-                  <p>Saldo luego del cobro</p>
-                  <p className="text-[15px] font-bold text-[#1f2a44]">{playtomicPreviewRemainingAfter.toFixed(2)} $</p>
-                </div>
-              </div>
-              <div className="rounded-lg border border-[#e0e5f2] bg-white px-3 py-2">
-                <p className="text-[12px] text-[#6f7890]">Método</p>
-                <p className="text-[14px] font-semibold text-[#2a3245]">{simplifiedPaymentMethodLabel}</p>
-              </div>
-              <div className="rounded-lg border border-[#e0e5f2] bg-white">
-                <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
-                  Conceptos que cubre
-                </div>
-                {playtomicPreviewConceptRows.length === 0 ? (
-                  <p className="px-3 py-3 text-[12px] text-[#7a8398]">No hay conceptos seleccionados.</p>
-                ) : (
-                  <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
-                    {playtomicPreviewConceptRows.map((row) => (
-                      <div key={`playtomic-preview-row-${row.id}`} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
-                        <span className="truncate pr-2">{row.label}</span>
-                        <strong className="text-[#2a3245]">{row.amount.toFixed(2)} $</strong>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
-                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
-                >
-                  Volver
-                </button>
-                <button
-                  type="button"
-                  onClick={() => queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
-                  className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
-                >
-                  Confirmar cobro
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+          methodValue={simplifiedPaymentMethodLabel}
+          summaryRows={[
+            { label: 'Monto a cobrar', value: `${playtomicPreviewRequestedAmount.toFixed(2)} $` },
+            { label: 'Saldo luego del cobro', value: `${playtomicPreviewRemainingAfter.toFixed(2)} $` },
+          ]}
+          conceptRows={playtomicPreviewConceptRows.map((row) => ({
+            id: `playtomic-preview-row-${row.id}`,
+            label: row.label,
+            value: `${row.amount.toFixed(2)} $`,
+          }))}
+          onBack={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+          onClose={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+          onConfirm={() => queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
+        />
       )}
 
       {activePaymentModal?.flow === 'playtomicPayment' &&
         activePaymentModal.step === 'result' &&
         playtomicResultModal && (
-        <div
-          className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
-          onPointerDown={handleModalBackdropPointerDown}
-          onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
-        >
-          <div
-            className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-              <h3
-                className={`text-[22px] font-bold tracking-[-0.01em] ${
-                  playtomicResultModal.variant === 'success'
-                    ? 'text-[#22724a]'
-                    : playtomicResultModal.variant === 'partial'
-                      ? 'text-[#9a5a00]'
-                      : 'text-[#b42346]'
-                }`}
-              >
-                {playtomicResultModal.title}
-              </h3>
-              <button
-                type="button"
-                onClick={closeSimplifiedPaymentModal}
-                className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <div className="px-5 py-5 space-y-4">
-              <p className="text-[14px] text-[#4b556d]">{playtomicResultModal.detail}</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
-                  <span>Solicitado</span>
-                  <strong>{playtomicResultModal.requestedAmount.toFixed(2)} $</strong>
-                </div>
-                <div className="rounded-lg bg-[#eef6ff] px-3 py-2 text-xs text-[#3155df] flex justify-between">
-                  <span>Aplicado</span>
-                  <strong>{playtomicResultModal.appliedAmount.toFixed(2)} $</strong>
-                </div>
-                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
-                  <span>Método</span>
-                  <strong>{playtomicResultModal.methodLabel}</strong>
-                </div>
-                <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
-                  <span>Saldo actual</span>
-                  <strong>{playtomicResultModal.remainingAfter.toFixed(2)} $</strong>
-                </div>
-              </div>
-              {playtomicResultModal.appliedItems.length > 0 && (
-                <div className="rounded-lg border border-[#e0e5f2] bg-white">
-                  <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
-                    Conceptos aplicados
-                  </div>
-                  <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
-                    {playtomicResultModal.appliedItems.map((row, index) => (
-                      <div key={`playtomic-result-row-${index}`} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
-                        <span className="truncate pr-2">{row.label}</span>
-                        <strong className="text-[#2a3245]">{row.amount.toFixed(2)} $</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeSimplifiedPaymentModal}
-                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
-                >
-                  Entendido
-                </button>
-                {playtomicResultModal.variant !== 'success' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
-                      void openSimplifiedPaymentModal();
-                    }}
-                    className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
-                  >
-                    Reintentar
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <AdminPaymentResultModal
+          onBackdropPointerDown={handleModalBackdropPointerDown}
+          onBackdropPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
+          title={playtomicResultModal.title}
+          detail={playtomicResultModal.detail}
+          variant={playtomicResultModal.variant}
+          summaryRows={[
+            { label: 'Solicitado', value: `${playtomicResultModal.requestedAmount.toFixed(2)} $` },
+            { label: 'Aplicado', value: `${playtomicResultModal.appliedAmount.toFixed(2)} $` },
+            { label: 'Método', value: playtomicResultModal.methodLabel },
+            { label: 'Saldo actual', value: `${playtomicResultModal.remainingAfter.toFixed(2)} $` },
+          ]}
+          conceptTitle="Conceptos aplicados"
+          conceptRows={playtomicResultModal.appliedItems.map((row, index) => ({
+            id: `playtomic-result-row-${index}`,
+            label: row.label,
+            value: `${row.amount.toFixed(2)} $`,
+          }))}
+          onClose={closeSimplifiedPaymentModal}
+          onRetry={
+            playtomicResultModal.variant !== 'success'
+              ? () => {
+                  setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
+                  void openSimplifiedPaymentModal();
+                }
+              : null
+          }
+        />
       )}
 
       <style jsx global>{`

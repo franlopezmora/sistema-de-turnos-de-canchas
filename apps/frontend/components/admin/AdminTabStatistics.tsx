@@ -1,18 +1,35 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend 
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
-import { DollarSign, Calendar, TrendingUp, CreditCard, Activity, RefreshCw, ChevronLeft, ChevronRight, ShoppingBag } from 'lucide-react';
+import {
+  Activity,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  DollarSign,
+  ShoppingBag,
+  TrendingUp,
+} from 'lucide-react';
 import { fetchWithAuth } from '../../utils/apiClient';
 import { getApiUrl } from '../../utils/apiUrl';
 import { reportUiError } from '../../utils/uiError';
+import { AdminPanel, AdminSegmentedControl } from './ui';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
-// Colores del gráfico de torta
-const COLORS = ['#347048', '#926699', '#B9CF32', '#FF8042'];
+const COLORS = ['#1f2638', '#3053e2', '#17b26a', '#f79009'];
 
 interface Props {
   slugProp?: string;
@@ -29,37 +46,42 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   VIRTUAL_WALLET: 'Billetera virtual',
   CASH_DRAWER: 'Caja',
   CARD_TERMINAL: 'Terminal',
-  AUTO: 'Automático'
+  AUTO: 'Automatico',
 };
+
+const periodOptions: Array<{ value: Period; label: string }> = [
+  { value: 'hoy', label: 'Hoy' },
+  { value: 'semana', label: 'Semana' },
+  { value: 'mes', label: 'Mes' },
+];
 
 const toPaymentMethodLabel = (method?: string) => {
   const key = String(method || '').trim().toUpperCase();
   return PAYMENT_METHOD_LABELS[key] || method || 'Otro';
 };
 
-export const getDateRange = (period: Period, offset: number = 0) => {
+export const getDateRange = (period: Period, offset = 0) => {
   const start = new Date();
   const end = new Date();
 
   if (period === 'hoy') {
     start.setDate(start.getDate() + offset);
     start.setHours(0, 0, 0, 0);
-    
+
     end.setDate(end.getDate() + offset);
     end.setHours(23, 59, 59, 999);
-  } 
-  else if (period === 'semana') {
-    const day = start.getDay() || 7; 
-    start.setDate(start.getDate() - day + 1 + (offset * 7));
+  } else if (period === 'semana') {
+    const day = start.getDay() || 7;
+    start.setDate(start.getDate() - day + 1 + offset * 7);
     start.setHours(0, 0, 0, 0);
-    
+
+    end.setTime(start.getTime());
     end.setDate(start.getDate() + 6);
     end.setHours(23, 59, 59, 999);
-  } 
-  else if (period === 'mes') {
+  } else if (period === 'mes') {
     start.setFullYear(start.getFullYear(), start.getMonth() + offset, 1);
     start.setHours(0, 0, 0, 0);
-    
+
     end.setFullYear(end.getFullYear(), end.getMonth() + offset + 1, 0);
     end.setHours(23, 59, 59, 999);
   }
@@ -67,32 +89,57 @@ export const getDateRange = (period: Period, offset: number = 0) => {
   return {
     startDate: start.toISOString(),
     endDate: end.toISOString(),
-    rawStart: start, 
-    rawEnd: end
+    rawStart: start,
+    rawEnd: end,
   };
 };
 
-export default function AdminTabStatistics({ slugProp }: Props) {
-  // 1. Obtención del slug
-  const params = useParams<{ slug: string }>();
-  const finalSlug = params?.slug || slugProp;
+function KpiCard({
+  icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  detail?: string;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-[#dce2ee] bg-white p-5 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#f1f4ff] text-[#3053e2]">
+          {icon}
+        </div>
+      </div>
+      <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">{label}</p>
+      <p className="mt-1 text-[24px] font-bold text-[#27314a]">{value}</p>
+      {detail && <p className="mt-1 text-[12px] text-[#6f7890]">{detail}</p>}
+    </div>
+  );
+}
 
-  // 2. Estados limpios
+function EmptyList({ label }: { label: string }) {
+  return <p className="text-sm font-semibold text-[#8b95aa]">{label}</p>;
+}
+
+export default function AdminTabStatistics({ slugProp }: Props) {
+  const finalSlug = slugProp;
+
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null); 
+  const [stats, setStats] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [activePeriod, setActivePeriod] = useState<Period>('mes');
-  const [periodOffset, setPeriodOffset] = useState<number>(0);
+  const [periodOffset, setPeriodOffset] = useState(0);
 
-  // 3. Funciones de UI
   const handlePeriodChange = (newPeriod: Period) => {
     setActivePeriod(newPeriod);
     setPeriodOffset(0);
   };
 
-  const getPeriodLabel = () => {
+  const getPeriodLabel = useCallback(() => {
     const { rawStart, rawEnd } = getDateRange(activePeriod, periodOffset);
-    
+
     if (activePeriod === 'mes') {
       return rawStart.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
     }
@@ -101,35 +148,31 @@ export default function AdminTabStatistics({ slugProp }: Props) {
       if (periodOffset === -1) return 'Ayer';
       return rawStart.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
     }
-    if (activePeriod === 'semana') {
-      if (periodOffset === 0) return 'Esta Semana';
-      if (periodOffset === -1) return 'Semana Pasada';
-      return `${rawStart.getDate()} al ${rawEnd.getDate()} ${rawEnd.toLocaleDateString('es-AR', { month: 'short' })}`;
-    }
-  };
+    if (periodOffset === 0) return 'Esta semana';
+    if (periodOffset === -1) return 'Semana pasada';
+    return `${rawStart.getDate()} al ${rawEnd.getDate()} ${rawEnd.toLocaleDateString('es-AR', { month: 'short' })}`;
+  }, [activePeriod, periodOffset]);
 
-  // 4. Lógica de conexión con el Backend
   const loadStats = useCallback(async () => {
+    if (!finalSlug) return;
     try {
-      setLoading(true); // Prendemos el loader al buscar datos nuevos
+      setLoading(true);
       setErrorMessage('');
       const { startDate, endDate } = getDateRange(activePeriod, periodOffset);
-      
       const url = `${apiBase()}/clubs/${finalSlug}/admin/stats/dashboard?startDate=${startDate}&endDate=${endDate}`;
-      
       const response = await fetchWithAuth(url);
-      
+
       if (response.ok) {
         const data = await response.json();
         const normalizedPaymentMethods = Array.isArray(data?.paymentMethods)
           ? data.paymentMethods.map((row: any) => ({
               ...row,
-              name: toPaymentMethodLabel(row?.name)
+              name: toPaymentMethodLabel(row?.name),
             }))
           : [];
         setStats({
           ...data,
-          paymentMethods: normalizedPaymentMethods
+          paymentMethods: normalizedPaymentMethods,
         });
       } else {
         reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, new Error(`Error del servidor: ${response.status}`));
@@ -139,331 +182,221 @@ export default function AdminTabStatistics({ slugProp }: Props) {
       reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, error);
       setErrorMessage('No se pudo conectar para traer estadisticas.');
     } finally {
-      setLoading(false); // 🔥 TRAMPA EVITADA: Apagamos el loader falle o no la petición
+      setLoading(false);
     }
-  }, [activePeriod, periodOffset, finalSlug]);
+  }, [activePeriod, finalSlug, periodOffset]);
 
-  // ÚNICO VIGILANTE: Escucha cambios en los filtros o el slug y carga los datos
   useEffect(() => {
-    if (finalSlug) { 
-      loadStats();
-    }
-  }, [finalSlug, loadStats]);
+    void loadStats();
+  }, [loadStats]);
 
-  // 5. Renders condicionales
-  if (loading && !stats) return (
-    <div className="flex items-center justify-center h-full min-h-[400px]">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#347048]"></div>
-    </div>
+  const averageTicket = useMemo(
+    () => (stats?.totalBookings > 0 ? stats.totalRevenue / stats.totalBookings : 0),
+    [stats?.totalBookings, stats?.totalRevenue]
   );
 
-  if (!stats) return (
-    <div className="p-8 text-center">
-        <p className="text-[#347048] font-bold text-lg">No hay datos disponibles para este período.</p>
-        <button onClick={loadStats} className="mt-4 px-4 py-2 bg-[#347048] text-white rounded-lg">Reintentar</button>
-    </div>
-  );
+  const topProducts = Array.isArray(stats?.products?.top) ? stats.products.top : [];
+  const bottomProducts = Array.isArray(stats?.products?.bottom) ? stats.products.bottom : [];
+  const unsoldProducts = Array.isArray(stats?.products?.unsold) ? stats.products.unsold : [];
 
-  const averageTicket = stats?.totalBookings > 0 ? stats.totalRevenue / stats.totalBookings : 0;
+  if (loading && !stats) {
+    return (
+      <div className="h-full min-h-0 overflow-y-auto">
+        <div className="flex min-h-[420px] items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#dce2ee] border-t-[#3053e2]" />
+        </div>
+      </div>
+    );
+  }
 
-  // 6. UI Principal
+  if (!stats) {
+    return (
+      <div className="h-full min-h-0 overflow-y-auto">
+        <div className="flex h-full min-h-0 w-full flex-col gap-4 p-4 lg:p-6">
+          <AdminPanel>
+            <p className="text-[12px] text-[#6f7890]">No hay datos disponibles para este periodo.</p>
+            <button
+              type="button"
+              onClick={() => void loadStats()}
+              className="mt-3 h-10 rounded-lg bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+            >
+              Reintentar
+            </button>
+          </AdminPanel>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 space-y-8 animate-in fade-in duration-500 pb-20">
-      
-      {/* TÍTULO DE SECCIÓN (Ahora más limpio, solo título y refresh) */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h2 className="text-3xl font-black text-[#EBE1D8] flex items-center gap-3 uppercase italic tracking-tighter">
-            <div className="bg-[#B9CF32] text-[#347048] p-2 rounded-xl shadow-lg shadow-[#B9CF32]/20">
-              <Activity size={28} strokeWidth={3} />
-            </div>
-            Estadísticas y Métricas
-          </h2>
-          <p className="text-[#EBE1D8]/60 text-xs font-bold uppercase tracking-[0.2em] mt-1 ml-14">
-            Resumen de rendimiento
-          </p>
+    <div className="h-full min-h-0 overflow-y-auto">
+    <div className="flex h-full min-h-0 w-full flex-col gap-4 p-4 pb-20 lg:p-6">
+
+      <AdminPanel bodyClassName="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center rounded-xl border border-[#dce2ee] bg-[#f8faff]">
+          <button
+            type="button"
+            onClick={() => setPeriodOffset((prev) => prev - 1)}
+            className="grid h-10 w-10 place-items-center text-[#46516a] transition hover:text-[#3053e2]"
+          >
+            <ChevronLeft size={18} strokeWidth={2.4} />
+          </button>
+          <span className="min-w-[140px] px-3 text-center text-[12px] font-semibold text-[#4e5870]">
+            {getPeriodLabel()}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPeriodOffset((prev) => prev + 1)}
+            disabled={periodOffset === 0}
+            className="grid h-10 w-10 place-items-center text-[#46516a] transition hover:text-[#3053e2] disabled:text-[#b8c1d4]"
+          >
+            <ChevronRight size={18} strokeWidth={2.4} />
+          </button>
         </div>
 
-        {/* REFRESH SOLAMENTE */}
-        <button 
-          onClick={loadStats}
-          className="bg-[#B9CF32] text-[#347048] p-3 rounded-2xl shadow-lg hover:scale-105 transition-transform shrink-0"
-          title="Actualizar datos"
+        <AdminSegmentedControl
+          ariaLabel="Periodo de informes"
+          value={activePeriod}
+          options={periodOptions}
+          onChange={(value) => handlePeriodChange(value as Period)}
+        />
+        <button
+          type="button"
+          onClick={() => void loadStats()}
+          className="h-9 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
         >
-          <RefreshCw size={20} strokeWidth={3} className={loading ? "animate-spin" : ""} />
+          Actualizar
         </button>
-      </div>
+      </AdminPanel>
 
       {errorMessage && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">
+        <div className="rounded-xl border border-[#ffd4d4] bg-[#fff5f5] px-4 py-3 text-[12px] font-semibold text-[#b42318]">
           {errorMessage}
         </div>
       )}
 
-      {/* KPI CARDS (Se mantienen iguales) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* ... (Tus tarjetas siguen aquí tal cual) ... */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#347048]/5 hover:shadow-md transition-all group relative overflow-hidden">
-           {/* ... Contenido Card 1 ... */}
-           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><DollarSign size={100} className="text-[#347048]" /></div>
-           <div className="flex justify-between items-start mb-4 relative z-10">
-             <div className="p-3 bg-[#EBE1D8] rounded-xl text-[#347048] group-hover:bg-[#347048] group-hover:text-white transition-colors"><DollarSign size={24} strokeWidth={2.5} /></div>
-             <span className="text-[10px] font-black uppercase tracking-widest text-[#347048] bg-[#347048]/10 px-2 py-1 rounded-lg">{activePeriod === 'hoy' ? 'Hoy' : activePeriod === 'semana' ? 'Semana' : 'Mes'}</span>
-           </div>
-           <p className="text-[#347048]/60 text-xs font-black uppercase tracking-widest mb-1 relative z-10">Facturación Total</p>
-           <h3 className="text-4xl font-black text-[#347048] relative z-10">${stats?.totalRevenue?.toLocaleString('es-AR') || 0}</h3>
-        </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#347048]/5 hover:shadow-md transition-all group relative overflow-hidden">
-           {/* ... Contenido Card 2 ... */}
-           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Calendar size={100} className="text-[#347048]" /></div>
-           <div className="flex justify-between items-start mb-4 relative z-10">
-             <div className="p-3 bg-[#EBE1D8] rounded-xl text-[#347048] group-hover:bg-[#347048] group-hover:text-white transition-colors"><Calendar size={24} strokeWidth={2.5} /></div>
-           </div>
-           <p className="text-[#347048]/60 text-xs font-black uppercase tracking-widest mb-1 relative z-10">Turnos Finalizados</p>
-           <h3 className="text-4xl font-black text-[#347048] relative z-10">{stats?.totalBookings || 0}</h3>
-        </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#347048]/5 hover:shadow-md transition-all group relative overflow-hidden">
-           {/* ... Contenido Card 3 ... */}
-           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><TrendingUp size={100} className="text-[#347048]" /></div>
-           <div className="flex justify-between items-start mb-4 relative z-10">
-             <div className="p-3 bg-[#EBE1D8] rounded-xl text-[#347048] group-hover:bg-[#347048] group-hover:text-white transition-colors"><TrendingUp size={24} strokeWidth={2.5} /></div>
-           </div>
-           <p className="text-[#347048]/60 text-xs font-black uppercase tracking-widest mb-1 relative z-10">Ticket Promedio</p>
-           <h3 className="text-4xl font-black text-[#347048] relative z-10">${averageTicket?.toLocaleString('es-AR') || 0}</h3>
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <KpiCard
+          icon={<DollarSign size={22} strokeWidth={2.4} />}
+          label="Facturacion total"
+          value={`$${Number(stats?.totalRevenue || 0).toLocaleString('es-AR')}`}
+          detail={activePeriod === 'hoy' ? 'Periodo diario' : activePeriod === 'semana' ? 'Periodo semanal' : 'Periodo mensual'}
+        />
+        <KpiCard
+          icon={<Calendar size={22} strokeWidth={2.4} />}
+          label="Turnos finalizados"
+          value={Number(stats?.totalBookings || 0).toLocaleString('es-AR')}
+        />
+        <KpiCard
+          icon={<TrendingUp size={22} strokeWidth={2.4} />}
+          label="Ticket promedio"
+          value={`$${Number(averageTicket || 0).toLocaleString('es-AR')}`}
+        />
       </div>
 
-      {/* SECCIÓN DE GRÁFICOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Gráfico 1: Evolución (CON TODO EL PANEL DE CONTROL INTEGRADO) */}
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm lg:col-span-2 border border-[#347048]/5 relative overflow-hidden">
-          
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-[#347048]/10 pb-4">
-            <h3 className="text-lg font-black text-[#347048] uppercase tracking-tight flex items-center gap-2">
-              Evolución: Turnos vs Bar
-            </h3>
-            
-            {/* PANEL DE CONTROL INTEGRADO */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Navegación de Fecha */}
-              <div className="flex items-center bg-[#EBE1D8]/50 rounded-xl overflow-hidden border border-[#347048]/10">
-                <button onClick={() => setPeriodOffset(prev => prev - 1)} className="p-2 text-[#347048] hover:bg-[#347048]/10 transition-colors">
-                  <ChevronLeft size={18} strokeWidth={3} />
-                </button>
-                <span className="text-[#347048] font-black text-xs uppercase italic px-3 min-w-[100px] text-center">
-                  {getPeriodLabel()}
-                </span>
-                <button onClick={() => setPeriodOffset(prev => prev + 1)} disabled={periodOffset === 0} className={`p-2 transition-colors ${periodOffset === 0 ? 'text-[#347048]/20' : 'text-[#347048] hover:bg-[#347048]/10'}`}>
-                  <ChevronRight size={18} strokeWidth={3} />
-                </button>
-              </div>
-
-              {/* Filtros HOY/SEMANA/MES */}
-              <div className="flex items-center gap-1 bg-[#EBE1D8]/50 p-1 rounded-lg border border-[#347048]/10">
-                <button onClick={() => handlePeriodChange('hoy')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activePeriod === 'hoy' ? 'bg-[#347048] text-white shadow-md' : 'text-[#347048] hover:bg-[#347048]/10'}`}>Hoy</button>
-                <button onClick={() => handlePeriodChange('semana')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activePeriod === 'semana' ? 'bg-[#347048] text-white shadow-md' : 'text-[#347048] hover:bg-[#347048]/10'}`}>Semana</button>
-                <button onClick={() => handlePeriodChange('mes')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activePeriod === 'mes' ? 'bg-[#347048] text-white shadow-md' : 'text-[#347048] hover:bg-[#347048]/10'}`}>Mes</button>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-80 w-full">
-             <ResponsiveContainer width="100%" height="100%">
-                {/* ... tu BarChart ... */}
-                <BarChart data={stats?.dailyEvolution || []} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 11, fontWeight: 600}} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 11, fontWeight: 600}} tickFormatter={(val) => `$${val/1000}k`} />
-                  <Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
-                  <Legend />
-                  <Bar dataKey="turnos" name="Turnos" stackId="a" fill="#347048" radius={[0, 0, 0, 0]} barSize={40} />
-                  <Bar dataKey="bar" name="Bar/Productos" stackId="a" fill="#B9CF32" radius={[6, 6, 0, 0]} barSize={40} />
-                </BarChart>
-             </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Gráfico 2: Métodos de Pago */}
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-[#347048]/5 flex flex-col">
-          <h3 className="text-lg font-black text-[#347048] mb-6 uppercase tracking-tight flex items-center gap-2 border-b border-[#347048]/10 pb-2">
-            <CreditCard size={20} /> Métodos de Pago
-          </h3>
-          <div className="h-80 w-full relative flex-grow">
-             {/* ... tu PieChart ... */}
-             <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={stats?.paymentMethods || []} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value" stroke="none">
-                    {stats?.paymentMethods?.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, 'Total']} />
-                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                </PieChart>
-             </ResponsiveContainer>
-             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8">
-               <span className="text-[#347048]/40 font-black text-[10px] uppercase tracking-widest">TOTAL</span>
-               <span className="text-[#347048] font-black text-2xl">${((stats?.totalRevenue || 0) / 1000).toFixed(0)}k</span>
-             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* SECCIÓN: PRODUCTOS VENDIDOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Resumen + listas */}
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-[#347048]/5 flex flex-col">
-          <h3 className="text-lg font-black text-[#347048] mb-6 uppercase tracking-tight flex items-center gap-2 border-b border-[#347048]/10 pb-2">
-            <ShoppingBag size={20} /> Productos vendidos
-          </h3>
-
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-[#EBE1D8]/40 border border-[#347048]/10 p-5">
-              <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-widest mb-1">Unidades (período)</p>
-              <p className="text-3xl font-black text-[#347048]">
-                {Number(stats?.products?.totals?.quantityAll || 0).toLocaleString('es-AR')}
-              </p>
-              <p className="text-[#347048]/50 text-xs font-bold mt-1">Total de unidades vendidas en el período</p>
-            </div>
-
-            <div className="rounded-2xl bg-[#EBE1D8]/40 border border-[#347048]/10 p-5">
-              <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-widest mb-1">Facturación (período)</p>
-              <p className="text-3xl font-black text-[#347048]">
-                ${Number(stats?.products?.totals?.revenueAll || 0).toLocaleString('es-AR')}
-              </p>
-              <p className="text-[#347048]/50 text-xs font-bold mt-1">Total facturado por productos en el período</p>
-            </div>
-
-            <div className="rounded-2xl bg-[#EBE1D8]/40 border border-[#347048]/10 p-5">
-              <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-widest mb-1">Productos sin ventas</p>
-              <p className="text-3xl font-black text-[#347048]">
-                {Number(stats?.products?.totals?.unsoldCount || 0).toLocaleString('es-AR')}
-              </p>
-              <p className="text-[#347048]/50 text-xs font-bold mt-1">
-                Cantidad de productos activos con 0 ventas
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Ranking */}
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-[#347048]/5 lg:col-span-2 relative overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-[#347048]/10 pb-4">
-            <div>
-              <h3 className="text-lg font-black text-[#347048] uppercase tracking-tight flex items-center gap-2">
-                Ranking de productos (unidades)
-              </h3>
-              <p className="text-[#347048]/50 text-[10px] font-black uppercase tracking-widest mt-1">
-                Período activo: {getPeriodLabel()}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-[10px] font-black uppercase tracking-widest text-[#347048] bg-[#347048]/10 px-2 py-1 rounded-lg">
-                Top 12
-              </span>
-
-              <div className="flex items-center bg-[#EBE1D8]/50 rounded-xl overflow-hidden border border-[#347048]/10">
-                <button onClick={() => setPeriodOffset(prev => prev - 1)} className="p-2 text-[#347048] hover:bg-[#347048]/10 transition-colors">
-                  <ChevronLeft size={18} strokeWidth={3} />
-                </button>
-                <span className="text-[#347048] font-black text-xs uppercase italic px-3 min-w-[100px] text-center">
-                  {getPeriodLabel()}
-                </span>
-                <button onClick={() => setPeriodOffset(prev => prev + 1)} disabled={periodOffset === 0} className={`p-2 transition-colors ${periodOffset === 0 ? 'text-[#347048]/20' : 'text-[#347048] hover:bg-[#347048]/10'}`}>
-                  <ChevronRight size={18} strokeWidth={3} />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1 bg-[#EBE1D8]/50 p-1 rounded-lg border border-[#347048]/10">
-                <button onClick={() => handlePeriodChange('hoy')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activePeriod === 'hoy' ? 'bg-[#347048] text-white shadow-md' : 'text-[#347048] hover:bg-[#347048]/10'}`}>Hoy</button>
-                <button onClick={() => handlePeriodChange('semana')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activePeriod === 'semana' ? 'bg-[#347048] text-white shadow-md' : 'text-[#347048] hover:bg-[#347048]/10'}`}>Semana</button>
-                <button onClick={() => handlePeriodChange('mes')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activePeriod === 'mes' ? 'bg-[#347048] text-white shadow-md' : 'text-[#347048] hover:bg-[#347048]/10'}`}>Mes</button>
-              </div>
-            </div>
-          </div>
-
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <AdminPanel title="Evolucion: turnos vs bar" description="Comparacion de ingresos por reservas y productos." className="lg:col-span-2">
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={Array.isArray(stats?.products?.top) ? stats.products.top : []}
-                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 600 }}
-                  interval={0}
-                  angle={0}
-                  textAnchor="middle"
-                  height={40}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#9CA3AF', fontSize: 11, fontWeight: 600 }}
-                  allowDecimals={false}
-                />
+              <BarChart data={stats?.dailyEvolution || []} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5eaf3" />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }} tickFormatter={(val) => `$${val / 1000}k`} />
+                <Tooltip cursor={{ fill: '#f5f7fb' }} contentStyle={{ borderRadius: 12, border: '1px solid #dce2ee', boxShadow: '0 8px 22px rgba(34,42,68,0.08)' }} />
+                <Legend />
+                <Bar dataKey="turnos" name="Turnos" stackId="a" fill="#1f2638" radius={[0, 0, 0, 0]} barSize={36} />
+                <Bar dataKey="bar" name="Bar/Productos" stackId="a" fill="#3053e2" radius={[6, 6, 0, 0]} barSize={36} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </AdminPanel>
+
+        <AdminPanel title="Metodos de pago" description="Distribucion de cobros por medio.">
+          <div className="relative h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={stats?.paymentMethods || []} cx="50%" cy="50%" innerRadius={70} outerRadius={92} paddingAngle={5} dataKey="value" stroke="none">
+                  {stats?.paymentMethods?.map((entry: any, index: number) => (
+                    <Cell key={`cell-${entry?.name || index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value: number) => [`$${value.toLocaleString('es-AR')}`, 'Total']} />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pb-8">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8b95aa]">Total</span>
+              <span className="text-2xl font-bold text-[#27314a]">${((stats?.totalRevenue || 0) / 1000).toFixed(0)}k</span>
+            </div>
+          </div>
+        </AdminPanel>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <AdminPanel title="Productos vendidos" description="Resumen comercial de productos en el periodo.">
+          <div className="space-y-3">
+            <KpiCard
+              icon={<ShoppingBag size={20} strokeWidth={2.4} />}
+              label="Unidades"
+              value={Number(stats?.products?.totals?.quantityAll || 0).toLocaleString('es-AR')}
+            />
+            <KpiCard
+              icon={<DollarSign size={20} strokeWidth={2.4} />}
+              label="Facturacion"
+              value={`$${Number(stats?.products?.totals?.revenueAll || 0).toLocaleString('es-AR')}`}
+            />
+            <KpiCard
+              icon={<Activity size={20} strokeWidth={2.4} />}
+              label="Sin ventas"
+              value={Number(stats?.products?.totals?.unsoldCount || 0).toLocaleString('es-AR')}
+            />
+          </div>
+        </AdminPanel>
+
+        <AdminPanel title="Ranking de productos" description={`Periodo activo: ${getPeriodLabel()}`} className="lg:col-span-2">
+          <div className="h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topProducts} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5eaf3" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }} interval={0} height={40} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }} allowDecimals={false} />
                 <Tooltip
-                  cursor={{ fill: '#F3F4F6' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  cursor={{ fill: '#f5f7fb' }}
+                  contentStyle={{ borderRadius: 12, border: '1px solid #dce2ee', boxShadow: '0 8px 22px rgba(34,42,68,0.08)' }}
                   formatter={(value: any, _name: any, props: any) => {
                     const qty = Number(value || 0);
                     const revenue = Number(props?.payload?.revenue || 0);
                     return [`${qty.toLocaleString('es-AR')} u. ($${revenue.toLocaleString('es-AR')})`, 'Vendidas'];
                   }}
                 />
-                <Bar dataKey="quantity" name="Unidades" fill="#926699" radius={[6, 6, 0, 0]} barSize={32} />
+                <Bar dataKey="quantity" name="Unidades" fill="#3053e2" radius={[6, 6, 0, 0]} barSize={32} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Detalle: Top / Menos / No vendidos */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-            <div className="rounded-2xl border border-[#347048]/10 bg-[#EBE1D8]/30 p-5">
-              <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-widest mb-3">Más vendidos</p>
-              <div className="space-y-2">
-                {(Array.isArray(stats?.products?.top) ? stats.products.top : []).slice(0, 6).map((row: any, idx: number) => (
-                  <div key={`${row?.productId || 'p'}-top-${idx}`} className="flex items-center justify-between gap-3">
-                    <span className="text-[#347048] font-bold text-sm truncate">{row?.name || 'Producto'}</span>
-                    <span className="text-[#347048]/70 font-black text-xs shrink-0">{Number(row?.quantity || 0)} u.</span>
-                  </div>
-                ))}
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            {[
+              ['Mas vendidos', topProducts, 'top'],
+              ['Menos vendidos', bottomProducts, 'bottom'],
+              ['Sin ventas', unsoldProducts, 'unsold'],
+            ].map(([title, rows, key]) => (
+              <div key={String(key)} className="rounded-xl border border-[#e7ebf3] bg-[#fbfcff] p-4">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#46516a]">{String(title)}</p>
+                <div className="space-y-2">
+                  {(rows as any[]).slice(0, 6).map((row: any, idx: number) => (
+                    <div key={`${row?.productId || 'p'}-${key}-${idx}`} className="flex items-center justify-between gap-3">
+                      <span className="truncate text-sm font-semibold text-[#30384c]">{row?.name || 'Producto'}</span>
+                      <span className="shrink-0 text-[12px] font-semibold text-[#3053e2]">{Number(row?.quantity || 0)} u.</span>
+                    </div>
+                  ))}
+                  {(rows as any[]).length === 0 && <EmptyList label="Sin datos." />}
+                </div>
               </div>
-            </div>
-
-            <div className="rounded-2xl border border-[#347048]/10 bg-[#EBE1D8]/30 p-5">
-              <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-widest mb-3">Menos vendidos</p>
-              <div className="space-y-2">
-                {(Array.isArray(stats?.products?.bottom) ? stats.products.bottom : []).slice(0, 6).map((row: any, idx: number) => (
-                  <div key={`${row?.productId || 'p'}-bottom-${idx}`} className="flex items-center justify-between gap-3">
-                    <span className="text-[#347048] font-bold text-sm truncate">{row?.name || 'Producto'}</span>
-                    <span className="text-[#347048]/70 font-black text-xs shrink-0">{Number(row?.quantity || 0)} u.</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-[#347048]/10 bg-[#EBE1D8]/30 p-5">
-              <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-widest mb-3">Sin ventas</p>
-              <div className="space-y-2">
-                {(Array.isArray(stats?.products?.unsold) ? stats.products.unsold : []).slice(0, 6).map((row: any, idx: number) => (
-                  <div key={`${row?.productId || 'p'}-unsold-${idx}`} className="flex items-center justify-between gap-3">
-                    <span className="text-[#347048] font-bold text-sm truncate">{row?.name || 'Producto'}</span>
-                    <span className="text-[#347048]/70 font-black text-xs shrink-0">0 u.</span>
-                  </div>
-                ))}
-              </div>
-              {Number(stats?.products?.totals?.unsoldCount || 0) > 12 && (
-                <p className="text-[#347048]/50 text-xs font-bold mt-3">
-                  Mostrando 6 de {Number(stats?.products?.totals?.unsoldCount || 0)} productos sin ventas
-                </p>
-              )}
-            </div>
+            ))}
           </div>
-        </div>
+        </AdminPanel>
       </div>
+    </div>
     </div>
   );
 }

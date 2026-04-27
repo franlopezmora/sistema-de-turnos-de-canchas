@@ -1,33 +1,72 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { getCourts, suspendCourt, reactivateCourt, updateCourtPrice } from '../../services/CourtService';
+import { Activity, Ban, Plus, Power } from 'lucide-react';
+import { getCourts, reactivateCourt, suspendCourt, updateCourtPrice } from '../../services/CourtService';
 import { isAuthSessionInvalidatedError } from '../../utils/apiClient';
-import AppModal from '../AppModal';
-import { Plus, LayoutGrid, Activity, Power, Ban } from 'lucide-react';
+import AdminAppModal from './ui/AdminAppModal';
 
 export default function AdminTabCourts() {
   const [courts, setCourts] = useState<any[]>([]);
   const [priceEdits, setPriceEdits] = useState<Record<number, string>>({});
   const [modalState, setModalState] = useState<{
-    show: boolean; title?: string; message?: ReactNode; cancelText?: string; confirmText?: string;
-    isWarning?: boolean; onConfirm?: () => Promise<void> | void; onCancel?: () => Promise<void> | void;
-    closeOnBackdrop?: boolean; closeOnEscape?: boolean;
+    show: boolean;
+    title?: string;
+    message?: ReactNode;
+    cancelText?: string;
+    confirmText?: string;
+    isWarning?: boolean;
+    onConfirm?: () => Promise<void> | void;
+    onCancel?: () => Promise<void> | void;
+    closeOnBackdrop?: boolean;
+    closeOnEscape?: boolean;
   }>({ show: false });
 
-  const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
-  const wrapAction = (action?: () => Promise<void> | void) => async () => { closeModal(); await action?.(); };
-  const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
-  const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
-  
-  const showConfirm = (options: {
-    title: string; message: ReactNode; confirmText?: string; cancelText?: string; isWarning?: boolean;
-    onConfirm: () => Promise<void> | void; onCancel?: () => Promise<void> | void; closeOnBackdrop?: boolean; closeOnEscape?: boolean;
-  }) => setModalState({
-    show: true, title: options.title, message: options.message,
-    confirmText: options.confirmText ?? 'Aceptar', cancelText: options.cancelText ?? 'Cancelar', isWarning: options.isWarning ?? true,
-    closeOnBackdrop: options.closeOnBackdrop, closeOnEscape: options.closeOnEscape,
-    onConfirm: wrapAction(options.onConfirm), onCancel: options.onCancel ? wrapAction(options.onCancel) : undefined
-  });
+  const closeModal = useCallback(() => {
+    setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
+  }, []);
+
+  const wrapAction = useCallback(
+    (action?: () => Promise<void> | void) => async () => {
+      closeModal();
+      await action?.();
+    },
+    [closeModal]
+  );
+
+  const showInfo = useCallback((message: ReactNode, title = 'Informacion') => {
+    setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
+  }, []);
+
+  const showError = useCallback((message: ReactNode) => {
+    setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
+  }, []);
+
+  const showConfirm = useCallback(
+    (options: {
+      title: string;
+      message: ReactNode;
+      confirmText?: string;
+      cancelText?: string;
+      isWarning?: boolean;
+      onConfirm: () => Promise<void> | void;
+      onCancel?: () => Promise<void> | void;
+      closeOnBackdrop?: boolean;
+      closeOnEscape?: boolean;
+    }) =>
+      setModalState({
+        show: true,
+        title: options.title,
+        message: options.message,
+        confirmText: options.confirmText ?? 'Aceptar',
+        cancelText: options.cancelText ?? 'Cancelar',
+        isWarning: options.isWarning ?? true,
+        closeOnBackdrop: options.closeOnBackdrop,
+        closeOnEscape: options.closeOnEscape,
+        onConfirm: wrapAction(options.onConfirm),
+        onCancel: options.onCancel ? wrapAction(options.onCancel) : undefined,
+      }),
+    [wrapAction]
+  );
 
   const loadCourts = useCallback(async () => {
     try {
@@ -43,27 +82,45 @@ export default function AdminTabCourts() {
         return next;
       });
     } catch (error: any) {
-      if (isAuthSessionInvalidatedError(error)) {
-        return;
-      }
-      showError('Error: ' + error.message);
+      if (isAuthSessionInvalidatedError(error)) return;
+      showError(`Error: ${error.message}`);
     }
-  }, []);
-  useEffect(() => { loadCourts(); }, [loadCourts]);
+  }, [showError]);
 
-  // ✅ Alta de canchas deshabilitada por seguridad: se gestiona desde base de datos.
+  useEffect(() => {
+    void loadCourts();
+  }, [loadCourts]);
 
   const handleSuspend = async (id: number) => {
     showConfirm({
-      title: 'Suspender cancha', message: '¿Seguro que deseas poner esta cancha en mantenimiento?', confirmText: 'Suspender',
-      onConfirm: async () => { try { await suspendCourt(id); loadCourts(); } catch (error: any) { showError('Error: ' + error.message); } }
+      title: 'Suspender cancha',
+      message: 'Seguro que deseas poner esta cancha en mantenimiento?',
+      confirmText: 'Suspender',
+      onConfirm: async () => {
+        try {
+          await suspendCourt(id);
+          await loadCourts();
+        } catch (error: any) {
+          showError(`Error: ${error.message}`);
+        }
+      },
     });
   };
 
   const handleReactivate = async (id: number) => {
     showConfirm({
-      title: 'Reactivar cancha', message: '¿Deseas habilitar nuevamente esta cancha para reservas?', confirmText: 'Reactivar', isWarning: false,
-      onConfirm: async () => { try { await reactivateCourt(id); loadCourts(); } catch (error: any) { showError('Error: ' + error.message); } }
+      title: 'Reactivar cancha',
+      message: 'Deseas habilitar nuevamente esta cancha para reservas?',
+      confirmText: 'Reactivar',
+      isWarning: false,
+      onConfirm: async () => {
+        try {
+          await reactivateCourt(id);
+          await loadCourts();
+        } catch (error: any) {
+          showError(`Error: ${error.message}`);
+        }
+      },
     });
   };
 
@@ -72,14 +129,14 @@ export default function AdminTabCourts() {
       const raw = priceEdits[id];
       const parsed = Number(raw);
       if (!Number.isFinite(parsed) || parsed < 0) {
-        showError('Ingresá un precio válido.');
+        showError('Ingresa un precio valido.');
         return;
       }
       await updateCourtPrice(id, parsed);
       showInfo('Precio actualizado', 'Listo');
-      loadCourts();
+      await loadCourts();
     } catch (error: any) {
-      showError('Error: ' + error.message);
+      showError(`Error: ${error.message}`);
     }
   };
 
@@ -92,152 +149,179 @@ export default function AdminTabCourts() {
   const getPriceReferenceMinutes = (court: any) => {
     const activityName = String(court?.activityType?.name || court?.sport || '')
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[̀-ͯ]/g, '')
       .toUpperCase()
       .trim();
 
-    if (activityName === 'FUTBOL' || activityName === 'TENIS') {
-      return 60;
-    }
+    if (activityName === 'FUTBOL' || activityName === 'TENIS') return 60;
 
     const rawDefault = Number(court?.activityType?.defaultDurationMinutes);
-    if (Number.isFinite(rawDefault) && rawDefault > 0) {
-      return rawDefault;
-    }
+    if (Number.isFinite(rawDefault) && rawDefault > 0) return rawDefault;
 
     return 90;
   };
 
+  const activeCourts = courts.filter((court) => !court.isUnderMaintenance).length;
+  const maintenanceCourts = courts.length - activeCourts;
+  const averagePrice = courts.length
+    ? courts.reduce((sum, court) => sum + Number(court.price || 0), 0) / courts.length
+    : 0;
+
   return (
-    <>
-      {/* --- ALTA DESHABILITADA (SE GESTIONA POR DB) --- */}
-      <div className="bg-[#EBE1D8] border-4 border-white rounded-[2rem] p-6 mb-8 shadow-2xl shadow-[#347048]/30 relative overflow-hidden transition-all">
-        <div className="flex items-center gap-3 text-[#926699]">
-          <div className="bg-[#926699] text-[#EBE1D8] p-2 rounded-xl text-xl shadow-lg shadow-[#926699]/20">
-            <Plus size={20} strokeWidth={3} />
+    <div className="h-full min-h-0 overflow-y-auto">
+      <div className="flex h-full min-h-0 w-full flex-col gap-4 p-4 pb-20 lg:p-6">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Total</p>
+            <p className="mt-1 text-[24px] font-bold text-[#3155df]">{courts.length}</p>
           </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50">Alta de canchas</p>
-            <p className="text-sm font-black text-[#347048]">Deshabilitada en el panel. Para altas, comunicarse con soporte.</p>
+          <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Operativas</p>
+            <p className="mt-1 text-[24px] font-bold text-[#2f5e46]">{activeCourts}</p>
           </div>
-        </div>
-      </div>
-
-      {/* --- LISTADO Y ESTADOS (DISEÑO PREMIUM) --- */}
-      <div className="bg-[#EBE1D8] border-4 border-white rounded-[2rem] p-8 mb-8 shadow-2xl shadow-[#347048]/30 relative overflow-hidden transition-all">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-8">
-          <h2 className="text-2xl font-black text-[#347048] uppercase italic tracking-tighter flex items-center gap-3">
-             <div className="w-2 h-8 bg-[#B9CF32] rounded-full"></div>
-             Estado de Canchas
-          </h2>
-          <div className="bg-white/40 border border-white px-4 py-1.5 rounded-full shadow-sm">
-             <span className="text-[10px] font-black text-[#347048] uppercase tracking-widest">{courts.length} Registradas</span>
+          <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Mantenimiento</p>
+            <p className="mt-1 text-[24px] font-bold text-[#9a5a00]">{maintenanceCourts}</p>
+          </div>
+          <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Precio prom.</p>
+            <p className="mt-1 text-[24px] font-bold text-[#27314a]">${Math.round(averagePrice).toLocaleString()}</p>
           </div>
         </div>
 
-        <div className="overflow-x-auto -mx-8 sm:mx-0">
-          <div className="mx-8 sm:mx-0 mb-4 rounded-2xl border border-[#347048]/15 bg-white/60 p-4">
-            <p className="text-[11px] font-black uppercase tracking-wider text-[#347048]">Cómo se calcula el precio</p>
-            <p className="text-[11px] text-[#347048]/75 font-bold mt-1">
-              El precio que definís en cada cancha se toma como precio base para la duración por defecto de su actividad.
-              Si la reserva es más corta o más larga, el sistema lo ajusta de forma proporcional.
-            </p>
-            <p className="text-[10px] text-[#347048]/60 font-bold mt-2">
-              Regla actual: para Fútbol y Tenis la base de cálculo es siempre 60 min.
-            </p>
+        <div className="rounded-xl border border-[#e7ebf3] bg-[#f8faff] px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#6f7890]">Calculo de precio</p>
+          <p className="mt-1 text-[12px] leading-5 text-[#4e5870]">
+            El precio definido es la base para la duracion por defecto de cada actividad. Si la reserva es mas corta o larga, el sistema ajusta el importe de forma proporcional. Para Futbol y Tenis la base es siempre 60 min.
+          </p>
+        </div>
+
+        {courts.length === 0 ? (
+          <div className="flex items-center justify-center rounded-xl border border-[#dce2ee] bg-white py-16 text-sm font-semibold text-[#98a1b3]">
+            Sin canchas registradas.
           </div>
-          <table className="w-full text-left border-separate border-spacing-y-2">
-            <thead>
-              <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/40">
-                <th className="px-6 py-2">ID</th>
-                <th className="px-6 py-2">Nombre Cancha</th>
-                <th className="px-6 py-2">Disciplina</th>
-                <th className="px-6 py-2">Precio</th>
-                <th className="px-6 py-2 text-center">Estado Operativo</th>
-                <th className="px-6 py-2 text-right">Controles</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm">
-              {courts.map((c) => (
-                <tr key={c.id} className="bg-white/60 hover:bg-white transition-all shadow-sm group">
-                  <td className="px-6 py-5 first:rounded-l-2xl font-black text-[#347048]/40 italic">#{c.id.toString().padStart(3, '0')}</td>
-                  <td className="px-6 py-5 font-black text-[#347048] uppercase tracking-tight">{c.name}</td>
-                  <td className="px-6 py-5">
-                    <span className="text-[10px] font-black bg-[#926699]/10 text-[#926699] px-3 py-1 rounded-full border border-[#926699]/20 uppercase tracking-widest">
-                        {getCourtTypeLabel(c)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-5">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="number"
-                        min={0}
-                        className="w-28 h-10 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-bold focus:outline-none shadow-sm transition-all appearance-none no-spinner"
-                        value={priceEdits[c.id] ?? ''}
-                        onChange={(e) => setPriceEdits((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                      />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {courts.map((court) => (
+              <div
+                key={court.id}
+                className="relative overflow-hidden rounded-xl border border-[#dce2ee] bg-white shadow-[0_8px_26px_rgba(34,42,68,0.05)]"
+              >
+                <div
+                  className={`absolute inset-y-0 left-0 w-[3px] ${
+                    court.isUnderMaintenance ? 'bg-red-400' : 'bg-emerald-400'
+                  }`}
+                />
+                <div className="p-5 pl-6">
+                  <div className="mb-4 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#8b95aa]">
+                        #{court.id.toString().padStart(3, '0')}
+                      </p>
+                      <h3 className="mt-0.5 text-[18px] font-semibold text-[#1f2638]">
+                        {court.name}
+                      </h3>
+                    </div>
+                    {court.isUnderMaintenance ? (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#ffd6d6] bg-[#fff5f5] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#b42318]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#d92d20]" />
+                        Mantenimiento
+                      </span>
+                    ) : (
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#ccebd7] bg-[#f0fbf4] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#167647]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#17b26a]" />
+                        Operativo
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dfe4f2] bg-[#f8faff] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#5b6680]">
+                    <Activity size={11} />
+                    {getCourtTypeLabel(court)}
+                  </span>
+
+                  <div className="mt-4 rounded-xl border border-[#eef2f8] bg-[#f8faff] p-3">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#8b95aa]">
+                      Precio base · {getPriceReferenceMinutes(court)} min
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#8b95aa]">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white pl-7 pr-3 text-[13px] font-semibold text-[#27314a] outline-none transition-all focus:border-[#3053e2]"
+                          value={priceEdits[court.id] ?? ''}
+                          onChange={(event) =>
+                            setPriceEdits((prev) => ({ ...prev, [court.id]: event.target.value }))
+                          }
+                        />
+                      </div>
                       <button
                         type="button"
-                        onClick={() => handlePriceSave(c.id)}
-                        className="text-[10px] font-black uppercase tracking-widest bg-[#347048] text-[#EBE1D8] px-3 py-2 rounded-xl shadow-md hover:bg-[#B9CF32] hover:text-[#347048] transition-all"
+                        onClick={() => void handlePriceSave(court.id)}
+                        className="h-10 shrink-0 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition-all hover:bg-[#2748cc]"
                       >
                         Guardar
                       </button>
                     </div>
-                    <p className="text-[10px] font-bold text-[#347048]/55 mt-1">
-                      Base para {getPriceReferenceMinutes(c)} min
-                    </p>
-                  </td>
-                  <td className="px-6 py-5 text-center">
-                    {c.isUnderMaintenance ? (
-                      <span className="inline-flex items-center gap-2 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-wider border bg-red-50 text-red-600 border-red-200">
-                        <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse"></div>
-                        Mantenimiento
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-200">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                        Operativo
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-5 last:rounded-r-2xl text-right">
-                    {c.isUnderMaintenance ? (
-                      <button 
-                        onClick={() => handleReactivate(c.id)} 
-                        className="text-[10px] font-black uppercase tracking-widest bg-[#B9CF32] text-[#347048] px-4 py-2 rounded-xl shadow-md hover:scale-105 transition-all flex items-center gap-2 ml-auto"
-                      >
-                        <Power size={14} strokeWidth={3} /> Reactivar
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={() => handleSuspend(c.id)} 
-                        className="text-[10px] font-black uppercase tracking-widest bg-white border-2 border-red-100 text-red-500 px-4 py-2 rounded-xl hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 ml-auto"
-                      >
-                        <Ban size={14} strokeWidth={3} /> Suspender
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  </div>
 
-      <AppModal 
-        show={modalState.show} 
-        onClose={closeModal} 
-        onCancel={modalState.onCancel} 
-        title={modalState.title} 
-        message={modalState.message}
-        cancelText={modalState.cancelText} 
-        confirmText={modalState.confirmText} 
-        isWarning={modalState.isWarning}
-        onConfirm={modalState.onConfirm} 
-        closeOnBackdrop={modalState.closeOnBackdrop} 
-        closeOnEscape={modalState.closeOnEscape} 
-      />
-    </>
+                  <div className="mt-3 border-t border-[#f0f3f8] pt-3">
+                    {court.isUnderMaintenance ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleReactivate(court.id)}
+                        className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#17b26a] px-3 text-[12px] font-semibold text-white transition-all hover:bg-[#079455]"
+                      >
+                        <Power size={13} strokeWidth={2.4} />
+                        Reactivar cancha
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleSuspend(court.id)}
+                        className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#ffd6d6] bg-white px-3 text-[12px] font-semibold text-[#b42318] transition-all hover:bg-[#fff5f5]"
+                      >
+                        <Ban size={13} strokeWidth={2.4} />
+                        Poner en mantenimiento
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-start gap-3 rounded-xl border border-[#e7ebf3] bg-[#f8faff] p-4">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#3053e2] shadow-[0_4px_12px_rgba(34,42,68,0.06)]">
+            <Plus size={16} strokeWidth={2.4} />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#3053e2]">Alta de canchas</p>
+            <p className="mt-1 text-[12px] leading-5 text-[#4e5870]">
+              Deshabilitada en el panel. Para altas, comunicarse con soporte.
+            </p>
+          </div>
+        </div>
+
+        <AdminAppModal
+          show={modalState.show}
+          onClose={closeModal}
+          onCancel={modalState.onCancel}
+          title={modalState.title}
+          message={modalState.message}
+          cancelText={modalState.cancelText}
+          confirmText={modalState.confirmText}
+          isWarning={modalState.isWarning}
+          onConfirm={modalState.onConfirm}
+          closeOnBackdrop={modalState.closeOnBackdrop}
+          closeOnEscape={modalState.closeOnEscape}
+        />
+      </div>
+    </div>
   );
 }

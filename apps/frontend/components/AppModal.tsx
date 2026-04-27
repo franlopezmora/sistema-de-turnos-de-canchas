@@ -27,14 +27,14 @@ type AppModalProps = {
 };
 
 /**
- * Modal genérico reutilizable para la aplicación
- * Soporta diferentes variantes: información, advertencia, confirmación, input
+ * Modal genÃ©rico reutilizable para la aplicaciÃ³n
+ * Soporta diferentes variantes: informaciÃ³n, advertencia, confirmaciÃ³n, input
  */
 export default function AppModal({
   show,
   onClose,
   onCancel,
-  title = 'Información',
+  title = 'InformaciÃ³n',
   message = '',
   cancelText = 'Cancelar',
   confirmText = 'Aceptar',
@@ -184,7 +184,7 @@ export default function AppModal({
           <h3 className={`text-2xl font-black flex items-center gap-3 uppercase italic tracking-tighter ${isWarning ? 'text-red-600' : 'text-[#347048]'}`}>
             {isWarning ? (
                 <AlertTriangle size={28} className="text-red-500" strokeWidth={2.5} />
-            ) : title.toLowerCase().includes('éxito') || title.toLowerCase().includes('listo') ? (
+            ) : title.toLowerCase().includes('Ã©xito') || title.toLowerCase().includes('listo') ? (
                 <CheckCircle2 size={28} className="text-[#B9CF32]" strokeWidth={3} />
             ) : (
                 <Info size={28} className="text-[#926699]" strokeWidth={3} />
@@ -228,7 +228,7 @@ export default function AppModal({
           )}
         </div>
 
-        {/* PIE Y BOTONES DE ACCIÓN */}
+        {/* PIE Y BOTONES DE ACCIÃ“N */}
         <div className="p-4 sm:p-6 border-t border-[#347048]/10 bg-[#EBE1D8] flex justify-end gap-3">
           {cancelText && (
             <button
@@ -258,7 +258,7 @@ export default function AppModal({
                         : 'bg-[#B9CF32] text-[#347048] hover:bg-[#aebd2b] shadow-[#B9CF32]/20 active:scale-95'
             }`}
           >
-            {/* Lógica de Barra de Progreso (Hold To Confirm) mantenida intacta */}
+            {/* LÃ³gica de Barra de Progreso (Hold To Confirm) mantenida intacta */}
             {holdToConfirm && (
               <span
                 aria-hidden="true"

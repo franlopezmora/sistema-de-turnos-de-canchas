@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import AdminLayout from '../../components/AdminLayout';
+import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
+import AdminTabServices from '../../components/admin/AdminTabServices';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
-import AdminTabServices from '../../components/admin/AdminTabServices';
 
 export default function AdminServicesPage() {
   const router = useRouter();
@@ -27,18 +27,21 @@ export default function AdminServicesPage() {
     setClubSlug(activeSlug || undefined);
   }, [authChecked, user]);
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
-  if (!hasAdminAccess(user)) return <NotFound message="No tenes permiso para acceder al panel de administracion." />;
+  if (!authChecked || !user) {
+    return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
+  }
+  if (!hasAdminAccess(user)) {
+    return <NotFound message="No tenes permiso para acceder al panel de administracion." />;
+  }
 
   return (
-    <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
-      <AdminLayout>
-        <Head>
-          <title>Servicios | TuCancha Admin</title>
-        </Head>
+    <>
+      <Head>
+        <title>Servicios | TuCancha Admin</title>
+      </Head>
+      <AdminPlaygroundShell activeItem="Servicios" user={user}>
         <AdminTabServices clubSlug={clubSlug} />
-      </AdminLayout>
-    </div>
+      </AdminPlaygroundShell>
+    </>
   );
 }
-

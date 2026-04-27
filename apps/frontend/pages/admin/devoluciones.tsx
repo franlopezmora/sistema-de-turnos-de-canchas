@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import AdminLayout from '../../components/AdminLayout';
+import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
@@ -23,14 +23,15 @@ export default function AdminRefundsPage() {
   if (!hasAdminAccess(user)) return <NotFound message="No tenes permiso para acceder al panel de administracion." />;
 
   return (
-    <div className="min-h-screen text-text relative overflow-hidden" style={{ backgroundColor: 'var(--bg)' }}>
-      <AdminLayout>
-        <Head>
-          <title>Devoluciones | TuCancha Admin</title>
-        </Head>
-        <AdminTabRefunds />
-      </AdminLayout>
-    </div>
+    <>
+      <Head>
+        <title>Devoluciones | TuCancha Admin</title>
+      </Head>
+      <AdminPlaygroundShell activeItem="Caja" user={user}>
+        <div className="h-full overflow-y-auto p-4 lg:p-6">
+          <AdminTabRefunds />
+        </div>
+      </AdminPlaygroundShell>
+    </>
   );
 }
-

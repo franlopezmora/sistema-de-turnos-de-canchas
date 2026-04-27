@@ -1,56 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import type { ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ClubAdminService } from '../services/ClubAdminService';
 import { Search, Plus, Edit, Trash2, X, Package, Tag, DollarSign, Box } from 'lucide-react';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
 import AppModal from './AppModal';
+import { AdminPanel, AdminRightSidebar } from './admin/ui';
 
 interface ProductsPageProps {
   slug?: string;
-  params?: { slug: string };
 }
 
-// --- ✨ COMPONENTE PORTAL (VERSIÓN BEIGE WIMBLEDON) ✨ ---
-const ModalPortal = ({ children, onClose }: { children: ReactNode, onClose: () => void }) => {
-  const backdropMouseDownRef = useRef(false);
-  if (typeof document === 'undefined') return null;
-  
-  return createPortal(
-  <div
-    className="fixed inset-0 z-[2147483000] flex items-center justify-center bg-[#347048]/60 p-4 animate-in fade-in duration-200"
-    onMouseDown={(event) => {
-      backdropMouseDownRef.current = event.target === event.currentTarget;
-    }}
-    onTouchStart={(event) => {
-      backdropMouseDownRef.current = event.target === event.currentTarget;
-    }}
-    onClick={(event) => {
-      const startedOnBackdrop = backdropMouseDownRef.current;
-      backdropMouseDownRef.current = false;
-      if (startedOnBackdrop && event.target === event.currentTarget) {
-        onClose();
-      }
-    }}
-  >
-      {/* Tarjeta Flotante Beige con bordes blancos */}
-      <div
-        className="relative z-10 w-full max-w-md bg-[#EBE1D8] border-4 border-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden text-[#347048]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="overflow-y-auto p-8 custom-scrollbar">
-            {children}
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-};
+const inputClass =
+  'h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition-all focus:border-[#3053e2]';
+const labelClass = 'mb-1.5 block text-[12px] font-medium text-[#4e5870]';
 
-export default function ProductsPage({ slug: slugProp, params }: ProductsPageProps) {
-  const slug = slugProp ?? params?.slug ?? '';
+export default function ProductsPage({ slug = '' }: ProductsPageProps) {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,20 +23,22 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [formError, setFormError] = useState('');
   const [feedbackModal, setFeedbackModal] = useState<{
     show: boolean;
     title: string;
     message: string;
     isWarning?: boolean;
-  }>({ show: false, title: 'Información', message: '' });
+  }>({ show: false, title: 'Informacion', message: '' });
   const [formData, setFormData] = useState({
     name: '',
     price: '',
     stock: '',
     category: '',
     isCombo: false,
-    components: [{ componentProductId: '', quantity: '1' }]
+    components: [{ componentProductId: '', quantity: '1' }],
   });
+  const [drawerSection, setDrawerSection] = useState<'GENERAL' | 'PRICING' | 'COMPOSITION'>('GENERAL');
 
   const loadProducts = useCallback(async () => {
     try {
@@ -79,12 +46,7 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
       setProducts(data);
     } catch (error) {
       reportUiError({ area: 'ProductsPage', action: 'loadProducts' }, error);
-      setFeedbackModal({
-        show: true,
-        title: 'Error',
-        message: 'No se pudieron cargar los productos.',
-        isWarning: true
-      });
+      setFeedbackModal({ show: true, title: 'Error', message: 'No se pudieron cargar los productos.', isWarning: true });
     } finally {
       setLoading(false);
     }
@@ -94,74 +56,108 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
     if (slug) loadProducts();
   }, [slug, loadProducts]);
 
-  const showErrorModal = (message: string) => {
-    setFeedbackModal({
-      show: true,
-      title: 'Error',
-      message,
-      isWarning: true
-    });
+  const emptyForm = () => ({
+    name: '',
+    price: '',
+    stock: '',
+    category: '',
+    isCombo: false,
+    components: [{ componentProductId: '', quantity: '1' }],
+  });
+
+  const openNew = () => {
+    setEditingProduct(null);
+    setFormData(emptyForm());
+    setFormError('');
+    setIsModalOpen(true);
   };
+
+  const openEdit = (product: any) => {
+    setEditingProduct(product);
+    setFormData({
+      name: product.name,
+      price: String(product.price),
+      stock: String(product.baseStock ?? product.stock ?? 0),
+      category: product.category || '',
+      isCombo: Boolean(product.isCombo),
+      components:
+        Array.isArray(product.components) && product.components.length > 0
+          ? product.components.map((c: any) => ({
+              componentProductId: String(c.componentProductId),
+              quantity: String(c.quantity),
+            }))
+          : [{ componentProductId: '', quantity: '1' }],
+    });
+    setFormError('');
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingProduct(null);
+    setFormData(emptyForm());
+    setFormError('');
+  };
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    setDrawerSection('GENERAL');
+  }, [isModalOpen, editingProduct?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const components = formData.components
-        .map((component) => ({
-          componentProductId: Number(component.componentProductId),
-          quantity: Number(component.quantity)
-        }))
-        .filter((component) => Number.isFinite(component.componentProductId) && component.componentProductId > 0 && Number.isFinite(component.quantity) && component.quantity > 0);
+    setFormError('');
 
-      if (formData.isCombo) {
-        if (components.length === 0) {
-          showErrorModal('Un combo debe tener al menos un componente.');
-          return;
-        }
-        const ids = components.map((component) => component.componentProductId);
-        if (new Set(ids).size !== ids.length) {
-          showErrorModal('No podés repetir el mismo producto en un combo.');
-          return;
-        }
-        if (editingProduct && ids.includes(Number(editingProduct.id))) {
-          showErrorModal('Un producto no puede ser componente de sí mismo.');
-          return;
-        }
+    const components = formData.components
+      .map((c) => ({
+        componentProductId: Number(c.componentProductId),
+        quantity: Number(c.quantity),
+      }))
+      .filter(
+        (c) =>
+          Number.isFinite(c.componentProductId) &&
+          c.componentProductId > 0 &&
+          Number.isFinite(c.quantity) &&
+          c.quantity > 0
+      );
+
+    if (formData.isCombo) {
+      if (components.length === 0) {
+        setFormError('Un combo debe tener al menos un componente.');
+        return;
       }
+      const ids = components.map((c) => c.componentProductId);
+      if (new Set(ids).size !== ids.length) {
+        setFormError('No podés repetir el mismo producto en un combo.');
+        return;
+      }
+      if (editingProduct && ids.includes(Number(editingProduct.id))) {
+        setFormError('Un producto no puede ser componente de sí mismo.');
+        return;
+      }
+    }
 
+    try {
       const payload = {
         name: formData.name,
         price: Number(formData.price),
         stock: formData.isCombo ? 0 : Number(formData.stock),
         category: formData.category,
         isCombo: formData.isCombo,
-        components: formData.isCombo ? components : []
+        components: formData.isCombo ? components : [],
       };
       if (editingProduct) {
         await ClubAdminService.updateProduct(slug, editingProduct.id, payload);
       } else {
         await ClubAdminService.createProduct(slug, payload);
       }
-      setIsModalOpen(false);
-      setFormData({
-        name: '',
-        price: '',
-        stock: '',
-        category: '',
-        isCombo: false,
-        components: [{ componentProductId: '', quantity: '1' }]
-      });
-      setEditingProduct(null);
+      closeModal();
       loadProducts();
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo guardar el producto.');
       reportUiError({ area: 'ProductsPage', action: 'saveProduct' }, error);
-      showErrorModal(message);
+      setFormError(message);
     }
-  };
-
-  const handleDelete = async (product: any) => {
-    setDeleteTarget(product);
   };
 
   const confirmDelete = async () => {
@@ -174,61 +170,30 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo dar de baja el producto.');
       reportUiError({ area: 'ProductsPage', action: 'deleteProduct' }, error);
-      showErrorModal(message);
+      setFeedbackModal({ show: true, title: 'Error', message, isWarning: true });
     } finally {
       setDeleting(false);
     }
   };
 
-  const openEdit = (product: any) => {
-    setEditingProduct(product);
-    setFormData({
-      name: product.name,
-      price: String(product.price),
-      stock: String(product.baseStock ?? product.stock ?? 0),
-      category: product.category || '',
-      isCombo: Boolean(product.isCombo),
-      components: Array.isArray(product.components) && product.components.length > 0
-        ? product.components.map((component: any) => ({
-            componentProductId: String(component.componentProductId),
-            quantity: String(component.quantity)
-          }))
-        : [{ componentProductId: '', quantity: '1' }]
-    });
-    setIsModalOpen(true);
-  };
-
-  const openNew = () => {
-    setEditingProduct(null);
-    setFormData({
-      name: '',
-      price: '',
-      stock: '',
-      category: '',
-      isCombo: false,
-      components: [{ componentProductId: '', quantity: '1' }]
-    });
-    setIsModalOpen(true);
-  };
-
   const addComponentRow = () => {
     setFormData((prev) => ({
       ...prev,
-      components: [...prev.components, { componentProductId: '', quantity: '1' }]
+      components: [...prev.components, { componentProductId: '', quantity: '1' }],
     }));
   };
 
   const removeComponentRow = (index: number) => {
     setFormData((prev) => ({
       ...prev,
-      components: prev.components.filter((_, i) => i !== index)
+      components: prev.components.filter((_, i) => i !== index),
     }));
   };
 
   const updateComponentRow = (index: number, field: 'componentProductId' | 'quantity', value: string) => {
     setFormData((prev) => ({
       ...prev,
-      components: prev.components.map((component, i) => i === index ? { ...component, [field]: value } : component)
+      components: prev.components.map((c, i) => (i === index ? { ...c, [field]: value } : c)),
     }));
   };
 
@@ -236,297 +201,345 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Estilos Wimbledon para los inputs del Modal
-  const inputClass ="w-full h-12 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all";
-  const labelClass = 'block text-[10px] font-black text-[#347048]/60 mb-1.5 uppercase tracking-widest ml-1';
-  const comboComponentOptions = products.filter((product) => !editingProduct || product.id !== editingProduct.id);
+  const comboComponentOptions = products.filter(
+    (p) => !editingProduct || p.id !== editingProduct.id
+  );
+
+  const productSummary = useMemo(() => {
+    const simple = products.filter((p) => !p.isCombo);
+    const combos = products.filter((p) => p.isCombo);
+    const lowStock = simple.filter((p) => Number(p.stock || 0) < 5);
+    const stockValue = simple.reduce((sum, p) => sum + Number(p.stock || 0) * Number(p.price || 0), 0);
+    return { total: products.length, combos: combos.length, lowStock: lowStock.length, stockValue };
+  }, [products]);
 
   return (
-    <>
-      <div className="flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-center mb-8">
-        {/* BUSCADOR */}
-        <div className="relative flex-1 w-full sm:max-w-md group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/40 group-focus-within:text-[#B9CF32] transition-colors" size={18} strokeWidth={2.5} />
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Items</p>
+          <p className="mt-1 text-[24px] font-bold text-[#3155df]">{productSummary.total}</p>
+        </div>
+        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Combos</p>
+          <p className="mt-1 text-[24px] font-bold text-[#2f5e46]">{productSummary.combos}</p>
+        </div>
+        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Bajo stock</p>
+          <p className="mt-1 text-[24px] font-bold text-[#9a5a00]">{productSummary.lowStock}</p>
+        </div>
+        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Valor stock</p>
+          <p className="mt-1 text-[24px] font-bold text-[#27314a]">${productSummary.stockValue.toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full flex-1 sm:max-w-md">
+          <Search
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+            size={16}
+            strokeWidth={2.5}
+          />
           <input
             type="text"
             placeholder="Buscar por nombre de producto..."
-            className="w-full bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl pl-12 pr-4 py-3 text-[#347048] font-bold placeholder-[#347048]/30 focus:outline-none shadow-sm transition-all"
+            className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white pl-10 pr-4 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition-all focus:border-[#3053e2]"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-
-        {/* BOTÓN NUEVO */}
         <button
           type="button"
           onClick={openNew}
-          className="w-full sm:w-auto px-6 py-3 bg-[#347048] hover:bg-[#B9CF32] text-[#EBE1D8] hover:text-[#347048] font-black rounded-xl flex items-center justify-center gap-3 transition-all shadow-xl shadow-[#347048]/20 uppercase tracking-widest text-xs italic"
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition-all hover:bg-[#2748cc] sm:w-auto"
         >
-          <Plus size={18} strokeWidth={3} /> Nuevo producto
+          <Plus size={16} strokeWidth={2.5} />
+          Nuevo producto
         </button>
       </div>
 
-      {/* TABLA DE PRODUCTOS */}
-      <div className="bg-white/40 border-2 border-white rounded-[2rem] overflow-hidden shadow-sm">
+      <AdminPanel
+        title="Inventario"
+        description="Lista operativa de productos, combos, precios y stock disponible."
+        bodyClassName="p-0"
+      >
         <div className="overflow-x-auto">
-            <table className="w-full text-left border-separate border-spacing-y-2 px-4">
-              <thead>
-                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/40">
-                  <th className="px-6 py-4">Producto</th>
-                  <th className="px-6 py-4">Tipo</th>
-                  <th className="px-6 py-4">Categoría</th>
-                  <th className="px-6 py-4">Stock Actual</th>
-                  <th className="px-6 py-4">Precio Venta</th>
-                  <th className="px-6 py-4 text-right">Acciones</th>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-[#edf0f6] bg-[#f8f9fc] text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">
+                <th className="px-5 py-3">Producto</th>
+                <th className="px-5 py-3">Tipo</th>
+                <th className="px-5 py-3">Categoria</th>
+                <th className="px-5 py-3">Stock</th>
+                <th className="px-5 py-3">Precio</th>
+                <th className="px-5 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#edf0f6] text-[12px]">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="p-14 text-center">
+                    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="text-sm font-bold">
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="p-20 text-center text-[#347048]/40">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-4 border-[#347048] mx-auto mb-4"></div>
-                      CARGANDO INVENTARIO...
+              ) : filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-14 text-center text-sm font-semibold text-[#98a1b3]">
+                    No hay productos registrados
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((product) => (
+                  <tr key={product.id} className="transition-colors hover:bg-[#f8f9fc]">
+                    <td className="px-5 py-4 font-semibold text-[#2a3245]">{product.name}</td>
+                    <td className="px-5 py-4">
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                          product.isCombo
+                            ? 'border-[#c7d2ff] bg-[#eef1ff] text-[#3053e2]'
+                            : 'border-[#dce2ee] bg-[#f5f7fb] text-[#697386]'
+                        }`}
+                      >
+                        {product.isCombo ? 'Combo' : 'Simple'}
+                      </span>
                     </td>
-                  </tr>
-                ) : filteredProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-20 text-center text-[#347048]/30 italic uppercase tracking-widest font-black">
-                      No hay productos registrados
+                    <td className="px-5 py-4">
+                      <span className="rounded-full border border-[#dce2ee] bg-[#f5f7fb] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#697386]">
+                        {product.category || 'General'}
+                      </span>
                     </td>
-                  </tr>
-                ) : (
-                  filteredProducts.map((product) => (
-                    <tr key={product.id} className="bg-white/80 hover:bg-white transition-all shadow-sm group">
-                      <td className="px-6 py-5 first:rounded-l-2xl font-black text-[#347048] uppercase tracking-tight italic">
-                        {product.name}
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className={`text-[10px] font-black px-3 py-1 rounded-full border uppercase tracking-widest ${product.isCombo ? 'bg-[#347048]/10 text-[#347048] border-[#347048]/20' : 'bg-[#926699]/10 text-[#926699] border-[#926699]/20'}`}>
-                          {product.isCombo ? 'Combo' : 'Simple'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className="text-[10px] font-black bg-[#926699]/10 text-[#926699] px-3 py-1 rounded-full border border-[#926699]/20 uppercase tracking-widest">
-                            {product.category || 'General'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span
-                          className={`inline-flex px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${
-                            product.stock < 5 ? 'bg-red-50 text-red-600 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                          }`}
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                          product.stock < 5
+                            ? 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318]'
+                            : 'border-[#ccebd7] bg-[#f0fbf4] text-[#167647]'
+                        }`}
+                      >
+                        {product.stock} u.
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-[13px] font-semibold text-[#27314a]">
+                      ${product.price?.toLocaleString?.() ?? product.price}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(product)}
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#697386] shadow-sm transition-all hover:border-[#3053e2] hover:bg-[#f1f4ff] hover:text-[#3053e2]"
+                          title="Editar"
                         >
-                          {product.stock} unidades
-                        </span>
-                      </td>
-                      <td className="px-6 py-5 text-lg font-black text-[#347048] italic tracking-tighter">
-                        ${product.price?.toLocaleString?.() ?? product.price}
-                      </td>
-                      <td className="px-6 py-5 last:rounded-r-2xl text-right">
-                        <div className="flex justify-end gap-3">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(product)}
-                            className="p-2 rounded-xl bg-white border border-[#347048]/10 text-[#347048] hover:bg-[#347048] hover:text-[#EBE1D8] transition-all shadow-sm"
-                            title="Editar"
-                          >
-                            <Edit size={16} strokeWidth={2.5} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(product)}
-                            className="p-2 rounded-xl bg-red-50 border border-red-100 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                            title="Dar de baja"
-                          >
-                            <Trash2 size={16} strokeWidth={2.5} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                          <Edit size={15} strokeWidth={2.5} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(product)}
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] shadow-sm transition-all hover:bg-[#b42318] hover:text-white"
+                          title="Dar de baja"
+                        >
+                          <Trash2 size={15} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </AdminPanel>
 
-      {/* --- MODAL DE PRODUCTO --- */}
-      {isModalOpen && (
-        <ModalPortal onClose={() => setIsModalOpen(false)}>
-            
-            <div className="flex justify-between items-start mb-8 border-b border-[#347048]/10 pb-6">
-              <div>
-                <h3 className="text-2xl font-black text-[#926699] flex items-center gap-3 uppercase italic tracking-tighter">
-                    <div className="bg-[#926699] p-2 rounded-xl text-[#EBE1D8] shadow-lg shadow-[#926699]/20">
-                        {editingProduct ? <Edit size={24} strokeWidth={2.5}/> : <Plus size={24} strokeWidth={3}/>}
-                    </div>
-                    {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-                </h3>
-                <p className="text-[#347048]/60 text-[10px] font-black uppercase tracking-widest mt-2 ml-1">Información del inventario</p>
+      <AdminRightSidebar
+        open={isModalOpen}
+        title={editingProduct ? 'Editar producto' : 'Nuevo producto'}
+        description="Inventario del club"
+        onClose={closeModal}
+        widthClassName="w-full max-w-[560px]"
+        tabs={[
+          { id: 'GENERAL', label: 'General' },
+          { id: 'PRICING', label: 'Precio y stock' },
+          { id: 'COMPOSITION', label: 'Composicion' },
+        ]}
+        activeTabId={drawerSection}
+        onTabChange={(tabId) => {
+          const next = tabId as 'GENERAL' | 'PRICING' | 'COMPOSITION';
+          setDrawerSection(next);
+          if (typeof window !== 'undefined') {
+            const target = window.document.getElementById(`products-drawer-${next.toLowerCase()}`);
+            target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }}
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div id="products-drawer-general" className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
+            <p className="text-[12px] font-semibold text-[#2a3245]">Datos generales</p>
+            <p className="mt-0.5 text-[11px] text-[#6f7890]">Nombre comercial y tipo del producto.</p>
+            <div className="mt-3">
+              <label className={labelClass}>Nombre del producto</label>
+              <div className="relative">
+                <input
+                  required
+                  placeholder="Ej: Gatorade Blue"
+                  className={`${inputClass} pl-10`}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]" size={15} strokeWidth={2.5} />
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <label className={labelClass}>Tipo de producto</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, isCombo: false }))}
+                  className={`h-10 rounded-xl border text-[12px] font-semibold transition-all ${
+                    !formData.isCombo
+                      ? 'border-[#3053e2] bg-[#f1f4ff] text-[#3053e2]'
+                      : 'border-[#d9dfeb] bg-white text-[#697386] hover:bg-[#f8faff]'
+                  }`}
+                >
+                  Producto simple
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, isCombo: true }))}
+                  className={`h-10 rounded-xl border text-[12px] font-semibold transition-all ${
+                    formData.isCombo
+                      ? 'border-[#3053e2] bg-[#f1f4ff] text-[#3053e2]'
+                      : 'border-[#d9dfeb] bg-white text-[#697386] hover:bg-[#f8faff]'
+                  }`}
+                >
+                  Combo
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="products-drawer-pricing" className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
+            <p className="text-[12px] font-semibold text-[#2a3245]">Precio y stock</p>
+            <p className="mt-0.5 text-[11px] text-[#6f7890]">Definí valores de venta y disponibilidad.</p>
+            <div className="mt-3">
+              <label className={labelClass}>Precio ($)</label>
+              <div className="relative">
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className={`${inputClass} pl-10`}
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  onWheel={(event) => event.currentTarget.blur()}
+                />
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]" size={15} strokeWidth={2.5} />
+              </div>
+            </div>
+
+            {!formData.isCombo && (
+              <div className="mt-3">
+                <label className={labelClass}>Stock inicial</label>
+                <div className="relative">
+                  <input
+                    required
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    className={`${inputClass} pl-10`}
+                    value={formData.stock}
+                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                    onWheel={(event) => event.currentTarget.blur()}
+                  />
+                  <Box className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]" size={15} strokeWidth={2.5} />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3">
+              <label className={labelClass}>Categoria (opcional)</label>
+              <div className="relative">
+                <input
+                  className={`${inputClass} pl-10`}
+                  placeholder="Ej: Bebidas, Grips, Alquiler..."
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                />
+                <Package className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]" size={15} strokeWidth={2.5} />
+              </div>
+            </div>
+          </div>
+
+          {formData.isCombo && (
+            <div id="products-drawer-composition" className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
+              <p className="text-[12px] font-semibold text-[#2a3245]">Composición del combo</p>
+              <p className="mt-0.5 text-[11px] text-[#6f7890]">Seleccioná los productos que forman el combo.</p>
+              <label className={labelClass}>Componentes del combo</label>
+              <div className="space-y-2">
+                {formData.components.map((component, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                    <select
+                      className="col-span-7 h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] outline-none transition-all focus:border-[#3053e2]"
+                      value={component.componentProductId}
+                      onChange={(e) => updateComponentRow(index, 'componentProductId', e.target.value)}
+                    >
+                      <option value="">Seleccionar producto</option>
+                      {comboComponentOptions.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      className="col-span-3 h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] outline-none transition-all focus:border-[#3053e2]"
+                      value={component.quantity}
+                      onChange={(e) => updateComponentRow(index, 'quantity', e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeComponentRow(index)}
+                      className="col-span-2 grid h-10 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] transition-all hover:bg-[#b42318] hover:text-white"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
-                title="Cerrar ventana"
+                onClick={addComponentRow}
+                className="mt-2 h-9 w-full rounded-lg border border-[#dce2ee] bg-white text-[12px] font-semibold text-[#3053e2] transition-colors hover:bg-[#f1f4ff]"
               >
-                <X size={20} strokeWidth={3} />
+                + Agregar componente
               </button>
             </div>
+          )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* NOMBRE */}
-              <div className="space-y-1.5">
-                <label className={labelClass}>Nombre del Producto</label>
-                <div className="relative group">
-                    <input
-                        required
-                        placeholder="Ej: Gatorade Blue"
-                        className={`${inputClass} pl-12`}
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/40 group-focus-within:text-[#B9CF32] transition-colors">
-                        <Tag size={18} strokeWidth={2.5} />
-                    </div>
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                <label className={labelClass}>Tipo de producto</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, isCombo: false }))}
-                    className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${!formData.isCombo ? 'bg-[#347048] border-[#347048] text-[#B9CF32]' : 'bg-white border-transparent text-[#347048]/40'}`}
-                  >
-                    Producto simple
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, isCombo: true }))}
-                    className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${formData.isCombo ? 'bg-[#347048] border-[#347048] text-[#B9CF32]' : 'bg-white border-transparent text-[#347048]/40'}`}
-                  >
-                    Combo
-                  </button>
-                </div>
-              </div>
+          {formError && (
+            <p className="rounded-lg border border-[#ffd6d6] bg-[#fff5f5] px-3 py-2 text-[12px] font-semibold text-[#b42318]">
+              {formError}
+            </p>
+          )}
 
-              <div className="space-y-1.5">
-                <label className={labelClass}>Precio ($)</label>
-                <div className="relative group">
-                    <input
-                      required
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      className={`${inputClass} pl-12`}
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      onWheel={(event) => {
-                        event.currentTarget.blur();
-                      }}
-                    />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/40 group-focus-within:text-[#B9CF32] transition-colors">
-                        <DollarSign size={18} strokeWidth={2.5} />
-                    </div>
-                </div>
-              </div>
-
-              {!formData.isCombo && (
-                <div className="space-y-1.5">
-                  <label className={labelClass}>Stock Inicial</label>
-                  <div className="relative group">
-                      <input
-                        required
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        className={`${inputClass} pl-12`}
-                        value={formData.stock}
-                        onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                        onWheel={(event) => {
-                          event.currentTarget.blur();
-                        }}
-                      />
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/40 group-focus-within:text-[#B9CF32] transition-colors">
-                          <Box size={18} strokeWidth={2.5} />
-                      </div>
-                  </div>
-                </div>
-              )}
-
-              {/* CATEGORÍA */}
-              <div className="space-y-1.5">
-                <label className={labelClass}>Categoría (Opcional)</label>
-                <div className="relative group">
-                    <input
-                        className={`${inputClass} pl-12`}
-                        placeholder="Ej: Bebidas, Grips, Alquiler..."
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#347048]/40 group-focus-within:text-[#B9CF32] transition-colors">
-                        <Package size={18} strokeWidth={2.5} />
-                    </div>
-                </div>
-              </div>
-
-              {formData.isCombo && (
-                <div className="space-y-3">
-                  <label className={labelClass}>Componentes del combo</label>
-                  <div className="space-y-2">
-                    {formData.components.map((component, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                        <select
-                          className="col-span-7 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-bold focus:outline-none shadow-sm"
-                          value={component.componentProductId}
-                          onChange={(e) => updateComponentRow(index, 'componentProductId', e.target.value)}
-                        >
-                          <option value="">Seleccionar producto</option>
-                          {comboComponentOptions.map((product) => (
-                            <option key={product.id} value={product.id}>{product.name}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min="1"
-                          className="col-span-3 h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-3 text-[#347048] font-bold focus:outline-none shadow-sm"
-                          value={component.quantity}
-                          onChange={(e) => updateComponentRow(index, 'quantity', e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeComponentRow(index)}
-                          className="col-span-2 h-11 rounded-xl bg-red-50 border border-red-100 text-red-500 hover:bg-red-500 hover:text-white transition"
-                        >
-                          <X size={16} className="mx-auto" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addComponentRow}
-                    className="w-full py-2.5 bg-white border-2 border-[#347048]/10 text-[#347048] rounded-xl text-[10px] font-black uppercase tracking-widest"
-                  >
-                    + Agregar componente
-                  </button>
-                </div>
-              )}
-
-              {/* BOTÓN DE GUARDADO */}
-              <div className="pt-4">
-                <button
-                  type="submit"
-                  className="w-full py-4 bg-[#347048] hover:bg-[#B9CF32] text-[#EBE1D8] hover:text-[#347048] font-black rounded-2xl shadow-xl shadow-[#347048]/20 transition-all uppercase tracking-[0.2em] text-sm italic"
-                >
-                  {editingProduct ? 'Guardar Cambios' : 'Confirmar Ingreso'}
-                </button>
-              </div>
-            </form>
-        </ModalPortal>
-      )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={closeModal}
+              className="h-10 flex-1 rounded-lg border border-[#dce2ee] bg-white text-[13px] font-semibold text-[#4e5870] transition-all hover:bg-[#f8faff]"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="h-10 flex-1 rounded-lg bg-[#3053e2] text-[13px] font-semibold text-white transition-all hover:bg-[#2748cc]"
+            >
+              {editingProduct ? 'Guardar cambios' : 'Confirmar ingreso'}
+            </button>
+          </div>
+        </form>
+      </AdminRightSidebar>
 
       <AppModal
         show={!!deleteTarget}
@@ -556,6 +569,6 @@ export default function ProductsPage({ slug: slugProp, params }: ProductsPagePro
         confirmText="Aceptar"
         isWarning={feedbackModal.isWarning}
       />
-    </>
+    </div>
   );
 }

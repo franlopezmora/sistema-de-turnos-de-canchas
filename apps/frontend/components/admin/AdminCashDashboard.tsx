@@ -7,7 +7,7 @@ import { CashService } from '../../services/CashService';
 import { formatDateTime24, formatTime24 } from '../../utils/dateTime';
 import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 import { buildCanonicalPhone, DEFAULT_PHONE_COUNTRY_ISO2, normalizePhoneCountryIso2, PHONE_COUNTRY_OPTIONS, splitCanonicalPhone } from '../../utils/phone';
-import AppModal from '../AppModal';
+import AdminAppModal from './ui/AdminAppModal';
 import PaymentCalculator, { type PaymentCalculatorResult } from '../PaymentCalculator';
 import ProductSearch, { type ProductSearchItem } from '../ui/ProductSearch';
 
@@ -1085,7 +1085,8 @@ const AdminCashDashboard = () => {
     productSale.clientPhone,
     productSale.clientDni,
     productSale.clientEmail,
-    productSale.clientIsProfessor
+    productSale.clientIsProfessor,
+    clubPhoneCountryIso2
   ]);
 
   const handleOpenShift = async (e: React.FormEvent) => {
@@ -2078,7 +2079,7 @@ const AdminCashDashboard = () => {
         </div>
       </div>
     </div>
-      <AppModal
+      <AdminAppModal
         show={showCreateClientModal}
         title="Crear cliente para esta venta"
         onClose={() => setShowCreateClientModal(false)}
@@ -2155,7 +2156,7 @@ const AdminCashDashboard = () => {
         )}
       />
 
-      <AppModal
+      <AdminAppModal
         show={actionFeedback.show}
         title={actionFeedback.title}
         message={actionFeedback.message}
@@ -2165,7 +2166,7 @@ const AdminCashDashboard = () => {
         cancelText=""
       />
 
-      <AppModal
+      <AdminAppModal
         show={showMovementMethodPicker}
         title="Seleccionar medio de pago"
         onClose={() => {
@@ -2256,7 +2257,7 @@ const AdminCashDashboard = () => {
         />
       )}
 
-      <AppModal
+      <AdminAppModal
         show={showMovementModal}
         title={selectedMovement?.type === 'INCOME' ? 'Detalle del ingreso' : 'Detalle del egreso'}
         onClose={() => setShowMovementModal(false)}

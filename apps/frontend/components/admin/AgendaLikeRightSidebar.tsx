@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { X } from 'lucide-react';
+import AdminSidebarScaffold from './ui/AdminSidebarScaffold';
 
 type AgendaLikeRightSidebarProps = {
   open: boolean;
@@ -8,9 +8,15 @@ type AgendaLikeRightSidebarProps = {
   subtitle?: ReactNode;
   statusChip?: ReactNode;
   statusChipClassName?: string;
+  tabs?: Array<{ id: string; label: string }>;
+  activeTabId?: string;
+  onTabChange?: (id: string) => void;
   children: ReactNode;
   footer?: ReactNode;
   maxWidthClassName?: string;
+  frameContent?: boolean;
+  contentClassName?: string;
+  framedContentClassName?: string;
 };
 
 export default function AgendaLikeRightSidebar({
@@ -20,55 +26,35 @@ export default function AgendaLikeRightSidebar({
   subtitle,
   statusChip,
   statusChipClassName = '',
+  tabs,
+  activeTabId,
+  onTabChange,
   children,
   footer,
   maxWidthClassName = 'max-w-[620px]',
+  frameContent = true,
+  contentClassName,
+  framedContentClassName,
 }: AgendaLikeRightSidebarProps) {
   return (
-    <>
-      {open && (
-        <button
-          type="button"
-          aria-label="Cerrar panel"
-          className="fixed inset-x-0 bottom-0 top-16 z-[105] bg-[#101326]/20 transition-[left] duration-200 ease-out will-change-[left] lg:left-[var(--admin-playground-sidebar-left,168px)] lg:rounded-tl-[12px]"
-          onClick={onClose}
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 right-0 top-16 z-[115] w-full ${maxWidthClassName} border-l border-[#e6e8ee] bg-white transition-transform duration-300 ${
-          open ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        <div className="relative h-full w-full flex flex-col">
-          <header className="border-b border-[#eef0f5] px-6 py-5 flex items-start justify-between">
-            <div>
-              <h2 className="text-[24px] leading-none font-semibold text-[#1f2638] tracking-[-0.015em]">
-                {title}
-              </h2>
-              {subtitle ? <p className="mt-3 text-[13px] leading-snug text-[#7d879d]">{subtitle}</p> : null}
-              {statusChip ? (
-                <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${statusChipClassName}`}>
-                  {statusChip}
-                </span>
-              ) : null}
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-9 w-9 rounded-full border border-[#e4e7ee] text-[#798194] grid place-items-center hover:bg-[#f7f8fb] shrink-0"
-              aria-label="Cerrar"
-            >
-              <X size={16} />
-            </button>
-          </header>
-
-          <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
-
-          {footer ? <footer className="border-t border-[#eef0f5] bg-white p-4">{footer}</footer> : null}
-        </div>
-      </aside>
-    </>
+    <AdminSidebarScaffold
+      open={open}
+      onClose={onClose}
+      title={title}
+      subtitle={subtitle}
+      statusChip={statusChip}
+      statusChipClassName={statusChipClassName}
+      widthClassName={`w-full ${maxWidthClassName}`}
+      tabs={tabs}
+      activeTabId={activeTabId}
+      onTabChange={onTabChange}
+      footer={footer}
+      zIndexClassName="z-[2147483150]"
+      frameContent={frameContent}
+      contentClassName={contentClassName}
+      framedContentClassName={framedContentClassName}
+    >
+      {children}
+    </AdminSidebarScaffold>
   );
 }

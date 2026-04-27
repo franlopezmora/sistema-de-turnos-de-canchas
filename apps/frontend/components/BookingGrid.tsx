@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import type { ReactNode } from 'react';
 import { useAvailability } from '../hooks/useAvailability';
@@ -169,14 +169,14 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   const [loginModalError, setLoginModalError] = useState('');
   const [loginModalLoading, setLoginModalLoading] = useState(false);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setModalState((prev) => ({ ...prev, show: false }));
     setLoginModalError('');
     setLoginModalLoading(false);
     pendingAfterLoginActionRef.current = null;
-  };
+  }, []);
 
-  const showInfo = (message: ReactNode, title = 'Información') => {
+  const showInfo = useCallback((message: ReactNode, title = 'Información') => {
     setModalState({
       show: true,
       title,
@@ -188,9 +188,9 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       closeOnEscape: true,
       blockManualClose: false
     });
-  };
+  }, [closeModal]);
 
-  const showError = (message: ReactNode) => {
+  const showError = useCallback((message: ReactNode) => {
     setModalState({
       show: true,
       title: 'Error',
@@ -203,7 +203,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       closeOnEscape: true,
       blockManualClose: false
     });
-  };
+  }, [closeModal]);
 
   const openLoginModal = (
     afterLoginAction?: () => void,
@@ -775,7 +775,7 @@ const performBooking = async () => {
       }
     };
     fetchCourts();
-  }, [clubSlug]);
+  }, [clubSlug, showError]);
 
   useEffect(() => {
     if (!pendingSport || activeCourts.length === 0) return;

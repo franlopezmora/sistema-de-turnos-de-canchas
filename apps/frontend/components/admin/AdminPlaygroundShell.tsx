@@ -32,10 +32,25 @@ const HELP_TIPS_BY_SECTION: Record<string, string[]> = {
     'Completá datos clave para evitar errores al cobrar o contactar.',
     'Revisá historial antes de crear duplicados.',
   ],
-  Pagos: [
-    'Registrá pagos parciales cuando no se abone el total.',
-    'Verificá el responsable de cobro antes de confirmar.',
-    'Usá la trazabilidad para auditar ajustes y movimientos.',
+  Caja: [
+    'Registra pagos parciales cuando no se abone el total.',
+    'Verifica el responsable de cobro antes de confirmar.',
+    'Usa la trazabilidad para auditar ajustes y movimientos.',
+  ],
+  Tienda: [
+    'Centraliza productos y servicios con una misma logica operativa.',
+    'Mantene items inactivos para conservar trazabilidad de ventas.',
+    'Revisa stock y precios antes de abrir consumos o cobrar.',
+  ],
+  Informes: [
+    'Revisa el resumen general antes de profundizar por categoria.',
+    'Compara periodos para detectar caidas o picos de actividad.',
+    'Usa filtros consistentes para evitar lecturas sesgadas.',
+  ],
+  Ajustes: [
+    'Agrupa configuraciones por dominio para reducir errores operativos.',
+    'Prioriza cambios desde panel lateral cuando el formulario es largo.',
+    'Registra excepciones de agenda con contexto claro para soporte.',
   ],
 };
 
@@ -332,19 +347,23 @@ export default function AdminPlaygroundShell({
             </button>
 
             <nav className="w-full space-y-1 px-2">
-              {PLAYGROUND_SIDEBAR_ITEMS.map(({ label, icon: Icon, href }) => {
+              {PLAYGROUND_SIDEBAR_ITEMS.map(({ label, icon: Icon, href, comingSoon }) => {
                 const active = label === activeItem;
                 return (
                   <button
                     key={label}
                     type="button"
                     onClick={() => {
-                      if (href && router.pathname !== href) void router.push(href);
+                      if (router.pathname !== href) void router.push(href);
                     }}
                     className={`w-full rounded-md py-2 text-left text-[11px] transition-colors ${
-                      active ? 'bg-[#eef1ff] text-[#2b3fa8]' : 'text-[#8b92a0] hover:bg-[#f4f5f7]'
+                      active
+                        ? 'bg-[#eef1ff] text-[#2b3fa8]'
+                        : comingSoon
+                          ? 'text-[#9aa2b4] hover:bg-[#f4f5f7]'
+                          : 'text-[#8b92a0] hover:bg-[#f4f5f7]'
                     } px-0`}
-                    title={label}
+                    title={comingSoon ? 'Proximamente' : label}
                   >
                     <span className="grid grid-cols-[48px_1fr] items-center">
                       <span className="inline-flex w-full shrink-0 justify-center">
@@ -357,7 +376,14 @@ export default function AdminPlaygroundShell({
                             : 'max-w-[124px] translate-x-0 opacity-100 blur-0'
                         }`}
                       >
-                        {label}
+                        <span className="inline-flex items-center gap-1">
+                          <span>{label}</span>
+                          {comingSoon && (
+                            <span className="rounded bg-[#eef1ff] px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-[#4c5ec6]">
+                              Proximamente
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </span>
                   </button>
@@ -374,6 +400,32 @@ export default function AdminPlaygroundShell({
             {children}
           </main>
         </div>
+        <nav className="flex h-[62px] shrink-0 items-center gap-1 overflow-x-auto border-t border-[#e7ebf4] bg-white px-2 lg:hidden">
+          {PLAYGROUND_SIDEBAR_ITEMS.map(({ label, icon: Icon, href, comingSoon }) => {
+            const active = label === activeItem;
+            return (
+              <button
+                key={`mobile-${label}`}
+                type="button"
+                onClick={() => {
+                  if (router.pathname !== href) void router.push(href);
+                }}
+                className={`flex h-12 min-w-[76px] flex-col items-center justify-center rounded-xl px-2 text-[10px] font-semibold transition ${
+                  active
+                    ? 'bg-[#eef1ff] text-[#2b3fa8]'
+                    : comingSoon
+                      ? 'text-[#9aa2b4] hover:bg-[#f4f5f7]'
+                      : 'text-[#8b92a0] hover:bg-[#f4f5f7]'
+                }`}
+                title={label}
+                aria-label={label}
+              >
+                <Icon size={15} />
+                <span className="mt-1 max-w-[68px] truncate">{label}</span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
       {helpOpen && (
         <div

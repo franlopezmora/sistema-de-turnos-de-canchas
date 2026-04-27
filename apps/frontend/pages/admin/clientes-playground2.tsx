@@ -10,6 +10,11 @@ import {
   Trash2,
 } from 'lucide-react';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
+import {
+  AdminPaymentFormModal,
+  AdminPaymentPreconfirmModal,
+} from '../../components/admin/payments/AdminPaymentFlowModals';
+import { AdminSegmentedControl } from '../../components/admin/ui';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
@@ -1289,37 +1294,16 @@ export default function AdminClientesPlayground2Page() {
       <AdminPlaygroundShell activeItem="Clientes" user={user} contentMuted={sidebarOpen}>
         <div className="flex h-full min-h-0 flex-col gap-4 p-4 lg:p-6">
               <header className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
-                <div className="overflow-x-auto">
-                  <div className="inline-flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white p-1 whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => setActiveView('directory')}
-                      className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
-                        activeView === 'directory' ? 'bg-[#edf1ff] text-[#3053e2]' : 'text-[#6f7890] hover:bg-[#f8f9fd]'
-                      }`}
-                    >
-                      Directorio
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveView('debt')}
-                      className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
-                        activeView === 'debt' ? 'bg-[#edf1ff] text-[#3053e2]' : 'text-[#6f7890] hover:bg-[#f8f9fd]'
-                      }`}
-                    >
-                      Cuentas y deuda
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveView('history')}
-                      className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
-                        activeView === 'history' ? 'bg-[#edf1ff] text-[#3053e2]' : 'text-[#6f7890] hover:bg-[#f8f9fd]'
-                      }`}
-                    >
-                      Perfil
-                    </button>
-                  </div>
-                </div>
+                <AdminSegmentedControl
+                  ariaLabel="Vistas de clientes"
+                  value={activeView}
+                  onChange={(nextView) => setActiveView(nextView as ClientsView)}
+                  options={[
+                    { value: 'directory', label: 'Directorio' },
+                    { value: 'debt', label: 'Cuentas y deuda' },
+                    { value: 'history', label: 'Perfil' },
+                  ]}
+                />
               </header>
 
               <div className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1937,88 +1921,27 @@ export default function AdminClientesPlayground2Page() {
       {activePaymentModal?.flow === 'playtomicPayment' &&
         activePaymentModal.step === 'preconfirm' &&
         isPlaytomicPaymentModal && (
-        <div
-          className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
-          onPointerDown={handleModalBackdropPointerDown}
-          onPointerUp={(event) =>
+        <AdminPaymentPreconfirmModal
+          onBackdropPointerDown={handleModalBackdropPointerDown}
+          onBackdropPointerUp={(event) =>
             handleModalBackdropPointerUp(event, () =>
               setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })
             )
           }
-        >
-          <div
-            className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-              <div>
-                <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cobro</h3>
-                <p className="mt-1 text-[12px] text-[#6f7890]">Revisa estos datos antes de confirmar.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
-                className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <div className="px-5 py-5 space-y-4">
-              <div className="rounded-lg border border-[#e0e5f2] bg-white">
-                <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
-                  Resumen final
-                </div>
-                <div className="divide-y divide-[#eef2f8] text-[13px]">
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-[#6f7890]">Monto a cobrar</span>
-                    <strong className="text-[#1f2a44]">{playtomicPreviewRequestedAmount.toFixed(2)} $</strong>
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-[#6f7890]">Saldo luego del cobro</span>
-                    <strong className="text-[#1f2a44]">{playtomicPreviewRemainingAfter.toFixed(2)} $</strong>
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="text-[#6f7890]">Metodo</span>
-                    <strong className="text-[#1f2a44]">{simplifiedPaymentMethodLabel}</strong>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-lg border border-[#e0e5f2] bg-white">
-                <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
-                  Conceptos que cubre
-                </div>
-                {playtomicPreviewConceptRows.length === 0 ? (
-                  <p className="px-3 py-3 text-[12px] text-[#7a8398]">No hay conceptos seleccionados.</p>
-                ) : (
-                  <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
-                    {playtomicPreviewConceptRows.map((row) => (
-                      <div key={`playtomic-preview-row-${row.id}`} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
-                        <span className="truncate pr-2">{row.label}</span>
-                        <strong className="text-[#2a3245]">{row.amount.toFixed(2)} $</strong>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
-                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
-                >
-                  Editar cobro
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
-                  className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
-                >
-                  Confirmar cobro
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+          methodValue={simplifiedPaymentMethodLabel}
+          summaryRows={[
+            { label: 'Monto a cobrar', value: `${playtomicPreviewRequestedAmount.toFixed(2)} $` },
+            { label: 'Saldo luego del cobro', value: `${playtomicPreviewRemainingAfter.toFixed(2)} $` },
+          ]}
+          conceptRows={playtomicPreviewConceptRows.map((row) => ({
+            id: `playtomic-preview-row-${row.id}`,
+            label: row.label,
+            value: `${row.amount.toFixed(2)} $`,
+          }))}
+          onBack={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+          onClose={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+          onConfirm={() => void queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
+        />
       )}
 
       {activePaymentModal?.flow === 'playtomicPayment' &&
