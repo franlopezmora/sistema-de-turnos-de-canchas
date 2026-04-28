@@ -824,12 +824,6 @@ export default function AdminPaymentsPlaygroundPage() {
     [filteredCashMovements]
   );
 
-  const filteredAverageAmount = useMemo(() => {
-    if (filteredCashMovements.length === 0) return 0;
-    const absoluteTotal = filteredCashMovements.reduce((sum, movement) => sum + Math.abs(movement.amount), 0);
-    return absoluteTotal / filteredCashMovements.length;
-  }, [filteredCashMovements]);
-
   const handleOpenShift = async (event: React.FormEvent) => {
     event.preventDefault();
     setCashShiftError('');
@@ -1293,11 +1287,18 @@ export default function AdminPaymentsPlaygroundPage() {
   const accountCards = useMemo(
     () => [
       { label: 'Cuentas abiertas', value: openAccounts.length, tone: 'text-[#3155df]' },
-      { label: 'Con deuda', value: openAccounts.length, tone: 'text-[#9a5a00]' },
+      {
+        label: 'Con deuda',
+        value: openAccounts.filter((a) => {
+          const d = accountDetailById[a.id];
+          return !d || d.remaining > 0.009;
+        }).length,
+        tone: 'text-[#9a5a00]',
+      },
       { label: 'Cerradas', value: closedAccounts.length, tone: 'text-[#2f5e46]' },
       { label: 'Con devoluciones', value: accountsWithRefundsIdSet.size, tone: 'text-[#7b3fb4]' },
     ],
-    [accountsWithRefundsIdSet.size, closedAccounts.length, openAccounts.length]
+    [accountDetailById, accountsWithRefundsIdSet.size, closedAccounts.length, openAccounts]
   );
 
   if (!authChecked || !user) {
@@ -1416,6 +1417,9 @@ export default function AdminPaymentsPlaygroundPage() {
                           : account.hasDebt
                             ? '--'
                             : '0.00 $';
+                        const lastPaymentDate = detail?.payments?.length
+                          ? detail.payments[detail.payments.length - 1]?.createdAt
+                          : undefined;
                         return (
                           <button
                             key={account.id}
@@ -1446,7 +1450,7 @@ export default function AdminPaymentsPlaygroundPage() {
                               </span>
                             </div>
                             <p className="text-right text-[11px] text-[#5f6984]">
-                              {formatDateTime24(account.createdAt)}
+                              {lastPaymentDate ? formatDateTime24(lastPaymentDate) : '—'}
                             </p>
                           </button>
                         );
@@ -1513,7 +1517,7 @@ export default function AdminPaymentsPlaygroundPage() {
                                       <p className="font-semibold text-[#27314a]">{formatMoney(item.total)}</p>
                                     </div>
                                     <p className="text-[11px] text-[#6f7890]">
-                                      {item.type} · Cantidad {item.quantity}
+                                      {({'BOOKING': 'Cancha', 'PRODUCT': 'Producto', 'SERVICE': 'Servicio', 'ADJUSTMENT': 'Ajuste'} as Record<string, string>)[String(item.type).toUpperCase()] ?? item.type} · Cantidad {item.quantity}
                                     </p>
                                   </div>
                                 ))}
@@ -1692,34 +1696,13 @@ export default function AdminPaymentsPlaygroundPage() {
                         {loadingCashShift ? (
                           <p className="mt-3 text-[12px] text-[#6f7890]">Cargando estado de caja...</p>
                         ) : cashCurrentShift ? (
-                          <div className="mt-3 space-y-3">
-                            <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3 text-[12px] text-[#4e5870]">
-                              <p><span className="font-semibold">Caja:</span> {cashCurrentShift.cashRegister?.name || '-'}</p>
-                              <p><span className="font-semibold">Apertura:</span> {formatDateTime24(cashCurrentShift.openedAt)}</p>
-                              <p><span className="font-semibold">Monto inicial:</span> {formatMoney(cashCurrentShift.openingAmount)}</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCashCloseShiftForm({ countedCash: '' });
-                                setCashSidebarView('close_shift');
-                              }}
-                              className="h-10 w-full rounded-xl bg-[#3053e2] text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
-                            >
-                              Cerrar caja
-                            </button>
+                          <div className="mt-3 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3 text-[12px] text-[#4e5870]">
+                            <p><span className="font-semibold">Caja:</span> {cashCurrentShift.cashRegister?.name || '-'}</p>
+                            <p><span className="font-semibold">Apertura:</span> {formatDateTime24(cashCurrentShift.openedAt)}</p>
+                            <p><span className="font-semibold">Monto inicial:</span> {formatMoney(cashCurrentShift.openingAmount)}</p>
                           </div>
                         ) : (
-                          <div className="mt-3 space-y-2">
-                            <p className="text-[12px] text-[#6f7890]">No hay turno activo. Abre caja desde el panel lateral.</p>
-                            <button
-                              type="button"
-                              onClick={() => setCashSidebarView('open_shift')}
-                              className="h-10 w-full rounded-xl bg-[#3053e2] text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
-                            >
-                              Abrir caja
-                            </button>
-                          </div>
+                          <p className="mt-3 text-[12px] text-[#6f7890]">No hay turno activo. Usá el botón de estado más abajo para abrir caja.</p>
                         )}
                       </article>
                     </div>
@@ -1730,32 +1713,25 @@ export default function AdminPaymentsPlaygroundPage() {
                         <span className="text-[12px] text-[#6f7890]">Acciones rápidas</span>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-3">
-                          <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Estado actual</p>
-                          <p className={`mt-1 inline-flex rounded-full px-2 py-1 text-[12px] font-semibold ${cashCurrentShift ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
-                            {cashCurrentShift ? 'Caja abierta' : 'Caja cerrada'}
-                          </p>
-                          <p className="mt-2 text-[12px] text-[#4e5870]">
-                            {cashCurrentShift
-                              ? 'Gestiona apertura y cierre aquí; registra movimientos desde la vista Movimientos.'
-                              : 'Abre caja para iniciar la operación diaria.'}
-                          </p>
-                        </div>
-
-                        <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-3">
-                          <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Acción de turno</p>
-                          <p className="mt-2 text-[12px] text-[#4e5870]">
-                            {cashCurrentShift
-                              ? 'Cierra la caja desde aquí cuando termines la operación del turno.'
-                              : 'Abre la caja para iniciar el turno y habilitar operaciones.'}
-                          </p>
+                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Estado de caja</p>
+                            <p className={`mt-1 inline-flex rounded-full px-2 py-1 text-[12px] font-semibold ${cashCurrentShift ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                              {cashCurrentShift ? 'Caja abierta' : 'Caja cerrada'}
+                            </p>
+                            <p className="mt-2 text-[12px] text-[#4e5870]">
+                              {cashCurrentShift
+                                ? 'Registrá movimientos desde la pestaña Movimientos.'
+                                : 'Abrí caja para iniciar la operación diaria.'}
+                            </p>
+                          </div>
                           <button
                             type="button"
                             onClick={() => setCashSidebarView(cashCurrentShift ? 'close_shift' : 'open_shift')}
-                            className="mt-3 h-9 w-full rounded-xl bg-[#3053e2] px-3 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+                            className="h-9 shrink-0 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
                           >
-                            {cashCurrentShift ? 'Cerrar caja ahora' : 'Abrir caja ahora'}
+                            {cashCurrentShift ? 'Cerrar caja' : 'Abrir caja'}
                           </button>
                         </div>
                       </div>
@@ -1809,7 +1785,7 @@ export default function AdminPaymentsPlaygroundPage() {
                       </div>
                     </div>
 
-                    <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <div className="mb-3 grid grid-cols-3 gap-2">
                       <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
                         <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Resultado visible</p>
                         <p className={`mt-1 text-[13px] font-semibold ${filteredNetAmount >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
@@ -1823,10 +1799,6 @@ export default function AdminPaymentsPlaygroundPage() {
                       <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
                         <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Egresos visibles</p>
                         <p className="mt-1 text-[13px] font-semibold text-red-700">{formatMoney(filteredExpenseAmount)}</p>
-                      </div>
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Ticket promedio</p>
-                        <p className="mt-1 text-[13px] font-semibold text-[#1f2638]">{formatMoney(filteredAverageAmount)}</p>
                       </div>
                     </div>
 

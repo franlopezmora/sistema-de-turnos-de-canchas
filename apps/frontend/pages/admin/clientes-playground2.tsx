@@ -34,7 +34,6 @@ import {
 } from '../../utils/phone';
 
 type ClientsView = 'directory' | 'debt' | 'history';
-type ClientScope = 'all' | 'debt_open';
 type ClientActionSidebarView = 'none' | 'client_create' | 'client_edit' | 'client_profile' | 'client_delete' | 'debt_detail';
 
 type PendingAccountItem = {
@@ -106,6 +105,8 @@ const formatRawTypeFallback = (value: string) =>
     .toLowerCase()
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const shortId = (id: unknown) => String(id || '').slice(-6).toUpperCase();
 
 const formatAccountSourceType = (value: unknown) => {
   const key = String(value || '').trim().toUpperCase();
@@ -241,7 +242,6 @@ export default function AdminClientesPlayground2Page() {
   const { authChecked, user } = useValidateAuth({ requireAdmin: true });
 
   const [activeView, setActiveView] = useState<ClientsView>('directory');
-  const [scope, setScope] = useState<ClientScope>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [clients, setClients] = useState<any[]>([]);
@@ -324,17 +324,12 @@ export default function AdminClientesPlayground2Page() {
     void run();
   }, [resolveClubSlug]);
 
-  useEffect(() => {
-    if (activeView === 'debt') setScope('debt_open');
-    else setScope('all');
-  }, [activeView]);
-
   const loadClients = useCallback(async () => {
     try {
       setLoading(true);
       setErrorMessage('');
       const slug = resolveClubSlug() || undefined;
-      const rows = await ClientService.listDebtors(slug, { scope });
+      const rows = await ClientService.listDebtors(slug, { scope: 'all' });
       const normalized = Array.isArray(rows) ? rows : [];
       setClients(normalized);
 
@@ -354,7 +349,7 @@ export default function AdminClientesPlayground2Page() {
     } finally {
       setLoading(false);
     }
-  }, [resolveClubSlug, scope]);
+  }, [resolveClubSlug]);
 
   useEffect(() => {
     if (!authChecked || !user || !hasAdminAccess(user)) return;
@@ -1301,12 +1296,12 @@ export default function AdminClientesPlayground2Page() {
                   options={[
                     { value: 'directory', label: 'Directorio' },
                     { value: 'debt', label: 'Cuentas y deuda' },
-                    { value: 'history', label: 'Perfil' },
+                    { value: 'history', label: 'Historial' },
                   ]}
                 />
               </header>
 
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3">
                 <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Total clientes</p>
                   <p className="mt-2 text-lg font-semibold text-[#1f2638]">{totalClients}</p>
@@ -1314,29 +1309,6 @@ export default function AdminClientesPlayground2Page() {
                 <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Deuda total</p>
                   <p className={`mt-2 text-lg font-semibold ${totalDebt > 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatMoney(totalDebt)}</p>
-                </article>
-                <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Alcance</p>
-                  <div className="mt-2 inline-flex rounded-xl border border-[#dce2ee] bg-white p-1">
-                    <button
-                      type="button"
-                      onClick={() => setScope('all')}
-                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-                        scope === 'all' ? 'bg-[#edf1ff] text-[#3053e2]' : 'text-[#6f7890] hover:bg-[#f8f9fd]'
-                      }`}
-                    >
-                      Todos
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setScope('debt_open')}
-                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-                        scope === 'debt_open' ? 'bg-[#edf1ff] text-[#3053e2]' : 'text-[#6f7890] hover:bg-[#f8f9fd]'
-                      }`}
-                    >
-                      Con deuda
-                    </button>
-                  </div>
                 </article>
               </div>
 
@@ -1347,11 +1319,11 @@ export default function AdminClientesPlayground2Page() {
                 </div>
               )}
 
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div className="min-h-0 flex-1 overflow-hidden">
                 {activeView === 'directory' && (
-                  <div className="grid min-h-full grid-cols-1 gap-4">
-                    <article className="rounded-xl border border-[#dce2ee] bg-white p-4">
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <div className="flex h-full flex-col">
+                    <article className="flex min-h-0 flex-1 flex-col rounded-xl border border-[#dce2ee] bg-white">
+                      <div className="flex flex-wrap items-center gap-2 p-4 pb-3">
                         <label className="relative w-full max-w-[320px]">
                           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8b93a5]" />
                           <input
@@ -1371,19 +1343,20 @@ export default function AdminClientesPlayground2Page() {
                         </button>
                       </div>
 
-                      <div className="max-h-[66vh] overflow-auto rounded-xl border border-[#dce2ee]">
+                      <div className="min-h-0 flex-1 overflow-auto rounded-b-xl border-t border-[#dce2ee]">
                         {loading ? (
                           <div className="p-8 text-center text-[13px] text-[#6f7890]">Cargando clientes...</div>
                         ) : filteredClients.length === 0 ? (
                           <div className="p-8 text-center text-[13px] text-[#6f7890]">No hay clientes para mostrar.</div>
                         ) : (
-                          <table className="w-full min-w-[760px] text-[13px]">
+                          <table className="w-full min-w-[900px] text-[13px]">
                             <thead className="sticky top-0 bg-[#f8f9fd] text-[12px] uppercase tracking-wide text-[#6f7890]">
                               <tr>
                                 <th className="px-3 py-2 text-left">Cliente</th>
                                 <th className="px-3 py-2 text-left">DNI</th>
-                                <th className="px-3 py-2 text-left">Contacto</th>
-                                <th className="px-3 py-2 text-left">Reservas</th>
+                                <th className="px-3 py-2 text-left">Teléfono</th>
+                                <th className="px-3 py-2 text-left">Email</th>
+                                <th className="px-3 py-2 text-left">Última reserva</th>
                                 <th className="px-3 py-2 text-left">Deuda</th>
                                 <th className="px-3 py-2 text-right">Acciones</th>
                               </tr>
@@ -1393,8 +1366,9 @@ export default function AdminClientesPlayground2Page() {
                                 <tr key={String(client.id)} className="border-t border-[#edf0f6] hover:bg-[#f4f6fb]">
                                   <td className="px-3 py-2 font-semibold text-[#1f2638]">{getClientName(client)}</td>
                                   <td className="px-3 py-2 text-[#4e5870]">{String(client.dni || '-')}</td>
-                                  <td className="px-3 py-2 text-[#4e5870]">{String(client.phone || client.email || '-')}</td>
-                                  <td className="px-3 py-2 text-[#4e5870]">{Number(client.totalBookings || 0)}</td>
+                                  <td className="px-3 py-2 text-[#4e5870]">{String(client.phone || '-')}</td>
+                                  <td className="px-3 py-2 text-[#4e5870]">{String(client.email || '-')}</td>
+                                  <td className="px-3 py-2 text-[#4e5870]">{client.lastBookingAt ? formatDate(String(client.lastBookingAt)) : '-'}</td>
                                   <td className={`px-3 py-2 font-semibold ${Number(client.totalDebt || 0) > EPSILON ? 'text-red-700' : 'text-[#6f7890]'}`}>
                                     {Number(client.totalDebt || 0) > EPSILON ? formatMoney(Number(client.totalDebt || 0)) : 'Sin deuda'}
                                   </td>
@@ -1436,12 +1410,14 @@ export default function AdminClientesPlayground2Page() {
                 )}
 
                 {activeView === 'debt' && (
-                  <div className="grid min-h-full grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
-                    <article className="rounded-xl border border-[#dce2ee] bg-white p-4">
-                      <h2 className="text-[13px] font-semibold text-[#1f2638]">Clientes con deuda</h2>
-                      <p className="mt-1 text-[12px] text-[#6f7890]">Selecciona un cliente para revisar cuentas pendientes.</p>
+                  <div className="grid h-full grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
+                    <article className="flex min-h-0 flex-col rounded-xl border border-[#dce2ee] bg-white">
+                      <div className="p-4 pb-3">
+                        <h2 className="text-[13px] font-semibold text-[#1f2638]">Clientes con deuda</h2>
+                        <p className="mt-1 text-[12px] text-[#6f7890]">Selecciona un cliente para revisar cuentas pendientes.</p>
+                      </div>
 
-                      <div className="mt-3 max-h-[66vh] overflow-auto rounded-xl border border-[#dce2ee]">
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-[#dce2ee]">
                         {loading ? (
                           <div className="p-6 text-center text-[13px] text-[#6f7890]">Cargando...</div>
                         ) : filteredClients.length === 0 ? (
@@ -1467,23 +1443,24 @@ export default function AdminClientesPlayground2Page() {
                       </div>
                     </article>
 
-                    <article className="rounded-xl border border-[#dce2ee] bg-white p-4">
-                      <div className="mb-3 flex items-center justify-between">
+                    <article className="flex min-h-0 flex-col rounded-xl border border-[#dce2ee] bg-white">
+                      <div className="flex items-center justify-between p-4 pb-3">
                         <h2 className="text-[13px] font-semibold text-[#1f2638]">Cuentas pendientes</h2>
                         <span className="text-[12px] text-[#6f7890]">{selectedClient ? getClientName(selectedClient) : 'Sin seleccion'}</span>
                       </div>
 
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-[#dce2ee] p-4">
                       {!selectedClient ? (
                         <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Selecciona un cliente para ver su deuda.</div>
                       ) : selectedDebtorPendingEntries.length === 0 ? (
                         <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Este cliente no tiene cuentas pendientes.</div>
                       ) : (
-                        <div className="space-y-3 max-h-[66vh] overflow-auto">
+                        <div className="space-y-3">
                           {selectedDebtorPendingEntries.map((account: any) => (
                             <div key={String(account.id)} className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
-                                  <p className="text-[13px] font-semibold text-[#1f2638]">Cuenta {formatAccountSourceType(account.sourceType)} #{String(account.id)}</p>
+                                  <p className="text-[13px] font-semibold text-[#1f2638]">Cuenta {formatAccountSourceType(account.sourceType)} #{shortId(account.id)}</p>
                                   <p className="text-[12px] text-[#6f7890]">{formatDate(account.date)} {account.time ? `· ${account.time}` : ''}</p>
                                 </div>
                                 <div className="text-right">
@@ -1511,15 +1488,18 @@ export default function AdminClientesPlayground2Page() {
                           ))}
                         </div>
                       )}
+                      </div>
                     </article>
                   </div>
                 )}
 
                 {activeView === 'history' && (
-                  <div className="grid min-h-full grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
-                    <article className="rounded-xl border border-[#dce2ee] bg-white p-4">
-                      <h2 className="text-[13px] font-semibold text-[#1f2638]">Clientes</h2>
-                      <div className="mt-2 max-h-[66vh] overflow-auto rounded-xl border border-[#dce2ee]">
+                  <div className="grid h-full grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
+                    <article className="flex min-h-0 flex-col rounded-xl border border-[#dce2ee] bg-white">
+                      <div className="p-4 pb-3">
+                        <h2 className="text-[13px] font-semibold text-[#1f2638]">Clientes</h2>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-[#dce2ee]">
                         {loading ? (
                           <div className="p-6 text-center text-[13px] text-[#6f7890]">Cargando...</div>
                         ) : filteredClients.length === 0 ? (
@@ -1545,7 +1525,7 @@ export default function AdminClientesPlayground2Page() {
                       </div>
                     </article>
 
-                    <article className="rounded-xl border border-[#dce2ee] bg-white p-4">
+                    <article className="flex min-h-0 flex-col overflow-auto rounded-xl border border-[#dce2ee] bg-white p-4">
                       {!selectedClient ? (
                         <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Selecciona un cliente para ver su perfil.</div>
                       ) : (
@@ -1625,7 +1605,7 @@ export default function AdminClientesPlayground2Page() {
                                   <ul className="space-y-2">
                                     {historyAccounts.map((account: any) => (
                                       <li key={String(account.id)} className="rounded-lg border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
-                                        <p className="text-[12px] font-semibold text-[#1f2638]">Cuenta {formatAccountSourceType(account.sourceType)} #{String(account.id)}</p>
+                                        <p className="text-[12px] font-semibold text-[#1f2638]">Cuenta {formatAccountSourceType(account.sourceType)} #{shortId(account.id)}</p>
                                         <p className="text-[12px] text-[#6f7890]">{formatDate(account.date)}{account.time ? ` · ${account.time}` : ''}</p>
                                         <p className="text-[12px] text-[#4e5870]">Total {formatMoney(Number(account.totalAmount || 0))} · Pendiente {formatMoney(Number(account.amount || 0))}</p>
                                       </li>
@@ -1645,18 +1625,15 @@ export default function AdminClientesPlayground2Page() {
       </AdminPlaygroundShell>
 
       {activePaymentModal?.flow === 'playtomicPayment' && activePaymentModal.step === 'form' && (
-        <div className="fixed inset-0 z-[2147483200]">
-          <button
-            type="button"
-            className="absolute inset-0 bg-[#0d1326]/45"
-            onPointerDown={handleModalBackdropPointerDown}
-            onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
-            aria-label="Cerrar modal de cobro"
-          />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-[2147483200] flex items-center justify-center p-4 bg-[#0d1326]/45"
+          onPointerDown={handleModalBackdropPointerDown}
+          onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
+        >
             <div
               className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
-              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
                 <div>
@@ -1915,7 +1892,6 @@ export default function AdminClientesPlayground2Page() {
               </div>
             </div>
           </div>
-        </div>
       )}
 
       {activePaymentModal?.flow === 'playtomicPayment' &&

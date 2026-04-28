@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Search, Plus, Edit, Trash2, Wrench, Tag, DollarSign } from 'lucide-react';
 import { ClubAdminService, type ClubCatalogService } from '../services/ClubAdminService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
@@ -40,7 +40,6 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
     message: string;
     isWarning?: boolean;
   }>({ show: false, title: 'Informacion', message: '' });
-  const [drawerSection, setDrawerSection] = useState<'GENERAL' | 'PRICING' | 'DETAIL'>('GENERAL');
 
   const loadServices = useCallback(async () => {
     try {
@@ -86,10 +85,6 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
     setFormError('');
   };
 
-  useEffect(() => {
-    if (!isModalOpen) return;
-    setDrawerSection('GENERAL');
-  }, [isModalOpen, editing?.id]);
 
   const submitForm = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -140,38 +135,8 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
     );
   });
 
-  const serviceSummary = useMemo(() => {
-    const active = services.filter((s) => s.isActive);
-    const inactive = services.filter((s) => !s.isActive);
-    const averagePrice = active.length
-      ? active.reduce((sum, s) => sum + Number(s.price || 0), 0) / active.length
-      : 0;
-    return { total: services.length, active: active.length, inactive: inactive.length, averagePrice };
-  }, [services]);
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Servicios</p>
-          <p className="mt-1 text-[24px] font-bold text-[#3155df]">{serviceSummary.total}</p>
-        </div>
-        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Activos</p>
-          <p className="mt-1 text-[24px] font-bold text-[#2f5e46]">{serviceSummary.active}</p>
-        </div>
-        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Inactivos</p>
-          <p className="mt-1 text-[24px] font-bold text-[#9a5a00]">{serviceSummary.inactive}</p>
-        </div>
-        <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Promedio</p>
-          <p className="mt-1 text-[24px] font-bold text-[#27314a]">
-            ${Math.round(serviceSummary.averagePrice).toLocaleString()}
-          </p>
-        </div>
-      </div>
-
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full flex-1 sm:max-w-md">
           <Search
@@ -190,7 +155,7 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
         <button
           type="button"
           onClick={openNew}
-          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition-all hover:bg-[#2748cc] sm:w-auto"
+          className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition-all hover:bg-[#2748cc] sm:w-auto"
         >
           <Plus size={16} strokeWidth={2.5} />
           Nuevo servicio
@@ -204,13 +169,13 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
       >
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-[#edf0f6] bg-[#f8f9fc] text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">
-                <th className="px-5 py-3">Codigo</th>
-                <th className="px-5 py-3">Servicio</th>
-                <th className="px-5 py-3">Precio</th>
-                <th className="px-5 py-3">Estado</th>
-                <th className="px-5 py-3 text-right">Acciones</th>
+                <th className="px-4 py-2.5">Codigo</th>
+                <th className="px-4 py-2.5">Servicio</th>
+                <th className="px-4 py-2.5">Precio</th>
+                <th className="px-4 py-2.5">Estado</th>
+                <th className="px-4 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#edf0f6] text-[12px]">
@@ -229,12 +194,12 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
               ) : (
                 filtered.map((service) => (
                   <tr key={service.id} className="transition-colors hover:bg-[#f8f9fc]">
-                    <td className="px-5 py-4 font-semibold uppercase text-[#3053e2]">{service.code}</td>
-                    <td className="px-5 py-4 font-semibold text-[#2a3245]">{service.name}</td>
-                    <td className="px-5 py-4 text-[13px] font-semibold text-[#27314a]">
+                    <td className="px-4 py-3 font-semibold uppercase text-[#3053e2]">{service.code}</td>
+                    <td className="px-4 py-3 font-semibold text-[#2a3245]">{service.name}</td>
+                    <td className="px-4 py-3 text-[13px] font-semibold text-[#27314a]">
                       ${Number(service.price || 0).toLocaleString()}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-4 py-3">
                       <span
                         className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                           service.isActive
@@ -245,7 +210,7 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
                         {service.isActive ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-right">
+                    <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
@@ -281,20 +246,6 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
         description="Catalogo de servicios del club"
         onClose={closeModal}
         widthClassName="w-full max-w-[500px]"
-        tabs={[
-          { id: 'GENERAL', label: 'General' },
-          { id: 'PRICING', label: 'Precio' },
-          { id: 'DETAIL', label: 'Detalle' },
-        ]}
-        activeTabId={drawerSection}
-        onTabChange={(tabId) => {
-          const next = tabId as 'GENERAL' | 'PRICING' | 'DETAIL';
-          setDrawerSection(next);
-          if (typeof window !== 'undefined') {
-            const target = window.document.getElementById(`services-drawer-${next.toLowerCase()}`);
-            target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }}
       >
         <form onSubmit={submitForm} className="space-y-5">
           <div id="services-drawer-general" className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
@@ -376,13 +327,13 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
             <button
               type="button"
               onClick={closeModal}
-              className="h-10 flex-1 rounded-lg border border-[#dce2ee] bg-white text-[13px] font-semibold text-[#4e5870] transition-all hover:bg-[#f8faff]"
+              className="h-9 flex-1 rounded-lg border border-[#dce2ee] bg-white text-[12px] font-semibold text-[#4e5870] transition-all hover:bg-[#f8faff]"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="h-10 flex-1 rounded-lg bg-[#3053e2] text-[13px] font-semibold text-white transition-all hover:bg-[#2748cc]"
+              className="h-9 flex-1 rounded-lg bg-[#3053e2] text-[12px] font-semibold text-white transition-all hover:bg-[#2748cc]"
             >
               {editing ? 'Guardar cambios' : 'Crear servicio'}
             </button>

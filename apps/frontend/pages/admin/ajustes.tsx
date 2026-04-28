@@ -65,15 +65,14 @@ export default function AdminSettingsV2Page() {
 
   return (
     <AdminRouteShell title="Ajustes | TuCancha Admin" activeItem="Ajustes" fromPath="/admin/ajustes">
-      <section className="h-full min-h-0 overflow-y-auto p-4 pb-20 lg:p-6">
-        <div className="flex min-h-full flex-col gap-4">
-          <AdminModuleTabs
-            tabs={SETTINGS_TABS}
-            value={activeTab}
-            onChange={(value) => handleChangeTab(value as SettingsTab)}
-            ariaLabel="Subnavegacion de ajustes"
-          />
-
+      <div className="flex h-full min-h-0 flex-col gap-4 p-4 pb-0 lg:p-6 lg:pb-0">
+        <AdminModuleTabs
+          tabs={SETTINGS_TABS}
+          value={activeTab}
+          onChange={(value) => handleChangeTab(value as SettingsTab)}
+          ariaLabel="Subnavegacion de ajustes"
+        />
+        <section className="min-h-0 flex-1 overflow-y-auto pb-6 lg:pb-8">
           {activeTab === 'club' && <AdminTabClub />}
           {activeTab === 'canchas' && <AdminTabCourts />}
           {activeTab !== 'club' && activeTab !== 'canchas' && (
@@ -82,8 +81,8 @@ export default function AdminSettingsV2Page() {
               description="Esta configuracion queda visible en roadmap y se migrara a panel lateral con componentes compartidos."
             />
           )}
-        </div>
-      </section>
+        </section>
+      </div>
     </AdminRouteShell>
   );
 }

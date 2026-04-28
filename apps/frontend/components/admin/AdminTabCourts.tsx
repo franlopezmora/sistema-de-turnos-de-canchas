@@ -168,8 +168,7 @@ export default function AdminTabCourts() {
     : 0;
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto">
-      <div className="flex h-full min-h-0 w-full flex-col gap-4 p-4 pb-20 lg:p-6">
+    <div className="flex w-full flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-xl border border-[#dce2ee] bg-white p-4 shadow-[0_8px_26px_rgba(34,42,68,0.05)]">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Total</p>
@@ -215,10 +214,7 @@ export default function AdminTabCourts() {
                 <div className="p-5 pl-6">
                   <div className="mb-4 flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#8b95aa]">
-                        #{court.id.toString().padStart(3, '0')}
-                      </p>
-                      <h3 className="mt-0.5 text-[18px] font-semibold text-[#1f2638]">
+                      <h3 className="text-[18px] font-semibold text-[#1f2638]">
                         {court.name}
                       </h3>
                     </div>
@@ -321,7 +317,6 @@ export default function AdminTabCourts() {
           closeOnBackdrop={modalState.closeOnBackdrop}
           closeOnEscape={modalState.closeOnEscape}
         />
-      </div>
     </div>
   );
 }

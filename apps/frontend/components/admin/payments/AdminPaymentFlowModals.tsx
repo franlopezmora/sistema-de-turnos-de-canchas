@@ -74,19 +74,16 @@ export function AdminPaymentFormModal({
   footer,
 }: AdminPaymentFormModalProps) {
   return (
-    <div className="fixed inset-0 z-[2147483200]">
-      <button
-        type="button"
-        className="absolute inset-0 bg-[#0d1326]/45"
-        onPointerDown={onBackdropPointerDown}
-        onPointerUp={onBackdropPointerUp}
-        aria-label="Cerrar modal de cobro"
-      />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div
-          className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
-          onClick={(event) => event.stopPropagation()}
-        >
+    <div
+      className="fixed inset-0 z-[2147483200] flex items-center justify-center p-4 bg-[#0d1326]/45"
+      onPointerDown={onBackdropPointerDown}
+      onPointerUp={onBackdropPointerUp}
+    >
+      <div
+        className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+      >
           <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
             <div>
               <p className="text-[18px] font-semibold text-[#1f2638]">{title}</p>
@@ -106,7 +103,6 @@ export function AdminPaymentFormModal({
             <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-4 py-3">{footer}</div>
           ) : null}
         </div>
-      </div>
     </div>
   );
 }

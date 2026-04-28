@@ -201,36 +201,31 @@ export default function AdminTabStatistics({ slugProp }: Props) {
 
   if (loading && !stats) {
     return (
-      <div className="h-full min-h-0 overflow-y-auto">
-        <div className="flex min-h-[420px] items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#dce2ee] border-t-[#3053e2]" />
-        </div>
+      <div className="flex min-h-[420px] items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#dce2ee] border-t-[#3053e2]" />
       </div>
     );
   }
 
   if (!stats) {
     return (
-      <div className="h-full min-h-0 overflow-y-auto">
-        <div className="flex h-full min-h-0 w-full flex-col gap-4 p-4 lg:p-6">
-          <AdminPanel>
-            <p className="text-[12px] text-[#6f7890]">No hay datos disponibles para este periodo.</p>
-            <button
-              type="button"
-              onClick={() => void loadStats()}
-              className="mt-3 h-10 rounded-lg bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
-            >
-              Reintentar
-            </button>
-          </AdminPanel>
-        </div>
+      <div className="flex w-full flex-col gap-4">
+        <AdminPanel>
+          <p className="text-[12px] text-[#6f7890]">No hay datos disponibles para este periodo.</p>
+          <button
+            type="button"
+            onClick={() => void loadStats()}
+            className="mt-3 h-10 rounded-lg bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+          >
+            Reintentar
+          </button>
+        </AdminPanel>
       </div>
     );
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto">
-    <div className="flex h-full min-h-0 w-full flex-col gap-4 p-4 pb-20 lg:p-6">
+    <div className="flex w-full flex-col gap-4">
 
       <AdminPanel bodyClassName="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center rounded-xl border border-[#dce2ee] bg-[#f8faff]">
@@ -301,11 +296,11 @@ export default function AdminTabStatistics({ slugProp }: Props) {
               <BarChart data={stats?.dailyEvolution || []} margin={{ top: 20, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5eaf3" />
                 <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }} tickFormatter={(val) => `$${val / 1000}k`} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }} tickFormatter={(val) => val >= 1000 ? `$${(val / 1000).toFixed(0)}k` : `$${val}`} />
                 <Tooltip cursor={{ fill: '#f5f7fb' }} contentStyle={{ borderRadius: 12, border: '1px solid #dce2ee', boxShadow: '0 8px 22px rgba(34,42,68,0.08)' }} />
                 <Legend />
                 <Bar dataKey="turnos" name="Turnos" stackId="a" fill="#1f2638" radius={[0, 0, 0, 0]} barSize={36} />
-                <Bar dataKey="bar" name="Bar/Productos" stackId="a" fill="#3053e2" radius={[6, 6, 0, 0]} barSize={36} />
+                <Bar dataKey="bar" name="Consumos" stackId="a" fill="#3053e2" radius={[6, 6, 0, 0]} barSize={36} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -326,7 +321,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pb-8">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8b95aa]">Total</span>
-              <span className="text-2xl font-bold text-[#27314a]">${((stats?.totalRevenue || 0) / 1000).toFixed(0)}k</span>
+              <span className="text-2xl font-bold text-[#27314a]">${(stats?.totalRevenue || 0) >= 1000 ? `${((stats?.totalRevenue || 0) / 1000).toFixed(0)}k` : (stats?.totalRevenue || 0).toLocaleString('es-AR')}</span>
             </div>
           </div>
         </AdminPanel>
@@ -396,7 +391,6 @@ export default function AdminTabStatistics({ slugProp }: Props) {
           </div>
         </AdminPanel>
       </div>
-    </div>
     </div>
   );
 }

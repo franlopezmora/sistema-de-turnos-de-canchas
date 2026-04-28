@@ -56,12 +56,12 @@ export default function BookingHoverCard({ x, y, participants }: BookingHoverCar
                 <p className="text-[10px] text-[#7f8798]">
                   {participant.status === 'PAID'
                     ? 'Saldado'
-                    : `Debe ${Number(participant.debtAmount || 0).toFixed(2)} $`}
+                    : `${Number(participant.debtAmount || 0).toLocaleString("es-AR", {minimumFractionDigits: 0, maximumFractionDigits: 0})} pendiente`}
                 </p>
               )}
               {participant.payable === false && participant.payer && participant.modeLabel === 'Pago único' && (
                 <p className="text-[10px] text-[#5c6785]">
-                  Pago {Number(participant.payerAmount || 0).toFixed(2)} $
+                  Pago {Number(participant.payerAmount || 0).toLocaleString("es-AR", {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                 </p>
               )}
             </div>

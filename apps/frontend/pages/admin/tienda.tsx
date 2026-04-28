@@ -44,15 +44,14 @@ export default function AdminStorePage() {
         const clubSlug = getActiveClubSlug(normalizedUser);
 
         return (
-          <section className="h-full min-h-0 overflow-y-auto p-4 pb-20 lg:p-6">
-            <div className="flex min-h-full flex-col gap-4">
-              <AdminModuleTabs
-                tabs={STORE_TABS}
-                value={activeTab}
-                onChange={(value) => handleChangeTab(value as StoreTab)}
-                ariaLabel="Subnavegacion de tienda"
-              />
-
+          <div className="flex h-full min-h-0 flex-col gap-4 p-4 pb-0 lg:p-6 lg:pb-0">
+            <AdminModuleTabs
+              tabs={STORE_TABS}
+              value={activeTab}
+              onChange={(value) => handleChangeTab(value as StoreTab)}
+              ariaLabel="Subnavegacion de tienda"
+            />
+            <section className="min-h-0 flex-1 overflow-y-auto pb-6 lg:pb-8">
               {activeTab === 'productos' && <AdminTabProducts clubSlug={clubSlug || undefined} />}
               {activeTab === 'servicios' && <AdminTabServices clubSlug={clubSlug || undefined} />}
               {activeTab === 'inventario' && (
@@ -61,8 +60,8 @@ export default function AdminStorePage() {
                   description="El inventario consolidado de tienda va a vivir en este modulo, con stock por producto y alertas de reposicion."
                 />
               )}
-            </div>
-          </section>
+            </section>
+          </div>
         );
       }}
     </AdminRouteShell>

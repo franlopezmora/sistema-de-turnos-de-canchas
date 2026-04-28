@@ -46,15 +46,14 @@ export default function AdminReportsPage() {
         const userSlug = getActiveClubSlug(normalizeSessionUser(user as any));
 
         return (
-          <section className="h-full min-h-0 overflow-y-auto p-4 pb-20 lg:p-6">
-            <div className="flex min-h-full flex-col gap-4">
-              <AdminModuleTabs
-                tabs={REPORT_TABS}
-                value={activeTab}
-                onChange={(value) => handleChangeTab(value as ReportsTab)}
-                ariaLabel="Subnavegacion de informes"
-              />
-
+          <div className="flex h-full min-h-0 flex-col gap-4 p-4 pb-0 lg:p-6 lg:pb-0">
+            <AdminModuleTabs
+              tabs={REPORT_TABS}
+              value={activeTab}
+              onChange={(value) => handleChangeTab(value as ReportsTab)}
+              ariaLabel="Subnavegacion de informes"
+            />
+            <section className="min-h-0 flex-1 overflow-y-auto pb-6 lg:pb-8">
               {activeTab === 'resumen' && (
                 userSlug ? (
                   <AdminTabStatistics slugProp={userSlug} />
@@ -72,8 +71,8 @@ export default function AdminReportsPage() {
                   description="Esta vista queda visible en la hoja de ruta del Admin v2 y se va a consolidar con filtros compartidos."
                 />
               )}
-            </div>
-          </section>
+            </section>
+          </div>
         );
       }}
     </AdminRouteShell>

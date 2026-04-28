@@ -5,8 +5,7 @@ import { getCourts } from '../../services/CourtService';
 import { ClubAdminService, ClubActivityType, type ActivityScheduleException, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope, type AuditLogEntry, type ClubReviewAdminItem, type ClubReviewAdminStatus } from '../../services/ClubAdminService';
 import { searchClients } from '../../services/BookingService';
 import AdminAppModal from './ui/AdminAppModal';
-import DatePickerDark from '../ui/DatePickerDark';
-import { Globe, Instagram, Facebook, Phone, Mail, Image as ImageIcon, AlertTriangle, Check, X, Search } from 'lucide-react';
+import { Globe, Instagram, Facebook, Phone, Mail, Image as ImageIcon, AlertTriangle, Check, X, Search, CalendarDays } from 'lucide-react';
 import { AdminRightSidebar, AdminSegmentedControl } from './ui';
 import { normalizeSessionUser } from '../../utils/session';
 import { useRouter } from 'next/router';
@@ -1185,17 +1184,17 @@ export default function AdminTabClub() {
                 Cambios críticos detectados: {criticalChanges.length}
               </p>
             ) : null}
-            <div className="max-h-56 overflow-auto rounded-xl border border-[#347048]/15 bg-white/80 p-3">
-              <ul className="space-y-1 text-xs text-[#347048]">
+            <div className="max-h-56 overflow-auto rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
+              <ul className="space-y-1 text-[12px] text-[#4e5870]">
                 {topChanges.map((change) => (
                   <li key={`${change.label}-${change.after}`}>
-                    {change.critical ? '• [CRITICO] ' : '• '}
-                    {change.label}: {change.before} ? {change.after}
+                    {change.critical ? '• [CRÍTICO] ' : '• '}
+                    {change.label}: {change.before} → {change.after}
                   </li>
                 ))}
               </ul>
             </div>
-            <p className="text-xs font-bold text-[#347048]/70">
+            <p className="text-[12px] text-[#6f7890]">
               Confirmá solo si verificaste el impacto operativo de estos cambios.
             </p>
           </div>
@@ -1839,8 +1838,6 @@ export default function AdminTabClub() {
     ? closureDatesSet.filter((date) => date >= clubForm.temporaryClosureStartDate && date <= clubForm.temporaryClosureEndDate)
     : [];
 
-  const inputClass = "w-full h-11 bg-white border-2 border-transparent focus:border-[#B9CF32] rounded-xl px-4 text-[#347048] font-bold placeholder-[#347048]/20 focus:outline-none shadow-sm transition-all";
-  const labelClass = "block text-[10px] font-black text-[#347048]/60 mb-1.5 uppercase tracking-widest ml-1";
 
 
   const formatPhoneInput = (value: string) => {
@@ -1863,7 +1860,7 @@ export default function AdminTabClub() {
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col gap-4 p-4 lg:p-6">
+      <div className="flex w-full flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -2455,43 +2452,37 @@ export default function AdminTabClub() {
                       <div>
                         <label className={labelCls}>Inicio del cierre temporal</label>
                         <div className="relative flex h-10 items-center rounded-xl border border-[#dce2ee] bg-white px-3">
-                          <span className="pointer-events-none text-[13px] text-[#1f2638]">
+                          <CalendarDays size={14} className="mr-2 shrink-0 text-[#8b95aa]" />
+                          <span className="pointer-events-none flex-1 text-[13px] text-[#1f2638]">
                             {parseLocalDate(clubForm.temporaryClosureStartDate)
                               ? parseLocalDate(clubForm.temporaryClosureStartDate)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
                               : 'Seleccionar fecha'}
                           </span>
-                          <div className="absolute inset-0 z-10">
-                            <DatePickerDark
-                              selected={parseLocalDate(clubForm.temporaryClosureStartDate)}
-                              onChange={(date: Date | null) => setClubForm((prev) => ({ ...prev, temporaryClosureStartDate: date ? formatLocalDate(date) : '' }))}
-                              minDate={parseLocalDate(getTodayDateKey()) || undefined}
-                              showIcon={false}
-                              variant="light"
-                              popperPlacement="bottom"
-                              inputClassName="w-full h-10 opacity-0 cursor-pointer"
-                            />
-                          </div>
+                          <input
+                            type="date"
+                            min={getTodayDateKey()}
+                            value={clubForm.temporaryClosureStartDate}
+                            onChange={(e) => setClubForm((prev) => ({ ...prev, temporaryClosureStartDate: e.target.value }))}
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                          />
                         </div>
                       </div>
                       <div>
                         <label className={labelCls}>Fin del cierre temporal</label>
                         <div className="relative flex h-10 items-center rounded-xl border border-[#dce2ee] bg-white px-3">
-                          <span className="pointer-events-none text-[13px] text-[#1f2638]">
+                          <CalendarDays size={14} className="mr-2 shrink-0 text-[#8b95aa]" />
+                          <span className="pointer-events-none flex-1 text-[13px] text-[#1f2638]">
                             {parseLocalDate(clubForm.temporaryClosureEndDate)
                               ? parseLocalDate(clubForm.temporaryClosureEndDate)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
                               : 'Seleccionar fecha'}
                           </span>
-                          <div className="absolute inset-0 z-10">
-                            <DatePickerDark
-                              selected={parseLocalDate(clubForm.temporaryClosureEndDate)}
-                              onChange={(date: Date | null) => setClubForm((prev) => ({ ...prev, temporaryClosureEndDate: date ? formatLocalDate(date) : '' }))}
-                              minDate={parseLocalDate(getTodayDateKey()) || undefined}
-                              showIcon={false}
-                              variant="light"
-                              popperPlacement="bottom"
-                              inputClassName="w-full h-10 opacity-0 cursor-pointer"
-                            />
-                          </div>
+                          <input
+                            type="date"
+                            min={clubForm.temporaryClosureStartDate || getTodayDateKey()}
+                            value={clubForm.temporaryClosureEndDate}
+                            onChange={(e) => setClubForm((prev) => ({ ...prev, temporaryClosureEndDate: e.target.value }))}
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                          />
                         </div>
                       </div>
                     </div>
@@ -2507,22 +2498,19 @@ export default function AdminTabClub() {
                   )}
                   <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <div className="relative flex h-10 w-full items-center rounded-xl border border-[#dce2ee] bg-white px-3 md:w-64">
-                      <span className="pointer-events-none text-[13px] text-[#1f2638]">
+                      <CalendarDays size={14} className="mr-2 shrink-0 text-[#8b95aa]" />
+                      <span className="pointer-events-none flex-1 text-[13px] text-[#1f2638]">
                         {parseLocalDate(closureDateInput)
                           ? parseLocalDate(closureDateInput)!.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
                           : 'Seleccionar fecha'}
                       </span>
-                      <div className="absolute inset-0 z-10">
-                        <DatePickerDark
-                          selected={parseLocalDate(closureDateInput)}
-                          onChange={(date: Date | null) => setClosureDateInput(date ? formatLocalDate(date) : '')}
-                          minDate={parseLocalDate(getTodayDateKey()) || undefined}
-                          showIcon={false}
-                          variant="light"
-                          popperPlacement="bottom"
-                          inputClassName="w-full h-10 opacity-0 cursor-pointer"
-                        />
-                      </div>
+                      <input
+                        type="date"
+                        min={getTodayDateKey()}
+                        value={closureDateInput}
+                        onChange={(e) => setClosureDateInput(e.target.value)}
+                        className="absolute inset-0 cursor-pointer opacity-0"
+                      />
                     </div>
                     <button
                       type="button"
