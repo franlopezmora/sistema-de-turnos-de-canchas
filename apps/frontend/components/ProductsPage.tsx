@@ -5,11 +5,100 @@ import { ClubAdminService } from '../services/ClubAdminService';
 import { Search, Plus, Edit, Trash2, X, Package, Tag, DollarSign, Box } from 'lucide-react';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
 import AppModal from './AppModal';
-import { AdminPanel, AdminRightSidebar } from './admin/ui';
+import { AdminDataTable, AdminPanel, AdminRightSidebar } from './admin/ui';
+import type { AdminDataTableColumn } from './admin/ui';
 
 interface ProductsPageProps {
   slug?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Table columns
+// ---------------------------------------------------------------------------
+
+const PRODUCT_COLUMNS = (
+  onEdit: (p: any) => void,
+  onDelete: (p: any) => void
+): AdminDataTableColumn<any>[] => [
+  {
+    key: 'name',
+    label: 'Producto',
+    render: (p) => <span className="font-semibold text-[#2a3245]">{p.name}</span>,
+  },
+  {
+    key: 'isCombo',
+    label: 'Tipo',
+    render: (p) => (
+      <span
+        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+          p.isCombo
+            ? 'border-[#c7d2ff] bg-[#eef1ff] text-[#3053e2]'
+            : 'border-[#dce2ee] bg-[#f5f7fb] text-[#697386]'
+        }`}
+      >
+        {p.isCombo ? 'Combo' : 'Simple'}
+      </span>
+    ),
+  },
+  {
+    key: 'category',
+    label: 'Categoría',
+    render: (p) => (
+      <span className="rounded-full border border-[#dce2ee] bg-[#f5f7fb] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#697386]">
+        {p.category || 'General'}
+      </span>
+    ),
+  },
+  {
+    key: 'stock',
+    label: 'Stock',
+    render: (p) => (
+      <span
+        className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+          Number(p.stock) < 5
+            ? 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318]'
+            : 'border-[#ccebd7] bg-[#f0fbf4] text-[#167647]'
+        }`}
+      >
+        {p.stock} u.
+      </span>
+    ),
+  },
+  {
+    key: 'price',
+    label: 'Precio',
+    render: (p) => (
+      <span className="font-semibold text-[#27314a]">
+        ${Number(p.price || 0).toLocaleString()}
+      </span>
+    ),
+  },
+  {
+    key: '_actions',
+    label: '',
+    align: 'right',
+    render: (p) => (
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => onEdit(p)}
+          className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#697386] shadow-sm transition-all hover:border-[#3053e2] hover:bg-[#f1f4ff] hover:text-[#3053e2]"
+          title="Editar"
+        >
+          <Edit size={15} strokeWidth={2.5} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(p)}
+          className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] shadow-sm transition-all hover:bg-[#b42318] hover:text-white"
+          title="Dar de baja"
+        >
+          <Trash2 size={15} strokeWidth={2.5} />
+        </button>
+      </div>
+    ),
+  },
+];
 
 const inputClass =
   'h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition-all focus:border-[#3053e2]';
@@ -253,91 +342,13 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
         description="Lista operativa de productos, combos, precios y stock disponible."
         bodyClassName="p-0"
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="sticky top-0 z-10">
-              <tr className="border-b border-[#edf0f6] bg-[#f8f9fc] text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">
-                <th className="px-4 py-2.5">Producto</th>
-                <th className="px-4 py-2.5">Tipo</th>
-                <th className="px-4 py-2.5">Categoria</th>
-                <th className="px-4 py-2.5">Stock</th>
-                <th className="px-4 py-2.5">Precio</th>
-                <th className="px-4 py-2.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#edf0f6] text-[12px]">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="p-14 text-center">
-                    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
-                  </td>
-                </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-14 text-center text-sm font-semibold text-[#98a1b3]">
-                    No hay productos registrados
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((product) => (
-                  <tr key={product.id} className="transition-colors hover:bg-[#f8f9fc]">
-                    <td className="px-4 py-3 font-semibold text-[#2a3245]">{product.name}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                          product.isCombo
-                            ? 'border-[#c7d2ff] bg-[#eef1ff] text-[#3053e2]'
-                            : 'border-[#dce2ee] bg-[#f5f7fb] text-[#697386]'
-                        }`}
-                      >
-                        {product.isCombo ? 'Combo' : 'Simple'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full border border-[#dce2ee] bg-[#f5f7fb] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#697386]">
-                        {product.category || 'General'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                          product.stock < 5
-                            ? 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318]'
-                            : 'border-[#ccebd7] bg-[#f0fbf4] text-[#167647]'
-                        }`}
-                      >
-                        {product.stock} u.
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[13px] font-semibold text-[#27314a]">
-                      ${product.price?.toLocaleString?.() ?? product.price}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(product)}
-                          className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#697386] shadow-sm transition-all hover:border-[#3053e2] hover:bg-[#f1f4ff] hover:text-[#3053e2]"
-                          title="Editar"
-                        >
-                          <Edit size={15} strokeWidth={2.5} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(product)}
-                          className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] shadow-sm transition-all hover:bg-[#b42318] hover:text-white"
-                          title="Dar de baja"
-                        >
-                          <Trash2 size={15} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <AdminDataTable
+          columns={PRODUCT_COLUMNS(openEdit, setDeleteTarget)}
+          data={filteredProducts}
+          rowKey={(p) => p.id}
+          loading={loading}
+          empty={{ title: 'No hay productos registrados', description: 'Creá el primero con el botón de arriba.' }}
+        />
       </AdminPanel>
 
       <AdminRightSidebar

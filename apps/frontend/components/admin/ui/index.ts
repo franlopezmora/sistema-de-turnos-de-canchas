@@ -1,4 +1,7 @@
 export { default as AdminAppModal } from './AdminAppModal';
+export { default as AdminDataTable } from './AdminDataTable';
+export type { AdminDataTableColumn } from './AdminDataTable';
+export { default as AdminDateInput } from './AdminDateInput';
 export { default as AdminEmptyState } from './AdminEmptyState';
 export { default as AdminModal } from './AdminModal';
 export { default as AdminModuleTabs } from './AdminModuleTabs';

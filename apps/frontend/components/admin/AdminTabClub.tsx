@@ -6,7 +6,7 @@ import { ClubAdminService, ClubActivityType, type ActivityScheduleException, typ
 import { searchClients } from '../../services/BookingService';
 import AdminAppModal from './ui/AdminAppModal';
 import { Globe, Instagram, Facebook, Phone, Mail, Image as ImageIcon, AlertTriangle, Check, X, Search, CalendarDays } from 'lucide-react';
-import { AdminRightSidebar, AdminSegmentedControl } from './ui';
+import { AdminDateInput, AdminRightSidebar, AdminSegmentedControl } from './ui';
 import { normalizeSessionUser } from '../../utils/session';
 import { useRouter } from 'next/router';
 import { lockBodyScroll } from '../../utils/bodyScrollLock';
@@ -3209,7 +3209,7 @@ export default function AdminTabClub() {
         title="Excepciones de agenda"
         description={exceptionModalActivity?.name}
         onClose={closeExceptionModal}
-        widthClassName="w-full max-w-[960px]"
+        widthClassName="w-full max-w-[520px]"
         tabs={[
           { id: 'LIST', label: 'Fechas' },
           { id: 'DETAIL', label: 'Configuracion' },
@@ -3217,33 +3217,42 @@ export default function AdminTabClub() {
         activeTabId={exceptionModalSidebarTab}
         onTabChange={(tabId) => setExceptionModalSidebarTab(tabId as 'LIST' | 'DETAIL')}
       >
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className={exceptionModalSidebarTab === 'LIST' ? '' : 'hidden'}>
-            <div className="mb-3 rounded-xl border border-[#dce2ee] p-3">
+        {/* ── Tab: Fechas ── */}
+        {exceptionModalSidebarTab === 'LIST' && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
               <p className={labelCls}>Nueva excepción</p>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  type="date"
-                  min={getTodayDateKey()}
-                  value={exceptionModalNewDate}
-                  onChange={(e) => setExceptionModalNewDate(e.target.value)}
-                  className="h-9 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] text-[#1f2638] outline-none focus:border-[#3053e2] transition"
-                />
+              <p className="mb-2 text-[11px] text-[#6f7890]">Seleccioná una fecha para agregar una excepción de horario.</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex-1">
+                  <AdminDateInput
+                    value={exceptionModalNewDate}
+                    onChange={setExceptionModalNewDate}
+                    min={getTodayDateKey()}
+                    placeholder="Seleccionar fecha"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={handleCreateExceptionInModal}
-                  className="h-9 rounded-xl bg-[#3053e2] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc] transition"
+                  className="h-10 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
                 >
                   Crear borrador
                 </button>
               </div>
             </div>
+
             {exceptionModalLoading ? (
-              <p className="text-[12px] text-[#6f7890]">Cargando excepciones...</p>
+              <div className="flex items-center gap-2 py-4 text-[12px] text-[#6f7890]">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
+                Cargando excepciones...
+              </div>
             ) : exceptionModalItems.length === 0 ? (
-              <p className="text-[12px] text-[#6f7890]">No hay excepciones para esta actividad.</p>
+              <p className="py-4 text-center text-[12px] text-[#98a1b3]">
+                No hay excepciones para esta actividad.
+              </p>
             ) : (
-              <div className="space-y-1.5 max-h-[50vh] overflow-auto pr-1">
+              <div className="space-y-1.5">
                 {exceptionModalItems.map((item) => {
                   const active = item.localDate === exceptionModalSelectedDate;
                   return (
@@ -3254,10 +3263,16 @@ export default function AdminTabClub() {
                         setExceptionModalSelectedDate(item.localDate);
                         setExceptionModalSidebarTab('DETAIL');
                       }}
-                      className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? 'border-[#3053e2] bg-[#edf1ff]' : 'border-[#dce2ee] bg-white hover:bg-[#f4f6fb]'}`}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                        active
+                          ? 'border-[#3053e2] bg-[#edf1ff]'
+                          : 'border-[#dce2ee] bg-white hover:bg-[#f4f6fb]'
+                      }`}
                     >
-                      <p className={`text-[12px] font-medium ${active ? 'text-[#3053e2]' : 'text-[#1f2638]'}`}>{item.localDate}</p>
-                      <p className="text-[11px] text-[#6f7890] mt-0.5">
+                      <p className={`text-[13px] font-semibold ${active ? 'text-[#3053e2]' : 'text-[#1f2638]'}`}>
+                        {item.localDate}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[#6f7890]">
                         {item.isClosed
                           ? 'Cerrado todo el día'
                           : item.scheduleMode === 'RANGE'
@@ -3270,48 +3285,73 @@ export default function AdminTabClub() {
               </div>
             )}
           </div>
+        )}
 
-          <div className={exceptionModalSidebarTab === 'DETAIL' ? '' : 'hidden'}>
+        {/* ── Tab: Configuracion ── */}
+        {exceptionModalSidebarTab === 'DETAIL' && (
+          <>
             {exceptionModalDraft ? (
               <div className="space-y-3">
-                <div className="rounded-xl border border-[#dce2ee] p-3">
+                <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
                   <p className={labelCls}>Fecha</p>
-                  <p className="text-[13px] font-medium text-[#1f2638]">{exceptionModalDraft.localDate}</p>
+                  <p className="text-[13px] font-semibold text-[#1f2638]">{exceptionModalDraft.localDate}</p>
                 </div>
+
                 <div className="rounded-xl border border-[#dce2ee] p-3">
                   <label className="flex cursor-pointer items-center gap-2.5">
                     <div
                       className={checkboxCls(exceptionModalDraft.isClosed)}
-                      onClick={() => setExceptionModalDraft((prev) => prev ? ({ ...prev, isClosed: !prev.isClosed }) : prev)}
+                      onClick={() =>
+                        setExceptionModalDraft((prev) =>
+                          prev ? { ...prev, isClosed: !prev.isClosed } : prev
+                        )
+                      }
                     >
-                      {exceptionModalDraft.isClosed && <Check size={12} strokeWidth={3} className="text-white" />}
+                      {exceptionModalDraft.isClosed && (
+                        <Check size={12} strokeWidth={3} className="text-white" />
+                      )}
                     </div>
-                    <span className="text-[12px] text-[#1f2638]">Cerrar toda la actividad en esta fecha</span>
+                    <span className="text-[12px] text-[#1f2638]">
+                      Cerrar toda la actividad en esta fecha
+                    </span>
                   </label>
                 </div>
+
                 {!exceptionModalDraft.isClosed && (
-                  <div className="rounded-xl border border-[#dce2ee] p-3 space-y-3">
+                  <div className="space-y-3 rounded-xl border border-[#dce2ee] p-3">
                     <div>
                       <label className={labelCls}>Modo</label>
                       <select
                         value={exceptionModalDraft.scheduleMode}
-                        onChange={(e) => setExceptionModalDraft((prev) => prev ? ({ ...prev, scheduleMode: e.target.value as 'FIXED' | 'RANGE' }) : prev)}
+                        onChange={(e) =>
+                          setExceptionModalDraft((prev) =>
+                            prev
+                              ? { ...prev, scheduleMode: e.target.value as 'FIXED' | 'RANGE' }
+                              : prev
+                          )
+                        }
                         className={inputCls}
                       >
                         <option value="FIXED">Turnos fijos</option>
                         <option value="RANGE">Rango horario</option>
                       </select>
                     </div>
+
                     <div>
                       <label className={labelCls}>Duraciones (min)</label>
                       <input
                         type="text"
                         value={exceptionModalDraft.scheduleDurations}
-                        onChange={(e) => setExceptionModalDraft((prev) => prev ? ({ ...prev, scheduleDurations: e.target.value }) : prev)}
+                        onChange={(e) =>
+                          setExceptionModalDraft((prev) =>
+                            prev ? { ...prev, scheduleDurations: e.target.value } : prev
+                          )
+                        }
                         className={inputCls}
                         placeholder="60, 90"
                       />
                     </div>
+
                     {exceptionModalDraft.scheduleMode === 'RANGE' ? (
                       <>
                         <div className="grid grid-cols-3 gap-2">
@@ -3320,7 +3360,11 @@ export default function AdminTabClub() {
                             <input
                               type="time"
                               value={exceptionModalDraft.scheduleOpenTime}
-                              onChange={(e) => setExceptionModalDraft((prev) => prev ? ({ ...prev, scheduleOpenTime: e.target.value }) : prev)}
+                              onChange={(e) =>
+                                setExceptionModalDraft((prev) =>
+                                  prev ? { ...prev, scheduleOpenTime: e.target.value } : prev
+                                )
+                              }
                               className={inputCls}
                             />
                           </div>
@@ -3329,7 +3373,11 @@ export default function AdminTabClub() {
                             <input
                               type="time"
                               value={exceptionModalDraft.scheduleCloseTime}
-                              onChange={(e) => setExceptionModalDraft((prev) => prev ? ({ ...prev, scheduleCloseTime: e.target.value }) : prev)}
+                              onChange={(e) =>
+                                setExceptionModalDraft((prev) =>
+                                  prev ? { ...prev, scheduleCloseTime: e.target.value } : prev
+                                )
+                              }
                               className={inputCls}
                             />
                           </div>
@@ -3339,42 +3387,61 @@ export default function AdminTabClub() {
                               type="number"
                               min={1}
                               value={exceptionModalDraft.scheduleIntervalMinutes}
-                              onChange={(e) => setExceptionModalDraft((prev) => prev ? ({ ...prev, scheduleIntervalMinutes: e.target.value }) : prev)}
+                              onChange={(e) =>
+                                setExceptionModalDraft((prev) =>
+                                  prev
+                                    ? { ...prev, scheduleIntervalMinutes: e.target.value }
+                                    : prev
+                                )
+                              }
                               className={inputCls}
                             />
                           </div>
                         </div>
                         <div>
-                          <label className={labelCls}>Franjas cortadas (HH:mm-HH:mm, una por línea)</label>
+                          <label className={labelCls}>
+                            Franjas cortadas (HH:mm-HH:mm, una por línea)
+                          </label>
                           <textarea
                             rows={3}
                             value={exceptionModalDraft.scheduleWindows}
-                            onChange={(e) => setExceptionModalDraft((prev) => prev ? ({ ...prev, scheduleWindows: e.target.value }) : prev)}
-                            className={`${inputCls} h-auto py-2.5 resize-none`}
+                            onChange={(e) =>
+                              setExceptionModalDraft((prev) =>
+                                prev ? { ...prev, scheduleWindows: e.target.value } : prev
+                              )
+                            }
+                            className={`${inputCls} h-auto resize-none py-2.5`}
                             placeholder={'08:00-12:00\n16:00-23:00'}
                           />
                         </div>
                       </>
                     ) : (
                       <div>
-                        <label className={labelCls}>Turnos fijos (HH:mm-60, uno por línea)</label>
+                        <label className={labelCls}>
+                          Turnos fijos (HH:mm-60, uno por línea)
+                        </label>
                         <textarea
                           rows={4}
                           value={exceptionModalDraft.scheduleFixedSlots}
-                          onChange={(e) => setExceptionModalDraft((prev) => prev ? ({ ...prev, scheduleFixedSlots: e.target.value }) : prev)}
-                          className={`${inputCls} h-auto py-2.5 resize-none`}
+                          onChange={(e) =>
+                            setExceptionModalDraft((prev) =>
+                              prev ? { ...prev, scheduleFixedSlots: e.target.value } : prev
+                            )
+                          }
+                          className={`${inputCls} h-auto resize-none py-2.5`}
                           placeholder={'08:00-60\n09:00-60'}
                         />
                       </div>
                     )}
                   </div>
                 )}
-                <div className="flex gap-2">
+
+                <div className="flex gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => void handleSaveExceptionFromModal()}
                     disabled={activityExceptionBusy[exceptionModalActivityId ?? -1]}
-                    className="h-9 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white hover:bg-[#2748cc] transition disabled:opacity-40"
+                    className="h-9 flex-1 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
                   >
                     Guardar excepción
                   </button>
@@ -3382,17 +3449,22 @@ export default function AdminTabClub() {
                     type="button"
                     onClick={() => void handleDeleteExceptionFromModal()}
                     disabled={activityExceptionBusy[exceptionModalActivityId ?? -1]}
-                    className="h-9 rounded-xl border border-red-100 bg-red-50 px-4 text-[12px] font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40"
+                    className="h-9 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 text-[12px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white disabled:opacity-40"
                   >
                     Eliminar
                   </button>
                 </div>
               </div>
             ) : (
-              <p className="text-[12px] text-[#6f7890]">Seleccioná una excepción de la lista o creá una nueva.</p>
+              <div className="py-8 text-center">
+                <p className="text-[13px] font-semibold text-[#98a1b3]">Sin excepción seleccionada</p>
+                <p className="mt-1 text-[12px] text-[#b0b8c8]">
+                  Seleccioná una fecha en la pestaña anterior o creá una nueva.
+                </p>
+              </div>
             )}
-          </div>
-        </div>
+          </>
+        )}
       </AdminRightSidebar>
 
       <AdminAppModal

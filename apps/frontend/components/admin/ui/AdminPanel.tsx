@@ -20,7 +20,7 @@ export default function AdminPanel({
   bodyClassName,
 }: AdminPanelProps) {
   return (
-    <section className={cx('rounded-xl border border-[#dce2ee] bg-white shadow-[0_8px_26px_rgba(34,42,68,0.05)]', className)}>
+    <section className={cx('rounded-xl border border-[#dce2ee] bg-white', className)}>
       {(title || description || actions) && (
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[#eef2f8] px-4 py-3">
           <div className="min-w-0">

@@ -1,15 +1,89 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Search, Plus, Edit, Trash2, Wrench, Tag, DollarSign } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Tag, DollarSign } from 'lucide-react';
 import { ClubAdminService, type ClubCatalogService } from '../services/ClubAdminService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
 import AppModal from './AppModal';
-import { AdminPanel, AdminRightSidebar } from './admin/ui';
+import { AdminDataTable, AdminPanel, AdminRightSidebar } from './admin/ui';
+import type { AdminDataTableColumn } from './admin/ui';
 
 type ServicesPageProps = {
   slug: string;
 };
+
+// ---------------------------------------------------------------------------
+// Table columns
+// ---------------------------------------------------------------------------
+
+const SERVICE_COLUMNS = (
+  onEdit: (s: ClubCatalogService) => void,
+  onDelete: (s: ClubCatalogService) => void
+): AdminDataTableColumn<ClubCatalogService>[] => [
+  {
+    key: 'code',
+    label: 'Código',
+    render: (s) => (
+      <span className="font-semibold uppercase tracking-wide text-[#3053e2]">{s.code}</span>
+    ),
+  },
+  {
+    key: 'name',
+    label: 'Servicio',
+    render: (s) => <span className="font-semibold text-[#2a3245]">{s.name}</span>,
+  },
+  {
+    key: 'price',
+    label: 'Precio',
+    render: (s) => (
+      <span className="font-semibold text-[#27314a]">
+        ${Number(s.price || 0).toLocaleString()}
+      </span>
+    ),
+  },
+  {
+    key: 'isActive',
+    label: 'Estado',
+    render: (s) => (
+      <span
+        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+          s.isActive
+            ? 'border-[#ccebd7] bg-[#f0fbf4] text-[#167647]'
+            : 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318]'
+        }`}
+      >
+        {s.isActive ? 'Activo' : 'Inactivo'}
+      </span>
+    ),
+  },
+  {
+    key: '_actions',
+    label: '',
+    align: 'right',
+    render: (s) => (
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => onEdit(s)}
+          className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#697386] shadow-sm transition-all hover:border-[#3053e2] hover:bg-[#f1f4ff] hover:text-[#3053e2]"
+          title="Editar"
+        >
+          <Edit size={15} strokeWidth={2.5} />
+        </button>
+        {s.isActive && (
+          <button
+            type="button"
+            onClick={() => onDelete(s)}
+            className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] shadow-sm transition-all hover:bg-[#b42318] hover:text-white"
+            title="Dar de baja"
+          >
+            <Trash2 size={15} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
+    ),
+  },
+];
 
 type ServiceFormState = {
   code: string;
@@ -167,77 +241,13 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
         description="Servicios que pueden venderse sin depender de stock fisico."
         bodyClassName="p-0"
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="sticky top-0 z-10">
-              <tr className="border-b border-[#edf0f6] bg-[#f8f9fc] text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">
-                <th className="px-4 py-2.5">Codigo</th>
-                <th className="px-4 py-2.5">Servicio</th>
-                <th className="px-4 py-2.5">Precio</th>
-                <th className="px-4 py-2.5">Estado</th>
-                <th className="px-4 py-2.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#edf0f6] text-[12px]">
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="p-14 text-center">
-                    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-14 text-center text-sm font-semibold text-[#98a1b3]">
-                    No hay servicios registrados
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((service) => (
-                  <tr key={service.id} className="transition-colors hover:bg-[#f8f9fc]">
-                    <td className="px-4 py-3 font-semibold uppercase text-[#3053e2]">{service.code}</td>
-                    <td className="px-4 py-3 font-semibold text-[#2a3245]">{service.name}</td>
-                    <td className="px-4 py-3 text-[13px] font-semibold text-[#27314a]">
-                      ${Number(service.price || 0).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                          service.isActive
-                            ? 'border-[#ccebd7] bg-[#f0fbf4] text-[#167647]'
-                            : 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318]'
-                        }`}
-                      >
-                        {service.isActive ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(service)}
-                          className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#697386] shadow-sm transition-all hover:border-[#3053e2] hover:bg-[#f1f4ff] hover:text-[#3053e2]"
-                          title="Editar"
-                        >
-                          <Edit size={15} strokeWidth={2.5} />
-                        </button>
-                        {service.isActive && (
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(service)}
-                            className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] shadow-sm transition-all hover:bg-[#b42318] hover:text-white"
-                            title="Dar de baja"
-                          >
-                            <Trash2 size={15} strokeWidth={2.5} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <AdminDataTable
+          columns={SERVICE_COLUMNS(openEdit, setDeleteTarget)}
+          data={filtered}
+          rowKey={(s) => s.id}
+          loading={loading}
+          empty={{ title: 'No hay servicios registrados', description: 'Creá el primero con el botón de arriba.' }}
+        />
       </AdminPanel>
 
       <AdminRightSidebar
@@ -369,11 +379,6 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
         onClose={() => setFeedbackModal((prev) => ({ ...prev, show: false }))}
       />
 
-      {editing && (
-        <div className="sr-only">
-          <Wrench aria-hidden />
-        </div>
-      )}
     </div>
   );
 }

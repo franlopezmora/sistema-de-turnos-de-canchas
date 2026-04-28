@@ -1,0 +1,166 @@
+import type { ReactNode } from 'react';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type AdminDataTableColumn<T> = {
+  key: string;
+  label: string;
+  /** Tailwind width class, e.g. 'w-[140px]' or 'w-[30%]'. Optional. */
+  width?: string;
+  /** Text alignment for header + cells. Default 'left'. */
+  align?: 'left' | 'center' | 'right';
+  /** Custom renderer. Receives the full row and its index. */
+  render?: (row: T, index: number) => ReactNode;
+  /** If true, the cell receives the hover-group class so actions can appear/hide. */
+  isActions?: boolean;
+};
+
+type AdminDataTableProps<T> = {
+  columns: AdminDataTableColumn<T>[];
+  data: T[];
+  rowKey: (row: T) => string | number;
+  loading?: boolean;
+  /** Shown when !loading && data.length === 0 */
+  empty?: {
+    title: string;
+    description?: string;
+    action?: ReactNode;
+  };
+  /** Extra class applied to the wrapping <div> */
+  className?: string;
+  /** Extra class applied to each <tr> */
+  rowClassName?: string | ((row: T, index: number) => string);
+  /** Called when the user clicks a row (excluding clicks on interactive elements inside) */
+  onRowClick?: (row: T) => void;
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const cx = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(' ');
+
+const alignClass = (align?: 'left' | 'center' | 'right') => {
+  if (align === 'center') return 'text-center';
+  if (align === 'right') return 'text-right';
+  return 'text-left';
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function AdminDataTable<T>({
+  columns,
+  data,
+  rowKey,
+  loading = false,
+  empty,
+  className,
+  rowClassName,
+  onRowClick,
+}: AdminDataTableProps<T>) {
+  const colSpan = columns.length;
+
+  return (
+    <div className={cx('overflow-x-auto', className)}>
+      <table className="w-full text-left">
+        {/* ── Header ── */}
+        <thead className="sticky top-0 z-10">
+          <tr className="border-b border-[#edf0f6] bg-[#f8f9fc]">
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                className={cx(
+                  'px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]',
+                  alignClass(col.align),
+                  col.width
+                )}
+              >
+                {col.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        {/* ── Body ── */}
+        <tbody className="divide-y divide-[#edf0f6] text-[13px]">
+          {loading ? (
+            <tr>
+              <td colSpan={colSpan} className="p-14 text-center">
+                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
+              </td>
+            </tr>
+          ) : data.length === 0 ? (
+            <tr>
+              <td colSpan={colSpan} className="p-14 text-center">
+                {empty ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-[14px] font-semibold text-[#98a1b3]">{empty.title}</p>
+                    {empty.description && (
+                      <p className="text-[12px] text-[#b0b8c8]">{empty.description}</p>
+                    )}
+                    {empty.action && <div className="mt-2">{empty.action}</div>}
+                  </div>
+                ) : (
+                  <p className="text-[14px] font-semibold text-[#98a1b3]">Sin resultados</p>
+                )}
+              </td>
+            </tr>
+          ) : (
+            data.map((row, index) => {
+              const extraRowClass =
+                typeof rowClassName === 'function'
+                  ? rowClassName(row, index)
+                  : rowClassName;
+              return (
+                <tr
+                  key={rowKey(row)}
+                  className={cx(
+                    'group transition-colors hover:bg-[#f8f9fc]',
+                    onRowClick && 'cursor-pointer',
+                    extraRowClass
+                  )}
+                  onClick={
+                    onRowClick
+                      ? (e) => {
+                          // Avoid triggering row click when clicking buttons/links
+                          const target = e.target as HTMLElement;
+                          if (
+                            target.closest('button') ||
+                            target.closest('a') ||
+                            target.closest('[role="button"]')
+                          ) {
+                            return;
+                          }
+                          onRowClick(row);
+                        }
+                      : undefined
+                  }
+                >
+                  {columns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={cx(
+                        'px-4 py-3',
+                        alignClass(col.align),
+                        col.isActions && 'opacity-0 group-hover:opacity-100 transition-opacity'
+                      )}
+                    >
+                      {col.render
+                        ? col.render(row, index)
+                        : String((row as Record<string, unknown>)[col.key] ?? '')}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
