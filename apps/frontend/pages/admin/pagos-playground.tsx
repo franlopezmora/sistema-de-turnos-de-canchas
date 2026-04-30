@@ -19,26 +19,17 @@ import type { CashAccountItem } from '../../modules/caja/components/CashAccounts
 import CashAccountDetailPanel from '../../modules/caja/components/CashAccountDetailPanel';
 import CashCloseFlow from '../../modules/caja/components/CashCloseFlow';
 import CashShiftPanel from '../../modules/caja/components/CashShiftPanel';
-import {
-  AdminPaymentFormModal,
-  AdminPaymentPreconfirmModal,
-  AdminPaymentResultModal,
-} from '../../components/admin/payments/AdminPaymentFlowModals';
+import AccountDrawer from '../../modules/cuentas/components/AccountDrawer';
 import { AdminDrawer, AdminDrawerSection, AdminFilterToolbar, AdminPanel, AdminSegmentedControl } from '../../components/admin/ui';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
 import {
-  addAccountItem,
-  closeAccount,
   getAccountById,
   listAccounts,
   openAccount,
-  registerPayment,
   type AccountStatus,
-  type PaymentMethod,
-  type PaymentChannel,
 } from '../../services/AccountService';
 import { CashService } from '../../services/CashService';
 import { ClubService } from '../../services/ClubService';
@@ -69,21 +60,6 @@ type RefundActionKind = 'approve' | 'approve_execute' | 'execute' | 'retry' | 'f
 type CashView = 'live' | 'movements' | 'closures';
 type CashActionSidebarView = 'none' | 'open_shift' | 'close_shift' | 'movement_create' | 'close_report';
 type AccountsFilter = 'ALL' | 'OPEN' | 'CLOSED' | 'WITH_DEBT' | 'WITH_REFUNDS';
-type AccountActionSidebarView = 'none' | 'overview' | 'add_item' | 'register_payment' | 'close_account' | 'create_account';
-type AccountPaymentModalStep = 'form' | 'preconfirm' | 'result';
-type PaymentQuickPreset = 'FULL' | 'COURT_ONLY' | 'CUSTOM_ITEMS';
-
-type AccountPaymentResultModal = {
-  variant: 'success' | 'error';
-  title: string;
-  detail: string;
-  requestedAmount: number;
-  appliedAmount: number;
-  remainingAfter: number;
-  methodLabel: string;
-  appliedItems?: Array<{ id: string; label: string; amount: number }>;
-};
-
 type AccountRow = {
   id: string;
   sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
@@ -105,11 +81,18 @@ type AccountDetailItem = {
   createdAt?: string;
 };
 
+type AccountDetailPaymentAllocation = {
+  id?: string;
+  accountItemId: string;
+  amount: number;
+};
+
 type AccountDetailPayment = {
   id: string;
   amount: number;
   method: string;
   channel?: string;
+  allocations: AccountDetailPaymentAllocation[];
   createdAt?: string;
 };
 
@@ -173,6 +156,7 @@ type CashShiftCloseReport = {
 
 const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString('es-AR')}`;
 const ACCOUNT_PAYMENT_EPSILON = 0.009;
+const SYNTHETIC_ACCOUNT_TOTAL_ITEM_ID = '__account-total__';
 
 const shortCode = (value: unknown) => {
   const raw = String(value || '').trim();
@@ -439,34 +423,11 @@ export default function AdminPaymentsPlaygroundPage() {
   const [accountsSearchTerm, setAccountsSearchTerm] = useState('');
   const [accountsFilter, setAccountsFilter] = useState<AccountsFilter>('ALL');
   const [selectedAccountId, setSelectedAccountId] = useState('');
-  const [accountSidebarView, setAccountSidebarView] = useState<AccountActionSidebarView>('none');
+  const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
   const [accountDetailById, setAccountDetailById] = useState<Record<string, AccountDetail>>({});
   const [loadingAccountDetailById, setLoadingAccountDetailById] = useState<Record<string, boolean>>({});
   const [accountDetailError, setAccountDetailError] = useState('');
-  const [accountActionError, setAccountActionError] = useState('');
-  const [submittingAccountItem, setSubmittingAccountItem] = useState(false);
-  const [submittingAccountPayment, setSubmittingAccountPayment] = useState(false);
-  const [submittingAccountClose, setSubmittingAccountClose] = useState(false);
   const [openingAccount, setOpeningAccount] = useState(false);
-  const [accountPaymentModalStep, setAccountPaymentModalStep] = useState<AccountPaymentModalStep | null>(null);
-  const [accountPaymentAmountDraft, setAccountPaymentAmountDraft] = useState('');
-  const [accountPaymentMethodDraft, setAccountPaymentMethodDraft] = useState<PaymentMethod>('CASH');
-  const [accountPaymentChannelDraft, setAccountPaymentChannelDraft] =
-    useState<Extract<PaymentChannel, 'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>>('BANK_ACCOUNT');
-  const [accountPaymentQuickPreset, setAccountPaymentQuickPreset] = useState<PaymentQuickPreset>('FULL');
-  const [accountPaymentSelectedItemIdsDraft, setAccountPaymentSelectedItemIdsDraft] = useState<string[]>([]);
-  const [accountPaymentCustomItemAmountDraftById, setAccountPaymentCustomItemAmountDraftById] = useState<
-    Record<string, string>
-  >({});
-  const [accountPaymentModalError, setAccountPaymentModalError] = useState('');
-  const [accountPaymentResultModal, setAccountPaymentResultModal] = useState<AccountPaymentResultModal | null>(null);
-  const accountModalBackdropPointerDownTargetRef = useRef<EventTarget | null>(null);
-  const [newAccountItemForm, setNewAccountItemForm] = useState({
-    description: '',
-    quantity: '1',
-    unitPrice: '',
-    type: 'PRODUCT' as 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT',
-  });
 
   const [cashActivePeriod, setCashActivePeriod] = useState<CashPeriod>('hoy');
   const [cashPeriodOffset, setCashPeriodOffset] = useState(0);
@@ -634,6 +595,11 @@ export default function AdminPaymentsPlaygroundPage() {
           amount: Number(payment?.amount || 0),
           method: String(payment?.method || ''),
           channel: String(payment?.channel || ''),
+          allocations: (Array.isArray(payment?.allocations) ? payment.allocations : []).map((allocation: any) => ({
+            id: allocation?.id ? String(allocation.id) : undefined,
+            accountItemId: String(allocation?.accountItemId || ''),
+            amount: Number(allocation?.amount || 0),
+          })).filter((allocation: AccountDetailPaymentAllocation) => allocation.accountItemId && allocation.amount > ACCOUNT_PAYMENT_EPSILON),
           createdAt: String(payment?.createdAt || ''),
         })),
         createdAt: String(detail?.createdAt || ''),
@@ -671,143 +637,26 @@ export default function AdminPaymentsPlaygroundPage() {
     }
   }, [loadingRefundsByAccountId, refundsByAccountId]);
 
-  const accountSidebarOpen = activeTab === 'ACCOUNTS' && accountSidebarView !== 'none';
-
-  const closeAccountSidebar = useCallback(() => {
-    if (submittingAccountItem || submittingAccountPayment || submittingAccountClose || openingAccount) return;
-    setAccountSidebarView('none');
-    setAccountPaymentModalStep(null);
-    setAccountPaymentModalError('');
-    setAccountPaymentResultModal(null);
-    setAccountActionError('');
-  }, [openingAccount, submittingAccountClose, submittingAccountItem, submittingAccountPayment]);
-
-  const handleCreateAccountItem = useCallback(async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!selectedAccountId) return;
-    const description = newAccountItemForm.description.trim();
-    const quantity = Number(newAccountItemForm.quantity);
-    const unitPrice = Number(newAccountItemForm.unitPrice);
-
-    if (description.length < 2) {
-      setAccountActionError('Ingresa una descripción válida.');
-      return;
-    }
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      setAccountActionError('La cantidad debe ser mayor a 0.');
-      return;
-    }
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-      setAccountActionError('El precio unitario debe ser mayor a 0.');
-      return;
-    }
-
-    try {
-      setSubmittingAccountItem(true);
-      setAccountActionError('');
-      await addAccountItem(selectedAccountId, {
-        description,
-        quantity,
-        unitPrice,
-        type: newAccountItemForm.type,
-      });
-      await Promise.all([refresh(), ensureAccountDetail(selectedAccountId, true)]);
-      showAdminToast('Concepto agregado correctamente.');
-      setNewAccountItemForm({ description: '', quantity: '1', unitPrice: '', type: 'PRODUCT' });
-      setAccountSidebarView('overview');
-    } catch (error) {
-      reportUiError({ area: 'PaymentsPlayground', action: 'handleCreateAccountItem' }, error);
-      setAccountActionError(extractErrorMessage(error, 'No se pudo agregar el concepto.'));
-    } finally {
-      setSubmittingAccountItem(false);
-    }
-  }, [ensureAccountDetail, newAccountItemForm, refresh, selectedAccountId, showAdminToast]);
-
-  const closeAccountPaymentModal = useCallback(() => {
-    if (submittingAccountPayment) return;
-    setAccountPaymentModalStep(null);
-    setAccountPaymentModalError('');
-    setAccountPaymentResultModal(null);
-  }, [submittingAccountPayment]);
-
-  const openAccountPaymentModal = useCallback(() => {
-    if (!selectedAccountId) return;
-    const detail = accountDetailById[selectedAccountId];
-    const isOpenByList = openAccounts.some((account) => account.id === selectedAccountId);
-    const isOpenByDetail = detail?.status === 'OPEN';
-    if (!isOpenByList && !isOpenByDetail) return;
-    const remaining = Number(detail?.remaining || 0);
-    if (remaining <= 0.009) {
-      setAccountActionError('La cuenta no tiene deuda pendiente.');
-      return;
-    }
-    setAccountActionError('');
-    const nextIds = (Array.isArray(detail?.items) ? detail.items : [])
-      .map((item) => String(item?.id || '').trim())
-      .filter(Boolean);
-    setAccountPaymentAmountDraft(remaining.toFixed(2));
-    setAccountPaymentMethodDraft('CASH');
-    setAccountPaymentChannelDraft('BANK_ACCOUNT');
-    setAccountPaymentQuickPreset('FULL');
-    setAccountPaymentSelectedItemIdsDraft(nextIds);
-    setAccountPaymentCustomItemAmountDraftById({});
-    setAccountPaymentModalError('');
-    setAccountPaymentResultModal(null);
-    setAccountPaymentModalStep('form');
-  }, [accountDetailById, openAccounts, selectedAccountId]);
-
-  const handleAccountModalBackdropPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    accountModalBackdropPointerDownTargetRef.current = event.target;
+  const closeAccountDrawer = useCallback(() => {
+    setAccountDrawerOpen(false);
   }, []);
-
-  const handleAccountModalBackdropPointerUp = useCallback(
-    (event: React.PointerEvent<HTMLElement>) => {
-      const startedOnBackdrop = accountModalBackdropPointerDownTargetRef.current === event.currentTarget;
-      const endedOnBackdrop = event.target === event.currentTarget;
-      accountModalBackdropPointerDownTargetRef.current = null;
-      if (startedOnBackdrop && endedOnBackdrop) {
-        closeAccountPaymentModal();
-      }
-    },
-    [closeAccountPaymentModal]
-  );
-
-  const handleCloseSelectedAccount = useCallback(async () => {
-    if (!selectedAccountId) return;
-    try {
-      setSubmittingAccountClose(true);
-      setAccountActionError('');
-      await closeAccount(selectedAccountId);
-      await Promise.all([refresh(), ensureAccountDetail(selectedAccountId, true)]);
-      showAdminToast('Cuenta cerrada correctamente.');
-      setAccountSidebarView('overview');
-    } catch (error) {
-      reportUiError({ area: 'PaymentsPlayground', action: 'handleCloseSelectedAccount' }, error);
-      setAccountActionError(extractErrorMessage(error, 'No se pudo cerrar la cuenta.'));
-    } finally {
-      setSubmittingAccountClose(false);
-    }
-  }, [ensureAccountDetail, refresh, selectedAccountId, showAdminToast]);
 
   const handleQuickOpenAccount = useCallback(async () => {
     try {
       setOpeningAccount(true);
-      setAccountActionError('');
       const created = await openAccount({ sourceType: 'MANUAL', sourceId: `manual-${Date.now()}` });
       await refresh();
       if (created?.id) {
         setSelectedAccountId(created.id);
-        await ensureAccountDetail(created.id, true);
+        setAccountDrawerOpen(true);
       }
-      setAccountSidebarView('overview');
-      showAdminToast('Cuenta creada correctamente.');
+      showAdminToast('Cuenta creada. Agregá el primer concepto.');
     } catch (error) {
       reportUiError({ area: 'PaymentsPlayground', action: 'handleQuickOpenAccount' }, error);
-      setAccountActionError(extractErrorMessage(error, 'No se pudo crear la cuenta.'));
     } finally {
       setOpeningAccount(false);
     }
-  }, [ensureAccountDetail, refresh, showAdminToast]);
+  }, [refresh, showAdminToast]);
 
   const loadCashSummary = useCallback(async () => {
     setCashSummaryError('');
@@ -929,8 +778,7 @@ export default function AdminPaymentsPlaygroundPage() {
 
   useEffect(() => {
     if (activeTab === 'ACCOUNTS') return;
-    setAccountSidebarView('none');
-    setAccountPaymentModalStep(null);
+    setAccountDrawerOpen(false);
   }, [activeTab]);
 
   const cashPeriodLabel = useMemo(() => {
@@ -1211,6 +1059,8 @@ export default function AdminPaymentsPlaygroundPage() {
     [allAccounts, selectedAccountId]
   );
   const selectedAccountDetail = selectedAccountId ? accountDetailById[selectedAccountId] || null : null;
+  const selectedAccountRemaining = Number(selectedAccountDetail?.remaining || 0);
+  const selectedAccountHasPendingDebt = selectedAccountRemaining > ACCOUNT_PAYMENT_EPSILON;
 
   useEffect(() => {
     if (activeTab !== 'ACCOUNTS') return;
@@ -1273,173 +1123,6 @@ export default function AdminPaymentsPlaygroundPage() {
     () => filteredAccounts.filter((account) => accountsWithRefundsIdSet.has(account.id)).length,
     [accountsWithRefundsIdSet, filteredAccounts]
   );
-  const accountPaymentMaxAmount = Number(selectedAccountDetail?.remaining || 0);
-  const accountPaymentPendingItems = useMemo(() => {
-    const items = Array.isArray(selectedAccountDetail?.items) ? selectedAccountDetail.items : [];
-    const remaining = Math.max(0, Number(selectedAccountDetail?.remaining || 0));
-    if (items.length === 0 && remaining > ACCOUNT_PAYMENT_EPSILON) {
-      return [
-        {
-          id: '__account-total__',
-          type: 'OTHER',
-          label: 'Saldo pendiente',
-          remainingAmount: Number(remaining.toFixed(2)),
-        },
-      ];
-    }
-    let remainingDraft = remaining;
-    return items
-      .map((item) => {
-        const requested = Math.max(0, Number(item.total || 0));
-        const amount = Number(Math.min(requested, Math.max(0, remainingDraft)).toFixed(2));
-        remainingDraft = Number(Math.max(0, remainingDraft - amount).toFixed(2));
-        return {
-          id: String(item.id),
-          type: String(item.type || 'OTHER').toUpperCase(),
-          label: String(item.type || '').toUpperCase() === 'BOOKING' ? 'Cancha' : String(item.description || 'Concepto'),
-          remainingAmount: amount,
-        };
-      })
-      .filter((item) => item.remainingAmount > ACCOUNT_PAYMENT_EPSILON);
-  }, [selectedAccountDetail]);
-  const resolveAccountPresetItemIds = useCallback(
-    (preset: PaymentQuickPreset) => {
-      if (preset === 'COURT_ONLY') {
-        return accountPaymentPendingItems
-          .filter((item) => item.type === 'BOOKING')
-          .map((item) => String(item.id));
-      }
-      return accountPaymentPendingItems.map((item) => String(item.id));
-    },
-    [accountPaymentPendingItems]
-  );
-  const resolveAccountCustomDraftAmount = useCallback(
-    (itemId: string, maxForItem: number, customDraftById: Record<string, string>) => {
-      const normalizedMax = Math.max(0, Number(maxForItem || 0));
-      const hasDraft = Object.prototype.hasOwnProperty.call(customDraftById, itemId);
-      if (!hasDraft) return normalizedMax;
-      const rawDraft = String(customDraftById[itemId] ?? '').trim();
-      if (rawDraft === '') return 0;
-      const parsed = Number(rawDraft.replace(',', '.'));
-      if (!Number.isFinite(parsed)) return normalizedMax;
-      return Math.max(0, Math.min(normalizedMax, parsed));
-    },
-    []
-  );
-  const computeAccountConceptBasedMaxAmount = useCallback(
-    (
-      preset: PaymentQuickPreset,
-      selectedIds?: string[],
-      customAmountDraftById?: Record<string, string>
-    ) => {
-      const allowedIds =
-        preset === 'CUSTOM_ITEMS'
-          ? new Set((selectedIds || []).map((value) => String(value || '').trim()).filter(Boolean))
-          : new Set(resolveAccountPresetItemIds(preset));
-      if (preset === 'CUSTOM_ITEMS') {
-        const customDrafts = customAmountDraftById ?? accountPaymentCustomItemAmountDraftById;
-        return Number(
-          Math.min(
-            accountPaymentMaxAmount,
-            accountPaymentPendingItems
-              .filter((item) => allowedIds.has(String(item.id)))
-              .reduce((sum, item) => {
-                const itemId = String(item.id);
-                const fallback = Number(item.remainingAmount || 0);
-                const resolved = resolveAccountCustomDraftAmount(itemId, fallback, customDrafts);
-                return sum + resolved;
-              }, 0)
-          ).toFixed(2)
-        );
-      }
-      return Number(
-        Math.min(
-          accountPaymentMaxAmount,
-          accountPaymentPendingItems
-            .filter((item) => allowedIds.has(String(item.id)))
-            .reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0)
-        ).toFixed(2)
-      );
-    },
-    [
-      accountPaymentCustomItemAmountDraftById,
-      accountPaymentMaxAmount,
-      accountPaymentPendingItems,
-      resolveAccountCustomDraftAmount,
-      resolveAccountPresetItemIds,
-    ]
-  );
-  const computeAccountCustomSelectedAmount = useCallback(
-    (selectedIds: string[], customAmountDraftById: Record<string, string>) => {
-      const selectedSet = new Set((selectedIds || []).map((value) => String(value || '').trim()).filter(Boolean));
-      return Number(
-        Math.min(
-          accountPaymentMaxAmount,
-          accountPaymentPendingItems
-            .filter((item) => selectedSet.has(String(item.id)))
-            .reduce((sum, item) => {
-              const itemId = String(item.id);
-              const fallback = Number(item.remainingAmount || 0);
-              const resolved = resolveAccountCustomDraftAmount(itemId, fallback, customAmountDraftById);
-              return sum + resolved;
-            }, 0)
-        ).toFixed(2)
-      );
-    },
-    [accountPaymentMaxAmount, accountPaymentPendingItems, resolveAccountCustomDraftAmount]
-  );
-  const accountPaymentConceptDebt = useMemo(
-    () =>
-      computeAccountConceptBasedMaxAmount(
-        accountPaymentQuickPreset,
-        accountPaymentSelectedItemIdsDraft,
-        accountPaymentCustomItemAmountDraftById
-      ),
-    [
-      accountPaymentCustomItemAmountDraftById,
-      accountPaymentQuickPreset,
-      accountPaymentSelectedItemIdsDraft,
-      computeAccountConceptBasedMaxAmount,
-    ]
-  );
-  const accountPaymentMaxAllowedAmount = Math.min(accountPaymentMaxAmount, accountPaymentConceptDebt);
-  const accountPaymentAmountNumeric = Number(String(accountPaymentAmountDraft || '').replace(',', '.'));
-  const accountPaymentAmountIsValid =
-    Number.isFinite(accountPaymentAmountNumeric) &&
-    accountPaymentAmountNumeric > ACCOUNT_PAYMENT_EPSILON &&
-    accountPaymentAmountNumeric <= accountPaymentMaxAllowedAmount + ACCOUNT_PAYMENT_EPSILON;
-  const accountPaymentPreviewRows = useMemo(() => {
-    const selectedIds =
-      accountPaymentQuickPreset === 'CUSTOM_ITEMS'
-        ? accountPaymentSelectedItemIdsDraft
-        : resolveAccountPresetItemIds(accountPaymentQuickPreset);
-    const selectedSet = new Set(selectedIds.map((value) => String(value || '').trim()).filter(Boolean));
-    let remaining = Number(Math.max(0, accountPaymentAmountNumeric).toFixed(2));
-    const rows: Array<{ id: string; label: string; amount: number }> = [];
-    for (const item of accountPaymentPendingItems) {
-      if (!selectedSet.has(String(item.id))) continue;
-      if (remaining <= ACCOUNT_PAYMENT_EPSILON) break;
-      const itemId = String(item.id);
-      const maxForItem = Number(item.remainingAmount || 0);
-      const desiredForItem =
-        accountPaymentQuickPreset === 'CUSTOM_ITEMS'
-          ? resolveAccountCustomDraftAmount(itemId, maxForItem, accountPaymentCustomItemAmountDraftById)
-          : maxForItem;
-      const amount = Number(Math.min(desiredForItem, remaining).toFixed(2));
-      if (amount <= ACCOUNT_PAYMENT_EPSILON) continue;
-      rows.push({ id: itemId, label: item.label, amount });
-      remaining = Number((remaining - amount).toFixed(2));
-    }
-    return rows;
-  }, [
-    accountPaymentAmountNumeric,
-    accountPaymentCustomItemAmountDraftById,
-    accountPaymentPendingItems,
-    accountPaymentQuickPreset,
-    accountPaymentSelectedItemIdsDraft,
-    resolveAccountCustomDraftAmount,
-    resolveAccountPresetItemIds,
-  ]);
 
   const refundRequestAccount = useMemo(
     () => allAccounts.find((account) => account.id === refundRequestAccountId) || null,
@@ -1675,117 +1358,6 @@ export default function AdminPaymentsPlaygroundPage() {
     showAdminToast,
   ]);
 
-  const submitAccountPaymentFromModal = useCallback(async () => {
-    if (!selectedAccountId) return;
-    const detail = accountDetailById[selectedAccountId];
-    const amount = Number(String(accountPaymentAmountDraft || '').replace(',', '.'));
-    if (!Number.isFinite(amount) || amount <= ACCOUNT_PAYMENT_EPSILON) {
-      setAccountPaymentModalError('Ingresá un monto válido mayor a 0.');
-      return;
-    }
-    const remaining = Number(detail?.remaining || 0);
-    if (amount > remaining + ACCOUNT_PAYMENT_EPSILON) {
-      setAccountPaymentModalError(`El monto no puede superar la deuda pendiente (${formatMoney(remaining)}).`);
-      return;
-    }
-    if (amount > accountPaymentMaxAllowedAmount + ACCOUNT_PAYMENT_EPSILON) {
-      setAccountPaymentModalError('La suma por concepto debe coincidir con el monto final a cobrar.');
-      return;
-    }
-    if (accountPaymentMethodDraft === 'TRANSFER' && !accountPaymentChannelDraft) {
-      setAccountPaymentModalError('Seleccioná el canal de transferencia.');
-      return;
-    }
-
-    const appliedItems = accountPaymentPreviewRows.map((row) => ({
-      id: row.id,
-      label: row.label,
-      amount: Number(row.amount.toFixed(2)),
-    }));
-
-    try {
-      setSubmittingAccountPayment(true);
-      setAccountPaymentModalError('');
-      await registerPayment({
-        accountId: selectedAccountId,
-        amount,
-        method: accountPaymentMethodDraft,
-        channel: accountPaymentMethodDraft === 'TRANSFER' ? accountPaymentChannelDraft : undefined,
-      });
-      await Promise.all([refresh(), ensureAccountDetail(selectedAccountId, true)]);
-      const reloaded = await ensureAccountDetail(selectedAccountId, true);
-      const remainingAfter = Number(reloaded?.remaining || 0);
-      showAdminToast(`Pago registrado: ${formatMoney(amount)}.`);
-      setAccountPaymentResultModal({
-        variant: 'success',
-        title: 'Cobro registrado',
-        detail: 'El cobro se registró correctamente.',
-        requestedAmount: Number(amount.toFixed(2)),
-        appliedAmount: Number(amount.toFixed(2)),
-        remainingAfter,
-        methodLabel: paymentMethodLabel(accountPaymentMethodDraft),
-        appliedItems,
-      });
-      setAccountPaymentModalStep('result');
-      setAccountSidebarView('overview');
-    } catch (error) {
-      reportUiError({ area: 'PaymentsPlayground', action: 'submitAccountPaymentFromModal' }, error);
-      const message = extractErrorMessage(error, 'No se pudo registrar el cobro.');
-      setAccountPaymentResultModal({
-        variant: 'error',
-        title: 'No se pudo registrar el cobro',
-        detail: message,
-        requestedAmount: Number(amount.toFixed(2)),
-        appliedAmount: 0,
-        remainingAfter: Number(detail?.remaining || 0),
-        methodLabel: paymentMethodLabel(accountPaymentMethodDraft),
-        appliedItems: [],
-      });
-      setAccountPaymentModalStep('result');
-    } finally {
-      setSubmittingAccountPayment(false);
-    }
-  }, [
-    accountPaymentAmountDraft,
-    accountPaymentChannelDraft,
-    accountPaymentMaxAllowedAmount,
-    accountPaymentMethodDraft,
-    accountPaymentPreviewRows,
-    accountDetailById,
-    ensureAccountDetail,
-    refresh,
-    selectedAccountId,
-    showAdminToast,
-  ]);
-
-  const applyAccountPaymentQuickPreset = useCallback(
-    (preset: PaymentQuickPreset) => {
-      setAccountPaymentQuickPreset(preset);
-      const nextIds =
-        preset === 'CUSTOM_ITEMS'
-          ? accountPaymentSelectedItemIdsDraft
-          : resolveAccountPresetItemIds(preset);
-      if (preset !== 'CUSTOM_ITEMS') {
-        setAccountPaymentSelectedItemIdsDraft(nextIds);
-        setAccountPaymentCustomItemAmountDraftById({});
-      }
-      setAccountPaymentAmountDraft(
-        String(
-          computeAccountConceptBasedMaxAmount(
-            preset,
-            nextIds,
-            accountPaymentCustomItemAmountDraftById
-          ).toFixed(2)
-        )
-      );
-    },
-    [
-      accountPaymentCustomItemAmountDraftById,
-      accountPaymentSelectedItemIdsDraft,
-      computeAccountConceptBasedMaxAmount,
-      resolveAccountPresetItemIds,
-    ]
-  );
 
   if (!authChecked || !user) {
     return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
@@ -1924,14 +1496,12 @@ export default function AdminPaymentsPlaygroundPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setAccountActionError('');
-                          setAccountSidebarView('create_account');
-                        }}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#3053e2] px-2.5 text-[11px] font-semibold text-white hover:bg-[#2748cc]"
+                        onClick={() => void handleQuickOpenAccount()}
+                        disabled={openingAccount}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#3053e2] px-2.5 text-[11px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-60"
                       >
                         <Plus size={14} strokeWidth={2.5} />
-                        Nueva cuenta
+                        {openingAccount ? 'Creando...' : 'Nueva cuenta'}
                       </button>
                     </AdminFilterToolbar>
                   )}
@@ -1950,7 +1520,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         onSelect={(id) => setSelectedAccountId(id)}
                         onPay={(id) => {
                           setSelectedAccountId(id);
-                          setAccountSidebarView('overview');
+                          setAccountDrawerOpen(true);
                         }}
                       />
                     </div>
@@ -1961,14 +1531,8 @@ export default function AdminPaymentsPlaygroundPage() {
                         detail={selectedAccountDetail}
                         loading={selectedAccountDetailLoading}
                         error={accountDetailError}
-                        onManage={() => {
-                          setAccountActionError('');
-                          setAccountSidebarView('overview');
-                        }}
-                        onPay={() => {
-                          setAccountActionError('');
-                          setAccountSidebarView('overview');
-                        }}
+                        onManage={() => setAccountDrawerOpen(true)}
+                        onPay={() => setAccountDrawerOpen(true)}
                         onRefund={() => void openRefundRequestForAccount(selectedAccount.id)}
                       />
                     ) : (
@@ -2418,284 +1982,14 @@ export default function AdminPaymentsPlaygroundPage() {
         </div>
       </AdminPlaygroundShell>
 
-      <AgendaLikeRightSidebar
-        open={accountSidebarOpen}
-        onClose={closeAccountSidebar}
-        title="Gestionar cuenta"
-        subtitle={
-          <>
-            {accountSidebarView === 'create_account'
-              ? 'Crea una cuenta manual para carga rápida de conceptos.'
-              : selectedAccount
-              ? `${selectedAccount.booking?.clientName || `Cuenta ${shortCode(selectedAccount.id)}`} · #${shortCode(selectedAccount.id)}`
-              : 'Sin cuenta seleccionada'}
-          </>
-        }
-        statusChip={selectedAccount?.status === 'OPEN' ? 'Cuenta abierta' : selectedAccount ? 'Cuenta cerrada' : undefined}
-        statusChipClassName={
-          selectedAccount?.status === 'OPEN'
-            ? 'bg-[#edf1ff] text-[#3155df]'
-            : 'bg-[#e8f8ec] text-[#16733f]'
-        }
-        tabs={
-          accountSidebarView === 'create_account'
-            ? [{ id: 'create_account', label: 'Nueva cuenta' }]
-            : selectedAccount?.status === 'OPEN'
-            ? [
-                { id: 'overview', label: 'Resumen' },
-                { id: 'add_item', label: 'Conceptos' },
-                { id: 'register_payment', label: 'Cobro' },
-                { id: 'close_account', label: 'Cierre' },
-              ]
-            : selectedAccount
-              ? [{ id: 'overview', label: 'Resumen' }]
-              : []
-        }
-        activeTabId={accountSidebarView}
-        onTabChange={(tabId) => {
-          if (
-            tabId === 'overview' ||
-            tabId === 'add_item' ||
-            tabId === 'register_payment' ||
-            tabId === 'close_account' ||
-            tabId === 'create_account'
-          ) {
-            setAccountActionError('');
-            setAccountSidebarView(tabId as AccountActionSidebarView);
-          }
-        }}
-        footer={
-          accountSidebarView === 'create_account' ? (
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeAccountSidebar}
-                className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleQuickOpenAccount()}
-                disabled={openingAccount}
-                className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-60"
-              >
-                {openingAccount ? 'Creando...' : 'Crear cuenta'}
-              </button>
-            </div>
-          ) : selectedAccount ? (
-            <div className="flex items-center justify-end gap-2">
-              {accountSidebarView === 'overview' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setAccountSidebarView('add_item')}
-                    disabled={selectedAccount.status !== 'OPEN'}
-                    className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd] disabled:opacity-50"
-                  >
-                    Agregar concepto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAccountSidebarView('register_payment')}
-                    disabled={selectedAccount.status !== 'OPEN'}
-                    className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd] disabled:opacity-50"
-                  >
-                    Registrar cobro
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAccountSidebarView('close_account')}
-                    disabled={selectedAccount.status !== 'OPEN'}
-                    className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-50"
-                  >
-                    Cerrar cuenta
-                  </button>
-                </>
-              )}
+      <AccountDrawer
+        accountId={selectedAccountId || null}
+        open={accountDrawerOpen}
+        onClose={closeAccountDrawer}
+        onSuccess={() => void refresh()}
+        onRefundRequest={(acctId) => void openRefundRequestForAccount(acctId)}
+      />
 
-              {accountSidebarView === 'add_item' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setAccountSidebarView('overview')}
-                    className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
-                  >
-                    Volver
-                  </button>
-                  <button
-                    type="submit"
-                    form="account-add-item-form"
-                    disabled={submittingAccountItem}
-                    className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-60"
-                  >
-                    {submittingAccountItem ? 'Guardando...' : 'Guardar concepto'}
-                  </button>
-                </>
-              )}
-
-              {accountSidebarView === 'register_payment' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setAccountSidebarView('overview')}
-                    className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
-                  >
-                    Volver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openAccountPaymentModal}
-                    disabled={
-                      submittingAccountPayment ||
-                      selectedAccount.status !== 'OPEN' ||
-                      Number(selectedAccountDetail?.remaining || 0) <= 0.009
-                    }
-                    className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-60"
-                  >
-                    Abrir modal de cobro
-                  </button>
-                </>
-              )}
-
-              {accountSidebarView === 'close_account' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setAccountSidebarView('overview')}
-                    className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
-                  >
-                    Volver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleCloseSelectedAccount()}
-                    disabled={submittingAccountClose || selectedAccount.status !== 'OPEN'}
-                    className="h-10 rounded-xl bg-[#b42346] px-4 text-[13px] font-semibold text-white transition hover:bg-[#9a1c3d] disabled:opacity-60"
-                  >
-                    {submittingAccountClose ? 'Cerrando...' : 'Confirmar cierre'}
-                  </button>
-                </>
-              )}
-            </div>
-          ) : undefined
-        }
-      >
-        {accountSidebarView === 'create_account' ? (
-          <section className="space-y-3 rounded-2xl border border-[#dce2ee] bg-white p-3">
-            <p className="text-[12px] font-semibold text-[#2a3245]">Nueva cuenta manual</p>
-            <p className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2 text-[12px] text-[#5b667f]">
-              Se creará una cuenta manual para registrar consumos o ajustes fuera de una reserva.
-            </p>
-          </section>
-        ) : !selectedAccount ? (
-          <p className="text-[12px] text-[#6f7890]">Seleccioná una cuenta para gestionar.</p>
-        ) : (
-          <div className="space-y-4">
-            {accountActionError && (
-              <div className="space-y-2">
-                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
-                  {accountActionError}
-                </div>
-              </div>
-            )}
-
-            {accountSidebarView === 'overview' && (
-              <section className="rounded-2xl border border-[#dce2ee] bg-white px-3 py-3">
-                <p className="text-[12px] font-semibold text-[#2a3245]">Acciones de cuenta</p>
-                <div className="mt-2 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2 text-[12px] text-[#5b667f]">
-                  {selectedAccount.status === 'OPEN'
-                    ? 'Usá las acciones del pie para agregar conceptos, registrar cobros o cerrar la cuenta.'
-                    : 'La cuenta ya está cerrada. Podés revisar su resumen desde este panel.'}
-                </div>
-              </section>
-            )}
-
-            {accountSidebarView === 'add_item' && (
-              <form id="account-add-item-form" className="space-y-3 rounded-2xl border border-[#dce2ee] bg-white p-3" onSubmit={handleCreateAccountItem}>
-                <p className="text-[12px] font-semibold text-[#2a3245]">Nuevo concepto</p>
-                <label className="block">
-                  <span className="text-[12px] font-medium text-[#4e5870]">Descripción</span>
-                  <input
-                    type="text"
-                    value={newAccountItemForm.description}
-                    onChange={(event) => setNewAccountItemForm((prev) => ({ ...prev, description: event.target.value }))}
-                    className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                    placeholder="Ej: Pelota de pádel"
-                  />
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#4e5870]">Cantidad</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={newAccountItemForm.quantity}
-                      onChange={(event) => setNewAccountItemForm((prev) => ({ ...prev, quantity: event.target.value }))}
-                      className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                    />
-                  </label>
-                  <label className="col-span-2 block">
-                    <span className="text-[12px] font-medium text-[#4e5870]">Precio unitario</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={newAccountItemForm.unitPrice}
-                      onChange={(event) => setNewAccountItemForm((prev) => ({ ...prev, unitPrice: event.target.value }))}
-                      className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                      placeholder="0.00"
-                    />
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="text-[12px] font-medium text-[#4e5870]">Tipo</span>
-                  <select
-                    value={newAccountItemForm.type}
-                    onChange={(event) =>
-                      setNewAccountItemForm((prev) => ({
-                        ...prev,
-                        type: event.target.value as 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT',
-                      }))
-                    }
-                    className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                  >
-                    <option value="PRODUCT">Producto</option>
-                    <option value="SERVICE">Servicio</option>
-                    <option value="ADJUSTMENT">Ajuste</option>
-                    <option value="BOOKING">Cancha</option>
-                  </select>
-                </label>
-              </form>
-            )}
-
-            {accountSidebarView === 'register_payment' && (
-              <section className="space-y-3 rounded-2xl border border-[#dce2ee] bg-white p-3">
-                <p className="text-[12px] font-semibold text-[#2a3245]">Registrar cobro</p>
-                <p className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2 text-[12px] text-[#5b667f]">
-                  Pendiente actual: <span className="font-semibold">{formatMoney(selectedAccountDetail?.remaining || 0)}</span>
-                </p>
-                <p className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2 text-[12px] text-[#5b667f]">
-                  El cobro se registra desde un modal dedicado para mantener el mismo flujo que usamos en agenda.
-                </p>
-              </section>
-            )}
-
-            {accountSidebarView === 'close_account' && (
-              <section className="space-y-3 rounded-2xl border border-[#dce2ee] bg-white p-3">
-                <p className="text-[12px] font-semibold text-[#2a3245]">Cierre de cuenta</p>
-                <div className="rounded-xl border border-[#f3d0d0] bg-[#fff6f6] px-3 py-2 text-[12px] text-[#8f3b3b]">
-                  Esta acción cierra la cuenta. Solo debe hacerse cuando no quede deuda pendiente.
-                </div>
-                <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2 text-[12px] text-[#4e5870]">
-                  Pendiente actual: <span className="font-semibold">{formatMoney(selectedAccountDetail?.remaining || 0)}</span>
-                </div>
-              </section>
-            )}
-          </div>
-        )}
-      </AgendaLikeRightSidebar>
 
       <AdminDrawer
         open={refundRequestOpen}
@@ -3112,329 +2406,6 @@ export default function AdminPaymentsPlaygroundPage() {
         </div>
       )}
 
-      {accountPaymentModalStep === 'form' && selectedAccount && (
-        <AdminPaymentFormModal
-          title="Registrar cobro"
-          subtitle="Elegi metodo y monto. Si hace falta, ajusta conceptos."
-          onClose={closeAccountPaymentModal}
-          onBackdropPointerDown={handleAccountModalBackdropPointerDown}
-          onBackdropPointerUp={handleAccountModalBackdropPointerUp}
-          footer={
-            <>
-              <button
-                type="button"
-                onClick={closeAccountPaymentModal}
-                className="h-10 rounded-xl border border-[#dce2ee] px-4 text-[14px] font-semibold text-[#5d667f] hover:bg-[#f7f9fc]"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!accountPaymentAmountIsValid) {
-                    setAccountPaymentModalError('Ingresá un monto válido dentro del saldo pendiente.');
-                    return;
-                  }
-                  setAccountPaymentModalError('');
-                  setAccountPaymentModalStep('preconfirm');
-                }}
-                disabled={submittingAccountPayment}
-                className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
-              >
-                Continuar
-              </button>
-            </>
-          }
-        >
-                <div className={`grid gap-3 ${accountPaymentMethodDraft === 'TRANSFER' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#79829a]">Método</span>
-                    <select
-                      value={accountPaymentMethodDraft}
-                      onChange={(event) => setAccountPaymentMethodDraft(event.target.value as PaymentMethod)}
-                      className="mt-1 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] outline-none focus:border-[#3053e2]"
-                    >
-                      <option value="CASH">Efectivo</option>
-                      <option value="TRANSFER">Transferencia</option>
-                      <option value="CARD">Tarjeta</option>
-                    </select>
-                  </label>
-                  {accountPaymentMethodDraft === 'TRANSFER' && (
-                    <label className="block">
-                      <span className="text-[12px] font-medium text-[#79829a]">Canal de transferencia</span>
-                      <select
-                        value={accountPaymentChannelDraft}
-                        onChange={(event) =>
-                          setAccountPaymentChannelDraft(
-                            event.target.value as Extract<PaymentChannel, 'BANK_ACCOUNT' | 'VIRTUAL_WALLET'>
-                          )
-                        }
-                        className="mt-1 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] outline-none focus:border-[#3053e2]"
-                      >
-                        <option value="BANK_ACCOUNT">Cuenta bancaria</option>
-                        <option value="VIRTUAL_WALLET">Billetera virtual</option>
-                      </select>
-                    </label>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
-                  <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a cobrar</p>
-                  <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-                    {[
-                      { id: 'FULL', label: 'Todo pendiente' },
-                      { id: 'COURT_ONLY', label: 'Solo cancha' },
-                      { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
-                    ].map((option) => {
-                      const isActive = accountPaymentQuickPreset === option.id;
-                      return (
-                        <button
-                          key={`account-payment-preset-${option.id}`}
-                          type="button"
-                          onClick={() => applyAccountPaymentQuickPreset(option.id as PaymentQuickPreset)}
-                          className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
-                            isActive
-                              ? 'border-[#3155df] bg-[#eef2ff] text-[#3155df]'
-                              : 'border-[#dce2ee] bg-white text-[#5f6880] hover:bg-[#f5f7fc]'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {accountPaymentQuickPreset === 'CUSTOM_ITEMS' && (
-                  <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[12px] font-semibold text-[#44506b]">Selección manual</p>
-                      <span className="text-[11px] font-semibold text-[#6f7890]">
-                        Total: {computeAccountConceptBasedMaxAmount('CUSTOM_ITEMS', accountPaymentSelectedItemIdsDraft, accountPaymentCustomItemAmountDraftById).toFixed(2)} $
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextIds = accountPaymentPendingItems.map((item) => String(item.id));
-                            const nextCustomDrafts: Record<string, string> = {};
-                            accountPaymentPendingItems.forEach((item) => {
-                              nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
-                            });
-                            setAccountPaymentSelectedItemIdsDraft(nextIds);
-                            setAccountPaymentCustomItemAmountDraftById(nextCustomDrafts);
-                            setAccountPaymentAmountDraft(
-                              String(computeAccountConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds, nextCustomDrafts).toFixed(2))
-                            );
-                          }}
-                          className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
-                        >
-                          Seleccionar todo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAccountPaymentSelectedItemIdsDraft([]);
-                            setAccountPaymentCustomItemAmountDraftById({});
-                            setAccountPaymentAmountDraft('');
-                          }}
-                          className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
-                        >
-                          Limpiar
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
-                      {accountPaymentPendingItems.length === 0 ? (
-                        <p className="px-1 py-2 text-[12px] text-[#7a8398]">No hay conceptos con deuda pendiente.</p>
-                      ) : (
-                        <div className="space-y-1">
-                          {accountPaymentPendingItems.map((item) => {
-                            const checked = accountPaymentSelectedItemIdsDraft.includes(String(item.id));
-                            return (
-                              <div
-                                key={`account-payment-concept-item-${item.id}`}
-                                onClick={() => {
-                                  const nextChecked = !checked;
-                                  const nextSet = new Set(accountPaymentSelectedItemIdsDraft.map((value) => String(value || '').trim()).filter(Boolean));
-                                  const itemId = String(item.id);
-                                  const nextDrafts: Record<string, string> = { ...accountPaymentCustomItemAmountDraftById };
-                                  if (nextChecked) {
-                                    nextSet.add(itemId);
-                                    const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-                                    if (!prevDraft) {
-                                      nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
-                                    }
-                                  } else {
-                                    nextSet.delete(itemId);
-                                    delete nextDrafts[itemId];
-                                  }
-                                  const nextIds = Array.from(nextSet);
-                                  setAccountPaymentSelectedItemIdsDraft(nextIds);
-                                  setAccountPaymentCustomItemAmountDraftById(nextDrafts);
-                                  setAccountPaymentAmountDraft(
-                                    String(computeAccountConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds, nextDrafts).toFixed(2))
-                                  );
-                                }}
-                                className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
-                              >
-                                <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onChange={(event) => {
-                                      const nextChecked = event.target.checked;
-                                      const nextSet = new Set(accountPaymentSelectedItemIdsDraft.map((value) => String(value || '').trim()).filter(Boolean));
-                                      const itemId = String(item.id);
-                                      const nextDrafts: Record<string, string> = { ...accountPaymentCustomItemAmountDraftById };
-                                      if (nextChecked) {
-                                        nextSet.add(itemId);
-                                        const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-                                        if (!prevDraft) {
-                                          nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
-                                        }
-                                      } else {
-                                        nextSet.delete(itemId);
-                                        delete nextDrafts[itemId];
-                                      }
-                                      const nextIds = Array.from(nextSet);
-                                      setAccountPaymentSelectedItemIdsDraft(nextIds);
-                                      setAccountPaymentCustomItemAmountDraftById(nextDrafts);
-                                      setAccountPaymentAmountDraft(
-                                        String(computeAccountConceptBasedMaxAmount('CUSTOM_ITEMS', nextIds, nextDrafts).toFixed(2))
-                                      );
-                                    }}
-                                    className="h-4 w-4 accent-[#3053e2]"
-                                  />
-                                  <span className="truncate">{item.type === 'BOOKING' ? 'Cancha' : item.label}</span>
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <div className="flex h-8 w-[116px] items-center rounded-md border border-[#dce2ee] bg-white px-2">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      step="0.01"
-                                      disabled={!checked}
-                                      onClick={(event) => event.stopPropagation()}
-                                      value={
-                                        checked
-                                          ? String(
-                                              accountPaymentCustomItemAmountDraftById[String(item.id)] ??
-                                                Number(item.remainingAmount || 0).toFixed(2)
-                                            )
-                                          : ''
-                                      }
-                                      onChange={(event) => {
-                                        const itemId = String(item.id);
-                                        const nextDrafts: Record<string, string> = {
-                                          ...accountPaymentCustomItemAmountDraftById,
-                                          [itemId]: event.target.value,
-                                        };
-                                        setAccountPaymentCustomItemAmountDraftById(nextDrafts);
-                                        setAccountPaymentAmountDraft(
-                                          String(
-                                            computeAccountConceptBasedMaxAmount(
-                                              'CUSTOM_ITEMS',
-                                              accountPaymentSelectedItemIdsDraft,
-                                              nextDrafts
-                                            ).toFixed(2)
-                                          )
-                                        );
-                                      }}
-                                      className="w-full bg-transparent text-right text-[12px] font-semibold text-[#2a3245] outline-none disabled:text-[#9ca5ba]"
-                                    />
-                                    <span className="ml-1 text-[11px] font-semibold text-[#8a92a5]">$</span>
-                                  </div>
-                                  <span className="w-[88px] text-right text-[11px] font-semibold text-[#62708f]">
-                                    {Number(item.remainingAmount || 0).toFixed(2)} $
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <label className="block">
-                  <span className="text-[12px] font-medium text-[#79829a]">Monto final</span>
-                  <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={accountPaymentAmountDraft}
-                      onChange={(event) => setAccountPaymentAmountDraft(event.target.value)}
-                      className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
-                    />
-                    <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-[#6f7890]">
-                    Maximo: {accountPaymentMaxAmount.toFixed(2)} $
-                  </p>
-                </label>
-
-                {accountPaymentModalError && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
-                    {accountPaymentModalError}
-                  </div>
-                )}
-        </AdminPaymentFormModal>
-      )}
-
-      {accountPaymentModalStep === 'preconfirm' && selectedAccount && (
-        <AdminPaymentPreconfirmModal
-          onBackdropPointerDown={handleAccountModalBackdropPointerDown}
-          onBackdropPointerUp={(event) => {
-            const startedOnBackdrop = accountModalBackdropPointerDownTargetRef.current === event.currentTarget;
-            const endedOnBackdrop = event.target === event.currentTarget;
-            accountModalBackdropPointerDownTargetRef.current = null;
-            if (startedOnBackdrop && endedOnBackdrop) {
-              setAccountPaymentModalStep('form');
-            }
-          }}
-          methodValue={`${paymentMethodLabel(accountPaymentMethodDraft)}${
-            accountPaymentMethodDraft === 'TRANSFER' ? ` - ${paymentChannelLabel(accountPaymentChannelDraft)}` : ''
-          }`}
-          summaryRows={[
-            { label: 'Monto a cobrar', value: `${accountPaymentAmountNumeric.toFixed(2)} $` },
-            {
-              label: 'Saldo luego del cobro',
-              value: `${Math.max(
-                0,
-                accountPaymentMaxAmount - (Number.isFinite(accountPaymentAmountNumeric) ? accountPaymentAmountNumeric : 0)
-              ).toFixed(2)} $`,
-            },
-          ]}
-          showConcepts={false}
-          onBack={() => setAccountPaymentModalStep('form')}
-          onClose={() => setAccountPaymentModalStep('form')}
-          confirmLabel={submittingAccountPayment ? 'Registrando...' : 'Confirmar cobro'}
-          confirmDisabled={submittingAccountPayment}
-          onConfirm={() => void submitAccountPaymentFromModal()}
-        />
-      )}
-
-      {accountPaymentModalStep === 'result' && accountPaymentResultModal && selectedAccount && (
-        <AdminPaymentResultModal
-          onBackdropPointerDown={handleAccountModalBackdropPointerDown}
-          onBackdropPointerUp={handleAccountModalBackdropPointerUp}
-          title={accountPaymentResultModal.title}
-          detail={accountPaymentResultModal.detail}
-          variant={accountPaymentResultModal.variant}
-          summaryRows={[
-            { label: 'Solicitado', value: `${accountPaymentResultModal.requestedAmount.toFixed(2)} $` },
-            { label: 'Aplicado', value: `${accountPaymentResultModal.appliedAmount.toFixed(2)} $` },
-            { label: 'Método', value: accountPaymentResultModal.methodLabel },
-            { label: 'Saldo actual', value: `${accountPaymentResultModal.remainingAfter.toFixed(2)} $` },
-          ]}
-          onClose={closeAccountPaymentModal}
-          onRetry={accountPaymentResultModal.variant !== 'success' ? () => setAccountPaymentModalStep('form') : null}
-        />
-      )}
 
       <AgendaLikeRightSidebar
         open={cashActionSidebarOpen}

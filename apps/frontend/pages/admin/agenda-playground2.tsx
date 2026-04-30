@@ -424,6 +424,7 @@ function PlaygroundCombo({
   align = 'left',
   variant = 'default',
   className = '',
+  disabled = false,
 }: {
   value: string;
   options: ComboOption[];
@@ -432,12 +433,17 @@ function PlaygroundCombo({
   align?: 'left' | 'right';
   variant?: 'default' | 'participant';
   className?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const optionsListRef = useRef<HTMLDivElement | null>(null);
   const optionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -471,15 +477,21 @@ function PlaygroundCombo({
     <div ref={containerRef} className={`playground-combo ${className}`}>
       <button
         type="button"
-        onClick={() => setOpen((previous) => !previous)}
-        className={`playground-combo-trigger ${compact ? 'playground-combo-trigger-compact' : ''}`}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((previous) => !previous);
+        }}
+        disabled={disabled}
+        className={`playground-combo-trigger ${compact ? 'playground-combo-trigger-compact' : ''} ${
+          disabled ? 'cursor-not-allowed opacity-60' : ''
+        }`}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="min-w-0 flex-1 truncate text-left">{selected?.label || ''}</span>
         <ChevronDown size={14} className={`playground-combo-chevron ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
+      {open && !disabled && (
         <div
           className={`playground-combo-menu ${align === 'right' ? 'right-0' : 'left-0'} ${
             variant === 'participant' ? 'playground-combo-menu-participant' : ''
@@ -2814,6 +2826,7 @@ export default function AdminAgendaPlaygroundPage() {
       const pending = pendingBookingPointerRef.current;
       if (!pending) return;
       if (draggingBookingMetaRef.current) return;
+      if (pending.booking.state === 'completed') return;
 
       const dx = Math.abs(event.clientX - pending.startX);
       const dy = Math.abs(event.clientY - pending.startY);
@@ -5045,6 +5058,7 @@ export default function AdminAgendaPlaygroundPage() {
     bookingKind !== 'block' &&
     editingBooking?.state === 'completed'
   );
+  const isCompletedReservationScheduleLocked = isCompletedReservation;
   const isBookingFullyPaid = Boolean(
     persistedEditingBookingId &&
     bookingKind !== 'block' &&
@@ -5609,7 +5623,6 @@ export default function AdminAgendaPlaygroundPage() {
     !hasValidOwner ||
     hasDuplicateParticipants ||
     (isCompletedReservation && hasScheduleChanges) ||
-    (isCompletedReservation && hasSidebarParticipantsChanges) ||
     isSelectionInPastBlocking ||
     shouldBlockSaveByQuote ||
     shouldShowScheduleConflict ||
@@ -6974,11 +6987,6 @@ export default function AdminAgendaPlaygroundPage() {
 
     if (isCompletedReservation && hasScheduleChanges) {
       setBlockingFieldError('time', 'No podés reprogramar una reserva completada.');
-      return;
-    }
-
-    if (isCompletedReservation && hasSidebarParticipantsChanges) {
-      setBlockingFieldError('participants', 'No podés modificar participantes en una reserva completada.');
       return;
     }
 
@@ -8874,7 +8882,12 @@ export default function AdminAgendaPlaygroundPage() {
                                             current?.booking?.id === booking.id ? null : current
                                           )
                                         }
-                                        style={{ top, height, cursor: draggingBookingId ? 'grabbing' : 'grab', zIndex: isHovered ? 26 : 12 }}
+                                        style={{
+                                          top,
+                                          height,
+                                          cursor: booking.state === 'completed' ? 'pointer' : draggingBookingId ? 'grabbing' : 'grab',
+                                          zIndex: isHovered ? 26 : 12,
+                                        }}
                                       />
                                     );
                                   })}
@@ -10342,7 +10355,6 @@ export default function AdminAgendaPlaygroundPage() {
                               <span className="ml-2 text-[18px] font-semibold text-[#8a92a5]">$</span>
                             </div>
                           </div>
-
                           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div className="block">
                               <span className="text-[12px] font-medium text-[#7a8398]">Hora de inicio</span>
@@ -10361,6 +10373,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   value: option.value,
                                   label: slotToTimeAmPm(option.slot),
                                 }))}
+                                disabled={isCompletedReservationScheduleLocked}
                                 className="mt-1"
                               />
                             </div>
@@ -10378,6 +10391,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   value: option.value,
                                   label: slotToTimeAmPm(option.slot),
                                 }))}
+                                disabled={isCompletedReservationScheduleLocked}
                                 className="mt-1"
                               />
                             </div>
@@ -10396,6 +10410,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   setFormError('');
                                 }}
                                 options={effectiveCourts.map((court) => ({ value: court.id, label: court.name }))}
+                                disabled={isCompletedReservationScheduleLocked}
                                 className="mt-1"
                               />
                               {courtFieldError && (
@@ -10793,9 +10808,6 @@ export default function AdminAgendaPlaygroundPage() {
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="text-[18px] font-semibold text-[#1f2638]">Consumos</p>
-                              <p className="mt-0.5 text-[12px] text-[#6f7890]">
-                                Sumá productos a la reserva y se integran al saldo total.
-                              </p>
                             </div>
                             <div className="text-right">
                               <p className="text-[11px] text-[#6f7890]">Total consumos</p>
@@ -11828,7 +11840,7 @@ export default function AdminAgendaPlaygroundPage() {
                     </p>
                     {isCompletedReservation && (
                       <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
-                        Reserva completada: podés cobrar, pero no reprogramar ni modificar participantes.
+                        Reserva completada: podés gestionar consumos, participantes y cobros; no reprogramar.
                       </p>
                     )}
                     {shouldHideBillingUntilConfirmed ? (
