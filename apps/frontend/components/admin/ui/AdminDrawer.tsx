@@ -227,7 +227,7 @@ export default function AdminDrawer({
                 )}
                 {statusChip && (
                   <span
-                    className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusChipClassName}`}
+                    className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusChipClassName}`}
                   >
                     {statusChip}
                   </span>

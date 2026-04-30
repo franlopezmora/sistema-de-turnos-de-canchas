@@ -1,4 +1,4 @@
-import { Tag, DollarSign } from 'lucide-react';
+import { Tag, DollarSign, Pencil, Plus } from 'lucide-react';
 import AdminDrawer, { AdminDrawerSection } from '../../../components/admin/ui/AdminDrawer';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +30,7 @@ type ServiceDrawerProps = {
 const inputClass =
   'h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition-all focus:border-[#3053e2]';
 const labelClass = 'mb-1.5 block text-[12px] font-medium text-[#4e5870]';
+const sectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -55,19 +56,20 @@ export default function ServiceDrawer({
   const isEditing = Boolean(editingService);
 
   const footer = (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center justify-end gap-2">
       <button
         type="button"
         onClick={onClose}
-        className="h-9 flex-1 rounded-lg border border-[#dce2ee] bg-white text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fc]"
+        className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fc]"
       >
         Cancelar
       </button>
       <button
         form="service-drawer-form"
         type="submit"
-        className="h-9 flex-1 rounded-lg bg-[#3053e2] text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
       >
+        {isEditing ? <Pencil size={14} /> : <Plus size={14} />}
         {isEditing ? 'Guardar cambios' : 'Crear servicio'}
       </button>
     </div>
@@ -84,7 +86,7 @@ export default function ServiceDrawer({
     >
       <form id="service-drawer-form" onSubmit={onSubmit}>
         {/* ── Datos generales ── */}
-        <AdminDrawerSection title="Identificación">
+        <AdminDrawerSection title="Identificación" className={sectionCardClass}>
           <div>
             <label className={labelClass}>Código del servicio</label>
             <div className="relative">
@@ -118,7 +120,7 @@ export default function ServiceDrawer({
         </AdminDrawerSection>
 
         {/* ── Precio ── */}
-        <AdminDrawerSection title="Precio" className="mt-5">
+        <AdminDrawerSection title="Precio" className={`${sectionCardClass} mt-5`}>
           <div>
             <label className={labelClass}>Precio ($)</label>
             <div className="relative">
@@ -143,7 +145,7 @@ export default function ServiceDrawer({
         </AdminDrawerSection>
 
         {/* ── Descripción ── */}
-        <AdminDrawerSection title="Descripción" className="mt-5">
+        <AdminDrawerSection title="Descripción" className={`${sectionCardClass} mt-5`}>
           <div>
             <label className={labelClass}>Detalle descriptivo (opcional)</label>
             <textarea

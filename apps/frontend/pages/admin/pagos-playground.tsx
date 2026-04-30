@@ -1,15 +1,14 @@
 import Head from 'next/head';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Landmark,
   Plus,
   Search,
-  X,
 } from 'lucide-react';
 import { useRouter } from 'next/router';
-import AgendaLikeRightSidebar from '../../components/admin/AgendaLikeRightSidebar';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
 import MetricCard from '../../components/admin/ui/MetricCard';
 import CashSummaryCards from '../../modules/caja/components/CashSummaryCards';
@@ -19,8 +18,13 @@ import type { CashAccountItem } from '../../modules/caja/components/CashAccounts
 import CashAccountDetailPanel from '../../modules/caja/components/CashAccountDetailPanel';
 import CashCloseFlow from '../../modules/caja/components/CashCloseFlow';
 import CashShiftPanel from '../../modules/caja/components/CashShiftPanel';
-import AccountDrawer from '../../modules/cuentas/components/AccountDrawer';
+import AccountDrawer, {
+  type AccountDrawerContext,
+  type AccountDrawerInitialView,
+  type AccountDrawerSuccessMeta,
+} from '../../modules/cuentas/components/AccountDrawer';
 import { AdminDrawer, AdminDrawerSection, AdminFilterToolbar, AdminPanel, AdminSegmentedControl } from '../../components/admin/ui';
+import AdminAppModal from '../../components/admin/ui/AdminAppModal';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
@@ -156,7 +160,8 @@ type CashShiftCloseReport = {
 
 const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString('es-AR')}`;
 const ACCOUNT_PAYMENT_EPSILON = 0.009;
-const SYNTHETIC_ACCOUNT_TOTAL_ITEM_ID = '__account-total__';
+const EMPTY_REFUNDS: RefundRecord[] = [];
+const drawerSectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
 
 const shortCode = (value: unknown) => {
   const raw = String(value || '').trim();
@@ -424,6 +429,8 @@ export default function AdminPaymentsPlaygroundPage() {
   const [accountsFilter, setAccountsFilter] = useState<AccountsFilter>('ALL');
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
+  const [accountDrawerInitialView, setAccountDrawerInitialView] =
+    useState<AccountDrawerInitialView>('overview');
   const [accountDetailById, setAccountDetailById] = useState<Record<string, AccountDetail>>({});
   const [loadingAccountDetailById, setLoadingAccountDetailById] = useState<Record<string, boolean>>({});
   const [accountDetailError, setAccountDetailError] = useState('');
@@ -496,6 +503,32 @@ export default function AdminPaymentsPlaygroundPage() {
   const [adminToasts, setAdminToasts] = useState<Array<{ id: number; message: string }>>([]);
   const adminToastIdRef = useRef(1);
   const adminToastTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const paymentsContentScrollRef = useRef<HTMLElement | null>(null);
+  const selectedAccountDetailFocusRef = useRef<HTMLDivElement | null>(null);
+  const accountDetailRequestSeqRef = useRef<Record<string, number>>({});
+
+  const focusSelectedAccountDetail = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const target = selectedAccountDetailFocusRef.current;
+      if (!target) return;
+      const scrollParent = paymentsContentScrollRef.current;
+      if (scrollParent) {
+        const parentRect = scrollParent.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const nextTop = scrollParent.scrollTop + targetRect.top - parentRect.top + 36;
+        scrollParent.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
+      } else {
+        const targetTop = target.getBoundingClientRect().top + window.scrollY + 36;
+        window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+      }
+      try {
+        target.focus({ preventScroll: true });
+      } catch {
+        target.focus();
+      }
+    });
+  }, []);
 
   const showAdminToast = useCallback((message: string) => {
     const text = String(message || '').trim();
@@ -570,8 +603,10 @@ export default function AdminPaymentsPlaygroundPage() {
     const key = String(accountId || '').trim();
     if (!key) return null;
     if (!force && accountDetailById[key]) return accountDetailById[key];
-    if (loadingAccountDetailById[key]) return null;
+    if (!force && loadingAccountDetailById[key]) return null;
 
+    const requestSeq = (accountDetailRequestSeqRef.current[key] || 0) + 1;
+    accountDetailRequestSeqRef.current[key] = requestSeq;
     try {
       setLoadingAccountDetailById((prev) => ({ ...prev, [key]: true }));
       setAccountDetailError('');
@@ -605,14 +640,18 @@ export default function AdminPaymentsPlaygroundPage() {
         createdAt: String(detail?.createdAt || ''),
         updatedAt: String(detail?.updatedAt || ''),
       };
-      setAccountDetailById((prev) => ({ ...prev, [key]: normalized }));
+      if (accountDetailRequestSeqRef.current[key] === requestSeq) {
+        setAccountDetailById((prev) => ({ ...prev, [key]: normalized }));
+      }
       return normalized;
     } catch (detailError) {
       reportUiError({ area: 'PaymentsPlayground', action: 'ensureAccountDetail' }, detailError);
       setAccountDetailError(extractErrorMessage(detailError, 'No se pudo cargar el detalle de la cuenta.'));
       return null;
     } finally {
-      setLoadingAccountDetailById((prev) => ({ ...prev, [key]: false }));
+      if (accountDetailRequestSeqRef.current[key] === requestSeq) {
+        setLoadingAccountDetailById((prev) => ({ ...prev, [key]: false }));
+      }
     }
   }, [accountDetailById, loadingAccountDetailById]);
 
@@ -639,7 +678,20 @@ export default function AdminPaymentsPlaygroundPage() {
 
   const closeAccountDrawer = useCallback(() => {
     setAccountDrawerOpen(false);
+    setAccountDrawerInitialView('overview');
   }, []);
+
+  const openAccountDrawer = useCallback((accountId: string, initialView: AccountDrawerInitialView = 'overview') => {
+    setSelectedAccountId(accountId);
+    setAccountDrawerInitialView(initialView);
+    setAccountDrawerOpen(true);
+  }, []);
+
+  const handleSelectAccount = useCallback((accountId: string) => {
+    setSelectedAccountId(accountId);
+    void ensureAccountDetail(accountId);
+    focusSelectedAccountDetail();
+  }, [ensureAccountDetail, focusSelectedAccountDetail]);
 
   const handleQuickOpenAccount = useCallback(async () => {
     try {
@@ -647,8 +699,7 @@ export default function AdminPaymentsPlaygroundPage() {
       const created = await openAccount({ sourceType: 'MANUAL', sourceId: `manual-${Date.now()}` });
       await refresh();
       if (created?.id) {
-        setSelectedAccountId(created.id);
-        setAccountDrawerOpen(true);
+        openAccountDrawer(created.id, 'add_item');
       }
       showAdminToast('Cuenta creada. Agregá el primer concepto.');
     } catch (error) {
@@ -656,7 +707,7 @@ export default function AdminPaymentsPlaygroundPage() {
     } finally {
       setOpeningAccount(false);
     }
-  }, [refresh, showAdminToast]);
+  }, [openAccountDrawer, refresh, showAdminToast]);
 
   const loadCashSummary = useCallback(async () => {
     setCashSummaryError('');
@@ -1059,8 +1110,20 @@ export default function AdminPaymentsPlaygroundPage() {
     [allAccounts, selectedAccountId]
   );
   const selectedAccountDetail = selectedAccountId ? accountDetailById[selectedAccountId] || null : null;
-  const selectedAccountRemaining = Number(selectedAccountDetail?.remaining || 0);
-  const selectedAccountHasPendingDebt = selectedAccountRemaining > ACCOUNT_PAYMENT_EPSILON;
+  const accountDrawerContext = useMemo<AccountDrawerContext | undefined>(() => {
+    if (!selectedAccount) return undefined;
+    const subtitleParts = [
+      accountSourceLabel(selectedAccount.sourceType),
+      `#${shortCode(selectedAccount.id)}`,
+      selectedAccount.booking?.id ? `Reserva #${selectedAccount.booking.id}` : '',
+      selectedAccount.createdAt ? formatDateTime24(selectedAccount.createdAt) : '',
+    ].filter(Boolean);
+    return {
+      title: accountDisplayLabel(selectedAccount),
+      subtitle: subtitleParts.join(' · '),
+      accountStatus: selectedAccount.status,
+    };
+  }, [selectedAccount]);
 
   useEffect(() => {
     if (activeTab !== 'ACCOUNTS') return;
@@ -1129,7 +1192,9 @@ export default function AdminPaymentsPlaygroundPage() {
     [allAccounts, refundRequestAccountId]
   );
   const refundRequestAccountDetail = refundRequestAccountId ? accountDetailById[refundRequestAccountId] || null : null;
-  const refundRequestAccountRefunds = refundRequestAccountId ? refundsByAccountId[refundRequestAccountId] || [] : [];
+  const refundRequestAccountRefunds = refundRequestAccountId
+    ? refundsByAccountId[refundRequestAccountId] || EMPTY_REFUNDS
+    : EMPTY_REFUNDS;
   const refundRequestPaymentOptions = useMemo(() => {
     const payments = Array.isArray(refundRequestAccountDetail?.payments) ? refundRequestAccountDetail.payments : [];
     return payments.map((payment) => {
@@ -1393,7 +1458,7 @@ export default function AdminPaymentsPlaygroundPage() {
             </div>
           )}
 
-          <section className="min-h-0 flex-1 overflow-auto">
+          <section ref={paymentsContentScrollRef} className="min-h-0 flex-1 overflow-auto">
             {loading && (activeTab === 'ACCOUNTS' || activeTab === 'REFUNDS') ? (
               <div className="h-full grid place-items-center">
                 <div className="inline-flex items-center gap-2 text-[13px] text-[#6f7890]">
@@ -1517,30 +1582,33 @@ export default function AdminPaymentsPlaygroundPage() {
                       <CashAccountsList
                         accounts={cashAccountItems}
                         selectedId={selectedAccountId}
-                        onSelect={(id) => setSelectedAccountId(id)}
-                        onPay={(id) => {
-                          setSelectedAccountId(id);
-                          setAccountDrawerOpen(true);
-                        }}
+                        onSelect={handleSelectAccount}
                       />
                     </div>
 
-                    {selectedAccountVisible && selectedAccount ? (
-                      <CashAccountDetailPanel
-                        account={selectedAccount}
-                        detail={selectedAccountDetail}
-                        loading={selectedAccountDetailLoading}
-                        error={accountDetailError}
-                        onManage={() => setAccountDrawerOpen(true)}
-                        onPay={() => setAccountDrawerOpen(true)}
-                        onRefund={() => void openRefundRequestForAccount(selectedAccount.id)}
-                      />
-                    ) : (
-                      <div className="rounded-xl border border-[#dce2ee] bg-white px-4 py-10 text-center">
-                        <p className="text-[13px] font-semibold text-[#44506b]">Seleccioná una cuenta</p>
-                        <p className="mt-1 text-[12px] text-[#7a8398]">Elegí un registro de la lista para ver su detalle y deuda actual.</p>
-                      </div>
-                    )}
+                    <div
+                      ref={selectedAccountDetailFocusRef}
+                      tabIndex={-1}
+                      className="min-w-0 scroll-mt-4 outline-none"
+                    >
+                      {selectedAccountVisible && selectedAccount ? (
+                        <CashAccountDetailPanel
+                          account={selectedAccount}
+                          detail={selectedAccountDetail}
+                          loading={selectedAccountDetailLoading}
+                          error={accountDetailError}
+                          onManage={() => openAccountDrawer(selectedAccount.id, 'overview')}
+                          onPay={() => openAccountDrawer(selectedAccount.id, 'payment')}
+                          onRefund={() => void openRefundRequestForAccount(selectedAccount.id)}
+                          onCloseAccount={() => openAccountDrawer(selectedAccount.id, 'close')}
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-[#dce2ee] bg-white px-4 py-10 text-center">
+                          <p className="text-[13px] font-semibold text-[#44506b]">Seleccioná una cuenta</p>
+                          <p className="mt-1 text-[12px] text-[#7a8398]">Elegí un registro de la lista para ver su detalle y deuda actual.</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   )}
                 </AdminPanel>
@@ -1985,8 +2053,22 @@ export default function AdminPaymentsPlaygroundPage() {
       <AccountDrawer
         accountId={selectedAccountId || null}
         open={accountDrawerOpen}
+        initialView={accountDrawerInitialView}
+        context={accountDrawerContext}
         onClose={closeAccountDrawer}
-        onSuccess={() => void refresh()}
+        onSuccess={(event, meta?: AccountDrawerSuccessMeta) => {
+          if (event === 'closed') {
+            showAdminToast(`${meta?.label || 'Cuenta'} cerrada correctamente.`);
+          }
+          const accountId = meta?.accountId || selectedAccountId;
+          void (async () => {
+            await refresh();
+            if (accountId) {
+              await ensureAccountDetail(accountId, true);
+              focusSelectedAccountDetail();
+            }
+          })();
+        }}
         onRefundRequest={(acctId) => void openRefundRequestForAccount(acctId)}
       />
 
@@ -2028,10 +2110,10 @@ export default function AdminPaymentsPlaygroundPage() {
           </div>
         }
       >
-        <AdminDrawerSection title="Cuenta">
-          <div className="space-y-2 rounded-2xl border border-[#dce2ee] bg-white p-3">
+        <AdminDrawerSection title="Cuenta" className={drawerSectionCardClass}>
+          <div className="space-y-3">
             {refundRequestAccountLocked && refundRequestAccount ? (
-              <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+              <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Cuenta seleccionada</p>
                 <p className="mt-1 text-[13px] font-semibold text-[#27314b]">{accountDisplayLabel(refundRequestAccount)}</p>
                 <p className="mt-0.5 text-[11px] text-[#6f7890]">
@@ -2074,14 +2156,14 @@ export default function AdminPaymentsPlaygroundPage() {
               </p>
             )}
             {allAccounts.length === 0 && (
-              <p className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2 text-[12px] text-[#6f7890]">
+              <p className="border-t border-[#edf0f6] pt-3 text-[12px] text-[#6f7890]">
                 No hay cuentas cargadas para iniciar una devolución.
               </p>
             )}
           </div>
         </AdminDrawerSection>
 
-        <AdminDrawerSection title="Pago a devolver">
+        <AdminDrawerSection title="Pago a devolver" className={drawerSectionCardClass}>
           <div className="space-y-2">
             {Boolean(refundRequestAccountId && loadingRefundsByAccountId[refundRequestAccountId]) && (
               <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[12px] font-semibold text-[#3053e2]">
@@ -2134,8 +2216,8 @@ export default function AdminPaymentsPlaygroundPage() {
           </div>
         </AdminDrawerSection>
 
-        <AdminDrawerSection title="Datos de la devolución">
-          <div className="space-y-3 rounded-2xl border border-[#dce2ee] bg-white p-3">
+        <AdminDrawerSection title="Datos de la devolución" className={drawerSectionCardClass}>
+          <div className="space-y-3">
             <label className="block">
               <span className="text-[12px] font-medium text-[#4e5870]">Monto a devolver</span>
               <input
@@ -2180,7 +2262,7 @@ export default function AdminPaymentsPlaygroundPage() {
               />
             </label>
 
-            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5">
               <input
                 type="checkbox"
                 checked={refundRequestExecuteNow}
@@ -2289,7 +2371,7 @@ export default function AdminPaymentsPlaygroundPage() {
       >
         {selectedRefund && (
           <>
-            <AdminDrawerSection title="Resumen">
+            <AdminDrawerSection title="Resumen" className={drawerSectionCardClass}>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Monto</p>
@@ -2302,25 +2384,25 @@ export default function AdminPaymentsPlaygroundPage() {
               </div>
             </AdminDrawerSection>
 
-            <AdminDrawerSection title="Referencias">
-              <div className="space-y-2 rounded-2xl border border-[#dce2ee] bg-white p-3 text-[12px] text-[#4e5870]">
-                <div className="flex items-center justify-between gap-3">
+            <AdminDrawerSection title="Referencias" className={drawerSectionCardClass}>
+              <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 text-[12px] text-[#4e5870]">
+                <div className="flex items-center justify-between gap-3 py-2.5">
                   <span>Pago</span>
                   <span className="font-mono font-semibold text-[#27314b]">{shortCode(selectedRefund.paymentId)}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 py-2.5">
                   <span>Cuenta</span>
                   <span className="font-mono font-semibold text-[#27314b]">{shortCode(selectedRefund.accountId)}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 py-2.5">
                   <span>Turno de caja</span>
                   <span className="font-mono font-semibold text-[#27314b]">{selectedRefund.cashShiftId ? shortCode(selectedRefund.cashShiftId) : '-'}</span>
                 </div>
               </div>
             </AdminDrawerSection>
 
-            <AdminDrawerSection title="Trazabilidad">
-              <div className="grid grid-cols-2 gap-2 text-[12px]">
+            <AdminDrawerSection title="Trazabilidad" className={drawerSectionCardClass}>
+              <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 text-[12px]">
                 {[
                   ['Creada', selectedRefund.createdAt],
                   ['Aprobada', selectedRefund.approvedAt],
@@ -2328,35 +2410,46 @@ export default function AdminPaymentsPlaygroundPage() {
                   ['Cancelada', selectedRefund.cancelledAt],
                   ['Fallida', selectedRefund.failedAt],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2">
+                  <div key={label} className="grid grid-cols-[104px_minmax(0,1fr)] items-center gap-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">{label}</p>
-                    <p className="mt-1 font-semibold text-[#27314b]">{value ? formatDateTime24(String(value)) : '-'}</p>
+                    <p className="font-semibold text-[#27314b]">{value ? formatDateTime24(String(value)) : '-'}</p>
                   </div>
                 ))}
               </div>
             </AdminDrawerSection>
 
-            <AdminDrawerSection title="Notas">
-              <div className="space-y-2 rounded-2xl border border-[#dce2ee] bg-white p-3 text-[12px] text-[#4e5870]">
-                <p><span className="font-semibold text-[#27314b]">Motivo:</span> {selectedRefund.reason?.trim() || refundReasonTypeLabel(selectedRefund.reasonType)}</p>
-                <p><span className="font-semibold text-[#27314b]">Nota:</span> {selectedRefund.executionNotes?.trim() || '-'}</p>
-                <p><span className="font-semibold text-[#27314b]">Referencia:</span> {selectedRefund.executionReference?.trim() || '-'}</p>
-                <p><span className="font-semibold text-[#27314b]">Cancelación:</span> {selectedRefund.cancelReason?.trim() || '-'}</p>
-                <p><span className="font-semibold text-[#27314b]">Fallo:</span> {selectedRefund.failedReason?.trim() || '-'}</p>
+            <AdminDrawerSection title="Notas" className={drawerSectionCardClass}>
+              <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 text-[12px] text-[#4e5870]">
+                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Motivo:</span> {selectedRefund.reason?.trim() || refundReasonTypeLabel(selectedRefund.reasonType)}</p>
+                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Nota:</span> {selectedRefund.executionNotes?.trim() || '-'}</p>
+                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Referencia:</span> {selectedRefund.executionReference?.trim() || '-'}</p>
+                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Cancelación:</span> {selectedRefund.cancelReason?.trim() || '-'}</p>
+                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Fallo:</span> {selectedRefund.failedReason?.trim() || '-'}</p>
               </div>
             </AdminDrawerSection>
           </>
         )}
       </AdminDrawer>
 
-      {refundActionConfirm && refundActionCopyValue && (
-        <div className="fixed inset-0 z-[2147483300] flex items-center justify-center bg-[#11162a]/45 p-4">
-          <div className="w-full max-w-[460px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl">
-            <div className="border-b border-[#edf1f6] px-5 py-4">
-              <h3 className="text-[21px] font-bold tracking-[-0.01em] text-[#222a3d]">{refundActionCopyValue.title}</h3>
-            </div>
-            <div className="space-y-4 px-5 py-5">
-              <p className="text-[14px] text-[#4b556d]">{refundActionCopyValue.message}</p>
+      <AdminAppModal
+        show={Boolean(refundActionConfirm && refundActionCopyValue)}
+        onClose={() => {
+          if (refundActionBusy) return;
+          setRefundActionConfirm(null);
+          setRefundActionError('');
+          setRefundActionReason('');
+        }}
+        onCancel={() => {
+          if (refundActionBusy) return;
+          setRefundActionConfirm(null);
+          setRefundActionError('');
+          setRefundActionReason('');
+        }}
+        title={refundActionCopyValue?.title || 'Confirmar acción'}
+        message={
+          refundActionCopyValue ? (
+            <div className="space-y-4">
+              <p>{refundActionCopyValue.message}</p>
               {refundActionCopyValue.needsReason && (
                 <label className="block">
                   <span className="text-[12px] font-medium text-[#4e5870]">Motivo</span>
@@ -2368,7 +2461,7 @@ export default function AdminPaymentsPlaygroundPage() {
                     }}
                     rows={3}
                     maxLength={500}
-                    className="mt-1 w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#3053e2]"
+                    className="mt-1 w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[13px] text-[#2a3245] outline-none transition focus:border-[#3053e2]"
                     placeholder="Detalle operativo"
                   />
                 </label>
@@ -2378,62 +2471,100 @@ export default function AdminPaymentsPlaygroundPage() {
                   {refundActionError}
                 </div>
               )}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (refundActionBusy) return;
-                    setRefundActionConfirm(null);
-                    setRefundActionError('');
-                    setRefundActionReason('');
-                  }}
-                  disabled={refundActionBusy}
-                  className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc] disabled:opacity-50"
-                >
-                  Volver
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runRefundAction()}
-                  disabled={refundActionBusy}
-                  className="h-10 rounded-xl bg-[#3053e2] px-5 text-sm font-bold text-white hover:bg-[#2748cc] disabled:opacity-50"
-                >
-                  {refundActionBusy ? 'Procesando...' : refundActionCopyValue.confirm}
-                </button>
-              </div>
             </div>
-          </div>
-        </div>
-      )}
+          ) : null
+        }
+        cancelText="Volver"
+        confirmText={refundActionBusy ? 'Procesando...' : refundActionCopyValue?.confirm || 'Confirmar'}
+        isWarning={refundActionConfirm?.action === 'cancel' || refundActionConfirm?.action === 'fail'}
+        confirmDisabled={refundActionBusy}
+        closeOnBackdrop={!refundActionBusy}
+        closeOnEscape={!refundActionBusy}
+        onConfirm={() => void runRefundAction()}
+      />
 
 
-      <AgendaLikeRightSidebar
+      <AdminDrawer
         open={cashActionSidebarOpen}
         onClose={closeActionSidebar}
         title={
-          <>
-            {cashSidebarView === 'open_shift' && 'Abrir caja'}
-            {cashSidebarView === 'close_shift' && 'Cerrar caja'}
-            {cashSidebarView === 'movement_create' && 'Registrar movimiento'}
-            {cashSidebarView === 'close_report' && 'Detalle de arqueo'}
-          </>
+          cashSidebarView === 'open_shift'
+            ? 'Abrir caja'
+            : cashSidebarView === 'close_shift'
+              ? 'Cerrar caja'
+              : cashSidebarView === 'movement_create'
+                ? 'Registrar movimiento'
+                : cashSidebarView === 'close_report'
+                  ? 'Detalle de arqueo'
+                  : 'Caja'
         }
         subtitle={
-          <>
-            {cashSidebarView === 'open_shift' && 'Configura caja registradora y monto inicial.'}
-            {cashSidebarView === 'close_shift' && 'Ingresa el efectivo contado para cerrar el turno.'}
-            {cashSidebarView === 'movement_create' && 'Crea ingresos o egresos sin saturar la vista principal.'}
-            {cashSidebarView === 'close_report' && 'Resumen ampliado del último cierre registrado.'}
-          </>
+          cashSidebarView === 'open_shift'
+            ? 'Configura caja registradora y monto inicial.'
+            : cashSidebarView === 'close_shift'
+              ? 'Ingresa el efectivo contado para cerrar el turno.'
+              : cashSidebarView === 'movement_create'
+                ? 'Crea ingresos o egresos sin saturar la vista principal.'
+                : cashSidebarView === 'close_report'
+                  ? 'Resumen ampliado del ultimo cierre registrado.'
+                  : undefined
         }
         statusChip={cashCurrentShift ? 'Caja abierta' : 'Caja cerrada'}
-        statusChipClassName={cashCurrentShift ? 'bg-[#e8f8ec] text-[#16733f]' : 'bg-[#edf1ff] text-[#3155df]'}
+        statusChipClassName={cashCurrentShift ? 'border-[#d4f0dc] bg-[#e8f8ec] text-[#16733f]' : 'border-[#dce5ff] bg-[#edf1ff] text-[#3155df]'}
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeActionSidebar}
+              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+            >
+              {cashSidebarView === 'close_report' ? 'Cerrar' : 'Cancelar'}
+            </button>
+
+            {cashSidebarView === 'open_shift' && (
+              <button
+                type="submit"
+                form="cash-open-shift-form"
+                disabled={openingCashShift}
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Landmark size={14} />
+                {openingCashShift ? 'Abriendo...' : 'Abrir caja'}
+              </button>
+            )}
+
+            {cashSidebarView === 'close_shift' && (
+              <button
+                type="submit"
+                form="cash-close-shift-form"
+                disabled={closingCashShift || !cashCurrentShift}
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Check size={14} />
+                {closingCashShift ? 'Cerrando...' : 'Confirmar cierre'}
+              </button>
+            )}
+
+            {cashSidebarView === 'movement_create' && (
+              <button
+                type="submit"
+                form="cash-new-movement-form"
+                disabled={submittingCashMovement || !cashCurrentShift}
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Plus size={14} />
+                {submittingCashMovement ? 'Registrando...' : 'Registrar movimiento'}
+              </button>
+            )}
+          </div>
+        }
       >
-        <div>
-          {cashSidebarView === 'open_shift' && (
-            <form className="space-y-3" onSubmit={handleOpenShift}>
-              <div>
-                <label className="text-[12px] font-medium text-[#4e5870]">Caja registradora</label>
+        {cashSidebarView === 'open_shift' && (
+          <form id="cash-open-shift-form" className="space-y-5" onSubmit={handleOpenShift}>
+            <AdminDrawerSection title="Caja" className={drawerSectionCardClass}>
+              <label className="block">
+                <span className="text-[12px] font-medium text-[#4e5870]">Caja registradora</span>
                 <select
                   value={cashOpenShiftForm.cashRegisterId}
                   onChange={(event) => setCashOpenShiftForm((prev) => ({ ...prev, cashRegisterId: event.target.value }))}
@@ -2446,10 +2577,12 @@ export default function AdminPaymentsPlaygroundPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
+            </AdminDrawerSection>
 
-              <div>
-                <label className="text-[12px] font-medium text-[#4e5870]">Monto inicial</label>
+            <AdminDrawerSection title="Monto inicial" className={drawerSectionCardClass}>
+              <label className="block">
+                <span className="text-[12px] font-medium text-[#4e5870]">Monto inicial</span>
                 <input
                   type="number"
                   min="0"
@@ -2459,36 +2592,24 @@ export default function AdminPaymentsPlaygroundPage() {
                   className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
                   placeholder="0"
                 />
-              </div>
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeActionSidebar}
-                  className="h-9 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={openingCashShift}
-                  className="h-9 rounded-lg bg-[#3053e2] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-60"
-                >
-                  {openingCashShift ? 'Abriendo...' : 'Abrir caja'}
-                </button>
-              </div>
-            </form>
-          )}
+              </label>
+            </AdminDrawerSection>
+          </form>
+        )}
 
-          {cashSidebarView === 'close_shift' && (
-            <form className="space-y-3" onSubmit={handleCloseShift}>
+        {cashSidebarView === 'close_shift' && (
+          <form id="cash-close-shift-form" className="space-y-5" onSubmit={handleCloseShift}>
+            <AdminDrawerSection title="Turno actual" className={drawerSectionCardClass}>
               <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3 text-[12px] text-[#4e5870]">
                 <p><span className="font-semibold">Caja:</span> {cashCurrentShift?.cashRegister?.name || '-'}</p>
                 <p><span className="font-semibold">Apertura:</span> {cashCurrentShift?.openedAt ? formatDateTime24(cashCurrentShift.openedAt) : '-'}</p>
                 <p><span className="font-semibold">Monto inicial:</span> {formatMoney(Number(cashCurrentShift?.openingAmount || 0))}</p>
               </div>
+            </AdminDrawerSection>
 
-              <div>
-                <label className="text-[12px] font-medium text-[#4e5870]">Dinero contado al cierre</label>
+            <AdminDrawerSection title="Arqueo" className={drawerSectionCardClass}>
+              <label className="block">
+                <span className="text-[12px] font-medium text-[#4e5870]">Dinero contado al cierre</span>
                 <input
                   type="number"
                   min="0"
@@ -2498,20 +2619,14 @@ export default function AdminPaymentsPlaygroundPage() {
                   className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
                   placeholder="0"
                 />
-              </div>
+              </label>
+            </AdminDrawerSection>
+          </form>
+        )}
 
-              <button
-                type="submit"
-                disabled={closingCashShift || !cashCurrentShift}
-                className="h-10 w-full rounded-xl bg-[#3053e2] text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {closingCashShift ? 'Cerrando...' : 'Confirmar cierre'}
-              </button>
-            </form>
-          )}
-
-          {cashSidebarView === 'movement_create' && (
-            <form className="space-y-3" onSubmit={handleCreateMovement}>
+        {cashSidebarView === 'movement_create' && (
+          <form id="cash-new-movement-form" className="space-y-5" onSubmit={handleCreateMovement}>
+            <AdminDrawerSection title="Tipo" className={drawerSectionCardClass}>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -2536,9 +2651,11 @@ export default function AdminPaymentsPlaygroundPage() {
                   Egreso
                 </button>
               </div>
+            </AdminDrawerSection>
 
-              <div>
-                <label className="text-[12px] font-medium text-[#4e5870]">Concepto</label>
+            <AdminDrawerSection title="Detalle" className={drawerSectionCardClass}>
+              <label className="block">
+                <span className="text-[12px] font-medium text-[#4e5870]">Concepto</span>
                 <input
                   type="text"
                   value={cashNewMovement.description}
@@ -2546,10 +2663,10 @@ export default function AdminPaymentsPlaygroundPage() {
                   className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
                   placeholder="Descripción del movimiento"
                 />
-              </div>
+              </label>
 
-              <div>
-                <label className="text-[12px] font-medium text-[#4e5870]">Monto</label>
+              <label className="mt-3 block">
+                <span className="text-[12px] font-medium text-[#4e5870]">Monto</span>
                 <input
                   type="number"
                   min="0"
@@ -2559,10 +2676,12 @@ export default function AdminPaymentsPlaygroundPage() {
                   className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
                   placeholder="0"
                 />
-              </div>
+              </label>
+            </AdminDrawerSection>
 
-              <div>
-                <label className="text-[12px] font-medium text-[#4e5870]">Método</label>
+            <AdminDrawerSection title="Método" className={drawerSectionCardClass}>
+              <label className="block">
+                <span className="text-[12px] font-medium text-[#4e5870]">Método</span>
                 <select
                   value={cashNewMovement.method}
                   onChange={(event) =>
@@ -2574,22 +2693,17 @@ export default function AdminPaymentsPlaygroundPage() {
                   <option value="TRANSFER">Transferencia</option>
                   <option value="CARD">Tarjeta</option>
                 </select>
-              </div>
+              </label>
 
-              <button
-                type="submit"
-                disabled={submittingCashMovement || !cashCurrentShift}
-                className="h-10 w-full rounded-xl bg-[#3053e2] text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submittingCashMovement ? 'Registrando...' : 'Registrar movimiento'}
-              </button>
               {!cashCurrentShift && (
-                <p className="text-[12px] text-[#7a8398]">Abrí caja para habilitar movimientos.</p>
+                <p className="mt-3 text-[12px] text-[#7a8398]">Abrí caja para habilitar movimientos.</p>
               )}
-            </form>
-          )}
+            </AdminDrawerSection>
+          </form>
+        )}
 
-          {cashSidebarView === 'close_report' && (
+        {cashSidebarView === 'close_report' && (
+          <AdminDrawerSection title="Arqueo" className={drawerSectionCardClass}>
             <div className="space-y-3 text-[13px] text-[#4e5870]">
               {cashLastCloseReport ? (
                 <>
@@ -2606,9 +2720,9 @@ export default function AdminPaymentsPlaygroundPage() {
                 <p className="text-[12px] text-[#6f7890]">No hay arqueo disponible en esta sesión.</p>
               )}
             </div>
-          )}
-        </div>
-      </AgendaLikeRightSidebar>
+          </AdminDrawerSection>
+        )}
+      </AdminDrawer>
     </>
   );
 }

@@ -24,10 +24,8 @@ export type CashAccountItem = {
 type CashAccountsListProps = {
   accounts: CashAccountItem[];
   selectedId: string | null;
-  /** Called when the user clicks the card or "Ver cuenta". */
+  /** Called when the user clicks the card. */
   onSelect: (id: string) => void;
-  /** Called when the user clicks "Cobrar" — opens payment flow directly. */
-  onPay: (id: string) => void;
   loading?: boolean;
   className?: string;
 };
@@ -61,12 +59,10 @@ function AccountCard({
   account,
   isSelected,
   onSelect,
-  onPay,
 }: {
   account: CashAccountItem;
   isSelected: boolean;
   onSelect: (id: string) => void;
-  onPay: (id: string) => void;
 }) {
   const { detail } = account;
   const clientName =
@@ -81,8 +77,16 @@ function AccountCard({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(account.id)}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        onSelect(account.id);
+      }}
       className={[
-        'group relative flex flex-col gap-2 rounded-xl border px-4 py-3 transition',
+        'group relative flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#cbd7ff]',
         isSelected
           ? 'border-[#3053e2] bg-[#eef1fd]'
           : 'border-[#dce2ee] bg-white hover:border-[#c0cadf] hover:bg-[#fafbff]',
@@ -90,16 +94,12 @@ function AccountCard({
     >
       {/* ── Top row: name + status badge ── */}
       <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => onSelect(account.id)}
-          className="min-w-0 text-left"
-        >
+        <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold leading-snug text-[#1a2035]">
             {clientName}
           </p>
           <p className="mt-0.5 truncate text-[11px] text-[#6f7890]">{courtInfo}</p>
-        </button>
+        </div>
 
         <span
           className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -137,32 +137,6 @@ function AccountCard({
           <span className="text-[#98a1b3]">Cargando detalle…</span>
         )}
       </div>
-
-      {/* ── Actions ── */}
-      <div className="flex items-center gap-2">
-        {hasPending && isOpen && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPay(account.id);
-            }}
-            className="h-8 rounded-lg bg-[#3053e2] px-3 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
-          >
-            Cobrar
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(account.id);
-          }}
-          className="h-8 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:border-[#c0cadf] hover:bg-[#f5f6f8]"
-        >
-          Ver cuenta
-        </button>
-      </div>
     </div>
   );
 }
@@ -184,7 +158,6 @@ export default function CashAccountsList({
   accounts,
   selectedId,
   onSelect,
-  onPay,
   loading = false,
   className,
 }: CashAccountsListProps) {
@@ -245,7 +218,6 @@ export default function CashAccountsList({
           account={account}
           isSelected={selectedId === account.id}
           onSelect={onSelect}
-          onPay={onPay}
         />
       ))}
     </div>

@@ -138,7 +138,7 @@ export const itemTypeLabel = (type: string): string => {
 
 export const normalizeAccountDetail = (raw: any, fallbackId: string): AccountDetail => ({
   id: String(raw?.id || fallbackId),
-  status: String(raw?.status || 'OPEN') as AccountStatus,
+  status: String(raw?.status || '').toUpperCase() === 'CLOSED' ? 'CLOSED' : 'OPEN',
   total: Number(raw?.total || 0),
   paid: Number(raw?.paid || 0),
   remaining: Number(raw?.remaining || 0),

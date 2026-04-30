@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { ClubAdminService, type ClubCatalogService } from '../services/ClubAdminService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
-import AppModal from './AppModal';
+import AdminAppModal from './admin/ui/AdminAppModal';
 import { AdminFilterToolbar, MetricCard } from './admin/ui';
 import ServicesTable from '../modules/tienda/components/ServicesTable';
 import ServiceDrawer from '../modules/tienda/components/ServiceDrawer';
@@ -217,7 +217,7 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
       />
 
       {/* ── Delete confirmation ── */}
-      <AppModal
+      <AdminAppModal
         show={Boolean(deleteTarget)}
         title="Dar de baja servicio"
         message={`Vas a dar de baja el servicio "${deleteTarget?.name || ''}".`}
@@ -233,10 +233,11 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
           setDeleteTarget(null);
         }}
         onConfirm={() => void confirmDelete()}
+        confirmDisabled={deleting}
       />
 
       {/* ── Feedback modal ── */}
-      <AppModal
+      <AdminAppModal
         show={feedbackModal.show}
         title={feedbackModal.title}
         message={feedbackModal.message}

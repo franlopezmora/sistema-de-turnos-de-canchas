@@ -10,6 +10,8 @@
 //   onClose        — callback para cerrar.
 //   onSuccess      — invocado tras cada acción exitosa; el padre actualiza su lista.
 //   onRefundRequest — abre el drawer de devolución en el padre (necesita contexto de allAccounts).
+//   initialView    — intención de apertura: detalle, cobro o nuevo concepto.
+//   context        — copia visible para identificar la cuenta dentro del drawer.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -22,6 +24,7 @@ import {
   ACCOUNT_PAYMENT_EPSILON,
   SYNTHETIC_ACCOUNT_TOTAL_ITEM_ID,
   formatMoney,
+  shortCode,
   paymentMethodLabel,
   paymentChannelLabel,
   formatRelativeDate,
@@ -47,11 +50,26 @@ type AccountDrawerView =
   | 'payment_result'
   | 'close_confirm';
 
+export type AccountDrawerInitialView = 'overview' | 'add_item' | 'payment' | 'close';
+
+export type AccountDrawerContext = {
+  title?: string;
+  subtitle?: string;
+  accountStatus?: 'OPEN' | 'CLOSED';
+};
+
+export type AccountDrawerSuccessMeta = {
+  accountId?: string;
+  label?: string;
+};
+
 type AccountDrawerProps = {
   accountId: string | null;
   open: boolean;
+  initialView?: AccountDrawerInitialView;
+  context?: AccountDrawerContext;
   onClose: () => void;
-  onSuccess?: (event: 'payment' | 'item_added' | 'closed') => void;
+  onSuccess?: (event: 'payment' | 'item_added' | 'closed', meta?: AccountDrawerSuccessMeta) => void;
   onRefundRequest?: (accountId: string) => void;
 };
 
@@ -66,7 +84,7 @@ const DataRow = ({
   value: string;
   valueClassName?: string;
 }) => (
-  <div className="flex items-center justify-between gap-3 py-1.5">
+  <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
     <span className="text-[13px] text-[#6f7890]">{label}</span>
     <span className={`text-right text-[13px] font-medium text-[#1a2035] ${valueClassName}`}>
       {value}
@@ -96,11 +114,23 @@ const SummaryCard = ({
   );
 };
 
+const createDefaultItemForm = () => ({
+  description: '',
+  quantity: '1',
+  unitPrice: '',
+  type: 'PRODUCT' as 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT',
+});
+
+const sectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
+const sectionListClass = 'divide-y divide-[#edf0f6] overflow-hidden rounded-xl border border-[#dce2ee] bg-white';
+
 // ─── AccountDrawer ────────────────────────────────────────────────────────────
 
 export default function AccountDrawer({
   accountId,
   open,
+  initialView = 'overview',
+  context,
   onClose,
   onSuccess,
   onRefundRequest,
@@ -112,18 +142,14 @@ export default function AccountDrawer({
 
   // ── View state ──────────────────────────────────────────────────────────────
   const [view, setView] = useState<AccountDrawerView>('overview');
+  const initialViewAppliedKeyRef = useRef('');
 
   // ── Action state ────────────────────────────────────────────────────────────
   const [actionError, setActionError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // ── Add item form ───────────────────────────────────────────────────────────
-  const [itemForm, setItemForm] = useState({
-    description: '',
-    quantity: '1',
-    unitPrice: '',
-    type: 'PRODUCT' as 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT',
-  });
+  const [itemForm, setItemForm] = useState(createDefaultItemForm);
 
   // ── Payment state ───────────────────────────────────────────────────────────
   const [payMethod, setPayMethod] = useState<PaymentMethod>('CASH');
@@ -136,22 +162,111 @@ export default function AccountDrawer({
   const [payError, setPayError] = useState('');
   const [payResult, setPayResult] = useState<PaymentResultData | null>(null);
 
+  const normalizeDrawerDetail = useCallback(
+    (raw: any, fallbackId: string) => {
+      const rawStatus = String(raw?.status || '').toUpperCase();
+      const contextStatus = String(context?.accountStatus || '').toUpperCase();
+      const effectiveStatus = rawStatus || contextStatus;
+      return normalizeAccountDetail(
+        effectiveStatus ? { ...raw, status: effectiveStatus } : raw,
+        fallbackId
+      );
+    },
+    [context?.accountStatus]
+  );
+
+  const openPaymentFlowForDetail = useCallback((targetDetail: AccountDetail) => {
+    if (targetDetail.status !== 'OPEN') {
+      setActionError('La cuenta está cerrada.');
+      setView('overview');
+      return;
+    }
+    if (Number(targetDetail.remaining || 0) <= ACCOUNT_PAYMENT_EPSILON) {
+      setActionError('La cuenta no tiene deuda pendiente.');
+      setView('overview');
+      return;
+    }
+
+    setActionError('');
+    const rows = buildPendingItemRows(targetDetail);
+    const allIds = rows.map((r) => String(r.id));
+    setPayMethod('CASH');
+    setPayChannel('BANK_ACCOUNT');
+    setPayPreset('FULL');
+    setPaySelectedIds(allIds);
+    setPayCustomAmountById({});
+    setPayAmountDraft(Number(targetDetail.remaining || 0).toFixed(2));
+    setPayError('');
+    setPayResult(null);
+    setView('payment_form');
+  }, []);
+
+  const applyInitialViewForDetail = useCallback(
+    (targetDetail: AccountDetail) => {
+      setActionError('');
+      setPayError('');
+
+      if (initialView === 'add_item') {
+        if (targetDetail.status === 'OPEN') {
+          setView('add_item');
+        } else {
+          setActionError('La cuenta está cerrada.');
+          setView('overview');
+        }
+        return;
+      }
+
+      if (initialView === 'payment') {
+        openPaymentFlowForDetail(targetDetail);
+        return;
+      }
+
+      if (initialView === 'close') {
+        if (targetDetail.status !== 'OPEN') {
+          setActionError('La cuenta ya está cerrada.');
+          setView('overview');
+          return;
+        }
+        if (Number(targetDetail.remaining || 0) > ACCOUNT_PAYMENT_EPSILON) {
+          setActionError('Registrá el cobro pendiente antes de cerrar la cuenta.');
+          setView('overview');
+          return;
+        }
+        setView('close_confirm');
+        return;
+      }
+
+      setView('overview');
+    },
+    [initialView, openPaymentFlowForDetail]
+  );
+
   // ── Fetch on open ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open || !accountId) {
       setDetail(null);
       setView('overview');
       setLoadError('');
+      setActionError('');
+      setPayError('');
+      setPayResult(null);
+      setItemForm(createDefaultItemForm());
+      initialViewAppliedKeyRef.current = '';
       return;
     }
     let cancelled = false;
     setLoading(true);
     setLoadError('');
+    setActionError('');
+    setPayError('');
+    setPayResult(null);
+    setItemForm(createDefaultItemForm());
     setView('overview');
+    initialViewAppliedKeyRef.current = '';
     getAccountById(accountId)
       .then((raw) => {
         if (cancelled) return;
-        setDetail(normalizeAccountDetail(raw, accountId));
+        setDetail(normalizeDrawerDetail(raw, accountId));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -164,18 +279,26 @@ export default function AccountDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, accountId]);
+  }, [open, accountId, normalizeDrawerDetail]);
+
+  useEffect(() => {
+    if (!open || !accountId || !detail) return;
+    const key = `${accountId}:${initialView}`;
+    if (initialViewAppliedKeyRef.current === key) return;
+    initialViewAppliedKeyRef.current = key;
+    applyInitialViewForDetail(detail);
+  }, [open, accountId, detail, initialView, applyInitialViewForDetail]);
 
   // ── Reload helper ─────────────────────────────────────────────────────────
   const reloadDetail = useCallback(async () => {
     if (!accountId) return;
     try {
       const raw = await getAccountById(accountId);
-      setDetail(normalizeAccountDetail(raw, accountId));
+      setDetail(normalizeDrawerDetail(raw, accountId));
     } catch (err) {
       reportUiError({ area: 'AccountDrawer', action: 'reloadDetail' }, err);
     }
-  }, [accountId]);
+  }, [accountId, normalizeDrawerDetail]);
 
   // ── Reset when going back ─────────────────────────────────────────────────
   const goToOverview = useCallback(() => {
@@ -222,22 +345,20 @@ export default function AccountDrawer({
   // ── Open payment flow ─────────────────────────────────────────────────────
   const openPaymentFlow = useCallback(() => {
     if (!detail) return;
-    if (Number(detail.remaining || 0) <= ACCOUNT_PAYMENT_EPSILON) {
-      setActionError('La cuenta no tiene deuda pendiente.');
-      return;
-    }
-    setActionError('');
-    const allIds = pendingRows.map((r) => String(r.id));
-    setPayMethod('CASH');
-    setPayChannel('BANK_ACCOUNT');
-    setPayPreset('FULL');
-    setPaySelectedIds(allIds);
-    setPayCustomAmountById({});
-    setPayAmountDraft(Number(detail.remaining || 0).toFixed(2));
-    setPayError('');
-    setPayResult(null);
-    setView('payment_form');
-  }, [detail, pendingRows]);
+    openPaymentFlowForDetail(detail);
+  }, [detail, openPaymentFlowForDetail]);
+
+  const getSuccessMeta = useCallback((): AccountDrawerSuccessMeta => {
+    const id = detail?.id || accountId || '';
+    const label =
+      String(context?.subtitle || '').trim() ||
+      String(context?.title || '').trim() ||
+      (id ? `Cuenta #${shortCode(id)}` : 'Cuenta');
+    return {
+      accountId: id || undefined,
+      label,
+    };
+  }, [accountId, context?.subtitle, context?.title, detail?.id]);
 
   // ── Apply quick preset ────────────────────────────────────────────────────
   const applyPreset = useCallback(
@@ -319,7 +440,7 @@ export default function AccountDrawer({
       });
       await reloadDetail();
       const reloaded = await getAccountById(accountId).then((r) =>
-        normalizeAccountDetail(r, accountId)
+        normalizeDrawerDetail(r, accountId)
       );
       setDetail(reloaded);
       setPayResult({
@@ -333,7 +454,7 @@ export default function AccountDrawer({
         appliedItems,
       });
       setView('payment_result');
-      onSuccess?.('payment');
+      onSuccess?.('payment', getSuccessMeta());
     } catch (err) {
       reportUiError({ area: 'AccountDrawer', action: 'submitPayment' }, err);
       const message = extractErrorMessage(err, 'No se pudo registrar el cobro.');
@@ -360,6 +481,8 @@ export default function AccountDrawer({
     payChannel,
     previewRows,
     reloadDetail,
+    getSuccessMeta,
+    normalizeDrawerDetail,
     onSuccess,
   ]);
 
@@ -368,6 +491,11 @@ export default function AccountDrawer({
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!accountId) return;
+      if (!detail || detail.status !== 'OPEN') {
+        setActionError('La cuenta está cerrada. No podés agregar conceptos.');
+        setView('overview');
+        return;
+      }
       const description = itemForm.description.trim();
       const quantity = Number(itemForm.quantity);
       const unitPrice = Number(itemForm.unitPrice);
@@ -395,9 +523,9 @@ export default function AccountDrawer({
           type: itemForm.type,
         });
         await reloadDetail();
-        setItemForm({ description: '', quantity: '1', unitPrice: '', type: 'PRODUCT' });
+        setItemForm(createDefaultItemForm());
         setView('overview');
-        onSuccess?.('item_added');
+        onSuccess?.('item_added', getSuccessMeta());
       } catch (err) {
         reportUiError({ area: 'AccountDrawer', action: 'submitAddItem' }, err);
         setActionError(extractErrorMessage(err, 'No se pudo agregar el concepto.'));
@@ -405,7 +533,7 @@ export default function AccountDrawer({
         setSubmitting(false);
       }
     },
-    [accountId, itemForm, reloadDetail, onSuccess]
+    [accountId, detail, itemForm, reloadDetail, getSuccessMeta, onSuccess]
   );
 
   // ── Submit close account ──────────────────────────────────────────────────
@@ -427,14 +555,15 @@ export default function AccountDrawer({
       await closeAccount(accountId);
       await reloadDetail();
       setView('overview');
-      onSuccess?.('closed');
+      onSuccess?.('closed', getSuccessMeta());
+      onClose();
     } catch (err) {
       reportUiError({ area: 'AccountDrawer', action: 'submitCloseAccount' }, err);
       setActionError(extractErrorMessage(err, 'No se pudo cerrar la cuenta.'));
     } finally {
       setSubmitting(false);
     }
-  }, [accountId, detail, reloadDetail, onSuccess]);
+  }, [accountId, detail, reloadDetail, getSuccessMeta, onClose, onSuccess]);
 
   // ── Close handler — guarda contra cierre accidental durante submit ─────────
   const handleClose = useCallback(() => {
@@ -451,6 +580,16 @@ export default function AccountDrawer({
   // ─────────────────────────────────────────────────────────────────────────────
 
   // ── Title & status ─────────────────────────────────────────────────────────
+  const contextTitle = String(context?.title || '').trim();
+  const contextSubtitle = String(context?.subtitle || '').trim();
+  const accountTitle = contextTitle || `Cuenta ${detail ? `#${shortCode(detail.id)}` : ''}`;
+  const drawerSubtitle =
+    detail && contextSubtitle
+      ? contextSubtitle
+      : detail && contextTitle
+      ? `#${shortCode(detail.id)}`
+      : undefined;
+
   const drawerTitle =
     view === 'add_item'
       ? 'Agregar concepto'
@@ -458,9 +597,9 @@ export default function AccountDrawer({
       ? 'Registrar cobro'
       : view === 'payment_result'
       ? payResult?.title || 'Cobro'
-      : view === 'close_confirm'
-      ? 'Cerrar cuenta'
-      : `Cuenta ${detail ? `#${detail.id.slice(-6).toUpperCase()}` : ''}`;
+    : view === 'close_confirm'
+    ? 'Cerrar cuenta'
+    : accountTitle;
 
   const statusChip =
     view === 'overview' && detail
@@ -483,12 +622,12 @@ export default function AccountDrawer({
     if (view === 'overview') {
       if (loading || !detail) return undefined;
       return (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {isOpen && (
             <button
               type="button"
               onClick={() => { setActionError(''); setView('add_item'); }}
-              className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#3053e2] transition hover:bg-[#f4f6fb]"
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#3053e2] transition hover:bg-[#f4f6fb]"
             >
               <Plus size={14} />
               Concepto
@@ -498,7 +637,7 @@ export default function AccountDrawer({
             <button
               type="button"
               onClick={openPaymentFlow}
-              className="flex h-9 items-center gap-1.5 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+              className="flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
             >
               <CreditCard size={14} />
               Cobrar
@@ -507,8 +646,11 @@ export default function AccountDrawer({
           {onRefundRequest && detail.payments.length > 0 && (
             <button
               type="button"
-              onClick={() => onRefundRequest(detail.id)}
-              className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              onClick={() => {
+                onClose();
+                onRefundRequest(detail.id);
+              }}
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
             >
               <Minus size={14} />
               Devolución
@@ -518,7 +660,7 @@ export default function AccountDrawer({
             <button
               type="button"
               onClick={() => { setActionError(''); setView('close_confirm'); }}
-              className="ml-auto flex h-9 items-center gap-1.5 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-3 text-[12px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white"
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white"
             >
               Cerrar cuenta
             </button>
@@ -534,7 +676,7 @@ export default function AccountDrawer({
             type="button"
             onClick={goToOverview}
             disabled={submitting}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Cancelar
@@ -544,7 +686,7 @@ export default function AccountDrawer({
             type="submit"
             form="add-item-form"
             disabled={submitting}
-            className="h-9 rounded-xl bg-[#3053e2] px-5 text-[12px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
           >
             {submitting ? 'Agregando...' : 'Agregar concepto'}
           </button>
@@ -559,7 +701,7 @@ export default function AccountDrawer({
             type="button"
             onClick={goToOverview}
             disabled={submitting}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Cancelar
@@ -569,7 +711,7 @@ export default function AccountDrawer({
             type="button"
             disabled={!amountIsValid || submitting}
             onClick={() => setView('payment_preconfirm')}
-            className="h-9 rounded-xl bg-[#3053e2] px-5 text-[12px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
           >
             Continuar →
           </button>
@@ -584,7 +726,7 @@ export default function AccountDrawer({
             type="button"
             onClick={() => setView('payment_form')}
             disabled={submitting}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Volver
@@ -594,7 +736,7 @@ export default function AccountDrawer({
             type="button"
             disabled={submitting}
             onClick={submitPayment}
-            className="h-9 rounded-xl bg-[#3053e2] px-5 text-[12px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
           >
             {submitting ? 'Registrando...' : 'Confirmar cobro'}
           </button>
@@ -609,7 +751,7 @@ export default function AccountDrawer({
             <button
               type="button"
               onClick={() => setView('payment_form')}
-              className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
             >
               <ArrowLeft size={14} />
               Reintentar
@@ -619,7 +761,7 @@ export default function AccountDrawer({
           <button
             type="button"
             onClick={goToOverview}
-            className="h-9 rounded-xl bg-[#3053e2] px-5 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
           >
             {payResult?.variant === 'success' ? 'Ver cuenta' : 'Cerrar'}
           </button>
@@ -634,7 +776,7 @@ export default function AccountDrawer({
             type="button"
             onClick={goToOverview}
             disabled={submitting}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Cancelar
@@ -644,7 +786,7 @@ export default function AccountDrawer({
             type="button"
             disabled={submitting}
             onClick={submitCloseAccount}
-            className="h-9 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 text-[12px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white disabled:opacity-40"
+            className="h-10 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-5 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white disabled:opacity-40"
           >
             {submitting ? 'Cerrando...' : 'Cerrar cuenta'}
           </button>
@@ -682,7 +824,7 @@ export default function AccountDrawer({
               setLoading(true);
               setLoadError('');
               getAccountById(accountId)
-                .then((raw) => setDetail(normalizeAccountDetail(raw, accountId)))
+                .then((raw) => setDetail(normalizeDrawerDetail(raw, accountId)))
                 .catch((err) => setLoadError(extractErrorMessage(err, 'Error al cargar la cuenta.')))
                 .finally(() => setLoading(false));
             }}
@@ -709,10 +851,14 @@ export default function AccountDrawer({
           )}
 
           {/* Summary cards */}
-          <AdminDrawerSection>
+          <AdminDrawerSection className={sectionCardClass}>
             <div className="flex gap-2">
               <SummaryCard label="Total" value={formatMoney(detail.total)} />
-              <SummaryCard label="Pagado" value={formatMoney(detail.paid)} variant="paid" />
+              <SummaryCard
+                label="Pagado"
+                value={formatMoney(detail.paid)}
+                variant={Number(detail.paid || 0) > ACCOUNT_PAYMENT_EPSILON ? 'paid' : 'default'}
+              />
               <SummaryCard
                 label="Pendiente"
                 value={formatMoney(detail.remaining)}
@@ -723,8 +869,8 @@ export default function AccountDrawer({
 
           {/* Conceptos */}
           {detail.items.length > 0 && (
-            <AdminDrawerSection title="Conceptos">
-              <div className="divide-y divide-[#f0f2f7] rounded-xl border border-[#eef0f5] bg-white">
+            <AdminDrawerSection title="Conceptos" className={sectionCardClass}>
+              <div className={sectionListClass}>
                 {detail.items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
@@ -747,8 +893,8 @@ export default function AccountDrawer({
 
           {/* Pagos registrados */}
           {detail.payments.length > 0 && (
-            <AdminDrawerSection title="Pagos">
-              <div className="divide-y divide-[#f0f2f7] rounded-xl border border-[#eef0f5] bg-white">
+            <AdminDrawerSection title="Pagos" className={sectionCardClass}>
+              <div className={sectionListClass}>
                 {detail.payments.map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
@@ -787,7 +933,7 @@ export default function AccountDrawer({
     if (view === 'add_item') {
       return (
         <form id="add-item-form" onSubmit={submitAddItem}>
-          <AdminDrawerSection title="Concepto">
+          <AdminDrawerSection title="Concepto" className={sectionCardClass}>
             <div className="space-y-3">
               {actionError && (
                 <p className="text-[13px] text-[#b42318]">{actionError}</p>
@@ -863,7 +1009,7 @@ export default function AccountDrawer({
               </div>
 
               {itemForm.description && itemForm.unitPrice && (
-                <div className="rounded-xl bg-[#f8f9fc] px-4 py-2.5">
+                <div className="rounded-xl border border-[#dce2ee] bg-white">
                   <DataRow
                     label="Total"
                     value={formatMoney(
@@ -890,7 +1036,7 @@ export default function AccountDrawer({
           )}
 
           {/* Quick presets */}
-          <AdminDrawerSection title="Cobrar">
+          <AdminDrawerSection title="Cobrar" className={sectionCardClass}>
             <div className="flex gap-2">
               {(
                 [
@@ -918,8 +1064,8 @@ export default function AccountDrawer({
 
           {/* Custom item checkboxes */}
           {payPreset === 'CUSTOM_ITEMS' && pendingRows.length > 0 && (
-            <AdminDrawerSection title="Conceptos">
-              <div className="divide-y divide-[#f0f2f7] rounded-xl border border-[#eef0f5] bg-white">
+            <AdminDrawerSection title="Conceptos" className={sectionCardClass}>
+              <div className={sectionListClass}>
                 {pendingRows.map((row) => {
                   const checked = paySelectedIds.includes(row.id);
                   return (
@@ -993,7 +1139,7 @@ export default function AccountDrawer({
           )}
 
           {/* Amount */}
-          <AdminDrawerSection title="Monto a cobrar">
+          <AdminDrawerSection title="Monto a cobrar" className={sectionCardClass}>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-medium text-[#98a1b3]">
                 $
@@ -1014,7 +1160,7 @@ export default function AccountDrawer({
           </AdminDrawerSection>
 
           {/* Method */}
-          <AdminDrawerSection title="Método de cobro">
+          <AdminDrawerSection title="Método de cobro" className={sectionCardClass}>
             <div className="flex gap-2">
               {(
                 [
@@ -1073,8 +1219,8 @@ export default function AccountDrawer({
     if (view === 'payment_preconfirm') {
       return (
         <>
-          <AdminDrawerSection title="Resumen del cobro">
-            <div className="rounded-xl border border-[#eef0f5] bg-white">
+          <AdminDrawerSection title="Resumen del cobro" className={sectionCardClass}>
+            <div className={sectionListClass}>
               <DataRow
                 label="Monto"
                 value={formatMoney(amountNumeric)}
@@ -1088,8 +1234,8 @@ export default function AccountDrawer({
           </AdminDrawerSection>
 
           {previewRows.length > 0 && (
-            <AdminDrawerSection title="Conceptos cubiertos">
-              <div className="divide-y divide-[#f0f2f7] rounded-xl border border-[#eef0f5] bg-white">
+            <AdminDrawerSection title="Conceptos cubiertos" className={sectionCardClass}>
+              <div className={sectionListClass}>
                 {previewRows.map((row) => (
                   <div key={row.id} className="flex items-center justify-between px-4 py-3">
                     <span className="text-[13px] text-[#1a2035]">{row.label}</span>
@@ -1119,7 +1265,7 @@ export default function AccountDrawer({
         <>
           <div
             className={[
-              'flex flex-col items-center gap-3 rounded-2xl p-6 text-center',
+              'flex flex-col items-center gap-3 rounded-2xl border p-6 text-center',
               isSuccess
                 ? 'bg-[#f0faf4] text-[#1a7a4a]'
                 : 'bg-[#fff5f5] text-[#b42318]',
@@ -1142,8 +1288,8 @@ export default function AccountDrawer({
           </div>
 
           {isSuccess && (
-            <AdminDrawerSection title="Detalle">
-              <div className="rounded-xl border border-[#eef0f5] bg-white">
+            <AdminDrawerSection title="Detalle" className={sectionCardClass}>
+              <div className={sectionListClass}>
                 <DataRow label="Cobrado" value={formatMoney(payResult.appliedAmount)} />
                 <DataRow label="Método" value={payResult.methodLabel} />
                 <DataRow label="Saldo restante" value={formatMoney(payResult.remainingAfter)} />
@@ -1152,8 +1298,8 @@ export default function AccountDrawer({
           )}
 
           {isSuccess && payResult.appliedItems.length > 0 && (
-            <AdminDrawerSection title="Conceptos">
-              <div className="divide-y divide-[#f0f2f7] rounded-xl border border-[#eef0f5] bg-white">
+            <AdminDrawerSection title="Conceptos" className={sectionCardClass}>
+              <div className={sectionListClass}>
                 {payResult.appliedItems.map((item) => (
                   <div key={item.id} className="flex items-center justify-between px-4 py-3">
                     <span className="text-[13px] text-[#1a2035]">{item.label}</span>
@@ -1188,8 +1334,8 @@ export default function AccountDrawer({
             </div>
           )}
 
-          <AdminDrawerSection title="Estado actual">
-            <div className="rounded-xl border border-[#eef0f5] bg-white">
+          <AdminDrawerSection title="Estado actual" className={sectionCardClass}>
+            <div className={sectionListClass}>
               <DataRow label="Total" value={formatMoney(detail.total)} />
               <DataRow label="Pagado" value={formatMoney(detail.paid)} />
               <DataRow label="Pendiente" value={formatMoney(detail.remaining)} />
@@ -1209,6 +1355,7 @@ export default function AccountDrawer({
       open={open}
       onClose={handleClose}
       title={drawerTitle}
+      subtitle={drawerSubtitle}
       statusChip={statusChip}
       statusChipClassName={statusChipClassName}
       size="md"

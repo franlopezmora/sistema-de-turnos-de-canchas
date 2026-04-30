@@ -3,15 +3,17 @@ import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DollarSign,
-  X,
   Pencil,
   Plus,
+  RotateCcw,
+  Save,
   Search,
   Trash2,
+  UserPlus,
 } from 'lucide-react';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
 import ClientsTable from '../../modules/clientes/components/ClientsTable';
-import { AdminFilterToolbar, AdminSegmentedControl } from '../../components/admin/ui';
+import { AdminDrawer, AdminDrawerSection, AdminFilterToolbar, AdminSegmentedControl } from '../../components/admin/ui';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
@@ -21,7 +23,11 @@ import { ClubAdminService } from '../../services/ClubAdminService';
 import { formatDateTime24 } from '../../utils/dateTime';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
 import { reportUiError } from '../../utils/uiError';
-import AccountDrawer from '../../modules/cuentas/components/AccountDrawer';
+import AccountDrawer, {
+  type AccountDrawerContext,
+  type AccountDrawerInitialView,
+  type AccountDrawerSuccessMeta,
+} from '../../modules/cuentas/components/AccountDrawer';
 import {
   buildCanonicalPhone,
   DEFAULT_PHONE_COUNTRY_ISO2,
@@ -35,6 +41,8 @@ type ClientActionSidebarView = 'none' | 'client_create' | 'client_edit' | 'clien
 
 
 const EPSILON = 0.009;
+const drawerSectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
+const drawerListClass = 'divide-y divide-[#edf0f6] rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px]';
 
 const formatDate = (dateInput: any) => {
   if (!dateInput) return '-';
@@ -156,6 +164,8 @@ export default function AdminClientesPlayground2Page() {
 
   const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
   const [accountDrawerAccountId, setAccountDrawerAccountId] = useState('');
+  const [accountDrawerInitialView, setAccountDrawerInitialView] =
+    useState<AccountDrawerInitialView>('overview');
 
   const [selectedClientDiscountAssignments, setSelectedClientDiscountAssignments] = useState<any[]>([]);
   const [loadingDiscountAssignments, setLoadingDiscountAssignments] = useState(false);
@@ -429,8 +439,9 @@ export default function AdminClientesPlayground2Page() {
   }, [selectedClient]);
 
 
-  const openAccountDrawer = (accountId: string) => {
+  const openAccountDrawer = (accountId: string, initialView: AccountDrawerInitialView = 'overview') => {
     setAccountDrawerAccountId(accountId);
+    setAccountDrawerInitialView(initialView);
     setAccountDrawerOpen(true);
   };
 
@@ -482,6 +493,28 @@ export default function AdminClientesPlayground2Page() {
     () => (selectedClient?.history || []).slice().sort(sortByCreationDesc),
     [selectedClient]
   );
+  const accountDrawerEntry = useMemo(
+    () =>
+      historyAccounts.find((account: any) => String(account?.id) === String(accountDrawerAccountId)) ||
+      null,
+    [accountDrawerAccountId, historyAccounts]
+  );
+  const accountDrawerContext = useMemo<AccountDrawerContext | undefined>(() => {
+    if (!accountDrawerAccountId) return undefined;
+    const accountLabel = accountDrawerEntry?.sourceType
+      ? `Cuenta ${formatAccountSourceType(accountDrawerEntry.sourceType)} #${shortId(accountDrawerAccountId)}`
+      : `Cuenta #${shortId(accountDrawerAccountId)}`;
+    const subtitleParts = [
+      accountLabel,
+      accountDrawerEntry?.date ? formatDate(accountDrawerEntry.date) : '',
+      accountDrawerEntry?.time ? String(accountDrawerEntry.time) : '',
+    ].filter(Boolean);
+    return {
+      title: selectedClient ? getClientName(selectedClient) : `Cuenta #${shortId(accountDrawerAccountId)}`,
+      subtitle: subtitleParts.join(' · '),
+      accountStatus: String(accountDrawerEntry?.status || '').toUpperCase() === 'CLOSED' ? 'CLOSED' : undefined,
+    };
+  }, [accountDrawerAccountId, accountDrawerEntry, selectedClient]);
 
   if (!authChecked || !user) {
     return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
@@ -631,14 +664,14 @@ export default function AdminClientesPlayground2Page() {
                               <div className="mt-2 flex items-center justify-end gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => openAccountDrawer(String(account.id))}
+                                  onClick={() => openAccountDrawer(String(account.id), 'overview')}
                                   className="h-8 rounded-lg border border-[#dce2ee] bg-white px-2.5 text-[12px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
                                 >
                                   Ver detalle
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => openAccountDrawer(String(account.id))}
+                                  onClick={() => openAccountDrawer(String(account.id), 'payment')}
                                   className="h-8 rounded-lg bg-[#3053e2] px-2.5 text-[12px] font-semibold text-white hover:bg-[#2748cc]"
                                 >
                                   <span className="inline-flex items-center gap-1"><DollarSign size={13} /> Cobrar</span>
@@ -798,173 +831,53 @@ export default function AdminClientesPlayground2Page() {
       </AdminPlaygroundShell>
 
 
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="Cerrar panel"
-          className="fixed inset-x-0 bottom-0 top-16 z-[105] bg-[#101326]/20 transition-[left] duration-200 ease-out will-change-[left] lg:left-[var(--admin-playground-sidebar-left,168px)] lg:rounded-tl-[12px]"
-          onClick={closeActionSidebar}
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 right-0 top-16 z-[115] w-full max-w-[620px] border-l border-[#e6e8ee] bg-white transition-transform duration-300 ${
-          sidebarOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        <div className="relative h-full w-full flex flex-col">
-          <header className="border-b border-[#eef0f5] px-6 py-5 flex items-start justify-between">
-            <div>
-              <h2 className="text-[24px] leading-none font-semibold text-[#1f2638] tracking-[-0.015em]">
-                {sidebarView === 'client_create' && 'Nuevo cliente'}
-                {sidebarView === 'client_edit' && 'Editar cliente'}
-                {sidebarView === 'client_profile' && 'Perfil del cliente'}
-                {sidebarView === 'client_delete' && 'Eliminar cliente'}
-              </h2>
-              <p className="mt-3 text-[13px] leading-snug text-[#7d879d]">
-                {isClientFormView && 'Gestion de datos basicos del cliente.'}
-                {sidebarView === 'client_profile' && (selectedClient ? getClientName(selectedClient) : 'Sin cliente seleccionado')}
-                {sidebarView === 'client_delete' && 'Esta accion es permanente.'}
-              </p>
-            </div>
+      <AdminDrawer
+        open={sidebarOpen}
+        onClose={closeActionSidebar}
+        title={
+          sidebarView === 'client_create'
+            ? 'Nuevo cliente'
+            : sidebarView === 'client_edit'
+              ? 'Editar cliente'
+              : sidebarView === 'client_profile'
+                ? 'Perfil del cliente'
+                : sidebarView === 'client_delete'
+                  ? 'Eliminar cliente'
+                  : 'Cliente'
+        }
+        subtitle={
+          isClientFormView
+            ? 'Gestion de datos basicos del cliente.'
+            : sidebarView === 'client_profile'
+              ? selectedClient
+                ? getClientName(selectedClient)
+                : 'Sin cliente seleccionado'
+              : sidebarView === 'client_delete'
+                ? 'Esta accion es permanente.'
+                : undefined
+        }
+        statusChip={
+          sidebarView === 'client_profile' && selectedClient
+            ? Number(selectedClient.totalDebt || 0) > EPSILON
+              ? 'Con deuda'
+              : 'Sin deuda'
+            : undefined
+        }
+        statusChipClassName={
+          sidebarView === 'client_profile' && selectedClient && Number(selectedClient.totalDebt || 0) > EPSILON
+            ? 'border-red-100 bg-red-50 text-red-700'
+            : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+        }
+        size="md"
+        footer={
+          <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={closeActionSidebar}
-              className="h-9 w-9 rounded-full border border-[#e4e7ee] text-[#798194] grid place-items-center hover:bg-[#f7f8fb] shrink-0"
-              aria-label="Cerrar"
+              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
             >
-              <X size={16} />
+              Cancelar
             </button>
-          </header>
-
-          <div className="flex-1 overflow-y-auto px-6 py-6">
-            {isClientFormView && (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={clientForm.name}
-                  onChange={(event) => setClientForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                  placeholder="Nombre y apellido"
-                />
-
-                <div className="grid grid-cols-[110px_1fr] gap-2">
-                  <select
-                    value={clientForm.phoneCountryIso2}
-                    onChange={(event) => setClientForm((prev) => ({ ...prev, phoneCountryIso2: normalizePhoneCountryIso2(event.target.value) }))}
-                    className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-2 text-[12px] font-semibold outline-none focus:border-[#3053e2]"
-                  >
-                    {PHONE_COUNTRY_OPTIONS.map((option) => (
-                      <option key={option.iso2} value={option.iso2}>
-                        {option.callingCode} {option.iso2}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={clientForm.phone}
-                    onChange={(event) =>
-                      setClientForm((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, '') }))
-                    }
-                    className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                    placeholder="Telefono"
-                  />
-                </div>
-
-                <input
-                  type="text"
-                  value={clientForm.dni}
-                  onChange={(event) => setClientForm((prev) => ({ ...prev, dni: event.target.value }))}
-                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                  placeholder="DNI"
-                />
-
-                <input
-                  type="email"
-                  value={clientForm.email}
-                  onChange={(event) => setClientForm((prev) => ({ ...prev, email: event.target.value }))}
-                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
-                  placeholder="Email"
-                />
-
-                <label className="inline-flex items-center gap-2 pt-1 text-[12px] font-semibold text-[#4e5870]">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(clientForm.isProfessor)}
-                    onChange={(event) => setClientForm((prev) => ({ ...prev, isProfessor: event.target.checked }))}
-                  />
-                  Es profesor
-                </label>
-              </div>
-            )}
-
-            {sidebarView === 'client_profile' && (
-              <div className="space-y-4">
-                {!selectedClient ? (
-                  <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">Selecciona un cliente.</div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-                        <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Cliente</p>
-                        <p className="mt-1 text-[13px] font-semibold text-[#1f2638]">{getClientName(selectedClient)}</p>
-                      </div>
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-                        <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">DNI</p>
-                        <p className="mt-1 text-[13px] font-semibold text-[#1f2638]">{String(selectedClient.dni || '-')}</p>
-                      </div>
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-                        <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Telefono</p>
-                        <p className="mt-1 text-[13px] font-semibold text-[#1f2638]">{String(selectedClient.phone || '-')}</p>
-                      </div>
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-                        <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Email</p>
-                        <p className="mt-1 break-all text-[13px] font-semibold text-[#1f2638]">{String(selectedClient.email || '-')}</p>
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-                      <p className="text-[10px] uppercase tracking-wide text-[#6f7890]">Estado comercial</p>
-                      <p className="mt-1 text-[13px] text-[#4e5870]">
-                        Total reservas: <span className="font-semibold text-[#1f2638]">{Number(selectedClient.totalBookings || 0)}</span>
-                      </p>
-                      {Number(selectedClient.totalDebt || 0) > EPSILON ? (
-                        <p className="mt-1 text-[13px] text-red-700">
-                          Deuda vigente: <span className="font-semibold">{formatMoney(Number(selectedClient.totalDebt || 0))}</span>
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-[13px] text-[#6f7890]">
-                          Sin deuda vigente
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {sidebarView === 'client_delete' && (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-[#fecaca] bg-[#fff1f2] p-3 text-[13px] text-[#7f1d1d]">
-                  Vas a eliminar a {selectedClient ? getClientName(selectedClient) : 'este cliente'}. Esta accion no se puede deshacer.
-                </div>
-                <div className="rounded-xl border border-[#dce2ee] bg-white p-3">
-                  <p className="text-[12px] uppercase tracking-wide text-[#6f7890]">Cliente seleccionado</p>
-                  <p className="mt-1 text-[13px] font-semibold text-[#1f2638]">{selectedClient ? getClientName(selectedClient) : '-'}</p>
-                </div>
-              </div>
-            )}
-
-          </div>
-
-          <footer className="border-t border-[#eef0f5] bg-white p-4">
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeActionSidebar}
-                className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
-              >
-                Cancelar
-              </button>
 
             {isClientFormView && (
               <>
@@ -981,17 +894,23 @@ export default function AdminClientesPlayground2Page() {
                       isProfessor: false,
                     });
                   }}
-                  className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+                  className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
                 >
-                  Limpiar
+                  <span className="inline-flex items-center gap-1.5">
+                    <RotateCcw size={14} />
+                    Limpiar
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void submitClient()}
                   disabled={submittingClient}
-                  className="h-10 rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {submittingClient ? 'Guardando...' : sidebarView === 'client_edit' ? 'Guardar cambios' : 'Crear cliente'}
+                  <span className="inline-flex items-center gap-1.5">
+                    {sidebarView === 'client_edit' ? <Save size={14} /> : <UserPlus size={14} />}
+                    {submittingClient ? 'Guardando...' : sidebarView === 'client_edit' ? 'Guardar cambios' : 'Crear cliente'}
+                  </span>
                 </button>
               </>
             )}
@@ -1000,9 +919,12 @@ export default function AdminClientesPlayground2Page() {
               <button
                 type="button"
                 onClick={() => openEditClient(selectedClient)}
-                className="h-10 rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc]"
+                className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc]"
               >
-                Editar cliente
+                <span className="inline-flex items-center gap-1.5">
+                  <Pencil size={14} />
+                  Editar cliente
+                </span>
               </button>
             )}
 
@@ -1013,23 +935,172 @@ export default function AdminClientesPlayground2Page() {
                   if (deletingClient) return;
                   void deleteSelectedClient();
                 }}
-                className="h-10 rounded-xl bg-[#b91c1c] px-3 text-[13px] font-semibold text-white hover:bg-[#991b1b] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-10 rounded-xl bg-[#b91c1c] px-5 text-[13px] font-semibold text-white hover:bg-[#991b1b] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={deletingClient}
               >
-                {deletingClient ? 'Eliminando...' : 'Si, eliminar'}
+                <span className="inline-flex items-center gap-1.5">
+                  <Trash2 size={14} />
+                  {deletingClient ? 'Eliminando...' : 'Si, eliminar'}
+                </span>
               </button>
             )}
+          </div>
+        }
+      >
+        {isClientFormView && (
+          <AdminDrawerSection title="Datos basicos" className={drawerSectionCardClass}>
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Nombre y apellido</span>
+                <input
+                  type="text"
+                  value={clientForm.name}
+                  onChange={(event) => setClientForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                  placeholder="Ej: Juan Perez"
+                />
+              </label>
 
+              <div className="grid grid-cols-[110px_1fr] gap-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Pais</span>
+                  <select
+                    value={clientForm.phoneCountryIso2}
+                    onChange={(event) => setClientForm((prev) => ({ ...prev, phoneCountryIso2: normalizePhoneCountryIso2(event.target.value) }))}
+                    className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-2 text-[12px] font-semibold text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                  >
+                    {PHONE_COUNTRY_OPTIONS.map((option) => (
+                      <option key={option.iso2} value={option.iso2}>
+                        {option.callingCode} {option.iso2}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Telefono</span>
+                  <input
+                    type="text"
+                    value={clientForm.phone}
+                    onChange={(event) =>
+                      setClientForm((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, '') }))
+                    }
+                    className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                    placeholder="351..."
+                  />
+                </label>
+              </div>
 
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">DNI</span>
+                <input
+                  type="text"
+                  value={clientForm.dni}
+                  onChange={(event) => setClientForm((prev) => ({ ...prev, dni: event.target.value }))}
+                  className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                  placeholder="Documento"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Email</span>
+                <input
+                  type="email"
+                  value={clientForm.email}
+                  onChange={(event) => setClientForm((prev) => ({ ...prev, email: event.target.value }))}
+                  className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                  placeholder="cliente@email.com"
+                />
+              </label>
+
+              <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870]">
+                <input
+                  type="checkbox"
+                  checked={Boolean(clientForm.isProfessor)}
+                  onChange={(event) => setClientForm((prev) => ({ ...prev, isProfessor: event.target.checked }))}
+                />
+                Es profesor
+              </label>
             </div>
-          </footer>
-        </div>
-      </aside>
+          </AdminDrawerSection>
+        )}
+
+        {sidebarView === 'client_profile' && (
+          !selectedClient ? (
+            <AdminDrawerSection className={drawerSectionCardClass}>
+              <div className="rounded-xl border border-[#dce2ee] bg-white p-8 text-center text-[13px] text-[#6f7890]">
+                Selecciona un cliente.
+              </div>
+            </AdminDrawerSection>
+          ) : (
+            <>
+              <AdminDrawerSection title="Datos del cliente" className={drawerSectionCardClass}>
+                <div className={drawerListClass}>
+                  <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
+                    <span className="text-[#6f7890]">Cliente</span>
+                    <span className="font-semibold text-[#1f2638]">{getClientName(selectedClient)}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
+                    <span className="text-[#6f7890]">DNI</span>
+                    <span className="font-semibold text-[#1f2638]">{String(selectedClient.dni || '-')}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
+                    <span className="text-[#6f7890]">Telefono</span>
+                    <span className="font-semibold text-[#1f2638]">{String(selectedClient.phone || '-')}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
+                    <span className="text-[#6f7890]">Email</span>
+                    <span className="break-all font-semibold text-[#1f2638]">{String(selectedClient.email || '-')}</span>
+                  </div>
+                </div>
+              </AdminDrawerSection>
+
+              <AdminDrawerSection title="Estado comercial" className={drawerSectionCardClass}>
+                <div className={drawerListClass}>
+                  <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
+                    <span className="text-[#6f7890]">Reservas</span>
+                    <span className="font-semibold text-[#1f2638]">{Number(selectedClient.totalBookings || 0)}</span>
+                  </div>
+                  <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
+                    <span className="text-[#6f7890]">Deuda</span>
+                    {Number(selectedClient.totalDebt || 0) > EPSILON ? (
+                      <span className="font-semibold text-red-700">{formatMoney(Number(selectedClient.totalDebt || 0))}</span>
+                    ) : (
+                      <span className="font-semibold text-[#6f7890]">Sin deuda vigente</span>
+                    )}
+                  </div>
+                </div>
+              </AdminDrawerSection>
+            </>
+          )
+        )}
+
+        {sidebarView === 'client_delete' && (
+          <AdminDrawerSection title="Confirmacion" className={drawerSectionCardClass}>
+            <div className="rounded-xl border border-[#fecaca] bg-[#fff1f2] p-3 text-[13px] text-[#7f1d1d]">
+              Vas a eliminar a {selectedClient ? getClientName(selectedClient) : 'este cliente'}. Esta accion no se puede deshacer.
+            </div>
+            <div className="rounded-xl border border-[#dce2ee] bg-white p-3">
+              <p className="text-[12px] uppercase tracking-wide text-[#6f7890]">Cliente seleccionado</p>
+              <p className="mt-1 text-[13px] font-semibold text-[#1f2638]">{selectedClient ? getClientName(selectedClient) : '-'}</p>
+            </div>
+          </AdminDrawerSection>
+        )}
+      </AdminDrawer>
       <AccountDrawer
         accountId={accountDrawerAccountId || null}
         open={accountDrawerOpen}
-        onClose={() => setAccountDrawerOpen(false)}
-        onSuccess={() => void loadClients()}
+        initialView={accountDrawerInitialView}
+        context={accountDrawerContext}
+        onClose={() => {
+          setAccountDrawerOpen(false);
+          setAccountDrawerInitialView('overview');
+        }}
+        onSuccess={(event, meta?: AccountDrawerSuccessMeta) => {
+          if (event === 'closed') {
+            showAdminToast(`${meta?.label || 'Cuenta'} cerrada correctamente.`);
+          }
+          void loadClients();
+        }}
       />
     </>
   );

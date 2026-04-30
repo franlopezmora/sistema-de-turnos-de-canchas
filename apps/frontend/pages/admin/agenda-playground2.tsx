@@ -10150,7 +10150,7 @@ export default function AdminAgendaPlaygroundPage() {
             )}
 
             <aside
-              className={`absolute inset-y-0 right-0 z-30 w-full max-w-[620px] border-l border-[#e6e8ee] bg-white transition-transform duration-300 ${
+              className={`absolute inset-y-0 right-0 z-30 w-full max-w-[740px] border-l border-[#e6e8ee] bg-white shadow-2xl transition-transform duration-300 ${
                 drawerOpen ? 'translate-x-0' : 'translate-x-full'
               }`}
             >
@@ -10168,9 +10168,9 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
                   </div>
                 )}
-                <header className="border-b border-[#eef0f5] px-6 py-5 flex items-start justify-between">
-                  <div>
-                    <h2 className="text-[24px] leading-none font-semibold text-[#1f2638] tracking-[-0.015em]">
+                <header className="border-b border-[#eef0f5] px-6 py-5 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-[#1a2035]">
                       {sidebarTitle}
                     </h2>
                     {!useSimplifiedBookingSidebar && (
@@ -12287,7 +12287,7 @@ export default function AdminAgendaPlaygroundPage() {
                   )}
                 </div>
 
-                <footer ref={simplifiedSidebarFooterRef} className="border-t border-[#eef0f5] bg-white p-4">
+                <footer ref={simplifiedSidebarFooterRef} className="border-t border-[#eef0f5] bg-white px-6 py-4">
                   {useSimplifiedBookingSidebar ? (
                     <div className="space-y-3">
                       {shouldShowSeriesScopeHint && (
@@ -12322,7 +12322,7 @@ export default function AdminAgendaPlaygroundPage() {
                               type="button"
                               onClick={() => void handleConfirmPendingBooking()}
                               disabled={confirmingBooking || isSubmittingBooking || isDeletingBooking}
-                              className="h-10 rounded-xl border border-[#d8e0ff] bg-white px-3 text-[#3155df] text-sm font-semibold hover:bg-[#f5f7ff] disabled:opacity-50"
+                              className="h-10 rounded-xl border border-[#d8e0ff] bg-white px-4 text-[13px] font-semibold text-[#3155df] hover:bg-[#f5f7ff] disabled:opacity-50"
                             >
                               {confirmingBooking ? 'Confirmando...' : 'Confirmar reserva'}
                             </button>
@@ -12331,7 +12331,7 @@ export default function AdminAgendaPlaygroundPage() {
                             <button
                               type="button"
                               onClick={() => setBlockingErrorModalOpen(true)}
-                              className="h-10 rounded-xl border border-[#efc5cf] bg-white px-3 text-[12px] font-semibold text-[#b42346] hover:bg-[#fff8fa]"
+                              className="h-10 rounded-xl border border-[#efc5cf] bg-white px-4 text-[13px] font-semibold text-[#b42346] hover:bg-[#fff8fa]"
                             >
                               Ver detalle
                             </button>
@@ -12340,7 +12340,7 @@ export default function AdminAgendaPlaygroundPage() {
                             type="button"
                             onClick={() => void handleCreateBooking()}
                             disabled={primaryActionDisabled}
-                            className="h-11 min-w-[170px] rounded-xl bg-[#3053e2] px-4 text-white text-[16px] font-semibold hover:bg-[#2748cc] disabled:opacity-50"
+                            className="h-10 min-w-[170px] rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
                           >
                             {editingBookingId ? 'Guardar cambios' : 'Crear reserva'}
                           </button>
@@ -12423,7 +12423,7 @@ export default function AdminAgendaPlaygroundPage() {
                           <button
                             type="button"
                             onClick={() => setBlockingErrorModalOpen(true)}
-                            className="h-10 rounded-xl border border-[#efc5cf] bg-white px-3 text-[12px] font-semibold text-[#b42346] hover:bg-[#fff8fa]"
+                            className="h-10 rounded-xl border border-[#efc5cf] bg-white px-4 text-[13px] font-semibold text-[#b42346] hover:bg-[#fff8fa]"
                           >
                             Ver detalle
                           </button>
@@ -12432,7 +12432,7 @@ export default function AdminAgendaPlaygroundPage() {
                           type="button"
                           onClick={() => void handleCreateBooking()}
                           disabled={primaryActionDisabled}
-                          className="h-10 min-w-[232px] rounded-xl bg-[#3053e2] px-4 text-white text-sm font-bold hover:bg-[#2748cc] disabled:opacity-50"
+                          className="h-10 min-w-[232px] rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
                         >
                           {isSubmittingBooking ? primaryActionLabel : `${primaryActionLabel} â€¢ ${primaryActionMeta}`}
                         </button>

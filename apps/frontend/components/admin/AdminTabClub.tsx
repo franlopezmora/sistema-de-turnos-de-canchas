@@ -5,8 +5,8 @@ import { getCourts } from '../../services/CourtService';
 import { ClubAdminService, ClubActivityType, type ActivityScheduleException, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope, type AuditLogEntry, type ClubReviewAdminItem, type ClubReviewAdminStatus } from '../../services/ClubAdminService';
 import { searchClients } from '../../services/BookingService';
 import AdminAppModal from './ui/AdminAppModal';
-import { Globe, Instagram, Facebook, Phone, Mail, Image as ImageIcon, AlertTriangle, Check, X, Search, CalendarDays } from 'lucide-react';
-import { AdminDateInput, AdminDrawer, AdminSegmentedControl } from './ui';
+import { Globe, Instagram, Facebook, Phone, Mail, Image as ImageIcon, AlertTriangle, Check, X, Search, CalendarDays, Trash2 } from 'lucide-react';
+import { AdminDateInput, AdminDrawer, AdminDrawerSection, AdminSegmentedControl } from './ui';
 import { normalizeSessionUser } from '../../utils/session';
 import { useRouter } from 'next/router';
 import { lockBodyScroll } from '../../utils/bodyScrollLock';
@@ -1441,6 +1441,8 @@ export default function AdminTabClub({
   const exceptionModalSelected = exceptionModalSelectedId != null
     ? exceptionModalItems.find((item) => Number(item.id) === exceptionModalSelectedId) || null
     : exceptionModalItems.find((item) => item.localDate === exceptionModalSelectedDate) || null;
+  const exceptionModalSelectedIsPendingDraft = Boolean(exceptionModalSelected && Number(exceptionModalSelected.id) <= 0);
+  const canDeleteExceptionModalDraft = Boolean(exceptionModalDraft && exceptionModalSelected);
 
   useEffect(() => {
     if (!exceptionModalSelected) {
@@ -1472,8 +1474,11 @@ export default function AdminTabClub({
     try {
       await queueScheduleExceptionDraft(exceptionModalActivity, exceptionModalDraft);
       setExceptionModalItems((prev) => {
+        const selectedPersistedId = exceptionModalSelected && Number(exceptionModalSelected.id) > 0
+          ? Number(exceptionModalSelected.id)
+          : 0;
         const nextItem: ActivityScheduleException = {
-          id: 0,
+          id: selectedPersistedId,
           activityTypeId: exceptionModalActivity.id,
           localDate: exceptionModalDraft.localDate,
           isClosed: exceptionModalDraft.isClosed,
@@ -1512,9 +1517,18 @@ export default function AdminTabClub({
   };
 
   const handleDeleteExceptionFromModal = async () => {
-    if (!exceptionModalActivity || !exceptionModalDraft) return;
+    if (!exceptionModalActivity || !exceptionModalDraft || !exceptionModalSelected) return;
     try {
-      await queueScheduleExceptionDelete(exceptionModalActivity, exceptionModalDraft.localDate);
+      if (exceptionModalSelectedIsPendingDraft) {
+        setPendingScheduleExceptionMutations((prev) => (
+          prev.filter((item) => !(
+            item.activityId === exceptionModalActivity.id &&
+            item.localDate === exceptionModalDraft.localDate
+          ))
+        ));
+      } else {
+        await queueScheduleExceptionDelete(exceptionModalActivity, exceptionModalDraft.localDate);
+      }
       setExceptionModalItems((prev) => (
         exceptionModalSelected && Number(exceptionModalSelected.id) > 0
           ? prev.filter((item) => Number(item.id) !== Number(exceptionModalSelected.id))
@@ -1522,19 +1536,25 @@ export default function AdminTabClub({
       ));
       setExceptionModalSelectedDate('');
       setExceptionModalSelectedId(null);
-      showInfo('Excepción marcada para eliminar. Se aplica al guardar los cambios generales.');
+      showInfo(
+        exceptionModalSelectedIsPendingDraft
+          ? 'Borrador de excepción descartado.'
+          : 'Excepción marcada para eliminar. Se aplica al guardar los cambios generales.'
+      );
     } catch (error: any) {
       showError(`No se pudo preparar la eliminación: ${error.message}`);
     }
   };
 
   const handleDeleteExceptionWithConfirmation = () => {
-    if (!exceptionModalDraft) return;
+    if (!canDeleteExceptionModalDraft || !exceptionModalDraft) return;
     setModalState({
       show: true,
-      title: 'Eliminar excepción',
-      message: `¿Confirmás eliminar la excepción del ${formatExceptionDate(exceptionModalDraft.localDate)}? Esta acción se aplicará al guardar los cambios generales.`,
-      confirmText: 'Eliminar',
+      title: exceptionModalSelectedIsPendingDraft ? 'Descartar borrador' : 'Eliminar excepción',
+      message: exceptionModalSelectedIsPendingDraft
+        ? `¿Confirmás descartar el borrador del ${formatExceptionDate(exceptionModalDraft.localDate)}?`
+        : `¿Confirmás eliminar la excepción del ${formatExceptionDate(exceptionModalDraft.localDate)}? Esta acción se aplicará al guardar los cambios generales.`,
+      confirmText: exceptionModalSelectedIsPendingDraft ? 'Descartar' : 'Eliminar',
       cancelText: 'Cancelar',
       isWarning: true,
       onConfirm: () => { void handleDeleteExceptionFromModal(); },
@@ -3075,107 +3095,111 @@ export default function AdminTabClub({
         subtitle={discountDrawerMode === 'edit' ? discountPolicyEditForm.name : undefined}
         size="sm"
         footer={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => discountDrawerMode === 'create' ? void handleCreateDiscountPolicy() : void handleSaveDiscountPolicy()}
-              className="h-9 flex-1 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
-            >
-              {discountDrawerMode === 'create' ? 'Crear política' : 'Guardar cambios'}
-            </button>
+          <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={handleCancelEditDiscountPolicy}
-              className="h-9 rounded-xl border border-[#dce2ee] bg-white px-4 text-[12px] text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#6f7890] transition hover:bg-[#f4f6fb]"
             >
               Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => discountDrawerMode === 'create' ? void handleCreateDiscountPolicy() : void handleSaveDiscountPolicy()}
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+            >
+              <Check size={14} />
+              {discountDrawerMode === 'create' ? 'Crear política' : 'Guardar cambios'}
             </button>
           </div>
         }
       >
         {discountDrawerMode === 'create' ? (
-          <div className="space-y-4">
-            <div>
-              <label className={labelCls}>Nombre</label>
-              <input
-                type="text"
-                value={discountPolicyForm.name}
-                onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, name: e.target.value }))}
-                className={inputCls}
-                placeholder="Ej: Amigo 20% turnos"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+          <AdminDrawerSection title="Datos de la politica">
+            <div className="space-y-4">
               <div>
-                <label className={labelCls}>Alcance</label>
-                <select
-                  value={discountPolicyForm.scope}
-                  onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, scope: e.target.value as DiscountPolicyScope }))}
-                  className={inputCls}
-                >
-                  <option value="BOOKING">Reserva</option>
-                  <option value="PRODUCT">Producto</option>
-                  <option value="SERVICE">Servicio</option>
-                  <option value="ALL">Todo</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Tipo</label>
-                <select
-                  value={discountPolicyForm.amountType}
-                  onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, amountType: e.target.value as DiscountAmountType }))}
-                  className={inputCls}
-                >
-                  <option value="PERCENT">Porcentaje</option>
-                  <option value="FIXED">Monto fijo</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Valor</label>
+                <label className={labelCls}>Nombre</label>
                 <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={discountPolicyForm.amountValue}
-                  onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, amountValue: e.target.value }))}
+                  type="text"
+                  value={discountPolicyForm.name}
+                  onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, name: e.target.value }))}
                   className={inputCls}
-                  placeholder={discountPolicyForm.amountType === 'PERCENT' ? '20' : '1000'}
+                  placeholder="Ej: Amigo 20% turnos"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Alcance</label>
+                  <select
+                    value={discountPolicyForm.scope}
+                    onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, scope: e.target.value as DiscountPolicyScope }))}
+                    className={inputCls}
+                  >
+                    <option value="BOOKING">Reserva</option>
+                    <option value="PRODUCT">Producto</option>
+                    <option value="SERVICE">Servicio</option>
+                    <option value="ALL">Todo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Tipo</label>
+                  <select
+                    value={discountPolicyForm.amountType}
+                    onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, amountType: e.target.value as DiscountAmountType }))}
+                    className={inputCls}
+                  >
+                    <option value="PERCENT">Porcentaje</option>
+                    <option value="FIXED">Monto fijo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Valor</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={discountPolicyForm.amountValue}
+                    onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, amountValue: e.target.value }))}
+                    className={inputCls}
+                    placeholder={discountPolicyForm.amountType === 'PERCENT' ? '20' : '1000'}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Prioridad</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={discountPolicyForm.priority}
+                    onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, priority: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
               <div>
-                <label className={labelCls}>Prioridad</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={discountPolicyForm.priority}
-                  onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, priority: e.target.value }))}
+                <label className={labelCls}>Modo de aplicación</label>
+                <select
+                  value={discountPolicyForm.applyMode}
+                  onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, applyMode: e.target.value as DiscountApplyMode }))}
                   className={inputCls}
-                />
+                >
+                  <option value="INCLUDE_ONLY">Solo incluidos</option>
+                  <option value="EXCLUDE_LIST">Excluir lista</option>
+                </select>
               </div>
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <div
+                  className={checkboxCls(discountPolicyForm.isStackable)}
+                  onClick={() => setDiscountPolicyForm((prev) => ({ ...prev, isStackable: !prev.isStackable }))}
+                >
+                  {discountPolicyForm.isStackable && <Check size={12} strokeWidth={3} className="text-white" />}
+                </div>
+                <span className="text-[12px] text-[#1f2638]">Acumulable con otras políticas</span>
+              </label>
             </div>
-            <div>
-              <label className={labelCls}>Modo de aplicación</label>
-              <select
-                value={discountPolicyForm.applyMode}
-                onChange={(e) => setDiscountPolicyForm((prev) => ({ ...prev, applyMode: e.target.value as DiscountApplyMode }))}
-                className={inputCls}
-              >
-                <option value="INCLUDE_ONLY">Solo incluidos</option>
-                <option value="EXCLUDE_LIST">Excluir lista</option>
-              </select>
-            </div>
-            <label className="flex cursor-pointer items-center gap-2.5">
-              <div
-                className={checkboxCls(discountPolicyForm.isStackable)}
-                onClick={() => setDiscountPolicyForm((prev) => ({ ...prev, isStackable: !prev.isStackable }))}
-              >
-                {discountPolicyForm.isStackable && <Check size={12} strokeWidth={3} className="text-white" />}
-              </div>
-              <span className="text-[12px] text-[#1f2638]">Acumulable con otras políticas</span>
-            </label>
-          </div>
+          </AdminDrawerSection>
         ) : (
-          <div className="space-y-4">
+          <AdminDrawerSection title="Datos de la politica">
+            <div className="space-y-4">
             <div>
               <label className={labelCls}>Nombre</label>
               <input
@@ -3263,7 +3287,8 @@ export default function AdminTabClub({
                 <span className="text-[12px] text-[#1f2638]">Política activa</span>
               </label>
             </div>
-          </div>
+            </div>
+          </AdminDrawerSection>
         )}
       </AdminDrawer>
 
@@ -3276,32 +3301,36 @@ export default function AdminTabClub({
         size="md"
         footer={
           exceptionModalSelectedDate && exceptionModalDraft ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setExceptionModalSelectedDate('');
                   setExceptionModalSelectedId(null);
                 }}
-                className="h-9 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
               >
                 ← Volver
               </button>
               <div className="flex-1" />
-              <button
-                type="button"
-                onClick={handleDeleteExceptionWithConfirmation}
-                disabled={activityExceptionBusy[exceptionModalActivityId ?? -1]}
-                className="h-9 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-3 text-[12px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white disabled:opacity-40"
-              >
-                Eliminar
-              </button>
+              {canDeleteExceptionModalDraft && (
+                <button
+                  type="button"
+                  onClick={handleDeleteExceptionWithConfirmation}
+                  disabled={activityExceptionBusy[exceptionModalActivityId ?? -1]}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white disabled:opacity-40"
+                >
+                  <Trash2 size={14} />
+                  {exceptionModalSelectedIsPendingDraft ? 'Descartar' : 'Eliminar'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void handleSaveExceptionFromModal()}
                 disabled={activityExceptionBusy[exceptionModalActivityId ?? -1]}
-                className="h-9 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
               >
+                <Check size={14} />
                 Guardar borrador
               </button>
             </div>
@@ -3310,11 +3339,9 @@ export default function AdminTabClub({
       >
         {/* ── Vista: Listado de excepciones ── */}
         {!exceptionModalSelectedDate && (
-          <div className="space-y-4">
-            {/* Nueva excepción */}
-            <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-              <p className={labelCls}>Nueva excepción</p>
-              <p className="mb-2 text-[11px] text-[#6f7890]">Seleccioná una fecha para crear o editar una excepción de horario.</p>
+          <div className="space-y-5">
+            <AdminDrawerSection title="Nueva excepción">
+              <p className="text-[12px] text-[#6f7890]">Seleccioná una fecha para crear o editar una excepción de horario.</p>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <div className="flex-1">
                   <AdminDateInput
@@ -3327,61 +3354,62 @@ export default function AdminTabClub({
                 <button
                   type="button"
                   onClick={handleCreateExceptionInModal}
-                  className="h-10 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+                  className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
                 >
                   Crear borrador
                 </button>
               </div>
-            </div>
+            </AdminDrawerSection>
 
-            {/* Lista */}
-            {exceptionModalLoading ? (
-              <div className="flex items-center gap-2 py-4 text-[12px] text-[#6f7890]">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
-                Cargando excepciones...
-              </div>
-            ) : exceptionModalItems.length === 0 ? (
-              <p className="py-4 text-center text-[12px] text-[#98a1b3]">
-                No hay excepciones para esta actividad.
-              </p>
-            ) : (
-              <div className="space-y-1.5">
-                {exceptionModalItems.map((item) => {
-                  const hasPending = pendingScheduleExceptionMutations.some(
-                    (m) => m.activityId === exceptionModalActivityId && m.localDate === item.localDate
-                  );
-                  return (
-                    <button
-                      key={`${item.activityTypeId}-${item.localDate}-${item.id}`}
-                      type="button"
-                      onClick={() => {
-                        setExceptionModalSelectedDate(item.localDate);
-                        setExceptionModalSelectedId(Number(item.id) > 0 ? Number(item.id) : null);
-                      }}
-                      className="w-full rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5 text-left transition hover:bg-[#f4f6fb]"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[13px] font-semibold text-[#1f2638]">
-                          {formatExceptionDate(item.localDate)}
+            <AdminDrawerSection title="Excepciones cargadas">
+              {exceptionModalLoading ? (
+                <div className="flex items-center gap-2 py-4 text-[12px] text-[#6f7890]">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
+                  Cargando excepciones...
+                </div>
+              ) : exceptionModalItems.length === 0 ? (
+                <p className="rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 py-4 text-center text-[12px] text-[#98a1b3]">
+                  No hay excepciones para esta actividad.
+                </p>
+              ) : (
+                <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3">
+                  {exceptionModalItems.map((item) => {
+                    const hasPending = pendingScheduleExceptionMutations.some(
+                      (m) => m.activityId === exceptionModalActivityId && m.localDate === item.localDate
+                    );
+                    return (
+                      <button
+                        key={`${item.activityTypeId}-${item.localDate}-${item.id}`}
+                        type="button"
+                        onClick={() => {
+                          setExceptionModalSelectedDate(item.localDate);
+                          setExceptionModalSelectedId(Number(item.id) > 0 ? Number(item.id) : null);
+                        }}
+                        className="w-full py-2.5 text-left transition hover:bg-white/70"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[13px] font-semibold text-[#1f2638]">
+                            {formatExceptionDate(item.localDate)}
+                          </p>
+                          {hasPending && (
+                            <span className="shrink-0 rounded-full bg-[#fef3c7] px-2 py-0.5 text-[10px] font-semibold text-[#b45309]">
+                              Pendiente
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                          {item.isClosed
+                            ? 'Cerrado todo el día'
+                            : item.scheduleMode === 'RANGE'
+                              ? `Rango ${item.scheduleOpenTime || '--'} - ${item.scheduleCloseTime || '--'}`
+                              : `Turnos fijos (${Array.isArray(item.scheduleFixedSlots) ? item.scheduleFixedSlots.length : 0})`}
                         </p>
-                        {hasPending && (
-                          <span className="shrink-0 rounded-full bg-[#fef3c7] px-2 py-0.5 text-[10px] font-semibold text-[#b45309]">
-                            Pendiente
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-[#6f7890]">
-                        {item.isClosed
-                          ? 'Cerrado todo el día'
-                          : item.scheduleMode === 'RANGE'
-                            ? `Rango ${item.scheduleOpenTime || '--'} - ${item.scheduleCloseTime || '--'}`
-                            : `Turnos fijos (${Array.isArray(item.scheduleFixedSlots) ? item.scheduleFixedSlots.length : 0})`}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </AdminDrawerSection>
           </div>
         )}
 
@@ -3389,18 +3417,19 @@ export default function AdminTabClub({
         {exceptionModalSelectedDate && (
           <>
             {exceptionModalDraft ? (
-              <div className="space-y-3">
+              <div className="space-y-5">
                 {/* Fecha seleccionada */}
-                <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-                  <p className={labelCls}>Fecha</p>
-                  <p className="text-[13px] font-semibold text-[#1f2638]">
-                    {formatExceptionDate(exceptionModalDraft.localDate)}
-                  </p>
-                </div>
+                <AdminDrawerSection title="Fecha">
+                  <div className="rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 py-2.5">
+                    <p className="text-[13px] font-semibold text-[#1f2638]">
+                      {formatExceptionDate(exceptionModalDraft.localDate)}
+                    </p>
+                  </div>
+                </AdminDrawerSection>
 
                 {/* Cierre total */}
-                <div className="rounded-xl border border-[#dce2ee] p-3">
-                  <label className="flex cursor-pointer items-center gap-2.5">
+                <AdminDrawerSection title="Disponibilidad">
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5">
                     <div
                       className={checkboxCls(exceptionModalDraft.isClosed)}
                       onClick={() =>
@@ -3417,126 +3446,131 @@ export default function AdminTabClub({
                       Cerrar toda la actividad en esta fecha
                     </span>
                   </label>
-                </div>
+                </AdminDrawerSection>
 
                 {/* Config de horario */}
                 {!exceptionModalDraft.isClosed && (
-                  <div className="space-y-3 rounded-xl border border-[#dce2ee] p-3">
-                    <div>
-                      <label className={labelCls}>Modo</label>
-                      <select
-                        value={exceptionModalDraft.scheduleMode}
-                        onChange={(e) =>
-                          setExceptionModalDraft((prev) =>
-                            prev
-                              ? { ...prev, scheduleMode: e.target.value as 'FIXED' | 'RANGE' }
-                              : prev
-                          )
-                        }
-                        className={inputCls}
-                      >
-                        <option value="FIXED">Turnos fijos</option>
-                        <option value="RANGE">Rango horario</option>
-                      </select>
-                    </div>
+                  <AdminDrawerSection
+                    title="Horario especial"
+                    className="rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4"
+                  >
+                    <div className="space-y-3">
+                      <div>
+                        <label className={labelCls}>Modo</label>
+                        <select
+                          value={exceptionModalDraft.scheduleMode}
+                          onChange={(e) =>
+                            setExceptionModalDraft((prev) =>
+                              prev
+                                ? { ...prev, scheduleMode: e.target.value as 'FIXED' | 'RANGE' }
+                                : prev
+                            )
+                          }
+                          className={inputCls}
+                        >
+                          <option value="FIXED">Turnos fijos</option>
+                          <option value="RANGE">Rango horario</option>
+                        </select>
+                      </div>
 
-                    <div>
-                      <label className={labelCls}>Duraciones (min)</label>
-                      <input
-                        type="text"
-                        value={exceptionModalDraft.scheduleDurations}
-                        onChange={(e) =>
-                          setExceptionModalDraft((prev) =>
-                            prev ? { ...prev, scheduleDurations: e.target.value } : prev
-                          )
-                        }
-                        className={inputCls}
-                        placeholder="60, 90"
-                      />
-                    </div>
+                      <div>
+                        <label className={labelCls}>Duraciones (min)</label>
+                        <input
+                          type="text"
+                          value={exceptionModalDraft.scheduleDurations}
+                          onChange={(e) =>
+                            setExceptionModalDraft((prev) =>
+                              prev ? { ...prev, scheduleDurations: e.target.value } : prev
+                            )
+                          }
+                          className={inputCls}
+                          placeholder="60, 90"
+                        />
+                      </div>
 
-                    {exceptionModalDraft.scheduleMode === 'RANGE' ? (
-                      <>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className={labelCls}>Apertura</label>
-                            <input
-                              type="time"
-                              value={exceptionModalDraft.scheduleOpenTime}
-                              onChange={(e) =>
-                                setExceptionModalDraft((prev) =>
-                                  prev ? { ...prev, scheduleOpenTime: e.target.value } : prev
-                                )
-                              }
-                              className={inputCls}
-                            />
+                      {exceptionModalDraft.scheduleMode === 'RANGE' ? (
+                        <>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className={labelCls}>Apertura</label>
+                              <input
+                                type="time"
+                                value={exceptionModalDraft.scheduleOpenTime}
+                                onChange={(e) =>
+                                  setExceptionModalDraft((prev) =>
+                                    prev ? { ...prev, scheduleOpenTime: e.target.value } : prev
+                                  )
+                                }
+                                className={inputCls}
+                              />
+                            </div>
+                            <div>
+                              <label className={labelCls}>Cierre</label>
+                              <input
+                                type="time"
+                                value={exceptionModalDraft.scheduleCloseTime}
+                                onChange={(e) =>
+                                  setExceptionModalDraft((prev) =>
+                                    prev ? { ...prev, scheduleCloseTime: e.target.value } : prev
+                                  )
+                                }
+                                className={inputCls}
+                              />
+                            </div>
+                            <div>
+                              <label className={labelCls}>Intervalo</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={exceptionModalDraft.scheduleIntervalMinutes}
+                                onChange={(e) =>
+                                  setExceptionModalDraft((prev) =>
+                                    prev
+                                      ? { ...prev, scheduleIntervalMinutes: e.target.value }
+                                      : prev
+                                  )
+                                }
+                                className={inputCls}
+                              />
+                            </div>
                           </div>
                           <div>
-                            <label className={labelCls}>Cierre</label>
-                            <input
-                              type="time"
-                              value={exceptionModalDraft.scheduleCloseTime}
+                            <label className={labelCls}>
+                              Franjas cortadas (HH:mm-HH:mm, una por línea)
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={exceptionModalDraft.scheduleWindows}
                               onChange={(e) =>
                                 setExceptionModalDraft((prev) =>
-                                  prev ? { ...prev, scheduleCloseTime: e.target.value } : prev
+                                  prev ? { ...prev, scheduleWindows: e.target.value } : prev
                                 )
                               }
-                              className={inputCls}
+                              className={`${inputCls} h-auto resize-none py-2.5`}
+                              placeholder={'08:00-12:00\n16:00-23:00'}
                             />
                           </div>
-                          <div>
-                            <label className={labelCls}>Intervalo</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={exceptionModalDraft.scheduleIntervalMinutes}
-                              onChange={(e) =>
-                                setExceptionModalDraft((prev) =>
-                                  prev
-                                    ? { ...prev, scheduleIntervalMinutes: e.target.value }
-                                    : prev
-                                )
-                              }
-                              className={inputCls}
-                            />
-                          </div>
-                        </div>
+                        </>
+                      ) : (
                         <div>
                           <label className={labelCls}>
-                            Franjas cortadas (HH:mm-HH:mm, una por línea)
+                            Turnos fijos (HH:mm-60, uno por línea)
                           </label>
                           <textarea
-                            rows={3}
-                            value={exceptionModalDraft.scheduleWindows}
+                            rows={4}
+                            value={exceptionModalDraft.scheduleFixedSlots}
                             onChange={(e) =>
                               setExceptionModalDraft((prev) =>
-                                prev ? { ...prev, scheduleWindows: e.target.value } : prev
+                                prev ? { ...prev, scheduleFixedSlots: e.target.value } : prev
                               )
                             }
                             className={`${inputCls} h-auto resize-none py-2.5`}
-                            placeholder={'08:00-12:00\n16:00-23:00'}
+                            placeholder={'08:00-60\n09:00-60'}
                           />
                         </div>
-                      </>
-                    ) : (
-                      <div>
-                        <label className={labelCls}>
-                          Turnos fijos (HH:mm-60, uno por línea)
-                        </label>
-                        <textarea
-                          rows={4}
-                          value={exceptionModalDraft.scheduleFixedSlots}
-                          onChange={(e) =>
-                            setExceptionModalDraft((prev) =>
-                              prev ? { ...prev, scheduleFixedSlots: e.target.value } : prev
-                            )
-                          }
-                          className={`${inputCls} h-auto resize-none py-2.5`}
-                          placeholder={'08:00-60\n09:00-60'}
-                        />
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  </AdminDrawerSection>
                 )}
               </div>
             ) : (

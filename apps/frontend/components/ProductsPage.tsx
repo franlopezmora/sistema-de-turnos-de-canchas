@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { ClubAdminService } from '../services/ClubAdminService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
-import AppModal from './AppModal';
+import AdminAppModal from './admin/ui/AdminAppModal';
 import { AdminFilterToolbar, MetricCard } from './admin/ui';
 import ProductsTable from '../modules/tienda/components/ProductsTable';
 import ProductDrawer from '../modules/tienda/components/ProductDrawer';
@@ -307,7 +307,7 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
       />
 
       {/* ── Delete confirmation ── */}
-      <AppModal
+      <AdminAppModal
         show={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         onCancel={() => setDeleteTarget(null)}
@@ -328,7 +328,7 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
       />
 
       {/* ── Feedback modal ── */}
-      <AppModal
+      <AdminAppModal
         show={feedbackModal.show}
         onClose={() => setFeedbackModal((prev) => ({ ...prev, show: false }))}
         title={feedbackModal.title}

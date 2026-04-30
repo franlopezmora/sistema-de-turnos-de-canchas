@@ -48,6 +48,8 @@ type CashAccountDetailPanelProps = {
   onPay: () => void;
   /** Opens the refund request drawer for this account. */
   onRefund: () => void;
+  /** Opens the close account confirmation flow. */
+  onCloseAccount: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -143,6 +145,7 @@ export default function CashAccountDetailPanel({
   onManage,
   onPay,
   onRefund,
+  onCloseAccount,
 }: CashAccountDetailPanelProps) {
   // ── Empty state ──
   if (!account) {
@@ -162,6 +165,7 @@ export default function CashAccountDetailPanel({
   const clientName = account.booking?.clientName?.trim() || `Cuenta ${shortId(account.id)}`;
   const isOpen = account.status === 'OPEN';
   const hasPending = detail ? detail.remaining > EPSILON : false;
+  const canClose = Boolean(detail && isOpen && !hasPending);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-[#dce2ee] bg-white">
@@ -303,7 +307,7 @@ export default function CashAccountDetailPanel({
       {/* ── Actions ── */}
       {account && (
         <div className="shrink-0 border-t border-[#edf0f6] px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {hasPending && isOpen && (
               <button
                 type="button"
@@ -313,15 +317,19 @@ export default function CashAccountDetailPanel({
                 Cobrar
               </button>
             )}
+            {canClose && (
+              <button
+                type="button"
+                onClick={onCloseAccount}
+                className="h-9 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+              >
+                Cerrar cuenta
+              </button>
+            )}
             <button
               type="button"
               onClick={onManage}
-              className={[
-                'h-9 rounded-lg border px-3 text-[12px] font-semibold transition',
-                hasPending && isOpen
-                  ? 'border-[#dce2ee] bg-white text-[#4e5870] hover:bg-[#f5f6f8]'
-                  : 'border-[#dce2ee] bg-[#3053e2] text-white hover:bg-[#2748cc]',
-              ].join(' ')}
+              className="h-9 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f5f6f8]"
             >
               Gestionar cuenta
             </button>
