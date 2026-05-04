@@ -169,4 +169,22 @@ export class DiscountController {
       return res.status(400).json({ error: error.message || 'No se pudo actualizar la asignaciÃ³n' });
     }
   };
+  deleteAssignment = async (req: Request, res: Response) => {
+    try {
+      const paramsSchema = z.object({ assignmentId: z.string().trim().min(1) });
+      const parsedParams = paramsSchema.safeParse(req.params);
+      if (!parsedParams.success) return res.status(400).json({ error: parsedParams.error.format() });
+
+      const clubId = this.resolveClubId(req);
+      await this.discountService.deleteAssignment({
+        clubId,
+        assignmentId: parsedParams.data.assignmentId
+      });
+      return res.status(204).send();
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message || 'No se pudo eliminar la asignación' });
+    }
+  };
 }
+
+

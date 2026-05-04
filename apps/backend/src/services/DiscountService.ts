@@ -441,4 +441,20 @@ export class DiscountService {
       data: { isActive: input.isActive }
     });
   }
+
+  async deleteAssignment(input: {
+    clubId: number;
+    assignmentId: string;
+  }) {
+    const assignment = await prisma.clientDiscountAssignment.findFirst({
+      where: { id: input.assignmentId, clubId: input.clubId }
+    });
+    if (!assignment) throw new Error('Asignación no encontrada');
+
+    await prisma.clientDiscountAssignment.delete({
+      where: { id: input.assignmentId }
+    });
+
+    return { ok: true };
+  }
 }

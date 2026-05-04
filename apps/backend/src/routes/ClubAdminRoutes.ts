@@ -554,6 +554,13 @@ router.patch('/:slug/admin/discount-assignments/:assignmentId',
     discountController.setAssignmentStatus
 );
 
+router.delete('/:slug/admin/discount-assignments/:assignmentId',
+    authMiddleware,
+    verifyClubAccess,
+    requireRole('ADMIN'),
+    discountController.deleteAssignment
+);
+
 router.get('/:slug/admin/client-duplicate-incidents',
     authMiddleware,
     verifyClubAccess,

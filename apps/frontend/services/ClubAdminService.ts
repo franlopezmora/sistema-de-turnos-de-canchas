@@ -1009,6 +1009,18 @@ export class ClubAdminService {
     return res.json();
   }
 
+  static async deleteDiscountAssignment(slug: string, assignmentId: string) {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/discount-assignments/${assignmentId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Error al eliminar asignación');
+    }
+    return true;
+  }
+
   static async listClubReviews(slug: string, params?: { take?: number; cursor?: string; status?: ClubReviewAdminStatus }): Promise<ClubReviewAdminPage> {
     const query = new URLSearchParams();
     if (params?.take != null) query.set('take', String(params.take));

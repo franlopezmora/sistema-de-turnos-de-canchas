@@ -106,12 +106,21 @@ type DiscountPolicyView = {
   isActive: boolean;
 };
 
+
 type ClientSearchResult = {
   id: string;
   name?: string;
   email?: string;
   phone?: string;
   dni?: string;
+};
+
+const resolveDiscountClientId = (client: ClientSearchResult | null | undefined): string => {
+  const rawId = String(client?.id || '').trim();
+  if (!rawId) return '';
+  if (rawId.startsWith('client-')) return rawId.slice('client-'.length).trim();
+  if (rawId.startsWith('user-')) return '';
+  return rawId;
 };
 
 type ClubConfigSnapshot = {
@@ -1712,19 +1721,24 @@ export default function AdminTabClub({
 
   const handleAssignPolicyToClient = async () => {
     if (!club || !selectedDiscountClient?.id) return;
+    const resolvedClientId = resolveDiscountClientId(selectedDiscountClient);
+    if (!resolvedClientId) {
+      showError('Selecciona un cliente del club para asignar descuentos.');
+      return;
+    }
     if (!selectedPolicyIdForAssignment) {
-      showError('Seleccioná una política para asignar');
+      showError('Selecciona una politica para asignar');
       return;
     }
     try {
-      await ClubAdminService.assignDiscountToClient(club.slug, selectedDiscountClient.id, {
+      await ClubAdminService.assignDiscountToClient(club.slug, resolvedClientId, {
         policyId: selectedPolicyIdForAssignment,
         notes: assignmentNotes.trim() || undefined
       });
       setSelectedPolicyIdForAssignment('');
       setAssignmentNotes('');
-      await loadClientAssignments(club.slug, selectedDiscountClient.id);
-      showInfo('Política asignada al cliente', 'Éxito');
+      await loadClientAssignments(club.slug, resolvedClientId);
+      showInfo('Politica asignada al cliente', 'Exito');
     } catch (error: any) {
       showError(`No se pudo asignar: ${error.message}`);
     }
@@ -1732,11 +1746,34 @@ export default function AdminTabClub({
 
   const handleToggleAssignment = async (assignmentId: string, nextStatus: boolean) => {
     if (!club || !selectedDiscountClient?.id) return;
+    const resolvedClientId = resolveDiscountClientId(selectedDiscountClient);
+    if (!resolvedClientId) {
+      showError('Selecciona un cliente del club para actualizar asignaciones.');
+      return;
+    }
     try {
       await ClubAdminService.updateDiscountAssignment(club.slug, assignmentId, nextStatus);
-      await loadClientAssignments(club.slug, selectedDiscountClient.id);
+      await loadClientAssignments(club.slug, resolvedClientId);
     } catch (error: any) {
-      showError(`No se pudo actualizar la asignación: ${error.message}`);
+      showError(`No se pudo actualizar la asignacion: ${error.message}`);
+    }
+  };
+
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    if (!club || !selectedDiscountClient?.id) return;
+    const resolvedClientId = resolveDiscountClientId(selectedDiscountClient);
+    if (!resolvedClientId) {
+      showError('Selecciona un cliente del club para eliminar asignaciones.');
+      return;
+    }
+    const confirmed = window.confirm('¿Eliminar esta asignación de descuento? Esta acción no se puede deshacer.');
+    if (!confirmed) return;
+    try {
+      await ClubAdminService.deleteDiscountAssignment(club.slug, assignmentId);
+      await loadClientAssignments(club.slug, resolvedClientId);
+      showInfo('Asignacion eliminada', 'Exito');
+    } catch (error: any) {
+      showError(`No se pudo eliminar la asignacion: ${error.message}`);
     }
   };
 
@@ -1756,6 +1793,10 @@ export default function AdminTabClub({
   const handleDiscountClientSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setClientSearch(value);
+    if (selectedDiscountClient) {
+      setSelectedDiscountClient(null);
+      setClientAssignments([]);
+    }
 
     if (clientSearchTimeoutRef.current) {
       clearTimeout(clientSearchTimeoutRef.current);
@@ -1773,22 +1814,28 @@ export default function AdminTabClub({
       try {
         const results = await searchClients(club.slug, term);
         const normalized = Array.isArray(results) ? results : [];
-        setClientSearchResults(normalized.slice(0, 20));
+        const clubClients = normalized.filter((client: any) => resolveDiscountClientId(client).length > 0);
+        setClientSearchResults(clubClients.slice(0, 20));
         setShowClientSearchDropdown(true);
       } catch (error: any) {
         setClientSearchResults([]);
         setShowClientSearchDropdown(false);
-        showError(`No se pudo buscar clientes: ${error?.message || 'Error de búsqueda'}`);
+        showError(`No se pudo buscar clientes: ${error?.message || 'Error de busqueda'}`);
       }
     }, 300);
   };
 
   const handleSelectDiscountClient = async (client: ClientSearchResult) => {
     if (!club) return;
-    setSelectedDiscountClient(client);
-    setClientSearch(String(client.name || '').trim() || String(client.id));
+    const resolvedClientId = resolveDiscountClientId(client);
+    if (!resolvedClientId) {
+      showError('Selecciona un cliente del club. Los usuarios del sistema no se pueden usar aca.');
+      return;
+    }
+    setSelectedDiscountClient({ ...client, id: resolvedClientId });
+    setClientSearch(String(client.name || '').trim() || resolvedClientId);
     setShowClientSearchDropdown(false);
-    await loadClientAssignments(club.slug, client.id);
+    await loadClientAssignments(club.slug, resolvedClientId);
   };
 
   useEffect(() => {
@@ -2023,7 +2070,7 @@ export default function AdminTabClub({
             {effectiveTab === 'identity' && (
               <div className="space-y-4">
                 {/* Datos básicos */}
-                <div className={cardCls}>
+                <div className={`${cardCls} relative z-20 overflow-visible`}>
                   <p className={cardTitleCls}>Datos básicos</p>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
@@ -2874,42 +2921,24 @@ export default function AdminTabClub({
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="md:col-span-2">
                       <label className={labelCls}>Buscar cliente</label>
-                      <div className="relative" ref={clientSearchWrapperRef}>
+                      <div className="relative z-30" ref={clientSearchWrapperRef}>
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f7890]" />
                         <input
                           type="text"
                           value={clientSearch}
-                          onChange={(e) => {
-                            setClientSearch(e.target.value);
-                            setShowClientSearchDropdown(true);
-                            if (clientSearchTimeoutRef.current) clearTimeout(clientSearchTimeoutRef.current);
-                            clientSearchTimeoutRef.current = setTimeout(async () => {
-                              if (e.target.value.trim().length >= 2) {
-                                try {
-                                  const results = await searchClients(club?.slug ?? '', e.target.value.trim());
-                                  setClientSearchResults(results);
-                                } catch {
-                                  setClientSearchResults([]);
-                                }
-                              } else {
-                                setClientSearchResults([]);
-                              }
-                            }, 300);
-                          }}
+                          onChange={handleDiscountClientSearchChange}
                           onFocus={() => setShowClientSearchDropdown(true)}
                           className={`${inputCls} pl-9`}
                           placeholder="Nombre o email..."
                         />
                         {showClientSearchDropdown && clientSearchResults.length > 0 && (
-                          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-[#dce2ee] bg-white shadow-lg">
+                          <div className="absolute left-0 right-0 top-full z-[120] mt-1 max-h-56 overflow-y-auto rounded-xl border border-[#dce2ee] bg-white shadow-lg">
                             {clientSearchResults.map((client) => (
                               <button
                                 key={client.id}
                                 type="button"
                                 onClick={() => {
-                                  setSelectedDiscountClient(client);
-                                  setClientSearch(client.name);
-                                  setShowClientSearchDropdown(false);
+                                  void handleSelectDiscountClient(client);
                                 }}
                                 className="flex w-full flex-col px-3 py-2.5 text-left hover:bg-[#f4f6fb] transition first:rounded-t-xl last:rounded-b-xl"
                               >
@@ -2966,19 +2995,28 @@ export default function AdminTabClub({
                         <p className="text-[12px] text-[#6f7890]">Sin asignaciones.</p>
                       ) : (
                         <div className="space-y-2">
-                          {clientAssignments.map((assignment: { id: string; policy?: { name: string }; notes?: string }) => (
+                          {clientAssignments.map((assignment: { id: string; isActive?: boolean; policy?: { name: string }; notes?: string }) => (
                             <div key={assignment.id} className="flex items-center justify-between rounded-xl border border-[#dce2ee] p-3">
                               <div>
                                 <p className="text-[12px] font-medium text-[#1f2638]">{assignment.policy?.name || assignment.id}</p>
                                 {assignment.notes && <p className="text-[11px] text-[#6f7890]">{assignment.notes}</p>}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => void handleToggleAssignment(assignment.id, false)}
-                                className="h-8 rounded-xl border border-red-100 bg-red-50 px-3 text-[11px] text-red-600 hover:bg-red-100 transition"
-                              >
-                                Desactivar
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void handleToggleAssignment(assignment.id, !Boolean(assignment.isActive))}
+                                  className="h-8 rounded-xl border border-[#dce2ee] bg-white px-3 text-[11px] text-[#4f5a74] hover:bg-[#f4f6fb] transition"
+                                >
+                                  {assignment.isActive ? 'Desactivar' : 'Activar'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDeleteAssignment(assignment.id)}
+                                  className="h-8 rounded-xl border border-red-100 bg-red-50 px-3 text-[11px] text-red-600 hover:bg-red-100 transition"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
