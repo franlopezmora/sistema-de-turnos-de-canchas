@@ -178,7 +178,7 @@ export default function ProductDrawer({
 
           {!formData.isCombo && (
             <div>
-              <label className={labelClass}>Stock inicial</label>
+              <label className={labelClass}>{isEditing ? 'Stock actual' : 'Stock inicial'}</label>
               <div className="relative">
                 <input
                   required
@@ -196,6 +196,11 @@ export default function ProductDrawer({
                   strokeWidth={2.5}
                 />
               </div>
+              <p className="mt-1 text-[11px] text-[#6f7890]">
+                {isEditing
+                  ? 'Este valor reemplaza el stock disponible del producto al guardar.'
+                  : 'Se usa para definir el stock con el que arranca el producto.'}
+              </p>
             </div>
           )}
 

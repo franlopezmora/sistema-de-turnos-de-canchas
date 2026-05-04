@@ -1235,20 +1235,20 @@ export default function AdminPaymentsPlaygroundPage() {
   const refundQuickActions = useCallback((refund: RefundRecord): Array<{ key: string; label: string; icon: ReactNode; action: RefundActionKind; tone?: 'danger' | 'muted' }> => {
     if (refund.status === 'REQUESTED') {
       return [
-        { key: 'approve', label: 'Aprobar', icon: <Check size={12} />, action: 'approve' },
-        { key: 'cancel', label: 'Cancelar', icon: <X size={12} />, action: 'cancel', tone: 'danger' },
+        { key: 'approve', label: 'Aprobar', icon: <Check size={14} />, action: 'approve' },
+        { key: 'cancel', label: 'Cancelar', icon: <X size={14} />, action: 'cancel', tone: 'danger' },
       ];
     }
     if (refund.status === 'APPROVED' || refund.status === 'READY_TO_EXECUTE') {
       return [
-        { key: 'execute', label: 'Ejecutar', icon: <Play size={12} />, action: 'execute' },
-        { key: 'fail', label: 'Marcar fallida', icon: <XCircle size={12} />, action: 'fail', tone: 'muted' },
+        { key: 'execute', label: 'Ejecutar', icon: <Play size={14} />, action: 'execute' },
+        { key: 'fail', label: 'Marcar fallida', icon: <XCircle size={14} />, action: 'fail', tone: 'muted' },
       ];
     }
     if (refund.status === 'FAILED') {
       return [
-        { key: 'retry', label: 'Reintentar', icon: <RotateCcw size={12} />, action: 'retry' },
-        { key: 'cancel', label: 'Cancelar', icon: <X size={12} />, action: 'cancel', tone: 'danger' },
+        { key: 'retry', label: 'Reintentar', icon: <RotateCcw size={14} />, action: 'retry' },
+        { key: 'cancel', label: 'Cancelar', icon: <X size={14} />, action: 'cancel', tone: 'danger' },
       ];
     }
     return [];
@@ -2010,7 +2010,7 @@ export default function AdminPaymentsPlaygroundPage() {
                             key={`refund-grid-${refund.id}`}
                             type="button"
                             onClick={() => setSelectedRefundId(refund.id)}
-                            className={`group relative grid w-full grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_120px_120px_110px] items-center px-4 py-3 text-left text-[13px] transition ${
+                            className={`group relative grid min-h-[46px] w-full grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_120px_120px_110px] items-center px-4 py-3 text-left text-[13px] transition ${
                               isSelected ? 'bg-[#f3f6ff] text-[#2a3245]' : 'text-[#4b5672] hover:bg-[#f8f9fd]'
                             }`}
                           >
@@ -2075,8 +2075,8 @@ export default function AdminPaymentsPlaygroundPage() {
                         key={refund.id}
                         type="button"
                         onClick={() => setSelectedRefundId(refund.id)}
-                        className={`relative block w-full px-4 py-3 text-left text-[13px] transition ${
-                          isSelected ? 'bg-[#eef2ff] text-[#2a3245]' : 'text-[#4b5672] hover:bg-[#f8f9fd]'
+                        className={`relative block min-h-[46px] w-full px-4 py-3 text-left text-[13px] transition ${
+                          isSelected ? 'bg-[#f3f6ff] text-[#2a3245]' : 'text-[#4b5672] hover:bg-[#f8f9fd]'
                         }`}
                       >
                         {isSelected ? <span className="absolute -inset-y-px left-0 w-0.5 rounded-r-full bg-[#3053e2]" aria-hidden="true" /> : null}

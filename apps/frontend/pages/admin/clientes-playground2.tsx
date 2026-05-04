@@ -655,7 +655,7 @@ export default function AdminClientesPlayground2Page() {
                                   <button
                                     type="button"
                                     onClick={() => setSelectedClientId(String(client.id))}
-                                    className={`w-full px-3 py-3 text-left transition ${
+                                    className={`w-full min-h-[46px] px-3 py-3 text-left transition ${
                                       String(selectedClientId) === String(client.id) ? 'bg-[#edf1ff]' : 'hover:bg-[#f8f9fd]'
                                     }`}
                                   >
@@ -770,7 +770,7 @@ export default function AdminClientesPlayground2Page() {
                                   <button
                                     type="button"
                                     onClick={() => setSelectedClientId(String(client.id))}
-                                    className={`w-full px-3 py-3 text-left transition ${
+                                    className={`w-full min-h-[46px] px-3 py-3 text-left transition ${
                                       String(selectedClientId) === String(client.id) ? 'bg-[#edf1ff]' : 'hover:bg-[#f8f9fd]'
                                     }`}
                                   >
