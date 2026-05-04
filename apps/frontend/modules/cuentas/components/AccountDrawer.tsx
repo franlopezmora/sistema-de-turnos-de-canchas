@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, X, AlertTriangle, Plus, Minus, CreditCard } from 'lucide-react';
 import AdminDrawer, { AdminDrawerSection } from '../../../components/admin/ui/AdminDrawer';
-import PlaytomicPaymentModal from '../../../components/admin/payments/PlaytomicPaymentModal';
+import PaymentRegistrationDrawer from '../../../components/admin/payments/PaymentRegistrationDrawer';
 import { getAccountById, addAccountItem, registerPayment, closeAccount } from '../../../services/AccountService';
 import type { PaymentMethod, PaymentChannel } from '../../../services/AccountService';
 import { extractErrorMessage, reportUiError } from '../../../utils/uiError';
@@ -700,7 +700,9 @@ export default function AccountDrawer({
   const contextSubtitle = String(context?.subtitle || '').trim();
   const accountTitle = contextTitle || `Cuenta ${detail ? `#${shortCode(detail.id)}` : ''}`;
   const drawerSubtitle =
-    detail && contextSubtitle
+    view === 'payment_form'
+      ? 'Elegi método y monto. Si hace falta, ajusta conceptos.'
+      : detail && contextSubtitle
       ? contextSubtitle
       : detail && contextTitle
       ? `#${shortCode(detail.id)}`
@@ -811,7 +813,28 @@ export default function AccountDrawer({
     }
 
     if (view === 'payment_form') {
-      return undefined;
+      return (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goToOverview}
+            disabled={submitting}
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+          >
+            <ArrowLeft size={14} />
+            Cancelar
+          </button>
+          <div className="flex-1" />
+          <button
+            type="button"
+            disabled={!amountIsValid || submitting}
+            onClick={() => setView('payment_preconfirm')}
+            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+          >
+            {submitting ? 'Cargando...' : 'Continuar'}
+          </button>
+        </div>
+      );
     }
 
     if (view === 'payment_preconfirm') {
@@ -1155,10 +1178,7 @@ export default function AccountDrawer({
     // ── Payment form ──────────────────────────────────────────────────────────
     if (view === 'payment_form') {
       return (
-        <PlaytomicPaymentModal
-          open
-          title="Registrar cobro"
-          subtitle="Elegi metodo y monto. Si hace falta, ajusta conceptos."
+        <PaymentRegistrationDrawer
           methodOptions={payMethodOptions}
           methodValue={payMethod}
           onMethodChange={(value) => setPayMethod(value as PaymentMethod)}
@@ -1177,9 +1197,6 @@ export default function AccountDrawer({
           onAmountChange={setPayAmountDraft}
           maxInlineLabel={`Maximo: ${maxAllowed.toFixed(2)} $`}
           maxFooterLabel={`Máximo para este cobro: ${maxAllowed.toFixed(2)} $`}
-          onClose={goToOverview}
-          onContinue={() => setView('payment_preconfirm')}
-          continueDisabled={!amountIsValid || submitting}
         />
       );
     }

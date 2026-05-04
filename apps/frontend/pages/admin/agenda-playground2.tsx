@@ -6,6 +6,7 @@ import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAler
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
+import AdminDrawer from '../../components/admin/ui/AdminDrawer';
 import AgendaBookingBlock from '../../components/admin/agenda/AgendaBookingBlock';
 import AgendaSelectionPreview from '../../components/admin/agenda/AgendaSelectionPreview';
 import AgendaSlotLayer from '../../components/admin/agenda/AgendaSlotLayer';
@@ -18,6 +19,7 @@ import {
   AdminPaymentResultModal,
 } from '../../components/admin/payments/AdminPaymentFlowModals';
 import PlaytomicPaymentModal from '../../components/admin/payments/PlaytomicPaymentModal';
+import PaymentRegistrationDrawer from '../../components/admin/payments/PaymentRegistrationDrawer';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { ClubAdminService, type BookingBillingConfig } from '../../services/ClubAdminService';
 import { cancelBooking, cancelFixedBooking, confirmBooking, createBooking, createFixedBooking, getAdminSchedule, getBookingBillingConfig, getBookingById, getBookingFinancialSummary, getBookingQuote, getBookingTimelineEvents, registerBookingPartialPayment, rescheduleFixedBooking, updateBookingBillingConfig, type BookingDomainEvent } from '../../services/BookingService';
@@ -12517,106 +12519,124 @@ export default function AdminAgendaPlaygroundPage() {
       {activePaymentModal?.flow === 'playtomicPayment' &&
         activePaymentModal.step === 'form' &&
         isPlaytomicPaymentModal && (
-        <PlaytomicPaymentModal
-          open
-          title="Registrar cobro"
-          subtitle="Elegi metodo y monto. Si hace falta, ajusta conceptos."
-          methodOptions={ownerPaymentMethodOptions}
-          methodValue={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
-          onMethodChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
-          presetOptions={[
-            { id: 'FULL', label: 'Todo pendiente' },
-            { id: 'COURT_ONLY', label: 'Solo cancha' },
-            { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
-          ]}
-          selectedPreset={simplifiedPaymentQuickPreset}
-          onPresetChange={applySimplifiedPaymentQuickPreset}
-          pendingItems={pendingAccountItems}
-          selectedItemIds={simplifiedPaymentSelectedItemIdsDraft}
-          customAmountById={simplifiedPaymentCustomItemAmountDraftById}
-          customSelectedTotal={computeCustomSelectedAmount(
-            simplifiedPaymentSelectedItemIdsDraft,
-            simplifiedPaymentCustomItemAmountDraftById
-          )}
-          onSelectAll={() => {
-            const nextIds = pendingAccountItems.map((item) => String(item.id));
-            const nextCustomDrafts: Record<string, string> = {};
-            pendingAccountItems.forEach((item) => {
-              nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
-            });
-            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-            setSimplifiedPaymentCustomItemAmountDraftById(nextCustomDrafts);
-            setSimplifiedPaymentAmountDraft(
-              formatPaymentAmountDraft(
-                computeConceptBasedMaxAmount('CUSTOM', nextIds, nextCustomDrafts)
-              )
-            );
-          }}
-          onClear={() => {
-            setSimplifiedPaymentSelectedItemIdsDraft([]);
-            setSimplifiedPaymentCustomItemAmountDraftById({});
-            setSimplifiedPaymentAmountDraft('');
-          }}
-          onToggleItem={(itemId, nextChecked) => {
-            const nextSet = new Set(
-              simplifiedPaymentSelectedItemIdsDraft
-                .map((value) => String(value || '').trim())
-                .filter(Boolean)
-            );
-            const nextDrafts: Record<string, string> = {
-              ...simplifiedPaymentCustomItemAmountDraftById,
-            };
-            if (nextChecked) {
-              nextSet.add(itemId);
-              const item = pendingAccountItemById.get(itemId);
-              const fallback = Number(item?.remainingAmount || 0);
-              const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-              if (!prevDraft) {
-                nextDrafts[itemId] = fallback.toFixed(2);
-              }
-            } else {
-              nextSet.delete(itemId);
-              delete nextDrafts[itemId];
-            }
-            const nextIds = Array.from(nextSet);
-            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-            setSimplifiedPaymentAmountDraft(
-              formatPaymentAmountDraft(computeCustomSelectedAmount(nextIds, nextDrafts))
-            );
-          }}
-          onItemAmountChange={(itemId, value) => {
-            const nextDrafts: Record<string, string> = {
-              ...simplifiedPaymentCustomItemAmountDraftById,
-              [itemId]: value,
-            };
-            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-            setSimplifiedPaymentAmountDraft(
-              formatPaymentAmountDraft(
-                computeCustomSelectedAmount(
-                  simplifiedPaymentSelectedItemIdsDraft,
-                  nextDrafts
-                )
-              )
-            );
-          }}
-          amountDraft={simplifiedPaymentAmountDraft}
-          onAmountChange={setSimplifiedPaymentAmountDraft}
-          maxInlineLabel={`Maximo: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
-          maxFooterLabel={`Máximo para este cobro: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
+        <AdminDrawer
+          open={true}
           onClose={closeSimplifiedPaymentModal}
-          onContinue={() => queueSimplifiedPaymentFromModal()}
-          continueDisabled={
-            !simplifiedResolvedPayerParticipantId ||
-            !hasValidSimplifiedPaymentMethod ||
-            !hasValidSimplifiedPaymentAmount ||
-            simplifiedRemainingAfterQueue <= 0.009
+          title="Registrar cobro"
+          subtitle="Elegi método y monto. Si hace falta, ajusta conceptos."
+          size="lg"
+          footer={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={closeSimplifiedPaymentModal}
+                className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              >
+                Cancelar
+              </button>
+              <div className="flex-1" />
+              <button
+                type="button"
+                disabled={
+                  !simplifiedResolvedPayerParticipantId ||
+                  !hasValidSimplifiedPaymentMethod ||
+                  !hasValidSimplifiedPaymentAmount ||
+                  simplifiedRemainingAfterQueue <= 0.009
+                }
+                onClick={() => queueSimplifiedPaymentFromModal()}
+                className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+              >
+                Continuar
+              </button>
+            </div>
           }
-          onBackdropPointerDown={handleModalBackdropPointerDown}
-          onBackdropPointerUp={(event) =>
-            handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)
-          }
-        />
+        >
+          <PaymentRegistrationDrawer
+            methodOptions={ownerPaymentMethodOptions}
+            methodValue={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
+            onMethodChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
+            presetOptions={[
+              { id: 'FULL', label: 'Todo pendiente' },
+              { id: 'COURT_ONLY', label: 'Solo cancha' },
+              { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
+            ]}
+            selectedPreset={simplifiedPaymentQuickPreset}
+            onPresetChange={applySimplifiedPaymentQuickPreset}
+            pendingItems={pendingAccountItems}
+            selectedItemIds={simplifiedPaymentSelectedItemIdsDraft}
+            customAmountById={simplifiedPaymentCustomItemAmountDraftById}
+            customSelectedTotal={computeCustomSelectedAmount(
+              simplifiedPaymentSelectedItemIdsDraft,
+              simplifiedPaymentCustomItemAmountDraftById
+            )}
+            onSelectAll={() => {
+              const nextIds = pendingAccountItems.map((item) => String(item.id));
+              const nextCustomDrafts: Record<string, string> = {};
+              pendingAccountItems.forEach((item) => {
+                nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
+              });
+              setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+              setSimplifiedPaymentCustomItemAmountDraftById(nextCustomDrafts);
+              setSimplifiedPaymentAmountDraft(
+                formatPaymentAmountDraft(
+                  computeConceptBasedMaxAmount('CUSTOM', nextIds, nextCustomDrafts)
+                )
+              );
+            }}
+            onClear={() => {
+              setSimplifiedPaymentSelectedItemIdsDraft([]);
+              setSimplifiedPaymentCustomItemAmountDraftById({});
+              setSimplifiedPaymentAmountDraft('');
+            }}
+            onToggleItem={(itemId, nextChecked) => {
+              const nextSet = new Set(
+                simplifiedPaymentSelectedItemIdsDraft
+                  .map((value) => String(value || '').trim())
+                  .filter(Boolean)
+              );
+              const nextDrafts: Record<string, string> = {
+                ...simplifiedPaymentCustomItemAmountDraftById,
+              };
+              if (nextChecked) {
+                nextSet.add(itemId);
+                const item = pendingAccountItemById.get(itemId);
+                const fallback = Number(item?.remainingAmount || 0);
+                const prevDraft = String(nextDrafts[itemId] ?? '').trim();
+                if (!prevDraft) {
+                  nextDrafts[itemId] = fallback.toFixed(2);
+                }
+              } else {
+                nextSet.delete(itemId);
+                delete nextDrafts[itemId];
+              }
+              const nextIds = Array.from(nextSet);
+              setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+              setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+              setSimplifiedPaymentAmountDraft(
+                formatPaymentAmountDraft(computeCustomSelectedAmount(nextIds, nextDrafts))
+              );
+            }}
+            onItemAmountChange={(itemId, value) => {
+              const nextDrafts: Record<string, string> = {
+                ...simplifiedPaymentCustomItemAmountDraftById,
+                [itemId]: value,
+              };
+              setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+              setSimplifiedPaymentAmountDraft(
+                formatPaymentAmountDraft(
+                  computeCustomSelectedAmount(
+                    simplifiedPaymentSelectedItemIdsDraft,
+                    nextDrafts
+                  )
+                )
+              );
+            }}
+            amountDraft={simplifiedPaymentAmountDraft}
+            onAmountChange={setSimplifiedPaymentAmountDraft}
+            maxInlineLabel={`Maximo: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
+            maxFooterLabel={`Máximo para este cobro: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
+          />
+        </AdminDrawer>
       )}
 
       {activePaymentModal?.flow === 'playtomicPayment' &&
