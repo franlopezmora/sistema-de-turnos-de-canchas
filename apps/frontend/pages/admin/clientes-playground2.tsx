@@ -252,7 +252,7 @@ export default function AdminClientesPlayground2Page() {
       if (normalized.length > 0) {
         setSelectedClientId((prev) => {
           if (prev && normalized.some((client) => String(client.id) === prev)) return prev;
-          return String(normalized[0].id);
+          return '';
         });
       } else {
         setSelectedClientId('');
@@ -308,7 +308,7 @@ export default function AdminClientesPlayground2Page() {
     }
     const selectedStillValid = debtFilteredClients.some((client) => String(client.id) === String(selectedClientId));
     if (!selectedStillValid) {
-      setSelectedClientId(String(debtFilteredClients[0].id));
+      setSelectedClientId('');
     }
   }, [activeView, debtFilteredClients, selectedClientId]);
 
@@ -462,6 +462,7 @@ export default function AdminClientesPlayground2Page() {
 
   const closeActionSidebar = useCallback(() => {
     if (deletingClient || submittingClient) return;
+    setSelectedClientId('');
     setSidebarView('none');
   }, [deletingClient, submittingClient]);
 
@@ -716,8 +717,9 @@ export default function AdminClientesPlayground2Page() {
                                   <button
                                     type="button"
                                     onClick={() => openAccountDrawer(String(account.id), 'overview')}
-                                    className="h-8 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+                                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
                                   >
+                                    <Search size={12} />
                                     Ver detalle
                                   </button>
                                   <button
@@ -930,16 +932,18 @@ export default function AdminClientesPlayground2Page() {
                                           <button
                                             type="button"
                                             onClick={() => openAccountDrawer(String(account.id), 'overview')}
-                                            className="h-7 rounded-lg border border-[#dce2ee] bg-white px-2 text-[11px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+                                            className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#dce2ee] bg-white px-2 text-[11px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
                                           >
+                                            <Search size={11} />
                                             Ver
                                           </button>
                                           {isPending && (
                                             <button
                                               type="button"
                                               onClick={() => openAccountDrawer(String(account.id), 'payment')}
-                                              className="h-7 rounded-lg bg-[#3053e2] px-2 text-[11px] font-semibold text-white hover:bg-[#2748cc]"
+                                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-[#3053e2] px-2 text-[11px] font-semibold text-white hover:bg-[#2748cc]"
                                             >
+                                              <DollarSign size={11} />
                                               Cobrar
                                             </button>
                                           )}
@@ -1061,8 +1065,9 @@ export default function AdminClientesPlayground2Page() {
             <button
               type="button"
               onClick={closeActionSidebar}
-              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
             >
+              <RotateCcw size={14} />
               Cancelar
             </button>
 

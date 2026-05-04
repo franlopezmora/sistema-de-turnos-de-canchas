@@ -1,12 +1,16 @@
 import Head from 'next/head';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
   ChevronLeft,
   ChevronRight,
   Landmark,
   Plus,
+  Play,
+  RotateCcw,
   Search,
+  X,
+  XCircle,
 } from 'lucide-react';
 import { useRouter } from 'next/router';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
@@ -1228,6 +1232,27 @@ export default function AdminPaymentsPlaygroundPage() {
     [pendingRefunds, recentRefunds, refundsByAccountId, selectedRefundId]
   );
   const refundActionCopyValue = refundActionConfirm ? refundActionCopy(refundActionConfirm.action) : null;
+  const refundQuickActions = useCallback((refund: RefundRecord): Array<{ key: string; label: string; icon: ReactNode; action: RefundActionKind; tone?: 'danger' | 'muted' }> => {
+    if (refund.status === 'REQUESTED') {
+      return [
+        { key: 'approve', label: 'Aprobar', icon: <Check size={12} />, action: 'approve' },
+        { key: 'cancel', label: 'Cancelar', icon: <X size={12} />, action: 'cancel', tone: 'danger' },
+      ];
+    }
+    if (refund.status === 'APPROVED' || refund.status === 'READY_TO_EXECUTE') {
+      return [
+        { key: 'execute', label: 'Ejecutar', icon: <Play size={12} />, action: 'execute' },
+        { key: 'fail', label: 'Marcar fallida', icon: <XCircle size={12} />, action: 'fail', tone: 'muted' },
+      ];
+    }
+    if (refund.status === 'FAILED') {
+      return [
+        { key: 'retry', label: 'Reintentar', icon: <RotateCcw size={12} />, action: 'retry' },
+        { key: 'cancel', label: 'Cancelar', icon: <X size={12} />, action: 'cancel', tone: 'danger' },
+      ];
+    }
+    return [];
+  }, []);
 
   const closeRefundRequestDrawer = useCallback(() => {
     if (submittingRefundRequest) return;
@@ -1804,7 +1829,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         <select
                           value={cashTypeFilter}
                           onChange={(event) => setCashTypeFilter(event.target.value as MovementTypeFilter)}
-                          className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                         >
                           <option value="ALL">Todos los tipos</option>
                           <option value="INCOME">Solo ingresos</option>
@@ -1814,7 +1839,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         <select
                           value={cashMethodFilter}
                           onChange={(event) => setCashMethodFilter(event.target.value as MovementMethodFilter)}
-                          className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                         >
                           <option value="ALL">Todos los métodos</option>
                           <option value="CASH">Efectivo</option>
@@ -1829,8 +1854,9 @@ export default function AdminPaymentsPlaygroundPage() {
                             setCashTypeFilter('ALL');
                             setCashMethodFilter('ALL');
                           }}
-                          className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
                         >
+                          <X size={13} />
                           Limpiar filtros
                         </button>
                       </AdminFilterToolbar>
@@ -1966,7 +1992,7 @@ export default function AdminPaymentsPlaygroundPage() {
                 >
                   {filteredRecentRefunds.length > 0 && (
                     <>
-                      <div className="hidden grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_150px_120px] border-b border-[#eef2f8] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#6f7890] lg:grid">
+                      <div className="hidden grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_120px_120px_110px] border-b border-[#eef2f8] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#6f7890] lg:grid">
                         <p>Código</p>
                         <p>Fecha</p>
                         <p>Motivo</p>
@@ -1974,28 +2000,64 @@ export default function AdminPaymentsPlaygroundPage() {
                         <p>Pago / Cuenta</p>
                         <p>Estado</p>
                         <p className="text-right">Monto</p>
+                        <p className="text-right">Acciones</p>
                       </div>
                       <div className="hidden divide-y divide-[#eef2f8] lg:block">
-                        {filteredRecentRefunds.map((refund) => (
+                        {filteredRecentRefunds.map((refund) => {
+                          const isSelected = selectedRefundId === refund.id;
+                          return (
                           <button
                             key={`refund-grid-${refund.id}`}
                             type="button"
                             onClick={() => setSelectedRefundId(refund.id)}
-                            className="grid w-full grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_150px_120px] items-center px-3 py-2 text-left text-[12px] text-[#4b5672] transition hover:bg-[#f8f9fd]"
+                            className={`group relative grid w-full grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_120px_120px_110px] items-center px-4 py-3 text-left text-[13px] transition ${
+                              isSelected ? 'bg-[#f3f6ff] text-[#2a3245]' : 'text-[#4b5672] hover:bg-[#f8f9fd]'
+                            }`}
                           >
+                            {isSelected ? <span className="absolute -inset-y-px left-0 w-0.5 rounded-r-full bg-[#3053e2]" aria-hidden="true" /> : null}
                             <p className="font-semibold text-[#2a3245]">{refundCodeLabel(refund)}</p>
                             <p>{formatDateTime24(refund.createdAt)}</p>
                             <p className="truncate">{refund.reason?.trim() || refundReasonTypeLabel(refund.reasonType)}</p>
                             <p>{refundExecutionMethodLabel(refund.executionMethod)}</p>
                             <p className="truncate text-[#5f6984]">P:{shortId(refund.paymentId)} · C:{shortId(refund.accountId)}</p>
                             <div>
-                              <span className="rounded-full bg-[#eef1f7] px-2 py-0.5 text-[10px] font-semibold text-[#55617f]">
+                              <span className="rounded-full bg-[#eef1f7] px-2 py-0.5 text-[11px] font-semibold text-[#55617f]">
                                 {formatRefundStatus(refund.status)}
                               </span>
                             </div>
                             <p className="text-right font-semibold text-[#27314a]">{formatMoney(refund.amount)}</p>
+                            <div
+                              className={`flex min-h-8 items-center justify-end gap-1.5 transition-opacity ${
+                                isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                              }`}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {refundQuickActions(refund).length === 0 ? (
+                                <span className="inline-flex h-8 w-8 items-center justify-center opacity-0" aria-hidden="true">
+                                  Acción
+                                </span>
+                              ) : null}
+                              {refundQuickActions(refund).map((quickAction) => (
+                                <button
+                                  key={`${refund.id}-${quickAction.key}`}
+                                  type="button"
+                                  title={quickAction.label}
+                                  aria-label={quickAction.label}
+                                  onClick={() => openRefundActionConfirm(refund, quickAction.action)}
+                                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+                                    quickAction.tone === 'danger'
+                                      ? 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] hover:bg-[#ffecec]'
+                                      : quickAction.tone === 'muted'
+                                        ? 'border-[#dce2ee] bg-white text-[#6f7890] hover:bg-[#f8f9fd]'
+                                        : 'border-[#dce2ee] bg-white text-[#3053e2] hover:bg-[#eef2ff]'
+                                  }`}
+                                >
+                                  {quickAction.icon}
+                                </button>
+                              ))}
+                            </div>
                           </button>
-                        ))}
+                        )})}
                       </div>
                     </>
                   )}
@@ -2006,13 +2068,18 @@ export default function AdminPaymentsPlaygroundPage() {
                     </div>
                   )}
                   <div className="divide-y divide-[#eef2f8] lg:hidden">
-                    {filteredRecentRefunds.map((refund) => (
+                    {filteredRecentRefunds.map((refund) => {
+                      const isSelected = selectedRefundId === refund.id;
+                      return (
                       <button
                         key={refund.id}
                         type="button"
                         onClick={() => setSelectedRefundId(refund.id)}
-                        className="block w-full px-3 py-2 text-left text-[12px] text-[#4b5672] transition hover:bg-[#f8f9fd]"
+                        className={`relative block w-full px-4 py-3 text-left text-[13px] transition ${
+                          isSelected ? 'bg-[#eef2ff] text-[#2a3245]' : 'text-[#4b5672] hover:bg-[#f8f9fd]'
+                        }`}
                       >
+                        {isSelected ? <span className="absolute -inset-y-px left-0 w-0.5 rounded-r-full bg-[#3053e2]" aria-hidden="true" /> : null}
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold text-[#2a3245]">{refundCodeLabel(refund)}</p>
                           <span className="rounded-full bg-[#eef1f7] px-2 py-0.5 text-[10px] font-semibold text-[#55617f]">
@@ -2021,7 +2088,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         </div>
                         <p>{formatMoney(refund.amount)} · {formatDateTime24(refund.createdAt)}</p>
                       </button>
-                    ))}
+                    )})}
                     {filteredRecentRefunds.length === 0 && (
                       <div className="px-3 py-8 text-center">
                         <p className="text-[13px] font-semibold text-[#44506b]">No hay devoluciones para este período</p>
@@ -2091,16 +2158,18 @@ export default function AdminPaymentsPlaygroundPage() {
               type="button"
               onClick={closeRefundRequestDrawer}
               disabled={submittingRefundRequest}
-              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd] disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd] disabled:opacity-60"
             >
+              <X size={14} />
               Cancelar
             </button>
             <button
               type="button"
               onClick={() => void submitRefundRequest()}
               disabled={submittingRefundRequest || !refundRequestAmountIsValid}
-              className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-60"
             >
+              <Check size={14} />
               {submittingRefundRequest
                 ? 'Procesando...'
                 : refundRequestExecuteNow
@@ -2139,7 +2208,7 @@ export default function AdminPaymentsPlaygroundPage() {
                     void openRefundRequestForAccount(nextAccountId, { lockAccount: false });
                   }}
                   disabled={submittingRefundRequest}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2] disabled:opacity-60"
+                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2] disabled:opacity-60"
                 >
                   <option value="">Seleccionar cuenta</option>
                   {allAccounts.map((account) => (
@@ -2191,11 +2260,11 @@ export default function AdminPaymentsPlaygroundPage() {
                       setRefundRequestReasonType(Number(payment.availableAmount || 0) + ACCOUNT_PAYMENT_EPSILON >= Number(payment.amount || 0) ? 'FULL' : 'PARTIAL_COMMERCIAL');
                       setRefundRequestError('');
                     }}
-                    className={[
-                      'w-full rounded-xl border px-3 py-3 text-left transition',
-                      selected ? 'border-[#3053e2] bg-[#f4f7ff]' : 'border-[#dce2ee] bg-white hover:bg-[#f8f9fd]',
-                      disabled ? 'cursor-not-allowed opacity-50' : '',
-                    ].join(' ')}
+                className={[
+                  'w-full rounded-xl border px-3 py-3 text-left transition',
+                  selected ? 'border-[#3053e2] bg-[#f4f7ff]' : 'border-[#dce2ee] bg-white hover:bg-[#f8f9fd]',
+                  disabled ? 'cursor-not-allowed opacity-50' : '',
+                ].join(' ')}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
@@ -2229,7 +2298,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   setRefundRequestAmountDraft(event.target.value);
                   setRefundRequestError('');
                 }}
-                className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                 placeholder="0.00"
               />
               <span className="mt-1 block text-[11px] text-[#7a8398]">
@@ -2242,7 +2311,7 @@ export default function AdminPaymentsPlaygroundPage() {
               <select
                 value={refundRequestReasonType}
                 onChange={(event) => setRefundRequestReasonType(event.target.value as RefundReasonType)}
-                className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
               >
                 {refundReasonOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -2257,7 +2326,7 @@ export default function AdminPaymentsPlaygroundPage() {
                 onChange={(event) => setRefundRequestNotes(event.target.value)}
                 rows={3}
                 maxLength={500}
-                className="mt-1 w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#3053e2]"
+                className="mt-1 w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                 placeholder="Detalle operativo"
               />
             </label>
@@ -2517,8 +2586,9 @@ export default function AdminPaymentsPlaygroundPage() {
             <button
               type="button"
               onClick={closeActionSidebar}
-              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
             >
+              <X size={14} />
               {cashSidebarView === 'close_report' ? 'Cerrar' : 'Cancelar'}
             </button>
 
@@ -2568,7 +2638,7 @@ export default function AdminPaymentsPlaygroundPage() {
                 <select
                   value={cashOpenShiftForm.cashRegisterId}
                   onChange={(event) => setCashOpenShiftForm((prev) => ({ ...prev, cashRegisterId: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                 >
                   <option value="">Seleccionar</option>
                   {cashRegisters.map((register) => (
@@ -2589,7 +2659,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   step="0.01"
                   value={cashOpenShiftForm.openingAmount}
                   onChange={(event) => setCashOpenShiftForm((prev) => ({ ...prev, openingAmount: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                   placeholder="0"
                 />
               </label>
@@ -2616,7 +2686,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   step="0.01"
                   value={cashCloseShiftForm.countedCash}
                   onChange={(event) => setCashCloseShiftForm({ countedCash: event.target.value })}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                   placeholder="0"
                 />
               </label>
@@ -2631,23 +2701,25 @@ export default function AdminPaymentsPlaygroundPage() {
                 <button
                   type="button"
                   onClick={() => setCashNewMovement((prev) => ({ ...prev, type: 'INCOME' }))}
-                  className={`h-10 rounded-xl border text-[12px] font-semibold ${
+                  className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-[12px] font-semibold ${
                     cashNewMovement.type === 'INCOME'
                       ? 'border-[#d4f0dc] bg-[#e8f8ec] text-[#16733f]'
                       : 'border-[#dce2ee] bg-white text-[#4e5870]'
                   }`}
                 >
+                  <Plus size={12} />
                   Ingreso
                 </button>
                 <button
                   type="button"
                   onClick={() => setCashNewMovement((prev) => ({ ...prev, type: 'EXPENSE' }))}
-                  className={`h-10 rounded-xl border text-[12px] font-semibold ${
+                  className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-[12px] font-semibold ${
                     cashNewMovement.type === 'EXPENSE'
                       ? 'border-[#f5c8d0] bg-[#fff0f2] text-[#b42346]'
                       : 'border-[#dce2ee] bg-white text-[#4e5870]'
                   }`}
                 >
+                  <X size={12} />
                   Egreso
                 </button>
               </div>
@@ -2660,7 +2732,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   type="text"
                   value={cashNewMovement.description}
                   onChange={(event) => setCashNewMovement((prev) => ({ ...prev, description: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                   placeholder="Descripción del movimiento"
                 />
               </label>
@@ -2673,7 +2745,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   step="0.01"
                   value={cashNewMovement.amount}
                   onChange={(event) => setCashNewMovement((prev) => ({ ...prev, amount: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                   placeholder="0"
                 />
               </label>
@@ -2687,7 +2759,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   onChange={(event) =>
                     setCashNewMovement((prev) => ({ ...prev, method: event.target.value as 'CASH' | 'TRANSFER' | 'CARD' }))
                   }
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
                 >
                   <option value="CASH">Efectivo</option>
                   <option value="TRANSFER">Transferencia</option>

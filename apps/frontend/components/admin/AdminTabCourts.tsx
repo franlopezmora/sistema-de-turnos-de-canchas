@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Activity, Ban, Power } from 'lucide-react';
+import { Activity, Ban, Power, Save } from 'lucide-react';
 import { getCourts, reactivateCourt, suspendCourt, updateCourtPrice } from '../../services/CourtService';
 import { isAuthSessionInvalidatedError } from '../../utils/apiClient';
 import AdminAppModal from './ui/AdminAppModal';
@@ -141,8 +141,9 @@ function CourtCard({
             <button
               type="button"
               onClick={onPriceSave}
-              className="h-10 shrink-0 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
             >
+              <Save size={13} />
               Guardar
             </button>
           </div>

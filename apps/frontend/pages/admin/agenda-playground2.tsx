@@ -1,8 +1,8 @@
-﻿import Head from 'next/head';
+import Head from 'next/head';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, MoreVertical, Pencil, Plus, Repeat, Search, User, Users, CreditCard, Settings, X, Receipt, BarChart3, Trophy, MessageSquare, ShoppingBag, FileText, GraduationCap, Lock, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, MoreVertical, Pencil, Plus, Repeat, Search, User, Users, CreditCard, Settings, X, Receipt, BarChart3, Trophy, MessageSquare, ShoppingBag, FileText, GraduationCap, Lock, Trash2 } from 'lucide-react';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
@@ -1936,6 +1936,8 @@ export default function AdminAgendaPlaygroundPage() {
   const simplifiedNewParticipantInputContainerRef = useRef<HTMLDivElement | null>(null);
   const simplifiedSidebarFooterRef = useRef<HTMLElement | null>(null);
   const agendaSurfaceRef = useRef<HTMLElement | null>(null);
+  const agendaScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastAutoScrollDateKeyRef = useRef<string | null>(null);
   const drawerScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const calendarNoticeTimerRef = useRef<number | null>(null);
   const drawerCloseCleanupTimerRef = useRef<number | null>(null);
@@ -5789,6 +5791,29 @@ export default function AdminAgendaPlaygroundPage() {
   }, []);
 
   useEffect(() => {
+    if (nowLineTop == null) return;
+    const container = agendaScrollContainerRef.current;
+    if (!container) return;
+
+    const today = new Date();
+    const sameDay =
+      selectedDate.getFullYear() === today.getFullYear() &&
+      selectedDate.getMonth() === today.getMonth() &&
+      selectedDate.getDate() === today.getDate();
+    if (!sameDay) return;
+
+    const dateKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`;
+    if (lastAutoScrollDateKeyRef.current === dateKey) return;
+    lastAutoScrollDateKeyRef.current = dateKey;
+
+    const headerHeight = 40;
+    const rawTarget = nowLineTop + headerHeight - container.clientHeight * 0.35;
+    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const nextTop = Math.max(0, Math.min(maxTop, rawTarget));
+    container.scrollTo({ top: nextTop, behavior: 'smooth' });
+  }, [nowLineTop, selectedDate]);
+
+  useEffect(() => {
     if (persistedEditingBookingId && bookingKind !== 'block' && !hasScheduleChanges) {
       setQuoteLoading(false);
       setQuotedListPrice(null);
@@ -8749,7 +8774,7 @@ export default function AdminAgendaPlaygroundPage() {
                 />
 
                 <div className="flex-1 rounded-2xl border border-[#e5e7eb] bg-white overflow-hidden">
-                  <div className="h-full overflow-auto">
+                  <div ref={agendaScrollContainerRef} className="h-full overflow-auto">
                     <div className="min-w-max px-4 pb-4 pt-0">
                       <div className="flex min-w-full">
                         <AgendaTimeGutter
@@ -9053,7 +9078,7 @@ export default function AdminAgendaPlaygroundPage() {
                         step={1}
                         value={customRepeatEveryWeeks}
                         onChange={(event) => setCustomRepeatEveryWeeks(Math.max(1, Number(event.target.value || 1)))}
-                        className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] outline-none"
+                        className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245] outline-none"
                       />
                     </label>
                     <div className="block">
@@ -9083,8 +9108,9 @@ export default function AdminAgendaPlaygroundPage() {
                               setCustomEndAfterEnabled(false);
                               setCustomEndAfterExpanded(false);
                             }}
-                            className="text-[12px] font-semibold text-[#de5a76] hover:underline shrink-0"
+                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#de5a76] hover:underline shrink-0"
                           >
+                            <X size={12} />
                             Quitar
                           </button>
                         )}
@@ -9097,7 +9123,7 @@ export default function AdminAgendaPlaygroundPage() {
                             step={1}
                             value={customEndAfterReservations}
                             onChange={(event) => setCustomEndAfterReservations(Math.max(1, Number(event.target.value || 1)))}
-                            className="h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] outline-none"
+                            className="h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245] outline-none"
                           />
                         </div>
                       )}
@@ -9122,8 +9148,9 @@ export default function AdminAgendaPlaygroundPage() {
                           setFormError('');
                           setCustomRecurrenceModalOpen(false);
                         }}
-                        className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
                       >
+                        <Check size={14} />
                         Confirmar
                       </button>
                     </div>
@@ -9213,8 +9240,9 @@ export default function AdminAgendaPlaygroundPage() {
                           setRecurringCreateConfirmOpen(false);
                           setRecurringPreviewSummary(null);
                         }}
-                        className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
                       >
+                        <X size={14} />
                         Cancelar
                       </button>
                       <button
@@ -9335,8 +9363,9 @@ export default function AdminAgendaPlaygroundPage() {
                       <button
                         type="button"
                         onClick={closeRecurringResultModal}
-                        className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
                       >
+                        <Check size={14} />
                         Entendido
                       </button>
                     </div>
@@ -9873,8 +9902,9 @@ export default function AdminAgendaPlaygroundPage() {
                         type="button"
                         onClick={closeDeleteBookingFlow}
                         disabled={isDeletingBooking}
-                        className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc] disabled:opacity-50"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc] disabled:opacity-50"
                       >
+                        <ChevronLeft size={14} />
                         Volver
                       </button>
                       <button
@@ -9927,8 +9957,9 @@ export default function AdminAgendaPlaygroundPage() {
                         type="button"
                         onClick={() => setDeleteBookingFinalConfirmOpen(false)}
                         disabled={isDeletingBooking}
-                        className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc] disabled:opacity-50"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc] disabled:opacity-50"
                       >
+                        <ChevronLeft size={14} />
                         Volver
                       </button>
                       <button
@@ -10634,7 +10665,7 @@ export default function AdminAgendaPlaygroundPage() {
                                           }}
                                         />
                                         <span className="grid h-7 w-7 place-items-center rounded-[10px] border border-[#c9d0de] bg-white text-[16px] leading-none text-[#2f53df] peer-checked:border-[#8ca2ff] peer-checked:bg-[#eef2ff]">
-                                          {recurringAllCourtsSelected ? '✓' : ''}
+                                          {recurringAllCourtsSelected ? <Check size={14} strokeWidth={3} /> : null}
                                         </span>
                                         <span className="font-medium">Todas las canchas</span>
                                       </label>
@@ -10664,7 +10695,7 @@ export default function AdminAgendaPlaygroundPage() {
                                                 }}
                                               />
                                               <span className="grid h-7 w-7 place-items-center rounded-[10px] border border-[#c9d0de] bg-white text-[16px] leading-none text-[#2f53df] peer-checked:border-[#8ca2ff] peer-checked:bg-[#eef2ff]">
-                                                {checked ? '✓' : ''}
+                                                {checked ? <Check size={14} strokeWidth={3} /> : null}
                                               </span>
                                               <span className="truncate font-medium">{court.name}</span>
                                             </label>
@@ -10898,8 +10929,9 @@ export default function AdminAgendaPlaygroundPage() {
                                   type="button"
                                   onClick={() => void handleAddConsumption()}
                                   disabled={!canAddConsumption}
-                                  className="h-10 w-full rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                                  className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
                                 >
+                                  <Plus size={13} />
                                   {consumptionAddInFlight ? 'Agregando...' : 'Agregar'}
                                 </button>
                               </div>
@@ -10986,8 +11018,9 @@ export default function AdminAgendaPlaygroundPage() {
                                       type="button"
                                       onClick={() => void handleRemoveConsumption(item.id)}
                                       disabled={consumptionRemovingId === item.id || item.paidAmount > 0.009}
-                                      className="h-8 rounded-lg border border-[#f0d6dd] px-2 text-[12px] font-semibold text-[#b42346] hover:bg-[#fff5f8] disabled:opacity-45"
+                                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#f0d6dd] px-2 text-[12px] font-semibold text-[#b42346] hover:bg-[#fff5f8] disabled:opacity-45"
                                     >
+                                      <X size={12} />
                                       {consumptionRemovingId === item.id ? '...' : 'Quitar'}
                                     </button>
                                   </div>
@@ -11104,8 +11137,9 @@ export default function AdminAgendaPlaygroundPage() {
                               type="button"
                               onClick={openSimplifiedPaymentModal}
                               disabled={!simplifiedCanRegisterPayment}
-                              className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
                             >
+                              <CreditCard size={14} />
                               Registrar pago
                             </button>
                             {!persistedEditingBookingId ? (
@@ -11778,7 +11812,7 @@ export default function AdminAgendaPlaygroundPage() {
                               value={blockingTitle}
                               onChange={(event) => setBlockingTitle(event.target.value)}
                               placeholder="Mantenimiento"
-                              className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] outline-none"
+                              className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245] outline-none"
                             />
                           </label>
                           <div className="block">
@@ -11806,7 +11840,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   setSelectedDate(next);
                                 }
                               }}
-                              className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px]"
+                              className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245]"
                             />
                           </label>
                           <div className="block">
@@ -13336,3 +13370,4 @@ export default function AdminAgendaPlaygroundPage() {
     </>
   );
 }
+
