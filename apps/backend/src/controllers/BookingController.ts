@@ -1404,8 +1404,8 @@ export class BookingController {
 
             return res.json(newItem);
 
-    } catch (error: any) { // �Y'? Le ponemos 'any' para poder leer el mensaje
-        console.error("�O Error en addItem:", error);
+    } catch (error: any) { // Le ponemos 'any' para poder leer el mensaje
+        console.error("Error en addItem:", error);
         // Devolvemos el error real para verlo en el frontend
         return res.status(500).json({ 
             error: "Error al agregar item: " + (error.message || "Desconocido") 

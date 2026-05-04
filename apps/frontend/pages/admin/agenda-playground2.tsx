@@ -12493,7 +12493,7 @@ export default function AdminAgendaPlaygroundPage() {
                           disabled={primaryActionDisabled}
                           className="h-10 min-w-[232px] rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
                         >
-                          {isSubmittingBooking ? primaryActionLabel : `${primaryActionLabel} â€¢ ${primaryActionMeta}`}
+                          {isSubmittingBooking ? primaryActionLabel : `${primaryActionLabel} • ${primaryActionMeta}`}
                         </button>
                       </div>
                     </div>

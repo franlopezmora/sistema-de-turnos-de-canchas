@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import Head from 'next/head';
 import { useRouter } from 'next/router';
-import Navbar from '../components/NavBar';
+import DarkPageLayout from '../components/DarkPageLayout';
 import RouteTransitionScreen from '../components/RouteTransitionScreen';
 import { getPendingLogoutRedirect } from '../services/AuthService';
 import { useValidateAuth } from '../hooks/useValidateAuth';
 import { updateMyProfile } from '../services/AuthService';
-import { Mail, Phone, IdCard, User, Save } from 'lucide-react';
+import { Mail, Phone, IdCard, User, Save, CheckCircle } from 'lucide-react';
 import {
   buildCanonicalPhone,
   DEFAULT_PHONE_COUNTRY_ISO2,
@@ -15,6 +14,18 @@ import {
   resolveCallingCodeByIso2,
   splitCanonicalPhone
 } from '../utils/phone';
+
+const PAGE_CSS = `
+  .pf-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .pf-full { grid-column:1 / -1; }
+  .pf-save { display:inline-flex; align-items:center; gap:8px; padding:12px 28px; background:#22c55e; color:#052010; border:none; border-radius:999px; font-size:13px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; font-family:'Sora',system-ui,sans-serif; transition:background .15s,transform .15s; }
+  .pf-save:hover:not(:disabled) { background:#4ade80; transform:translateY(-1px); }
+  .pf-save:disabled { opacity:.5; cursor:not-allowed; }
+  .pf-notice { display:flex; align-items:flex-start; gap:10px; padding:14px 18px; border-radius:14px; font-size:13px; font-weight:600; line-height:1.5; }
+  .pf-notice-err { background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.2); color:#fca5a5; }
+  .pf-notice-ok { background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2); color:#4ade80; }
+  @media(max-width:600px){ .pf-grid { grid-template-columns:1fr; } }
+`;
 
 export default function PerfilPage() {
   const router = useRouter();
@@ -51,7 +62,9 @@ export default function PerfilPage() {
     });
   }, [user]);
 
-  if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando sesion...'} />;
+  if (!authChecked || !user) {
+    return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando sesion...'} />;
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -76,10 +89,7 @@ export default function PerfilPage() {
       return;
     }
 
-    const canonicalPhone = buildCanonicalPhone({
-      countryIso2: form.phoneCountryIso2,
-      localNumber: phoneLocal
-    });
+    const canonicalPhone = buildCanonicalPhone({ countryIso2: form.phoneCountryIso2, localNumber: phoneLocal });
     if (!canonicalPhone) {
       setError('Número de teléfono inválido.');
       return;
@@ -95,7 +105,7 @@ export default function PerfilPage() {
         phoneNumberLocal: phoneLocal,
         dni: safeDni || undefined
       });
-      setSuccess('Perfil actualizado.');
+      setSuccess('Perfil actualizado correctamente.');
     } catch (err: any) {
       setError(err?.message || 'No se pudo actualizar el perfil.');
     } finally {
@@ -103,123 +113,149 @@ export default function PerfilPage() {
     }
   };
 
+  const displayName = user.firstName || (user as any).name || 'Usuario';
+
   return (
-    <>
-      <Head>
-        <title>Mi Perfil | TuCancha</title>
-      </Head>
-      <div className="min-h-screen bg-vibrant-brand text-[#EBE1D8]">
-        <Navbar />
-        <main className="max-w-3xl mx-auto px-6 pt-28 pb-14">
-          <div className="bg-[#EBE1D8] border-4 border-white rounded-[2rem] p-8 shadow-2xl shadow-[#1f4b33]/30 text-[#347048]">
-            <div className="flex items-center justify-between gap-4 flex-wrap border-b border-[#347048]/10 pb-6 mb-6">
-              <div>
-                <h1 className="text-3xl font-black uppercase italic tracking-tight text-[#926699]">Mi Perfil</h1>
-                <p className="text-sm font-bold text-[#347048]/70 mt-1">Editá los datos de tu cuenta</p>
+    <DarkPageLayout title="Mi Perfil | TuCancha" extraCss={PAGE_CSS}>
+      <div className="tc-page-sm">
+
+        {/* ── PAGE HEADER ── */}
+        <div style={{ marginBottom: 40, paddingBottom: 32, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+          <span className="tc-page-eyebrow">Cuenta</span>
+          <h1 className="tc-page-h">Mi <i>perfil</i></h1>
+          <p className="tc-page-sub">Editá los datos de tu cuenta, {displayName}.</p>
+        </div>
+
+        {/* ── FORM CARD ── */}
+        <div className="tc-card" style={{ padding: 32 }}>
+          <form onSubmit={handleSubmit}>
+
+            {/* Notices */}
+            {error && (
+              <div className="pf-notice pf-notice-err" style={{ marginBottom: 24 }}>
+                <span>⚠</span> {error}
               </div>
+            )}
+            {success && (
+              <div className="pf-notice pf-notice-ok" style={{ marginBottom: 24 }}>
+                <CheckCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} /> {success}
+              </div>
+            )}
+
+            <div className="pf-grid">
+
+              {/* Nombre */}
+              <div className="tc-field">
+                <div className="tc-field-label">
+                  <User size={12} /> Nombre
+                </div>
+                <input
+                  className="tc-input"
+                  value={form.firstName}
+                  onChange={(e) => setForm(p => ({ ...p, firstName: e.target.value }))}
+                  placeholder="Tu nombre"
+                />
+              </div>
+
+              {/* Apellido */}
+              <div className="tc-field">
+                <div className="tc-field-label">
+                  <User size={12} /> Apellido
+                </div>
+                <input
+                  className="tc-input"
+                  value={form.lastName}
+                  onChange={(e) => setForm(p => ({ ...p, lastName: e.target.value }))}
+                  placeholder="Tu apellido"
+                />
+              </div>
+
+              {/* Email */}
+              <div className="tc-field pf-full">
+                <div className="tc-field-label">
+                  <Mail size={12} /> Email (no editable)
+                </div>
+                <input
+                  className="tc-input"
+                  value={form.email}
+                  disabled
+                  style={{ color: '#444' }}
+                />
+              </div>
+
+              {/* Teléfono */}
+              <div className="tc-field pf-full">
+                <div className="tc-field-label">
+                  <Phone size={12} /> Teléfono
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <select
+                    className="tc-select"
+                    value={form.phoneCountryIso2}
+                    onChange={(e) => setForm(p => ({ ...p, phoneCountryIso2: normalizePhoneCountryIso2(e.target.value) }))}
+                  >
+                    {PHONE_COUNTRY_OPTIONS.map(opt => (
+                      <option key={opt.iso2} value={opt.iso2}>{opt.callingCode} {opt.iso2}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="tc-input"
+                    value={form.phoneLocal}
+                    onChange={(e) => setForm(p => ({ ...p, phoneLocal: e.target.value.replace(/[^\d]/g, '') }))}
+                    placeholder="Número local"
+                  />
+                </div>
+              </div>
+
+              {/* DNI */}
+              <div className="tc-field pf-full">
+                <div className="tc-field-label">
+                  <IdCard size={12} /> DNI (opcional)
+                </div>
+                <input
+                  className="tc-input"
+                  value={form.dni}
+                  onChange={(e) => setForm(p => ({ ...p, dni: e.target.value.replace(/[^\d]/g, '') }))}
+                  placeholder="Sin puntos ni espacios"
+                />
+              </div>
+
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error ? (
-                <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-bold text-red-600">{error}</div>
-              ) : null}
-              {success ? (
-                <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm font-bold text-green-700">{success}</div>
-              ) : null}
+            {/* Submit */}
+            <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <button type="submit" disabled={saving} className="pf-save">
+                <Save size={15} />
+                {saving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+              {success && !saving && (
+                <span style={{ fontSize: 13, color: '#22c55e', fontWeight: 600 }}>¡Listo!</span>
+              )}
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="rounded-xl border border-[#347048]/10 bg-white p-4 block">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2 flex items-center gap-2">
-                    <User size={14} />
-                    Nombre
-                  </div>
-                  <input
-                    value={form.firstName}
-                    onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
-                    className="w-full bg-transparent text-base font-black outline-none"
-                  />
-                </label>
+          </form>
+        </div>
 
-                <label className="rounded-xl border border-[#347048]/10 bg-white p-4 block">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2 flex items-center gap-2">
-                    <User size={14} />
-                    Apellido
-                  </div>
-                  <input
-                    value={form.lastName}
-                    onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
-                    className="w-full bg-transparent text-base font-black outline-none"
-                  />
-                </label>
-
-                <label className="rounded-xl border border-[#347048]/10 bg-white p-4 block md:col-span-2">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2 flex items-center gap-2">
-                    <Mail size={14} />
-                    Email (no editable)
-                  </div>
-                  <input
-                    value={form.email}
-                    disabled
-                    className="w-full bg-transparent text-base font-black outline-none text-[#347048]/60"
-                  />
-                </label>
-
-                <div className="rounded-xl border border-[#347048]/10 bg-white p-4 md:col-span-2">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2 flex items-center gap-2">
-                    <Phone size={14} />
-                    Teléfono
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={form.phoneCountryIso2}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, phoneCountryIso2: normalizePhoneCountryIso2(e.target.value) }))
-                      }
-                      className="bg-[#347048]/5 rounded-lg px-2 py-2 text-sm font-black outline-none"
-                    >
-                      {PHONE_COUNTRY_OPTIONS.map((option) => (
-                        <option key={option.iso2} value={option.iso2}>
-                          {option.callingCode} {option.iso2}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      value={form.phoneLocal}
-                      onChange={(e) => setForm((prev) => ({ ...prev, phoneLocal: e.target.value.replace(/[^\d]/g, '') }))}
-                      className="flex-1 bg-transparent text-base font-black outline-none"
-                      placeholder="Número local"
-                    />
-                  </div>
-                </div>
-
-                <label className="rounded-xl border border-[#347048]/10 bg-white p-4 block md:col-span-2">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-[#347048]/50 mb-2 flex items-center gap-2">
-                    <IdCard size={14} />
-                    DNI (opcional)
-                  </div>
-                  <input
-                    value={form.dni}
-                    onChange={(e) => setForm((prev) => ({ ...prev, dni: e.target.value.replace(/[^\d]/g, '') }))}
-                    className="w-full bg-transparent text-base font-black outline-none"
-                  />
-                </label>
+        {/* ── DANGER ZONE ── */}
+        <div style={{ marginTop: 40 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#444', marginBottom: 16 }}>Zona de cuenta</div>
+          <div className="tc-card" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#f2f2f2', marginBottom: 4 }}>Tus reservas activas</div>
+                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.5 }}>Revisá el estado de todas tus reservas en un solo lugar.</div>
               </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#347048] text-[#B9CF32] text-sm font-black uppercase tracking-wider disabled:opacity-60"
-                >
-                  <Save size={16} />
-                  {saving ? 'Guardando...' : 'Guardar cambios'}
-                </button>
-              </div>
-            </form>
+              <a
+                href="/bookings"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 999, color: '#22c55e', fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'background .15s' }}
+              >
+                Ver reservas →
+              </a>
+            </div>
           </div>
-        </main>
+        </div>
+
       </div>
-    </>
+    </DarkPageLayout>
   );
 }
-
