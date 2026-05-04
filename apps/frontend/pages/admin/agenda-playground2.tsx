@@ -17,6 +17,7 @@ import {
   AdminPaymentPreconfirmModal,
   AdminPaymentResultModal,
 } from '../../components/admin/payments/AdminPaymentFlowModals';
+import PlaytomicPaymentModal from '../../components/admin/payments/PlaytomicPaymentModal';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { ClubAdminService, type BookingBillingConfig } from '../../services/ClubAdminService';
 import { cancelBooking, cancelFixedBooking, confirmBooking, createBooking, createFixedBooking, getAdminSchedule, getBookingBillingConfig, getBookingById, getBookingFinancialSummary, getBookingQuote, getBookingTimelineEvents, registerBookingPartialPayment, rescheduleFixedBooking, updateBookingBillingConfig, type BookingDomainEvent } from '../../services/BookingService';
@@ -12513,7 +12514,114 @@ export default function AdminAgendaPlaygroundPage() {
             </section>
           </AdminPlaygroundShell>
 
-      {activePaymentModal?.flow === 'playtomicPayment' && activePaymentModal.step === 'form' && (
+      {activePaymentModal?.flow === 'playtomicPayment' &&
+        activePaymentModal.step === 'form' &&
+        isPlaytomicPaymentModal && (
+        <PlaytomicPaymentModal
+          open
+          title="Registrar cobro"
+          subtitle="Elegi metodo y monto. Si hace falta, ajusta conceptos."
+          methodOptions={ownerPaymentMethodOptions}
+          methodValue={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
+          onMethodChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
+          presetOptions={[
+            { id: 'FULL', label: 'Todo pendiente' },
+            { id: 'COURT_ONLY', label: 'Solo cancha' },
+            { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
+          ]}
+          selectedPreset={simplifiedPaymentQuickPreset}
+          onPresetChange={applySimplifiedPaymentQuickPreset}
+          pendingItems={pendingAccountItems}
+          selectedItemIds={simplifiedPaymentSelectedItemIdsDraft}
+          customAmountById={simplifiedPaymentCustomItemAmountDraftById}
+          customSelectedTotal={computeCustomSelectedAmount(
+            simplifiedPaymentSelectedItemIdsDraft,
+            simplifiedPaymentCustomItemAmountDraftById
+          )}
+          onSelectAll={() => {
+            const nextIds = pendingAccountItems.map((item) => String(item.id));
+            const nextCustomDrafts: Record<string, string> = {};
+            pendingAccountItems.forEach((item) => {
+              nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
+            });
+            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+            setSimplifiedPaymentCustomItemAmountDraftById(nextCustomDrafts);
+            setSimplifiedPaymentAmountDraft(
+              formatPaymentAmountDraft(
+                computeConceptBasedMaxAmount('CUSTOM', nextIds, nextCustomDrafts)
+              )
+            );
+          }}
+          onClear={() => {
+            setSimplifiedPaymentSelectedItemIdsDraft([]);
+            setSimplifiedPaymentCustomItemAmountDraftById({});
+            setSimplifiedPaymentAmountDraft('');
+          }}
+          onToggleItem={(itemId, nextChecked) => {
+            const nextSet = new Set(
+              simplifiedPaymentSelectedItemIdsDraft
+                .map((value) => String(value || '').trim())
+                .filter(Boolean)
+            );
+            const nextDrafts: Record<string, string> = {
+              ...simplifiedPaymentCustomItemAmountDraftById,
+            };
+            if (nextChecked) {
+              nextSet.add(itemId);
+              const item = pendingAccountItemById.get(itemId);
+              const fallback = Number(item?.remainingAmount || 0);
+              const prevDraft = String(nextDrafts[itemId] ?? '').trim();
+              if (!prevDraft) {
+                nextDrafts[itemId] = fallback.toFixed(2);
+              }
+            } else {
+              nextSet.delete(itemId);
+              delete nextDrafts[itemId];
+            }
+            const nextIds = Array.from(nextSet);
+            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
+            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+            setSimplifiedPaymentAmountDraft(
+              formatPaymentAmountDraft(computeCustomSelectedAmount(nextIds, nextDrafts))
+            );
+          }}
+          onItemAmountChange={(itemId, value) => {
+            const nextDrafts: Record<string, string> = {
+              ...simplifiedPaymentCustomItemAmountDraftById,
+              [itemId]: value,
+            };
+            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
+            setSimplifiedPaymentAmountDraft(
+              formatPaymentAmountDraft(
+                computeCustomSelectedAmount(
+                  simplifiedPaymentSelectedItemIdsDraft,
+                  nextDrafts
+                )
+              )
+            );
+          }}
+          amountDraft={simplifiedPaymentAmountDraft}
+          onAmountChange={setSimplifiedPaymentAmountDraft}
+          maxInlineLabel={`Maximo: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
+          maxFooterLabel={`Máximo para este cobro: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
+          onClose={closeSimplifiedPaymentModal}
+          onContinue={() => queueSimplifiedPaymentFromModal()}
+          continueDisabled={
+            !simplifiedResolvedPayerParticipantId ||
+            !hasValidSimplifiedPaymentMethod ||
+            !hasValidSimplifiedPaymentAmount ||
+            simplifiedRemainingAfterQueue <= 0.009
+          }
+          onBackdropPointerDown={handleModalBackdropPointerDown}
+          onBackdropPointerUp={(event) =>
+            handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)
+          }
+        />
+      )}
+
+      {activePaymentModal?.flow === 'playtomicPayment' &&
+        activePaymentModal.step === 'form' &&
+        !isPlaytomicPaymentModal && (
         <div
           className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[#0d1326]/45 p-4"
           role="presentation"

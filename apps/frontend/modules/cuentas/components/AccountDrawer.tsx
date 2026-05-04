@@ -13,8 +13,9 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, X, AlertTriangle, Plus, Minus, CreditCard, Banknote, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, Check, X, AlertTriangle, Plus, Minus, CreditCard } from 'lucide-react';
 import AdminDrawer, { AdminDrawerSection } from '../../../components/admin/ui/AdminDrawer';
+import PlaytomicPaymentModal from '../../../components/admin/payments/PlaytomicPaymentModal';
 import { getAccountById, addAccountItem, registerPayment, closeAccount } from '../../../services/AccountService';
 import type { PaymentMethod, PaymentChannel } from '../../../services/AccountService';
 import { extractErrorMessage, reportUiError } from '../../../utils/uiError';
@@ -299,16 +300,55 @@ export default function AccountDrawer({
   }, [accountId, normalizeDrawerDetail]);
 
   // ── Reset when going back ─────────────────────────────────────────────────
-  const goToOverview = useCallback(() => {
+  const goToOverview = useCallback(async () => {
+    // Si venimos de un pago exitoso, recarga el detail una vez más para certeza
+    if (payResult?.variant === 'success') {
+      await reloadDetail();
+    }
     setView('overview');
     setActionError('');
     setPayError('');
-  }, []);
+  }, [payResult, reloadDetail]);
 
   // ── Payment derived state ─────────────────────────────────────────────────
   const pendingRows = useMemo(() => buildPendingItemRows(detail), [detail]);
   const accountMaxAmount = Number(detail?.remaining || 0);
   const hasCourtItems = pendingRows.some((r) => r.type === 'BOOKING');
+  const pendingRowById = useMemo(() => {
+    const map = new Map<string, (typeof pendingRows)[number]>();
+    pendingRows.forEach((row) => {
+      map.set(String(row.id), row);
+    });
+    return map;
+  }, [pendingRows]);
+  const customSelectedTotal = useMemo(() => {
+    return paySelectedIds.reduce((sum, itemId) => {
+      const row = pendingRowById.get(itemId);
+      if (!row) return sum;
+      const resolved = resolveCustomDraftAmount(
+        itemId,
+        Number(row.remainingAmount || 0),
+        payCustomAmountById
+      );
+      return sum + resolved;
+    }, 0);
+  }, [paySelectedIds, pendingRowById, payCustomAmountById]);
+  const payMethodOptions = useMemo(
+    () => [
+      { value: 'CASH', label: 'Efectivo' },
+      { value: 'TRANSFER', label: 'Transferencia' },
+      { value: 'CARD', label: 'Tarjeta' },
+    ],
+    []
+  );
+  const payPresetOptions = useMemo(
+    () => [
+      { id: 'FULL', label: 'Todo pendiente' },
+      ...(hasCourtItems ? [{ id: 'COURT_ONLY', label: 'Solo cancha' }] : []),
+      { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
+    ],
+    [hasCourtItems]
+  );
 
   const conceptMaxAmount = useMemo(
     () =>
@@ -383,6 +423,84 @@ export default function AccountDrawer({
       );
     },
     [paySelectedIds, pendingRows, accountMaxAmount]
+  );
+
+  const handleSelectAllCustomItems = useCallback(() => {
+    const nextIds = pendingRows.map((row) => String(row.id));
+    const nextDrafts: Record<string, string> = {};
+    pendingRows.forEach((row) => {
+      nextDrafts[String(row.id)] = Number(row.remainingAmount || 0).toFixed(2);
+    });
+    setPaySelectedIds(nextIds);
+    setPayCustomAmountById(nextDrafts);
+    setPayAmountDraft(
+      String(
+        computeConceptBasedMaxAmount(
+          'CUSTOM_ITEMS',
+          pendingRows,
+          accountMaxAmount,
+          nextIds,
+          nextDrafts
+        ).toFixed(2)
+      )
+    );
+  }, [pendingRows, accountMaxAmount]);
+
+  const handleClearCustomItems = useCallback(() => {
+    setPaySelectedIds([]);
+    setPayCustomAmountById({});
+    setPayAmountDraft('');
+  }, []);
+
+  const handleToggleCustomItem = useCallback(
+    (itemId: string, checked: boolean) => {
+      const nextIds = checked
+        ? [...paySelectedIds, itemId]
+        : paySelectedIds.filter((id) => id !== itemId);
+      const nextDrafts = { ...payCustomAmountById };
+      if (checked) {
+        const row = pendingRowById.get(itemId);
+        const fallback = Number(row?.remainingAmount || 0).toFixed(2);
+        if (!String(nextDrafts[itemId] ?? '').trim()) {
+          nextDrafts[itemId] = fallback;
+        }
+      } else {
+        delete nextDrafts[itemId];
+      }
+      setPaySelectedIds(nextIds);
+      setPayCustomAmountById(nextDrafts);
+      setPayAmountDraft(
+        String(
+          computeConceptBasedMaxAmount(
+            'CUSTOM_ITEMS',
+            pendingRows,
+            accountMaxAmount,
+            nextIds,
+            nextDrafts
+          ).toFixed(2)
+        )
+      );
+    },
+    [paySelectedIds, payCustomAmountById, pendingRowById, pendingRows, accountMaxAmount]
+  );
+
+  const handleCustomItemAmountChange = useCallback(
+    (itemId: string, value: string) => {
+      const nextDrafts = { ...payCustomAmountById, [itemId]: value };
+      setPayCustomAmountById(nextDrafts);
+      setPayAmountDraft(
+        String(
+          computeConceptBasedMaxAmount(
+            'CUSTOM_ITEMS',
+            pendingRows,
+            accountMaxAmount,
+            paySelectedIds,
+            nextDrafts
+          ).toFixed(2)
+        )
+      );
+    },
+    [payCustomAmountById, pendingRows, accountMaxAmount, paySelectedIds]
   );
 
   // ── Submit payment ────────────────────────────────────────────────────────
@@ -693,28 +811,7 @@ export default function AccountDrawer({
     }
 
     if (view === 'payment_form') {
-      return (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={goToOverview}
-            disabled={submitting}
-            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
-          >
-            <ArrowLeft size={14} />
-            Cancelar
-          </button>
-          <div className="flex-1" />
-          <button
-            type="button"
-            disabled={!amountIsValid || submitting}
-            onClick={() => setView('payment_preconfirm')}
-            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
-          >
-            Continuar →
-          </button>
-        </div>
-      );
+      return undefined;
     }
 
     if (view === 'payment_preconfirm') {
@@ -869,22 +966,55 @@ export default function AccountDrawer({
           {detail.items.length > 0 && (
             <AdminDrawerSection title="Conceptos" className={sectionCardClass}>
               <div className={sectionListClass}>
-                {detail.items.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium text-[#1a2035]">
-                        {item.type === 'BOOKING' ? 'Cancha' : item.description}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-[#98a1b3]">
-                        {itemTypeLabel(item.type)}
-                        {item.quantity > 1 && ` · ×${item.quantity}`}
-                      </p>
+                {detail.items.map((item) => {
+                  // Calcular cuánto se pagó de este item
+                  const paidForItem = detail.payments.reduce(
+                    (sum, payment) =>
+                      sum +
+                      (payment.allocations
+                        .filter((a) => String(a.accountItemId) === String(item.id))
+                        .reduce((s, a) => s + Number(a.amount || 0), 0) || 0),
+                    0
+                  );
+                  const remainingForItem = Math.max(0, Number(item.total || 0) - paidForItem);
+                  const itemIsPaid = remainingForItem < ACCOUNT_PAYMENT_EPSILON;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex flex-col gap-2 px-4 py-3 ${
+                        itemIsPaid ? 'bg-[#f0faf4] opacity-75' : 'hover:bg-[#f8f9fc]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium text-[#1a2035]">
+                            {item.type === 'BOOKING' ? 'Cancha' : item.description}
+                            {itemIsPaid && (
+                              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#1a7a4a] px-2 py-0.5 text-[10px] font-bold text-white">
+                                ✓ Pagado
+                              </span>
+                            )}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-[#98a1b3]">
+                            {itemTypeLabel(item.type)}
+                            {item.quantity > 1 && ` · ×${item.quantity}`}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[13px] font-semibold text-[#1a2035]">
+                          {formatMoney(item.total)}
+                        </span>
+                      </div>
+                      {!itemIsPaid && paidForItem > ACCOUNT_PAYMENT_EPSILON && (
+                        <div className="flex items-center justify-between gap-2 border-t border-[#edf0f6] pt-2 text-[11px]">
+                          <span className="text-[#6f7890]">
+                            Pagado: {formatMoney(paidForItem)} | Pendiente: {formatMoney(remainingForItem)}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <span className="shrink-0 text-[13px] font-semibold text-[#1a2035]">
-                      {formatMoney(item.total)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </AdminDrawerSection>
           )}
@@ -1025,191 +1155,32 @@ export default function AccountDrawer({
     // ── Payment form ──────────────────────────────────────────────────────────
     if (view === 'payment_form') {
       return (
-        <>
-          {payError && (
-            <div className="flex items-start gap-2 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 py-3">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[#b42318]" />
-              <p className="text-[13px] text-[#b42318]">{payError}</p>
-            </div>
-          )}
-
-          {/* Quick presets */}
-          <AdminDrawerSection title="Cobrar" className={sectionCardClass}>
-            <div className="flex gap-2">
-              {(
-                [
-                  { id: 'FULL', label: 'Todo pendiente' },
-                  ...(hasCourtItems ? [{ id: 'COURT_ONLY', label: 'Solo cancha' }] : []),
-                  { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
-                ] as Array<{ id: PaymentQuickPreset; label: string }>
-              ).map(({ id, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => applyPreset(id)}
-                  className={[
-                    'rounded-full border px-3 py-1.5 text-[12px] font-medium transition',
-                    payPreset === id
-                      ? 'border-[#3053e2] bg-[#3053e2] text-white'
-                      : 'border-[#dce2ee] bg-white text-[#6f7890] hover:border-[#3053e2] hover:text-[#3053e2]',
-                  ].join(' ')}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </AdminDrawerSection>
-
-          {/* Custom item checkboxes */}
-          {payPreset === 'CUSTOM_ITEMS' && pendingRows.length > 0 && (
-            <AdminDrawerSection title="Conceptos" className={sectionCardClass}>
-              <div className={sectionListClass}>
-                {pendingRows.map((row) => {
-                  const checked = paySelectedIds.includes(row.id);
-                  return (
-                    <label
-                      key={row.id}
-                      className="flex cursor-pointer items-center gap-3 px-4 py-3"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...paySelectedIds, row.id]
-                            : paySelectedIds.filter((id) => id !== row.id);
-                          setPaySelectedIds(next);
-                          setPayAmountDraft(
-                            String(
-                              computeConceptBasedMaxAmount(
-                                'CUSTOM_ITEMS',
-                                pendingRows,
-                                accountMaxAmount,
-                                next,
-                                payCustomAmountById
-                              ).toFixed(2)
-                            )
-                          );
-                        }}
-                        className="h-4 w-4 rounded border-[#dce2ee] text-[#3053e2] accent-[#3053e2]"
-                      />
-                      <span className="flex-1 text-[13px] text-[#1a2035]">{row.label}</span>
-                      {checked && (
-                        <input
-                          type="number"
-                          min="0"
-                          max={row.remainingAmount}
-                          step="0.01"
-                          value={
-                            payCustomAmountById[row.id] !== undefined
-                              ? payCustomAmountById[row.id]
-                              : row.remainingAmount.toFixed(2)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            const next = { ...payCustomAmountById, [row.id]: e.target.value };
-                            setPayCustomAmountById(next);
-                            setPayAmountDraft(
-                              String(
-                                computeConceptBasedMaxAmount(
-                                  'CUSTOM_ITEMS',
-                                  pendingRows,
-                                  accountMaxAmount,
-                                  paySelectedIds,
-                                  next
-                                ).toFixed(2)
-                              )
-                            );
-                          }}
-                          className="h-8 w-24 rounded-lg border border-[#dce2ee] bg-[#f8f9fc] px-2 text-right text-[12px] text-[#1a2035] focus:border-[#3053e2] focus:outline-none"
-                        />
-                      )}
-                      {!checked && (
-                        <span className="text-[12px] text-[#98a1b3]">
-                          {formatMoney(row.remainingAmount)}
-                        </span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            </AdminDrawerSection>
-          )}
-
-          {/* Amount */}
-          <AdminDrawerSection title="Monto a cobrar" className={sectionCardClass}>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-medium text-[#98a1b3]">
-                $
-              </span>
-              <input
-                type="number"
-                min="0"
-                max={maxAllowed}
-                step="0.01"
-                value={payAmountDraft}
-                onChange={(e) => setPayAmountDraft(e.target.value)}
-                className="h-12 w-full rounded-xl border border-[#dce2ee] bg-white pl-7 pr-4 text-[16px] font-semibold text-[#1a2035] focus:border-[#3053e2] focus:outline-none"
-              />
-            </div>
-            <p className="text-[12px] text-[#98a1b3]">
-              Máximo: {formatMoney(maxAllowed)}
-            </p>
-          </AdminDrawerSection>
-
-          {/* Method */}
-          <AdminDrawerSection title="Método de cobro" className={sectionCardClass}>
-            <div className="flex gap-2">
-              {(
-                [
-                  { value: 'CASH', label: 'Efectivo', Icon: Banknote },
-                  { value: 'TRANSFER', label: 'Transferencia', Icon: ArrowRightLeft },
-                  { value: 'CARD', label: 'Tarjeta', Icon: CreditCard },
-                ] as Array<{ value: PaymentMethod; label: string; Icon: React.FC<any> }>
-              ).map(({ value, label, Icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setPayMethod(value)}
-                  className={[
-                    'flex flex-1 flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-[12px] font-medium transition',
-                    payMethod === value
-                      ? 'border-[#3053e2] bg-[#f0f4ff] text-[#3053e2]'
-                      : 'border-[#dce2ee] bg-white text-[#6f7890] hover:border-[#b0bcda]',
-                  ].join(' ')}
-                >
-                  <Icon size={16} />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {payMethod === 'TRANSFER' && (
-              <div className="mt-2 flex gap-2">
-                {(
-                  [
-                    { value: 'BANK_ACCOUNT', label: 'Cuenta bancaria' },
-                    { value: 'VIRTUAL_WALLET', label: 'Billetera virtual' },
-                  ] as Array<{ value: typeof payChannel; label: string }>
-                ).map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setPayChannel(value)}
-                    className={[
-                      'flex-1 rounded-xl border px-3 py-2 text-[12px] font-medium transition',
-                      payChannel === value
-                        ? 'border-[#3053e2] bg-[#f0f4ff] text-[#3053e2]'
-                        : 'border-[#dce2ee] bg-white text-[#6f7890] hover:border-[#b0bcda]',
-                    ].join(' ')}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </AdminDrawerSection>
-        </>
+        <PlaytomicPaymentModal
+          open
+          title="Registrar cobro"
+          subtitle="Elegi metodo y monto. Si hace falta, ajusta conceptos."
+          methodOptions={payMethodOptions}
+          methodValue={payMethod}
+          onMethodChange={(value) => setPayMethod(value as PaymentMethod)}
+          presetOptions={payPresetOptions}
+          selectedPreset={payPreset}
+          onPresetChange={applyPreset}
+          pendingItems={pendingRows}
+          selectedItemIds={paySelectedIds}
+          customAmountById={payCustomAmountById}
+          customSelectedTotal={customSelectedTotal}
+          onSelectAll={handleSelectAllCustomItems}
+          onClear={handleClearCustomItems}
+          onToggleItem={handleToggleCustomItem}
+          onItemAmountChange={handleCustomItemAmountChange}
+          amountDraft={payAmountDraft}
+          onAmountChange={setPayAmountDraft}
+          maxInlineLabel={`Maximo: ${maxAllowed.toFixed(2)} $`}
+          maxFooterLabel={`Máximo para este cobro: ${maxAllowed.toFixed(2)} $`}
+          onClose={goToOverview}
+          onContinue={() => setView('payment_preconfirm')}
+          continueDisabled={!amountIsValid || submitting}
+        />
       );
     }
 
