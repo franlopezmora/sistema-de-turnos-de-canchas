@@ -572,194 +572,11 @@ export default function Home() {
     window.scrollTo({ top: Math.max(top - navbarOffset, 0), behavior: 'smooth' });
   };
 
-  const handleSearch = async () => {
-    const requestId = ++searchRequestIdRef.current;
-    const isCurrentRequest = () => searchRequestIdRef.current === requestId;
-
-    scrollToSearchBarTop();
-    setIsSearching(true);
-    setShowCityDropdown(false);
-    setSearchError(null);
-    setDisplayedClubs([]);
-    setAvailableTimesByClub({});
-
-    try {
-      if (locationOptions.length === 0 && searchCity.trim()) {
-        if (!isCurrentRequest()) return;
-        setSearchError('No hay ubicaciones cargadas para validar la busqueda.');
-        setLastSearchLabel('');
-        scrollToSearchBarTop();
-        return;
-      }
-
-      let location = searchCity.trim() ? selectedLocation : null;
-      if (!location && searchCity.trim()) {
-        const normalized = normalizeText(searchCity);
-        const exact = locationOptions.find(
-          (option) => normalizeText(option.label) === normalized || normalizeText(option.query) === normalized
-        );
-        if (exact) {
-          location = exact;
-          setSelectedLocation(exact);
-          setSearchCity(exact.label);
-        }
-      }
-
-      if (!location) {
-        if (!isCurrentRequest()) return;
-        setDisplayedClubs(clubs);
-        if (searchCity.trim()) {
-          setSearchError('Seleccion una ubicacion del listado para buscar clubes cercanos.');
-        }
-        setLastSearchLabel('');
-        scrollToSearchBarTop();
-        return;
-      }
-
-      const coordsResults = await fetchLocations(location.query, 1);
-      const locationCoords = coordsResults[0];
-      if (!locationCoords) {
-        if (!isCurrentRequest()) return;
-        setSearchError('No pudimos ubicar esa ciudad. Proba con otra.');
-        setDisplayedClubs([]);
-        setLastSearchLabel('');
-        scrollToSearchBarTop();
-        return;
-      }
-
-      const filtered: { club: Club; distance: number }[] = (await Promise.all(
-        clubs.map(async (club) => {
-          const coords = await resolveClubCoords(club);
-          if (!coords) return null;
-          const distance = calculateDistanceKm({ lat: locationCoords.lat, lon: locationCoords.lon }, coords);
-          if (distance > DEFAULT_RADIUS_KM) return null;
-          return { club, distance };
-        })
-      )).filter((row): row is { club: Club; distance: number } => Boolean(row));
-
-      filtered.sort((a, b) => a.distance - b.distance);
-      let finalClubs = filtered.map(item => item.club);
-
-      if (searchDate) {
-        try {
-          if (/^\d{4}-\d{2}-\d{2}$/.test(searchDate)) {
-            const [year, month, day] = searchDate.split('-').map(Number);
-            const parsed = new Date(year, month - 1, day);
-            if (!isNaN(parsed.getTime())) {
-              const dayOfWeek = parsed.getDay(); // 0 (Dom) .. 6 (Sab)
-              finalClubs = finalClubs.filter((club) => {
-                const closureDates = Array.isArray((club as any).closureDates)
-                  ? (club as any).closureDates.map((value: unknown) => String(value || '').trim())
-                  : [];
-                const clubOperationalStatus = String((club as any).clubOperationalStatus || 'OPEN');
-                const temporaryClosureStartDate = String((club as any).temporaryClosureStartDate || '').trim();
-                const temporaryClosureEndDate = String((club as any).temporaryClosureEndDate || '').trim();
-
-                if (clubOperationalStatus === 'PERMANENTLY_CLOSED') return false;
-                if (
-                  clubOperationalStatus === 'TEMPORARY_CLOSED' &&
-                  /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureStartDate) &&
-                  /^\d{4}-\d{2}-\d{2}$/.test(temporaryClosureEndDate) &&
-                  searchDate >= temporaryClosureStartDate &&
-                  searchDate <= temporaryClosureEndDate
-                ) {
-                  return false;
-                }
-
-                if (closureDates.includes(searchDate)) return false;
-                if (!Array.isArray(club.openingDays) || club.openingDays.length === 0) return true; // no config => open all days
-                return club.openingDays.includes(dayOfWeek);
-              });
-            }
-          }
-        } catch (e) { /* noop */ }
-
-        if (searchSport) {
-          const availabilityChecks = await Promise.all(
-            finalClubs.map(async (club) => {
-              try {
-                const courtsRes = await fetch(`${apiBase}/courts?clubSlug=${encodeURIComponent(club.slug)}`, {
-                  cache: 'no-store'
-                });
-                if (!courtsRes.ok) return { hasSlots: false, times: [] };
-
-                const courts = await courtsRes.json();
-                const activityIds = Array.from(
-                  new Set(
-                    (Array.isArray(courts) ? courts : [])
-                      .filter((court: any) => matchesSport(String(court?.activityType?.name || ''), searchSport))
-                      .map((court: any) => Number(court?.activityType?.id))
-                      .filter((activityId: number) => Number.isFinite(activityId) && activityId > 0)
-                  )
-                );
-
-                if (activityIds.length === 0) return { hasSlots: false, times: [] };
-
-                const times: string[] = [];
-                const results = await Promise.all(
-                  activityIds.map(async (activityId) => {
-                    const res = await fetch(
-                      `${apiBase}/bookings/availability-with-courts?activityId=${activityId}&date=${searchDate}&clubSlug=${encodeURIComponent(club.slug)}&t=${Date.now()}`,
-                      { cache: 'no-store' }
-                    );
-                    if (!res.ok) return [];
-                    const data = await res.json();
-                    const slots = Array.isArray(data?.slotsWithCourts)
-                      ? data.slotsWithCourts.filter((slot: any) => Array.isArray(slot.availableCourts) && slot.availableCourts.length > 0)
-                      : [];
-                    return slots
-                      .map((slot: any) => (slot?.slotTime ? String(slot.slotTime) : null))
-                      .filter((slotTime: string | null): slotTime is string => Boolean(slotTime));
-                  })
-                );
-
-                results.forEach((slotTimes) => times.push(...slotTimes));
-                const hasSlots = times.length > 0;
-                if (!hasSlots) return { hasSlots: false, times: [] };
-                const uniqueTimes = Array.from(new Set(times)).sort();
-                return { hasSlots: true, times: uniqueTimes };
-              } catch (error) {
-                reportUiError({ area: 'HomePage', action: 'validateClubAvailability' }, error);
-              }
-              return { hasSlots: false, times: [] };
-            })
-          );
-
-          if (!isCurrentRequest()) return;
-
-          const filteredClubs: Club[] = [];
-          const timesMap: Record<number, string[]> = {};
-          availabilityChecks.forEach((result, index) => {
-            if (result.hasSlots) {
-              const club = finalClubs[index];
-              filteredClubs.push(club);
-              timesMap[club.id] = result.times;
-            }
-          });
-          finalClubs = filteredClubs;
-          setAvailableTimesByClub(timesMap);
-        }
-      } else {
-        setAvailableTimesByClub({});
-      }
-
-      if (!isCurrentRequest()) return;
-
-      setDisplayedClubs(finalClubs);
-      setLastSearchLabel(location.label);
-      scrollToSearchBarTop();
-    } catch (error) {
-      if (!isCurrentRequest()) return;
-      reportUiError({ area: 'HomePage', action: 'handleSearch' }, error);
-      setSearchError('No pudimos completar la busqueda. Intenta de nuevo.');
-      setDisplayedClubs([]);
-      setLastSearchLabel('');
-      setAvailableTimesByClub({});
-    } finally {
-      if (isCurrentRequest()) {
-        setIsSearching(false);
-      }
-    }
+  const handleSearch = () => {
+    const query: Record<string, string> = {};
+    if (searchCity.trim()) query.q = searchCity.trim();
+    if (searchSport) query.sport = searchSport;
+    router.push({ pathname: '/complejos', query });
   };
 
   // Cierra el DatePicker abierto (si existe) forzando blur sobre su input
@@ -1009,9 +826,9 @@ export default function Home() {
       {/* ── HEADER ── */}
       <header className="tc-header">
         <div className="tc-header-inner">
-          <a href="/" className="tc-brand">
+          <Link href="/" className="tc-brand">
             <span className="tc-brand-text">TuCancha</span>
-          </a>
+          </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {user ? (
               <div style={{ position: 'relative' }}>
@@ -1213,89 +1030,6 @@ export default function Home() {
           ))}
         </div>
       </section>
-
-      {/* ── CLUB RESULTS ── */}
-      <section className="tc-clubs" ref={resultsRef}>
-        <div className="tc-clubs-inner">
-          <h2 className="tc-clubs-h">
-            <MapPin size={20} style={{ color: '#22c55e' }} />
-            {lastSearchLabel ? `Canchas cerca de ${lastSearchLabel}` : 'Clubes disponibles'}
-          </h2>
-
-          {searchError && <div style={{ marginBottom: 20, fontSize: 13, color: '#f87171', fontWeight: 600 }}>{searchError}</div>}
-
-          {user?.id && favoriteClubs.length > 0 && (
-            <div style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: '#555' }}>Favoritos</span>
-              {favoriteClubs.slice(0, 5).map(club => (
-                <Link key={`fav-${club.id}`} href={`/club/${club.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 11px', borderRadius: 999, background: 'rgba(34,197,94,.08)', border: '1px solid rgba(34,197,94,.2)', fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
-                  <Heart size={10} style={{ fill: '#22c55e' }} />{club.name}
-                </Link>
-              ))}
-            </div>
-          )}
-
-          {favoriteFeedback && <div style={{ marginBottom: 14, fontSize: 12, color: '#22c55e', fontWeight: 600 }}>{favoriteFeedback}</div>}
-
-          {loadingClubs ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
-              {[1,2,3].map(i => <div key={i} style={{ height: 280, background: '#111', borderRadius: 16, border: '1px solid rgba(255,255,255,.06)', animation: 'tc-pulse 1.5s ease-in-out infinite alternate', opacity: .6 }} />)}
-            </div>
-          ) : isSearching ? (
-            <div style={{ textAlign: 'center', padding: '80px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(255,255,255,.08)', borderTopColor: '#22c55e', animation: 'tc-spin 1s linear infinite' }} />
-              <span style={{ fontSize: 14, color: '#666', fontWeight: 600 }}>Buscando canchas...</span>
-            </div>
-          ) : displayedClubs.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
-              {displayedClubs.map((club, idx) => (
-                <RevealOnScroll key={club.id} delay={idx * 70} className="h-full">
-                  <Link href={`/club/${club.slug}`} className="tc-club-card">
-                    <div className="tc-club-img">
-                      <button type="button" onClick={e => handleToggleFavorite(e, club)} disabled={Boolean(favoriteBusyByClub[Number(club.id)])}
-                        style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, padding: 6, background: favoriteClubIds.has(Number(club.id)) ? 'rgba(248,113,113,.18)' : 'rgba(255,255,255,.08)', border: `1px solid ${favoriteClubIds.has(Number(club.id)) ? 'rgba(248,113,113,.4)' : 'rgba(255,255,255,.12)'}`, borderRadius: 8, cursor: 'pointer' }}>
-                        <Heart size={13} style={{ fill: favoriteClubIds.has(Number(club.id)) ? '#f87171' : 'transparent', color: favoriteClubIds.has(Number(club.id)) ? '#f87171' : '#777' }} />
-                      </button>
-                      {club.clubImageUrl ? (
-                        <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${club.clubImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(.75)' }} />
-                      ) : (
-                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#0f1f0f,#0a150a)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {club.logoUrl ? <img src={club.logoUrl} alt={club.name} style={{ width: 56, height: 56, objectFit: 'contain', opacity: .7 }} /> : <Activity size={28} style={{ color: '#22c55e', opacity: .35 }} />}
-                        </div>
-                      )}
-                      <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(5,5,5,.72)', backdropFilter: 'blur(8px)', padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, color: '#e8e8e8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <MapPin size={10} />{club.name}
-                      </div>
-                    </div>
-                    <div className="tc-club-body">
-                      <h3 className="tc-club-name">{club.name}</h3>
-                      <p className="tc-club-addr">{formatClubAddress(club) || 'Ubicación no disponible'}</p>
-                      {searchDate && (availableTimesByClub[club.id]?.length ?? 0) > 0 && (
-                        <div style={{ marginTop: 10, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                          {availableTimesByClub[club.id].slice(0, 4).map(time => (
-                            <Link key={time} href={{ pathname: `/club/${club.slug}`, query: { date: searchDate, time, sport: searchSport } }}
-                              onClick={e => e.stopPropagation()}
-                              style={{ padding: '3px 9px', borderRadius: 999, border: '1px solid rgba(34,197,94,.3)', color: '#22c55e', fontSize: 11, fontWeight: 700 }}>
-                              {time}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                      <span className="tc-club-cta">Reservar</span>
-                    </div>
-                  </Link>
-                </RevealOnScroll>
-              ))}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: '#555' }}>
-              <p style={{ fontSize: 14 }}>No encontramos canchas con ese criterio.</p>
-              <button onClick={() => { setSearchCity(''); setSelectedLocation(null); setSearchError(null); setLastSearchLabel(''); setAvailableTimesByClub({}); setDisplayedClubs(clubs); }} style={{ marginTop: 14, color: '#22c55e', fontSize: 13, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Ver todos</button>
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* ── VALUES (POR QUÉ TUCANCHA) ── */}
       <section style={{ borderTop: '1px solid rgba(255,255,255,.07)' }}>
         <div className="tc-sec-w">
@@ -1464,8 +1198,8 @@ export default function Home() {
             <div className="tc-foot-col">
               <h6>Jugadores</h6>
               <ul>
-                <li><a href="/bookings">Mis reservas</a></li>
-                <li><a href="/login">Crear cuenta</a></li>
+                <li><Link href="/bookings">Mis reservas</Link></li>
+                <li><Link href="/login">Crear cuenta</Link></li>
               </ul>
             </div>
             <div className="tc-foot-col">
@@ -1547,4 +1281,3 @@ export default function Home() {
     </>
   );
 }
-
