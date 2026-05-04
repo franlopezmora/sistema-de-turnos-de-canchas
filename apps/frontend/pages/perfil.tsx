@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import DarkPageLayout from '../components/DarkPageLayout';
 import RouteTransitionScreen from '../components/RouteTransitionScreen';
 import { getPendingLogoutRedirect } from '../services/AuthService';

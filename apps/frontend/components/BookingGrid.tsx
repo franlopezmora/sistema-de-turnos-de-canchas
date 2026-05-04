@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
@@ -64,7 +64,13 @@ const formatHourFromMinutes = (minutesFromMidnight: number) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
 
-// ── DARK CUSTOM SELECT ──
+const normalizeSlotLabel = (slot: string) => {
+  const parsed = parseSlotToMinutes(slot);
+  if (parsed === null) return String(slot || '').trim();
+  return formatHourFromMinutes(parsed);
+};
+
+// -- DARK CUSTOM SELECT --
 const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -409,16 +415,24 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     return slotsWithCourts;
   })();
 
+  const isSlotDisabledForDate = useCallback((dateStr: string, slotTime: string, courtId: number) => {
+    const normalizedSlotTime = normalizeSlotLabel(slotTime);
+    return Boolean(
+      disabledSlots[`${dateStr}-${slotTime}-${courtId}`] ||
+      disabledSlots[`${dateStr}-${normalizedSlotTime}-${courtId}`]
+    );
+  }, [disabledSlots]);
+
   const availableSlots = useMemo(() => {
     if (!selectedDate) return [] as Array<{ slotTime: string; courts: CourtSummary[] }>;
     const dateStr = formatLocalDate(selectedDate);
     return filteredSlotsWithCourts
       .map(slot => ({
         slotTime: slot.slotTime,
-        courts: slot.availableCourts.filter(c => !disabledSlots[`${dateStr}-${slot.slotTime}-${c.id}`])
+        courts: slot.availableCourts.filter(c => !isSlotDisabledForDate(dateStr, slot.slotTime, Number(c.id)))
       }))
       .filter(slot => slot.courts.length > 0);
-  }, [filteredSlotsWithCourts, disabledSlots, selectedDate]);
+  }, [filteredSlotsWithCourts, isSlotDisabledForDate, selectedDate]);
 
   useEffect(() => {
     if (!selectedSlot) return;
@@ -671,26 +685,29 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   }, [atcRawSlotStarts]);
 
   const atcSlotStarts = useMemo(() => {
-    if (atcRawSlotStarts.length === 0) return [] as number[];
-    const first = atcRawSlotStarts[0];
-    const last = atcRawSlotStarts[atcRawSlotStarts.length - 1];
-    const alignedStart = Math.floor(first / atcStepMinutes) * atcStepMinutes;
-    const expanded: number[] = [];
-    for (let minute = alignedStart; minute <= last; minute += atcStepMinutes) {
-      expanded.push(minute);
-    }
-    return expanded;
-  }, [atcRawSlotStarts, atcStepMinutes]);
+    // Use raw slot starts directly so grid rows map 1:1 to real API slots.
+    // The previous "aligned" expansion shifted rows by up to (step-1) minutes,
+    // causing atcCourtSlots to look up times that don't exist in
+    // atcAvailabilityByTime → all slots rendered grey.
+    return atcRawSlotStarts;
+  }, [atcRawSlotStarts]);
 
   const atcAvailabilityByTime = useMemo(() => {
     const map = new Map<string, Set<number>>();
     if (!selectedDate) return map;
     const dateStr = formatLocalDate(selectedDate);
     filteredSlotsWithCourts.forEach(slot => {
+      // Normalize so '9:00' and '09:00' map to the same entry.
+      // atcCourtSlots looks up via formatHourFromMinutes (zero-padded);
+      // fixed-slot clubs may return unpadded times from the API.
+      const normalizedTime = normalizeSlotLabel(slot.slotTime);
       const availableIds = slot.availableCourts
         .map(c => Number(c.id))
-        .filter(id => !disabledSlots[`${dateStr}-${slot.slotTime}-${id}`]);
-      map.set(slot.slotTime, new Set(availableIds));
+        .filter(id =>
+          !disabledSlots[`${dateStr}-${slot.slotTime}-${id}`] &&
+          !disabledSlots[`${dateStr}-${normalizedTime}-${id}`]
+        );
+      map.set(normalizedTime, new Set(availableIds));
     });
     return map;
   }, [filteredSlotsWithCourts, selectedDate, disabledSlots]);
