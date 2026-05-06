@@ -35,7 +35,7 @@ type AdminDrawerProps = {
    * Ancho del drawer en desktop.
    * sm  → 440px — formularios simples (abrir caja, crear movimiento).
    * md  → 580px — edición/gestión (cerrar caja, gestión de cuenta).
-   * lg  → 740px — detalle complejo (pago, vista de cuenta completa).
+   * lg  → 670px — detalle complejo (pago, vista de cuenta completa).
    * Desktop: slide-in desde la derecha.
    * Mobile: siempre pantalla completa.
    */
@@ -72,7 +72,7 @@ type AdminDrawerProps = {
 const sizeWidthClass: Record<AdminDrawerSize, string> = {
   sm: 'md:max-w-[440px]',
   md: 'md:max-w-[580px]',
-  lg: 'md:max-w-[740px]',
+  lg: 'md:max-w-[670px]',
 };
 
 // ---------------------------------------------------------------------------
