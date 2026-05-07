@@ -1375,7 +1375,10 @@ function resolvePlaygroundClientEmail(owner?: Participant | null) {
 
 function resolveParticipantClientId(participant?: Participant | null) {
   const ref = String(participant?.entityRef || '').trim();
-  if (ref.startsWith('client:')) return ref.slice('client:'.length).trim();
+  if (ref.startsWith('client:')) {
+    const raw = ref.slice('client:'.length).trim();
+    return raw.startsWith('client-') ? raw.slice('client-'.length).trim() : raw;
+  }
   if (ref.startsWith('booking-client:')) return ref.slice('booking-client:'.length).trim();
   return '';
 }
@@ -3891,7 +3894,12 @@ export default function AdminAgendaPlaygroundPage() {
           const stableRef =
             sourceType === 'systemUser'
               ? (Number(client?.userId || 0) > 0 ? `user:${Number(client.userId)}` : undefined)
-              : (client?.id ? `client:${String(client.id)}` : undefined);
+              : (() => {
+                  const rawId = String(client?.id || '').trim();
+                  if (!rawId) return undefined;
+                  const normalizedClientId = rawId.startsWith('client-') ? rawId.slice('client-'.length).trim() : rawId;
+                  return normalizedClientId ? `client:${normalizedClientId}` : undefined;
+                })();
           return {
             id: `club-${participantId}-${client?.id || index}`,
             label: String(client?.name || query),
@@ -3947,7 +3955,12 @@ export default function AdminAgendaPlaygroundPage() {
           const stableRef =
             sourceType === 'systemUser'
               ? (Number(client?.userId || 0) > 0 ? `user:${Number(client.userId)}` : undefined)
-              : (client?.id ? `client:${String(client.id)}` : undefined);
+              : (() => {
+                  const rawId = String(client?.id || '').trim();
+                  if (!rawId) return undefined;
+                  const normalizedClientId = rawId.startsWith('client-') ? rawId.slice('client-'.length).trim() : rawId;
+                  return normalizedClientId ? `client:${normalizedClientId}` : undefined;
+                })();
           return {
             id: `draft-${client?.id || index}`,
             label: String(client?.name || safeQuery),
