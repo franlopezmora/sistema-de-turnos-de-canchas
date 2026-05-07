@@ -1,7 +1,7 @@
 import { Repeat } from 'lucide-react';
 
 type BookingState = 'pending' | 'confirmed' | 'completed' | 'blocked';
-type PaymentState = 'paid' | 'unpaid';
+type PaymentState = 'paid' | 'partial' | 'unpaid';
 
 type DraftRange = {
   start: number;

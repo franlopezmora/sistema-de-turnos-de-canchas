@@ -618,12 +618,6 @@ export default function ClubPage() {
 
           </div>
         </div>
-
-        {/* Footer */}
-        <div style={{ marginTop: 60, paddingTop: 24, borderTop: '1px solid rgba(255,255,255,.05)', textAlign: 'center' }}>
-          <span style={{ fontSize: 12, color: '#333', fontWeight: 500 }}>TuCancha · Todos los derechos reservados</span>
-        </div>
-
       </div>
 
       {reviewModalOpen && (

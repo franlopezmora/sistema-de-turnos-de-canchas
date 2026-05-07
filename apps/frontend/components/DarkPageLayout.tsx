@@ -172,11 +172,25 @@ const BASE_CSS = `
   .tc-root.tc-theme-light .tc-badge-gray { background:rgba(15,23,42,.05); color:#334155; border-color:rgba(15,23,42,.1); }
   .tc-root.tc-theme-light .tc-star { color:#94a3b8; }
   .tc-root.tc-theme-light .tc-divider { background:rgba(15,23,42,.08); }
+  /* Compact footer */
+  .tc-user-foot { margin-top:40px; border-top:1px solid rgba(255,255,255,.06); background:rgba(10,10,10,.92); }
+  .tc-user-foot-inner { max-width:1360px; margin:0 auto; padding:18px 24px 22px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+  .tc-user-foot-brand { font-size:12px; color:#666; font-weight:600; }
+  .tc-user-foot-links { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .tc-user-foot-link { font-size:11px; color:#555; font-weight:700; text-transform:uppercase; letter-spacing:.08em; transition:color .15s; }
+  .tc-user-foot-link:hover { color:#22c55e; }
+  .tc-root.tc-theme-light .tc-user-foot { border-top-color:rgba(15,23,42,.08); background:rgba(248,252,255,.9); }
+  .tc-root.tc-theme-light .tc-user-foot-brand { color:#64748b; }
+  .tc-root.tc-theme-light .tc-user-foot-link { color:#64748b; }
+  .tc-root.tc-theme-light .tc-user-foot-link:hover { color:#15803d; }
   /* Responsive */
   @media(max-width:720px){
     .tc-page,.tc-page-sm { padding:32px 20px 64px; }
     .tc-breadcrumbs-wrap { padding:10px 20px 0; }
     .tc-breadcrumbs-cloud { border-radius:14px; }
+    .tc-user-foot { margin-top:30px; }
+    .tc-user-foot-inner { padding:16px 20px 20px; }
+    .tc-user-foot-links { width:100%; }
   }
   @keyframes tc-pulse { 0%,100%{opacity:1}50%{opacity:.5} }
   @keyframes tc-spin { to{transform:rotate(360deg)} }
@@ -212,6 +226,7 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
   const userInitials = user
     ? ((user.firstName?.[0] || '') + (user.lastName?.[0] || '')).toUpperCase() || (user.name?.[0] || 'U').toUpperCase()
     : 'U';
+  const currentYear = new Date().getFullYear();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -226,15 +241,25 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
 
   useEffect(() => {
     let lastY = window.scrollY;
+    const movementThreshold = 4;
     const handler = () => {
       const y = window.scrollY;
+      const delta = Math.abs(y - lastY);
       if (y < 80) {
+        if (delta >= movementThreshold) {
+          setShowUserMenu(false);
+        }
         setNavHidden(false);
         lastY = y;
         return;
       }
-      if (Math.abs(y - lastY) < 4) return;
-      setNavHidden(y > lastY);
+      if (delta < movementThreshold) return;
+      const scrollingDown = y > lastY;
+      setShowUserMenu(false);
+      if (scrollingDown) {
+        setContactMenu(null);
+      }
+      setNavHidden(scrollingDown);
       lastY = y;
     };
     window.addEventListener('scroll', handler, { passive: true });
@@ -425,6 +450,23 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
 
         {/* ── PAGE CONTENT ── */}
         {children}
+        <footer className="tc-user-foot">
+          <div className="tc-user-foot-inner">
+            <span className="tc-user-foot-brand">© {currentYear} TuCancha</span>
+            <nav className="tc-user-foot-links" aria-label="Enlaces del sitio">
+              <Link href="/" className="tc-user-foot-link">Inicio</Link>
+              <Link href="/complejos" className="tc-user-foot-link">Complejos</Link>
+              {user ? (
+                <>
+                  <Link href="/bookings" className="tc-user-foot-link">Mis reservas</Link>
+                  <Link href="/perfil" className="tc-user-foot-link">Mi perfil</Link>
+                </>
+              ) : (
+                <Link href="/login" className="tc-user-foot-link">Ingresar</Link>
+              )}
+            </nav>
+          </div>
+        </footer>
 
         {/* ── CONTACT SIDEBAR ── */}
         <div className="tc-contact-overlay" style={{ opacity: showContact ? 1 : 0, pointerEvents: showContact ? 'auto' : 'none' }} onClick={() => setShowContact(false)} />

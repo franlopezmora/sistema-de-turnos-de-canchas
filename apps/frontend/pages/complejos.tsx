@@ -23,11 +23,11 @@ const geocode = async (address: string): Promise<{ lat: number; lon: number } | 
 /* ── CSS ─────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
   /* Hero */
-  .vn-hero { position:relative; overflow:hidden; border-bottom:1px solid rgba(255,255,255,.06); }
+  .vn-hero { position:relative; overflow:visible; border-bottom:1px solid rgba(255,255,255,.06); z-index:30; }
   .vn-hero-bg { position:absolute; inset:0;
     background: radial-gradient(ellipse 70% 60% at 60% 80%, rgba(34,197,94,.07) 0%, transparent 70%),
                 radial-gradient(ellipse 50% 40% at 10% 20%, rgba(34,197,94,.04) 0%, transparent 60%); }
-  .vn-hero-inner { position:relative; max-width:860px; margin:0 auto; padding:72px 40px 60px; text-align:center; }
+  .vn-hero-inner { position:relative; z-index:2; max-width:860px; margin:0 auto; padding:72px 40px 60px; text-align:center; }
   .vn-badge { display:inline-flex; align-items:center; gap:8px; padding:5px 14px; border-radius:999px;
     background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.2);
     font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#22c55e; margin-bottom:20px; }
@@ -48,14 +48,25 @@ const PAGE_CSS = `
   .vn-search-clear { background:none; border:none; color:#555; cursor:pointer; padding:0 8px; display:flex; align-items:center; }
   /* Chips */
   .vn-filters { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .vn-chip-wrap { position:relative; }
   .vn-chip { position:relative; display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:999px;
     background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
     font-size:12px; font-weight:700; color:#888; cursor:pointer; font-family:inherit;
-    transition:border-color .15s,color .15s; }
+    transition:border-color .15s,color .15s, background .15s; appearance:none; }
   .vn-chip:hover { border-color:rgba(255,255,255,.2); color:#e8e8e8; }
   .vn-chip.vn-active { background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.35); color:#22c55e; }
-  .vn-chip svg { width:13px; height:13px; flex-shrink:0; }
-  .vn-chip select { position:absolute; inset:0; opacity:0; cursor:pointer; font-size:14px; width:100%; }
+  .vn-chip-ico { width:13px; height:13px; flex-shrink:0; }
+  .vn-chip-caret { width:11px; height:11px; flex-shrink:0; color:#666; transform-origin:center; transition:transform .22s ease, color .18s ease; }
+  .vn-chip-wrap:hover .vn-chip-caret { color:#9ca3af; }
+  .vn-chip-wrap.vn-open .vn-chip-caret { transform:rotate(180deg); color:#22c55e; }
+  .vn-dropdown { position:absolute; top:calc(100% + 8px); left:0; min-width:260px; background:#111; border:1px solid rgba(255,255,255,.1); border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:120; }
+  .vn-dropdown-head { padding:10px 16px; border-bottom:1px solid rgba(255,255,255,.08); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.14em; color:#555; }
+  .vn-dropdown-list { max-height:220px; overflow-y:auto; margin:0; padding:0; list-style:none; }
+  .vn-dropdown-item { width:100%; display:flex; align-items:center; gap:10px; padding:11px 16px; background:transparent; border:0; border-bottom:1px solid rgba(255,255,255,.05); cursor:pointer; font-family:inherit; font-size:13px; color:#c8c8c8; font-weight:500; text-align:left; transition:background .15s, color .15s; }
+  .vn-dropdown-item:last-child { border-bottom:none; }
+  .vn-dropdown-item:hover { background:rgba(255,255,255,.05); }
+  .vn-dropdown-item.vn-selected { background:rgba(34,197,94,.1); color:#22c55e; }
+  .vn-dropdown-item-ico { width:13px; height:13px; color:#22c55e; flex-shrink:0; }
   .vn-chip-sep { width:1px; height:20px; background:rgba(255,255,255,.08); margin:0 2px; }
   .vn-adv-btn { display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:999px;
     background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
@@ -72,7 +83,7 @@ const PAGE_CSS = `
   .vn-adv-apply { padding:10px 20px; border-radius:10px; background:#22c55e; border:none; color:#052010;
     font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:inherit; }
   /* Featured */
-  .vn-feat { border-bottom:1px solid rgba(255,255,255,.06); }
+  .vn-feat { position:relative; z-index:10; border-bottom:1px solid rgba(255,255,255,.06); }
   .vn-feat-inner { max-width:1360px; margin:0 auto; padding:64px 40px; }
   .vn-feat-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:32px; flex-wrap:wrap; }
   .vn-feat-title { font-size:22px; font-weight:800; color:#f2f2f2; letter-spacing:-.025em; margin:0 0 4px; }
@@ -189,6 +200,15 @@ const PAGE_CSS = `
   .tc-root.tc-theme-light .vn-chip:hover,
   .tc-root.tc-theme-light .vn-adv-btn:hover { border-color:rgba(15,23,42,.2); color:#0f172a; }
   .tc-root.tc-theme-light .vn-chip.vn-active { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.28); color:#15803d; }
+  .tc-root.tc-theme-light .vn-chip-caret { color:#64748b; }
+  .tc-root.tc-theme-light .vn-chip-wrap:hover .vn-chip-caret { color:#334155; }
+  .tc-root.tc-theme-light .vn-chip-wrap.vn-open .vn-chip-caret { color:#15803d; }
+  .tc-root.tc-theme-light .vn-dropdown { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 12px 28px rgba(15,23,42,.14); }
+  .tc-root.tc-theme-light .vn-dropdown-head { color:#64748b; border-bottom-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .vn-dropdown-item { color:#1f2937; border-bottom-color:rgba(15,23,42,.06); }
+  .tc-root.tc-theme-light .vn-dropdown-item:hover { background:rgba(15,23,42,.05); }
+  .tc-root.tc-theme-light .vn-dropdown-item.vn-selected { color:#15803d; background:rgba(34,197,94,.12); }
+  .tc-root.tc-theme-light .vn-dropdown-item-ico { color:#16a34a; }
   .tc-root.tc-theme-light .vn-chip-sep { background:rgba(15,23,42,.1); }
   .tc-root.tc-theme-light .vn-adv { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 16px 34px rgba(15,23,42,.14); }
   .tc-root.tc-theme-light .vn-adv label { color:#64748b; }
@@ -285,6 +305,7 @@ export default function ComplejosPage() {
   const router = useRouter();
   const { isLight } = useUserTheme();
   const searchRef = useRef<HTMLInputElement>(null);
+  const filtersRef = useRef<HTMLDivElement>(null);
   const mapDivRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<any>(null);
   const mapTileLayerRef = useRef<any>(null);
@@ -295,6 +316,8 @@ export default function ComplejosPage() {
   const [search, setSearch] = useState('');
   const [zone, setZone] = useState('');
   const [sport, setSport] = useState('');
+  const [showZoneDropdown, setShowZoneDropdown] = useState(false);
+  const [showSportDropdown, setShowSportDropdown] = useState(false);
   const [showAdv, setShowAdv] = useState(false);
   const [featTab, setFeatTab] = useState<FeatTab>('top');
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -308,7 +331,7 @@ export default function ComplejosPage() {
     if (router.query.zone) setZone(String(router.query.zone));
     if (router.query.sport) setSport(String(router.query.sport));
     setParamsRead(true);
-  }, [router.isReady, paramsRead]);
+  }, [router.isReady, paramsRead, router.query.q, router.query.zone, router.query.sport]);
 
   // Sync filters → URL (shallow, no page reload)
   useEffect(() => {
@@ -320,6 +343,17 @@ export default function ComplejosPage() {
     void router.replace({ pathname: '/complejos', query: q }, undefined, { shallow: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, zone, sport, paramsRead]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!filtersRef.current?.contains(event.target as Node)) {
+        setShowZoneDropdown(false);
+        setShowSportDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
 
   // Load clubs + ratings
   useEffect(() => {
@@ -474,7 +508,13 @@ export default function ComplejosPage() {
   );
 
   const hasFilters = search || zone || sport;
-  const clearFilters = () => { setSearch(''); setZone(''); setSport(''); };
+  const clearFilters = () => {
+    setSearch('');
+    setZone('');
+    setSport('');
+    setShowZoneDropdown(false);
+    setShowSportDropdown(false);
+  };
 
   return (
     <DarkPageLayout
@@ -511,22 +551,92 @@ export default function ComplejosPage() {
             )}
           </div>
 
-          <div className="vn-filters">
-            <div className={`vn-chip${zone ? ' vn-active' : ''}`}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-              {zone || 'Zona'}<ChevronDown size={11} />
-              <select value={zone} onChange={e => setZone(e.target.value)}>
-                <option value="">Todas las zonas</option>
-                {zones.map(z => <option key={z} value={z}>{z}</option>)}
-              </select>
+          <div ref={filtersRef} className="vn-filters">
+            <div className={`vn-chip-wrap${showZoneDropdown ? ' vn-open' : ''}`} onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                className={`vn-chip${zone ? ' vn-active' : ''}`}
+                onClick={() => {
+                  setShowSportDropdown(false);
+                  setShowZoneDropdown((prev) => !prev);
+                }}
+              >
+                <MapPin className="vn-chip-ico" />
+                {zone || 'Zona'}
+                <ChevronDown className="vn-chip-caret" />
+              </button>
+              {showZoneDropdown && (
+                <div className="vn-dropdown">
+                  <div className="vn-dropdown-head">Elegí zona</div>
+                  <ul className="vn-dropdown-list">
+                    <li>
+                      <button
+                        type="button"
+                        className={`vn-dropdown-item${!zone ? ' vn-selected' : ''}`}
+                        onClick={() => {
+                          setZone('');
+                          setShowZoneDropdown(false);
+                        }}
+                      >
+                        <MapPin className="vn-dropdown-item-ico" />
+                        Todas las zonas
+                      </button>
+                    </li>
+                    {zones.map((z) => (
+                      <li key={z}>
+                        <button
+                          type="button"
+                          className={`vn-dropdown-item${zone === z ? ' vn-selected' : ''}`}
+                          onClick={() => {
+                            setZone(z);
+                            setShowZoneDropdown(false);
+                          }}
+                        >
+                          <MapPin className="vn-dropdown-item-ico" />
+                          {z}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
-            <div className={`vn-chip${sport ? ' vn-active' : ''}`}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 0 20M2 12h20"/></svg>
-              {sport ? SPORT_LABELS[sport] : 'Deporte'}<ChevronDown size={11} />
-              <select value={sport} onChange={e => setSport(e.target.value)}>
-                {SPORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+            <div className={`vn-chip-wrap${showSportDropdown ? ' vn-open' : ''}`} onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                className={`vn-chip${sport ? ' vn-active' : ''}`}
+                onClick={() => {
+                  setShowZoneDropdown(false);
+                  setShowSportDropdown((prev) => !prev);
+                }}
+              >
+                <svg className="vn-chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 2a15 15 0 0 1 0 20M2 12h20" /></svg>
+                {sport ? SPORT_LABELS[sport] : 'Deporte'}
+                <ChevronDown className="vn-chip-caret" />
+              </button>
+              {showSportDropdown && (
+                <div className="vn-dropdown">
+                  <div className="vn-dropdown-head">Elegí deporte</div>
+                  <ul className="vn-dropdown-list">
+                    {SPORTS.map((option) => (
+                      <li key={option.value || 'all'}>
+                        <button
+                          type="button"
+                          className={`vn-dropdown-item${sport === option.value ? ' vn-selected' : ''}`}
+                          onClick={() => {
+                            setSport(option.value);
+                            setShowSportDropdown(false);
+                          }}
+                        >
+                          <svg className="vn-dropdown-item-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 2a15 15 0 0 1 0 20M2 12h20" /></svg>
+                          {option.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             {hasFilters && (

@@ -42,8 +42,16 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
   const navRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    let lastY = window.scrollY;
+    const movementThreshold = 4;
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
+      const y = window.scrollY;
+      setIsScrolled(y > 10);
+      if (Math.abs(y - lastY) >= movementThreshold) {
+        setShowUserMenu(false);
+        setShowNotifications(false);
+      }
+      lastY = y;
     };
 
     window.addEventListener('scroll', handleScroll);
@@ -63,6 +71,7 @@ const Navbar = ({ onMenuClick, onNavClick }: NavbarProps) => {
 
   useEffect(() => {
     setShowUserMenu(false);
+    setShowNotifications(false);
   }, [router.asPath]);
 
   useEffect(() => {

@@ -201,11 +201,25 @@ export default function Home() {
 
   useEffect(() => {
     let lastY = window.scrollY;
+    const movementThreshold = 4;
     const handler = () => {
       const y = window.scrollY;
-      if (y < 80) { setNavHidden(false); lastY = y; return; }
-      if (Math.abs(y - lastY) < 4) return; // ignorar micro-scrolls
-      setNavHidden(y > lastY);
+      const delta = Math.abs(y - lastY);
+      if (y < 80) {
+        if (delta >= movementThreshold) {
+          setShowUserMenu(false);
+        }
+        setNavHidden(false);
+        lastY = y;
+        return;
+      }
+      if (delta < movementThreshold) return; // ignorar micro-scrolls
+      const scrollingDown = y > lastY;
+      setShowUserMenu(false);
+      if (scrollingDown) {
+        setContactMenu(null);
+      }
+      setNavHidden(scrollingDown);
       lastY = y;
     };
     window.addEventListener('scroll', handler, { passive: true });
@@ -221,7 +235,7 @@ export default function Home() {
       }, 380);
     }, 2700);
     return () => clearInterval(timer);
-  }, []);
+  }, [sportWords.length]);
 
   useEffect(() => {
     const els = document.querySelectorAll('.tc-sr,.tc-sr-up,.tc-sr-left,.tc-sr-right');
@@ -680,7 +694,24 @@ export default function Home() {
 
   const handleSearch = () => {
     const query: Record<string, string> = {};
-    if (searchCity.trim()) query.q = searchCity.trim();
+    const cityTerm = searchCity.trim();
+    if (cityTerm) {
+      const normalizedTerm = normalizeText(cityTerm);
+      const matchedLocation = (
+        selectedLocation && normalizeText(selectedLocation.label) === normalizedTerm
+      )
+        ? selectedLocation
+        : locationOptions.find((option) =>
+            normalizeText(option.label) === normalizedTerm ||
+            normalizeText(option.city) === normalizedTerm
+          ) || null;
+
+      if (matchedLocation?.city) {
+        query.zone = matchedLocation.city;
+      } else {
+        query.q = cityTerm;
+      }
+    }
     if (searchSport) query.sport = searchSport;
     router.push({ pathname: '/complejos', query });
   };
@@ -751,6 +782,9 @@ export default function Home() {
     .tc-search { position:relative; z-index:25; display:flex; gap:0; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px; backdrop-filter:blur(20px); max-width:620px; align-items:center; flex-wrap:wrap; }
     .tc-search-seg { display:flex; align-items:center; gap:8px; padding:10px 16px; font-size:13px; font-weight:600; color:#e8e8e8; cursor:pointer; position:relative; white-space:nowrap; border-radius:999px; transition:background .15s; }
     .tc-search-seg:hover { background:rgba(255,255,255,.06); }
+    .tc-search-caret { width:12px; height:12px; color:#666; flex-shrink:0; transform-origin:center; transition:transform .22s ease, color .18s ease; }
+    .tc-search-seg:hover .tc-search-caret { color:#9ca3af; }
+    .tc-search-caret.tc-search-caret-open { transform:rotate(180deg); color:#22c55e; }
     .tc-search-divider { width:1px; height:28px; background:rgba(255,255,255,.12); flex-shrink:0; margin:0 2px; }
     .tc-search-input { flex:1; min-width:120px; padding:10px 14px; background:transparent; border:none; color:#e8e8e8; font-family:'Sora',system-ui,sans-serif; font-size:13px; font-weight:500; outline:none; }
     .tc-search-input::placeholder { color:#555; }
@@ -995,6 +1029,9 @@ export default function Home() {
     .tc-root.tc-theme-light .tc-search { background:rgba(255,255,255,.92); border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.1); }
     .tc-root.tc-theme-light .tc-search-seg { color:#1f2937; }
     .tc-root.tc-theme-light .tc-search-seg:hover { background:rgba(15,23,42,.04); }
+    .tc-root.tc-theme-light .tc-search-caret { color:#64748b; }
+    .tc-root.tc-theme-light .tc-search-seg:hover .tc-search-caret { color:#334155; }
+    .tc-root.tc-theme-light .tc-search-caret.tc-search-caret-open { color:#15803d; }
     .tc-root.tc-theme-light .tc-search-divider { background:rgba(15,23,42,.12); }
     .tc-root.tc-theme-light .tc-search-input { color:#0f172a; }
     .tc-root.tc-theme-light .tc-search-input::placeholder { color:#94a3b8; }
@@ -1185,7 +1222,7 @@ export default function Home() {
               <div className="tc-search-seg" style={{ position: 'relative' }} onClick={(e) => { e.stopPropagation(); setShowCityDropdown(false); closeDatepicker(); setShowSportDropdown(p => !p); }}>
                 <span style={{ color: '#888', display: 'flex' }}>{selectedSport.icon}</span>
                 <span>{selectedSport.label}</span>
-                <ChevronDown size={12} style={{ color: '#666' }} />
+                <ChevronDown className={`tc-search-caret${showSportDropdown ? ' tc-search-caret-open' : ''}`} />
                 {showSportDropdown && (
                   <div className="tc-dropdown" onClick={e => e.stopPropagation()}>
                     <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,.08)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.14em', color: '#555' }}>Elegí deporte</div>

@@ -341,12 +341,17 @@ export default function AccountDrawer({
     ],
     []
   );
-  const payPresetOptions = useMemo(
-    () => [
-      { id: 'FULL', label: 'Todo pendiente' },
-      ...(hasCourtItems ? [{ id: 'COURT_ONLY', label: 'Solo cancha' }] : []),
-      { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
-    ],
+  const payPresetOptions = useMemo<Array<{ id: PaymentQuickPreset; label: string }>>(
+    () => {
+      const options: Array<{ id: PaymentQuickPreset; label: string }> = [
+        { id: 'FULL', label: 'Todo pendiente' },
+      ];
+      if (hasCourtItems) {
+        options.push({ id: 'COURT_ONLY', label: 'Solo cancha' });
+      }
+      options.push({ id: 'CUSTOM_ITEMS', label: 'Personalizado' });
+      return options;
+    },
     [hasCourtItems]
   );
 

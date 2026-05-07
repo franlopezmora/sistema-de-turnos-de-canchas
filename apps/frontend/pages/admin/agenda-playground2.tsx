@@ -12588,7 +12588,11 @@ export default function AdminAgendaPlaygroundPage() {
               { id: 'COURT_ONLY', label: 'Solo cancha' },
               { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
             ]}
-            selectedPreset={simplifiedPaymentQuickPreset}
+            selectedPreset={
+              simplifiedPaymentQuickPreset === 'MY_SHARE'
+                ? 'FULL'
+                : simplifiedPaymentQuickPreset
+            }
             onPresetChange={applySimplifiedPaymentQuickPreset}
             pendingItems={pendingAccountItems}
             selectedItemIds={simplifiedPaymentSelectedItemIdsDraft}

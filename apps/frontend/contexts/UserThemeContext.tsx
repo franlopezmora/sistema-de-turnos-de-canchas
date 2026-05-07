@@ -16,26 +16,33 @@ const UserThemeContext = createContext<UserThemeContextValue | null>(null);
 const sanitizeTheme = (value: unknown): UserTheme => (value === 'light' ? 'light' : 'dark');
 
 export function UserThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<UserTheme>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    try {
-      return sanitizeTheme(window.localStorage.getItem(STORAGE_KEY));
-    } catch {
-      return 'dark';
-    }
-  });
+  const [theme, setThemeState] = useState<UserTheme>('dark');
+  const [themeReady, setThemeReady] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storedTheme = sanitizeTheme(window.localStorage.getItem(STORAGE_KEY));
+      setThemeState(storedTheme);
+    } catch {
+      setThemeState('dark');
+    } finally {
+      setThemeReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!themeReady || typeof window === 'undefined') return;
+    const root = document.documentElement;
+    root.dataset.userTheme = theme;
+    root.classList.toggle('tc-global-light', theme === 'light');
     if (typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(STORAGE_KEY, theme);
     } catch {
       // noop
     }
-    const root = document.documentElement;
-    root.dataset.userTheme = theme;
-    root.classList.toggle('tc-global-light', theme === 'light');
-  }, [theme]);
+  }, [theme, themeReady]);
 
   const setTheme = useCallback((next: UserTheme) => {
     setThemeState(sanitizeTheme(next));
