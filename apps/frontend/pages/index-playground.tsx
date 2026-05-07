@@ -154,6 +154,11 @@ export default function Home() {
   const [favoriteClubs, setFavoriteClubs] = useState<Club[]>([]);
   const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
   const [favoriteBusyByClub, setFavoriteBusyByClub] = useState<Record<number, boolean>>({});
+  useEffect(() => {
+    if (!favoriteFeedback) return;
+    const timeout = window.setTimeout(() => setFavoriteFeedback(null), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [favoriteFeedback]);
   // track which FAQ item is currently open (null if none)
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const faqRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -409,21 +414,6 @@ export default function Home() {
     void loadFavorites();
   }, [user?.id]);
 
-  const resolveLinkingMessage = (linking: { status?: string; reason?: string } | null | undefined) => {
-    const status = String(linking?.status || '');
-    if (status === 'linked_existing_client') return 'Favorito guardado y cliente vinculado.';
-    if (status === 'created_client') return 'Favorito guardado y cliente creado.';
-    if (status === 'already_linked') return 'Favorito guardado. Ya estabas vinculado en este club.';
-    if (status === 'duplicate_detected_no_link') return 'Favorito guardado. Detectamos posible duplicado y no vinculamos automáticamente.';
-    if (status === 'insufficient_data_no_link') {
-      const reason = String(linking?.reason || '');
-      if (reason === 'missing_phone') return 'Favorito guardado. No se pudo vincular cliente: falta teléfono.';
-      if (reason === 'missing_name') return 'Favorito guardado. No se pudo vincular cliente: falta nombre.';
-      return 'Favorito guardado. No se pudo vincular cliente: faltan datos de identidad.';
-    }
-    return null;
-  };
-
   const handleToggleFavorite = async (e: React.MouseEvent, club: Club) => {
     e.preventDefault();
     e.stopPropagation();
@@ -449,7 +439,7 @@ export default function Home() {
         setFavoriteClubs((prev) => prev.filter((item) => Number(item.id) !== clubId));
         setFavoriteFeedback('Favorito eliminado.');
       } else {
-        const result = await ClubService.markFavorite(clubId);
+        await ClubService.markFavorite(clubId);
         setFavoriteClubIds((prev) => {
           const next = new Set(prev);
           next.add(clubId);
@@ -459,7 +449,7 @@ export default function Home() {
           const exists = prev.some((item) => Number(item.id) === clubId);
           return exists ? prev : [club, ...prev];
         });
-        setFavoriteFeedback(resolveLinkingMessage(result?.linking) || 'Favorito guardado.');
+        setFavoriteFeedback('Favorito guardado.');
       }
     } catch (error) {
       reportUiError({ area: 'HomePage', action: 'toggleFavorite' }, error);

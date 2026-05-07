@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import type { ReactNode } from 'react';
 import { useAvailability } from '../hooks/useAvailability';
-import { createBooking } from '../services/BookingService';
 import { login as loginUser, requestMagicLink } from '../services/AuthService';
 import AppModal from './AppModal';
 
@@ -13,6 +12,7 @@ import { ClubService, Club } from '../services/ClubService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
 import { useAuth } from '../contexts/AuthContext';
 import { lockBodyScroll } from '../utils/bodyScrollLock';
+import { createBookingCheckoutDraftId, saveBookingCheckoutDraft } from '../utils/bookingCheckoutDraft';
 import { ChevronDown, Check, Calendar, Clock, MapPin, Zap, MousePointerClick, Hourglass, Moon, Ban, AlertCircle, Activity, ChevronLeft, ChevronRight, LayoutGrid, Rows3, Info, Mail, Lock, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
 
 const apiBase = () => `${getApiUrl()}/api`;
@@ -40,7 +40,9 @@ type CourtSummary = {
 const DEFAULT_DURATION_MINUTES = 90;
 const TIMELINE_PIXELS_PER_MINUTE = 1.45;
 const TIMELINE_ROW_HEIGHT = 52;
-type ScheduleViewMode = 'atc' | 'list';
+const MOBILE_LIST_ONLY_QUERY = '(max-width: 900px)';
+const MOBILE_VISIBLE_SLOTS_LIMIT = 9;
+type ScheduleViewMode = 'timeline' | 'list';
 
 const normalizeActivityDurations = (raw: unknown, fallback: number) => {
   const parsed = Array.isArray(raw)
@@ -169,12 +171,13 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   const [selectedCourt, setSelectedCourt] = useState<CourtSummary | null>(null);
   const [selectedActivityFilter, setSelectedActivityFilter] = useState<string>('');
   const [selectedDuration, setSelectedDuration] = useState<number>(DEFAULT_DURATION_MINUTES);
-  const [scheduleViewMode, setScheduleViewMode] = useState<ScheduleViewMode>('atc');
+  const [scheduleViewMode, setScheduleViewMode] = useState<ScheduleViewMode>('timeline');
+  const [isMobileListOnly, setIsMobileListOnly] = useState(false);
+  const [showAllMobileSlots, setShowAllMobileSlots] = useState(false);
   const [hoveredAtcSlot, setHoveredAtcSlot] = useState<{ courtId: number; slotTime: string } | null>(null);
   const [pendingSport, setPendingSport] = useState<string | null>(null);
   const [pendingTime, setPendingTime] = useState<string | null>(null);
   const [queryApplied, setQueryApplied] = useState(false);
-  const [isBooking, setIsBooking] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const courtsSectionRef = useRef<HTMLDivElement | null>(null);
@@ -354,8 +357,31 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
 
   const { slotsWithCourts, loading, error, refresh } = useAvailability(selectedDate, selectedActivityId, clubSlug, selectedDuration);
   const durationOptions = useMemo(() => selectedActivityDurations, [selectedActivityDurations]);
+  const activeScheduleViewMode: ScheduleViewMode = isMobileListOnly ? 'list' : scheduleViewMode;
 
   useEffect(() => { setIsAuthenticated(Boolean(hasAuthSession)); }, [hasAuthSession]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mediaQuery = window.matchMedia(MOBILE_LIST_ONLY_QUERY);
+    const syncViewportMode = (matches: boolean) => setIsMobileListOnly(matches);
+    syncViewportMode(mediaQuery.matches);
+
+    const listener = (event: MediaQueryListEvent) => syncViewportMode(event.matches);
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+    mediaQuery.addListener(listener);
+    return () => mediaQuery.removeListener(listener);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileListOnly) return;
+    if (scheduleViewMode !== 'list') {
+      setScheduleViewMode('list');
+    }
+  }, [isMobileListOnly, scheduleViewMode]);
 
   useEffect(() => {
     if (!router.isReady || queryApplied) return;
@@ -434,10 +460,30 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       .filter(slot => slot.courts.length > 0);
   }, [filteredSlotsWithCourts, isSlotDisabledForDate, selectedDate]);
 
+  const visibleListSlots = useMemo(() => {
+    if (activeScheduleViewMode !== 'list') return availableSlots;
+    if (!isMobileListOnly) return availableSlots;
+    return showAllMobileSlots ? availableSlots : availableSlots.slice(0, MOBILE_VISIBLE_SLOTS_LIMIT);
+  }, [activeScheduleViewMode, availableSlots, isMobileListOnly, showAllMobileSlots]);
+
   useEffect(() => {
     if (!selectedSlot) return;
     if (!availableSlots.some(s => s.slotTime === selectedSlot)) { setSelectedSlot(null); setSelectedCourt(null); }
   }, [availableSlots, selectedSlot]);
+
+  useEffect(() => {
+    setShowAllMobileSlots(false);
+  }, [selectedDate, selectedActivityFilter, selectedDuration, selectedActivityId]);
+
+  useEffect(() => {
+    if (!isMobileListOnly || showAllMobileSlots || !selectedSlot) return;
+    const selectedIsVisible = availableSlots
+      .slice(0, MOBILE_VISIBLE_SLOTS_LIMIT)
+      .some((slot) => slot.slotTime === selectedSlot);
+    if (!selectedIsVisible) {
+      setShowAllMobileSlots(true);
+    }
+  }, [availableSlots, isMobileListOnly, selectedSlot, showAllMobileSlots]);
 
   const priceInfo = useMemo(() => {
     const final = Number(selectedCourt?.price ?? 0);
@@ -455,70 +501,88 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     };
   }, [selectedCourt?.price, selectedCourt?.basePrice, selectedCourt?.lightsExtraApplied]);
 
-  const performBooking = async () => {
-    if (!selectedDate || !selectedSlot || !selectedCourt) return;
-    try {
-      setIsBooking(true);
-      const [hours, minutes] = selectedSlot.split(':').map(Number);
-      const bookingDateTime = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), hours, minutes, 0, 0);
-      const bookingActivityId = Number(selectedCourt.activityType?.id || selectedActivityId || 0);
-      if (!Number.isFinite(bookingActivityId) || bookingActivityId <= 0) { showError('No se pudo identificar la actividad de la cancha seleccionada.'); return; }
+  const bookingReview = useMemo(() => {
+    if (!selectedDate || !selectedSlot || !selectedCourt) return null;
+    const [hours, minutes] = selectedSlot.split(':').map(Number);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    const start = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), hours, minutes, 0, 0);
+    const end = new Date(start.getTime() + selectedDuration * 60000);
+    const activityName = String(selectedCourt.activityType?.name || selectedActivityFilter || 'Actividad');
+    const courtName = String(selectedCourt.name || `Cancha ${selectedCourt.id}`);
+    const price = Number(priceInfo.final || 0);
+    const listPrice = Number(priceInfo.list || price || 0);
+    const discountAmount = Math.max(0, Number((listPrice - price).toFixed(2)));
+    return {
+      courtName,
+      activityName,
+      start,
+      end,
+      dateLabel: start.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long' }),
+      shortDateLabel: start.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      timeLabel: `${start.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })} - ${end.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}`,
+      durationLabel: `${selectedDuration} min`,
+      price,
+      listPrice,
+      discountAmount,
+      hasLights: Boolean(priceInfo.hasLights),
+      lightsAmount: Number(priceInfo.extra || 0),
+      lightsFromHour: clubConfig?.lightsFromHour || null,
+    };
+  }, [
+    clubConfig?.lightsFromHour,
+    priceInfo.extra,
+    priceInfo.final,
+    priceInfo.hasLights,
+    priceInfo.list,
+    selectedActivityFilter,
+    selectedCourt,
+    selectedDate,
+    selectedDuration,
+    selectedSlot,
+  ]);
 
-      const createResult = await createBooking(selectedCourt.id, bookingActivityId, selectedDate, selectedSlot, { durationMinutes: selectedDuration, applyDiscount: false });
-      const startDateTime = bookingDateTime;
-      const endDateTime = new Date(startDateTime.getTime() + selectedDuration * 60000);
-      const fallbackPrice = Number(priceInfo.final || 0);
-      const fallbackListPrice = Number(priceInfo.list || fallbackPrice || 0);
-      const parsedCreatedPrice = Number((createResult as any)?.price);
-      const parsedCreatedListPrice = Number((createResult as any)?.listPrice);
-      const finalPrice = Number.isFinite(parsedCreatedPrice) && parsedCreatedPrice >= 0 ? parsedCreatedPrice : fallbackPrice;
-      const listPrice = Number.isFinite(parsedCreatedListPrice) && parsedCreatedListPrice > 0 ? parsedCreatedListPrice : fallbackListPrice;
-      const discountAmount = Math.max(0, Number((listPrice - finalPrice).toFixed(2)));
+  const openCheckout = () => {
+    if (!selectedDate || !selectedSlot || !selectedCourt || !bookingReview) return;
+    const bookingActivityId = Number(selectedCourt.activityType?.id || selectedActivityId || 0);
+    if (!Number.isFinite(bookingActivityId) || bookingActivityId <= 0) {
+      showError('No se pudo identificar la actividad de la cancha seleccionada.');
+      return;
+    }
 
-      const bookingSummaryMessage = buildBookingSummaryMessage({
-        courtName: String(selectedCourt.name || `Cancha ${selectedCourt.id}`),
-        activityName: String(selectedCourt.activityType?.name || selectedActivityFilter || 'Actividad'),
-        start: startDateTime, end: endDateTime, durationMinutes: selectedDuration,
-        price: finalPrice, listPrice, discountAmount,
-        nightSurcharge: { applied: Boolean(priceInfo.hasLights), amount: Number(priceInfo.extra || 0), fromHour: clubConfig?.lightsFromHour || null }
-      });
-
-      const dateStr = formatLocalDate(selectedDate);
-      const slotKey = `${dateStr}-${selectedSlot}-${selectedCourt.id}`;
-      setDisabledSlots(prev => ({ ...prev, [slotKey]: true }));
-
-      try {
-        if (createResult && (createResult as any).refresh && (createResult as any).refreshDate) {
-          const [ry, rm, rd] = String((createResult as any).refreshDate).split('-').map(Number);
-          setSelectedDate(new Date(ry, rm - 1, rd));
-        }
-        await (refresh as () => Promise<void>)?.();
-        setSelectedSlot(null);
-        setSelectedCourt(null);
-      } catch (_) { /* noop */ }
-
-      showInfo(bookingSummaryMessage, 'Reserva confirmada');
-    } catch (err) {
-      const message = extractErrorMessage(err, 'No se pudo completar la reserva.');
-      reportUiError({ area: 'BookingGrid', action: 'handleBooking' }, err);
-      if (String(message).toLowerCase().includes('sesión expirada') || String(message).toLowerCase().includes('sesion expirada')) {
-        setIsAuthenticated(false);
-        openLoginModal(() => { performBooking(); });
-        return;
-      }
-      showError(message);
-    } finally { setIsBooking(false); }
+    const draftId = createBookingCheckoutDraftId();
+    const draftSaved = saveBookingCheckoutDraft({
+      id: draftId,
+      clubSlug: clubSlug || null,
+      courtId: Number(selectedCourt.id),
+      courtName: bookingReview.courtName,
+      activityId: bookingActivityId,
+      activityName: bookingReview.activityName,
+      date: formatLocalDate(selectedDate),
+      slotTime: selectedSlot,
+      durationMinutes: selectedDuration,
+      price: bookingReview.price,
+      listPrice: bookingReview.listPrice,
+      discountAmount: bookingReview.discountAmount,
+      lightsExtraApplied: bookingReview.lightsAmount,
+      lightsFromHour: bookingReview.lightsFromHour || null,
+      createdAt: new Date().toISOString(),
+    });
+    if (!draftSaved) {
+      showError('No pudimos preparar el checkout. Intentá nuevamente.');
+      return;
+    }
+    void router.push(`/checkout?draft=${encodeURIComponent(draftId)}`);
   };
 
   const handleBooking = () => {
     if (!selectedDate || !selectedSlot || !selectedCourt) return;
     if (!hasAuthSession || !isAuthenticated) {
       setIsAuthenticated(false);
-      openLoginModal(() => { performBooking(); });
+      openLoginModal(() => { openCheckout(); });
       return;
     }
     setIsAuthenticated(true);
-    performBooking();
+    openCheckout();
   };
 
   useEffect(() => {
@@ -785,7 +849,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
 
   useEffect(() => {
     setHoveredAtcSlot(null);
-  }, [selectedDate, selectedActivityFilter, selectedDuration, scheduleViewMode]);
+  }, [selectedDate, selectedActivityFilter, selectedDuration, activeScheduleViewMode]);
 
   const canConfirm = Boolean(selectedSlot && selectedCourt);
   const labelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#555', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontFamily: "'Sora',system-ui,sans-serif" };
@@ -855,11 +919,69 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
 
       </div>
 
+      {/* View mode */}
+      {!isMobileListOnly && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'inline-flex', padding: 4, borderRadius: 12, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => setScheduleViewMode('timeline')}
+              style={{
+                border: 'none',
+                borderRadius: 9,
+                padding: '8px 12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '.08em',
+                textTransform: 'uppercase',
+                background: scheduleViewMode === 'timeline' ? 'rgba(34,197,94,.16)' : 'transparent',
+                color: scheduleViewMode === 'timeline' ? '#22c55e' : '#666',
+                fontFamily: "'Sora',system-ui,sans-serif",
+              }}
+            >
+              <LayoutGrid size={12} /> Agenda visual
+            </button>
+            <button
+              type="button"
+              onClick={() => setScheduleViewMode('list')}
+              style={{
+                border: 'none',
+                borderRadius: 9,
+                padding: '8px 12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '.08em',
+                textTransform: 'uppercase',
+                background: scheduleViewMode === 'list' ? 'rgba(34,197,94,.16)' : 'transparent',
+                color: scheduleViewMode === 'list' ? '#22c55e' : '#666',
+                fontFamily: "'Sora',system-ui,sans-serif",
+              }}
+            >
+              <Rows3 size={12} /> Lista clásica
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Loading */}
       {loading && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid #1a1a1a', borderTopColor: '#22c55e', borderRadius: '50%', animation: 'bg-spin .8s linear infinite' }} />
-          <style>{`@keyframes bg-spin{to{transform:rotate(360deg)}}`}</style>
+        <div style={{ ...sectionStyle, marginTop: 0 }}>
+          <div style={labelStyle}>
+            <Clock size={12} style={{ color: '#22c55e' }} />
+            {activeScheduleViewMode === 'timeline' ? 'Agenda de canchas' : 'Horarios disponibles'}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '36px 0', border: '1px dashed rgba(255,255,255,.08)', borderRadius: 16, background: 'rgba(255,255,255,.02)' }}>
+            <div style={{ width: 32, height: 32, border: '3px solid #1a1a1a', borderTopColor: '#22c55e', borderRadius: '50%', animation: 'bg-spin .8s linear infinite' }} />
+            <style>{`@keyframes bg-spin{to{transform:rotate(360deg)}}`}</style>
+          </div>
         </div>
       )}
 
@@ -870,69 +992,19 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
         </div>
       )}
 
-      {/* View mode */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'inline-flex', padding: 4, borderRadius: 12, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', gap: 4 }}>
-          <button
-            type="button"
-            onClick={() => setScheduleViewMode('atc')}
-            style={{
-              border: 'none',
-              borderRadius: 9,
-              padding: '8px 12px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: '.08em',
-              textTransform: 'uppercase',
-              background: scheduleViewMode === 'atc' ? 'rgba(34,197,94,.16)' : 'transparent',
-              color: scheduleViewMode === 'atc' ? '#22c55e' : '#666',
-              fontFamily: "'Sora',system-ui,sans-serif",
-            }}
-          >
-            <LayoutGrid size={12} /> Agenda ATC
-          </button>
-          <button
-            type="button"
-            onClick={() => setScheduleViewMode('list')}
-            style={{
-              border: 'none',
-              borderRadius: 9,
-              padding: '8px 12px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: '.08em',
-              textTransform: 'uppercase',
-              background: scheduleViewMode === 'list' ? 'rgba(34,197,94,.16)' : 'transparent',
-              color: scheduleViewMode === 'list' ? '#22c55e' : '#666',
-              fontFamily: "'Sora',system-ui,sans-serif",
-            }}
-          >
-            <Rows3 size={12} /> Lista clásica
-          </button>
-        </div>
-      </div>
-
       {/* Slots */}
       {!loading && availableSlots.length > 0 && (
         <div style={sectionStyle}>
           <div style={labelStyle}>
             <Clock size={12} style={{ color: '#22c55e' }} />
-            {scheduleViewMode === 'atc' ? 'Agenda de canchas' : 'Horarios disponibles'}
+            {activeScheduleViewMode === 'timeline' ? 'Agenda de canchas' : 'Horarios disponibles'}
           </div>
 
           {!selectedActivityFilter ? (
             <div style={{ textAlign: 'center', padding: '32px 20px', background: 'rgba(255,255,255,.02)', border: '1px dashed rgba(255,255,255,.07)', borderRadius: 16, fontSize: 13, fontWeight: 600, color: '#444' }}>
               Elegí un deporte para ver los horarios.
             </div>
-          ) : scheduleViewMode === 'atc' ? (
+          ) : activeScheduleViewMode === 'timeline' ? (
             atcTimeline && atcCourts.length > 0 ? (
               <>
                 <div style={{ border: '1px solid rgba(255,255,255,.08)', borderRadius: 16, overflow: 'hidden', background: 'rgba(255,255,255,.015)' }}>
@@ -1045,7 +1117,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                                     left: (selectedSlotData.minute - atcTimeline.startMinute) * TIMELINE_PIXELS_PER_MINUTE + 2,
                                     top: 6,
                                     height: TIMELINE_ROW_HEIGHT - 12,
-                                    width: Math.max(44, selectedDuration * TIMELINE_PIXELS_PER_MINUTE - 4),
+                                    width: Math.max(8, selectedDuration * TIMELINE_PIXELS_PER_MINUTE - 4),
                                     borderRadius: 8,
                                     border: '1px solid rgba(34,197,94,.72)',
                                     background: 'rgba(34,197,94,.42)',
@@ -1061,7 +1133,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                                     left: (hoveredSlotData.minute - atcTimeline.startMinute) * TIMELINE_PIXELS_PER_MINUTE + 2,
                                     top: 6,
                                     height: TIMELINE_ROW_HEIGHT - 12,
-                                    width: Math.max(44, selectedDuration * TIMELINE_PIXELS_PER_MINUTE - 4),
+                                    width: Math.max(8, selectedDuration * TIMELINE_PIXELS_PER_MINUTE - 4),
                                     borderRadius: 8,
                                     border: '1px solid rgba(34,197,94,.72)',
                                     background: 'rgba(34,197,94,.86)',
@@ -1127,7 +1199,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
           ) : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 8 }}>
-                {availableSlots.map(slot => {
+                {visibleListSlots.map(slot => {
                   const isSelected = selectedSlot === slot.slotTime;
                   return (
                     <button
@@ -1148,16 +1220,43 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                   );
                 })}
               </div>
-              <p style={{ fontSize: 10, color: '#333', fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', marginTop: 10, marginBottom: 0 }}>
-                Solo se muestran horarios con disponibilidad.
-              </p>
+              {isMobileListOnly && availableSlots.length > MOBILE_VISIBLE_SLOTS_LIMIT && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllMobileSlots((prev) => !prev)}
+                    aria-label={showAllMobileSlots ? 'Ver menos horarios' : 'Ver más horarios'}
+                    title={showAllMobileSlots ? 'Ver menos horarios' : 'Ver más horarios'}
+                    style={{
+                      width: 40,
+                      height: 24,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#52525b',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    <ChevronDown
+                      size={14}
+                      style={{
+                        transform: showAllMobileSlots ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform .2s ease',
+                      }}
+                    />
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
       )}
 
       {/* Courts */}
-      {scheduleViewMode === 'list' && selectedSlot && (
+      {activeScheduleViewMode === 'list' && selectedSlot && (
         <div ref={courtsSectionRef} style={sectionStyle}>
           <div style={labelStyle}><MapPin size={12} style={{ color: '#22c55e' }} /> Elegí una cancha</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1219,30 +1318,25 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       <button
         ref={confirmButtonRef}
         onClick={handleBooking}
-        disabled={isBooking || !canConfirm}
+        disabled={!canConfirm}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           width: '100%', padding: '14px 20px', borderRadius: 16,
           fontSize: 13, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
-          fontFamily: "'Sora',system-ui,sans-serif", cursor: isBooking || !canConfirm ? 'not-allowed' : 'pointer',
+          fontFamily: "'Sora',system-ui,sans-serif", cursor: !canConfirm ? 'not-allowed' : 'pointer',
           border: 'none', transition: 'all .2s',
-          background: isBooking || !canConfirm ? 'rgba(255,255,255,.04)' : '#22c55e',
-          color: isBooking || !canConfirm ? '#333' : '#052010',
+          background: !canConfirm ? 'rgba(255,255,255,.04)' : '#22c55e',
+          color: !canConfirm ? '#333' : '#052010',
           marginTop: 8,
         }}
       >
-        {isBooking ? (
-          <>
-            <div style={{ width: 16, height: 16, border: '2px solid rgba(5,32,16,.4)', borderTopColor: '#052010', borderRadius: '50%', animation: 'bg-spin .8s linear infinite', flexShrink: 0 }} />
-            Procesando...
-          </>
-        ) : !canConfirm ? (
+        {!canConfirm ? (
           <>
             <MousePointerClick size={15} /> Seleccioná turno y cancha
           </>
         ) : (
           <>
-            <Zap size={15} /> Confirmar reserva
+            <Zap size={15} /> Revisar reserva
           </>
         )}
       </button>
@@ -1429,4 +1523,3 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     </div>
   );
 }
-

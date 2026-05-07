@@ -56,13 +56,6 @@ export interface Club {
   updatedAt?: string;
 }
 
-export type FavoriteLinkingStatus =
-  | 'already_linked'
-  | 'linked_existing_client'
-  | 'created_client'
-  | 'duplicate_detected_no_link'
-  | 'insufficient_data_no_link';
-
 export type ClubFavorite = {
   id: string;
   clubId: number;
@@ -159,10 +152,6 @@ export class ClubService {
       clubId: number;
       userId: number;
       createdAt: string;
-    };
-    linking: {
-      status: FavoriteLinkingStatus;
-      clientId: string | null;
     };
   }> {
     const response = await fetchWithAuth(`${apiBase()}/clubs/${clubId}/favorite`, {

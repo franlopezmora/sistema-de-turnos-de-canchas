@@ -23,12 +23,13 @@ const countActiveBookings = (rows: any[]): number => {
 };
 
 const BASE_CSS = `
-  .tc-root { min-height:100vh; background:#050505; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .tc-root { min-height:100vh; background:#050505; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:hidden; padding-top:68px; }
   .tc-root *,.tc-root *::before,.tc-root *::after { box-sizing:border-box; }
   .tc-root a { color:inherit; text-decoration:none; }
   .tc-root ::selection { background:#22c55e; color:#052010; }
   /* Header */
-  .tc-header { position:sticky; top:0; z-index:50; background:rgba(5,5,5,.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(255,255,255,.06); }
+  .tc-header { position:fixed; top:0; left:0; right:0; z-index:50; background:rgba(5,5,5,.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(255,255,255,.06); transform:translateY(0); transition:transform .38s cubic-bezier(.4,0,.2,1); }
+  .tc-header-hidden { transform:translateY(-110%); }
   .tc-header-inner { max-width:1360px; margin:0 auto; padding:0 24px; min-height:68px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
   .tc-brand-text { font-size:13px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#22c55e; }
   .tc-btn { display:inline-flex; align-items:center; gap:8px; padding:9px 18px; border-radius:999px; font-size:13px; font-weight:700; border:1px solid rgba(255,255,255,.14); background:#111; color:#e8e8e8; cursor:pointer; transition:transform .15s,box-shadow .15s; font-family:inherit; }
@@ -50,6 +51,33 @@ const BASE_CSS = `
   /* Page shell */
   .tc-page { max-width:1360px; margin:0 auto; padding:48px 40px 80px; }
   .tc-page-sm { max-width:860px; margin:0 auto; padding:48px 40px 80px; }
+  .tc-breadcrumbs-wrap { padding:12px 24px 0; }
+  .tc-breadcrumbs { max-width:1360px; margin:0 auto; }
+  .tc-breadcrumbs-cloud {
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    width:fit-content;
+    max-width:100%;
+    padding:8px 12px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.1);
+    background:rgba(12,12,12,.74);
+    backdrop-filter:blur(10px);
+    box-shadow:0 8px 24px rgba(0,0,0,.28);
+  }
+  .tc-breadcrumb-link,.tc-breadcrumb-current { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  .tc-breadcrumb-link { color:#6c6c6c; transition:color .15s; }
+  .tc-breadcrumb-link:hover { color:#22c55e; }
+  .tc-breadcrumb-current {
+    color:#e9e9e9;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:999px;
+    padding:4px 8px;
+  }
+  .tc-breadcrumb-sep { color:#3a3a3a; font-size:10px; font-weight:700; }
   /* Section heading */
   .tc-page-eyebrow { display:inline-flex; align-items:center; gap:10px; font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#555; margin-bottom:14px; }
   .tc-page-eyebrow::before { content:''; display:inline-block; width:24px; height:1px; background:#555; }
@@ -87,6 +115,8 @@ const BASE_CSS = `
   /* Responsive */
   @media(max-width:720px){
     .tc-page,.tc-page-sm { padding:32px 20px 64px; }
+    .tc-breadcrumbs-wrap { padding:10px 20px 0; }
+    .tc-breadcrumbs-cloud { border-radius:14px; }
   }
   @keyframes tc-pulse { 0%,100%{opacity:1}50%{opacity:.5} }
   @keyframes tc-spin { to{transform:rotate(360deg)} }
@@ -97,9 +127,10 @@ interface DarkPageLayoutProps {
   title: string;
   children: React.ReactNode;
   extraCss?: string;
+  breadcrumbs?: Array<{ label: string; href?: string }>;
 }
 
-export default function DarkPageLayout({ title, children, extraCss = '' }: DarkPageLayoutProps) {
+export default function DarkPageLayout({ title, children, extraCss = '', breadcrumbs = [] }: DarkPageLayoutProps) {
   const router = useRouter();
   const { user: rawUser } = useAuth();
   const user = rawUser ? normalizeSessionUser(rawUser) : null;
@@ -111,6 +142,7 @@ export default function DarkPageLayout({ title, children, extraCss = '' }: DarkP
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [activeBookingsCount, setActiveBookingsCount] = useState(0);
+  const [navHidden, setNavHidden] = useState(false);
   const [contactMenu, setContactMenu] = useState<{ type: 'whatsapp' | 'email' | 'instagram'; top: number; left: number; href: string; copyText: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -132,6 +164,23 @@ export default function DarkPageLayout({ title, children, extraCss = '' }: DarkP
     });
   }, [user]);
 
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const handler = () => {
+      const y = window.scrollY;
+      if (y < 80) {
+        setNavHidden(false);
+        lastY = y;
+        return;
+      }
+      if (Math.abs(y - lastY) < 4) return;
+      setNavHidden(y > lastY);
+      lastY = y;
+    };
+    window.addEventListener('scroll', handler, { passive: true });
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+
   // Close contactMenu on outside click / Escape
   useEffect(() => {
     if (!contactMenu) return;
@@ -143,6 +192,19 @@ export default function DarkPageLayout({ title, children, extraCss = '' }: DarkP
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [contactMenu]);
+
+  useEffect(() => {
+    const closeTransientPanels = () => {
+      setShowContact(false);
+      setContactMenu(null);
+      setShowUserMenu(false);
+      setNavHidden(false);
+    };
+    router.events.on('routeChangeStart', closeTransientPanels);
+    return () => {
+      router.events.off('routeChangeStart', closeTransientPanels);
+    };
+  }, [router.events]);
 
   const openContactMenu = (e: React.MouseEvent, type: 'whatsapp' | 'email' | 'instagram') => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -191,16 +253,17 @@ export default function DarkPageLayout({ title, children, extraCss = '' }: DarkP
     <>
       <Head>
         <title>{title}</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
-        <style dangerouslySetInnerHTML={{ __html: BASE_CSS + (extraCss ? '\n' + extraCss : '') }} />
       </Head>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: BASE_CSS + (extraCss ? '\n' + extraCss : '')
+        }}
+      />
 
       <div className="tc-root" onClick={() => { setShowUserMenu(false); }}>
 
         {/* ── HEADER ── */}
-        <header className="tc-header">
+        <header className={`tc-header${navHidden ? ' tc-header-hidden' : ''}`}>
           <div className="tc-header-inner">
             <Link href="/" className="tc-brand">
               <span className="tc-brand-text">TuCancha</span>
@@ -269,12 +332,42 @@ export default function DarkPageLayout({ title, children, extraCss = '' }: DarkP
           </div>
         </header>
 
+        {breadcrumbs.length > 0 && (
+          <nav className="tc-breadcrumbs-wrap" aria-label="Breadcrumb">
+            <div className="tc-breadcrumbs">
+              <div className="tc-breadcrumbs-cloud">
+                {breadcrumbs.map((item, index) => {
+                  const isLast = index === breadcrumbs.length - 1;
+                  return (
+                    <div key={`${item.label}-${index}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      {item.href && !isLast ? (
+                        <Link href={item.href} className="tc-breadcrumb-link">{item.label}</Link>
+                      ) : (
+                        <span className="tc-breadcrumb-current">{item.label}</span>
+                      )}
+                      {!isLast && <span className="tc-breadcrumb-sep">/</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </nav>
+        )}
+
         {/* ── PAGE CONTENT ── */}
         {children}
 
         {/* ── CONTACT SIDEBAR ── */}
         <div className="tc-contact-overlay" style={{ opacity: showContact ? 1 : 0, pointerEvents: showContact ? 'auto' : 'none' }} onClick={() => setShowContact(false)} />
-        <div className={`tc-contact-panel${showContact ? ' tc-open' : ''}`}>
+        <div
+          className={`tc-contact-panel${showContact ? ' tc-open' : ''}`}
+          style={{
+            transform: showContact ? 'translateX(0)' : 'translateX(100%)',
+            visibility: showContact ? 'visible' : 'hidden',
+            pointerEvents: showContact ? 'auto' : 'none',
+          }}
+          aria-hidden={!showContact}
+        >
           <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: '#22c55e', margin: 0 }}>Contacto</h2>
             <button onClick={() => setShowContact(false)} style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#f87171' }}>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import DarkPageLayout from '../components/DarkPageLayout';
-import RouteTransitionScreen from '../components/RouteTransitionScreen';
+import UserLoadingState from '../components/UserLoadingState';
 import { getPendingLogoutRedirect } from '../services/AuthService';
 import { useValidateAuth } from '../hooks/useValidateAuth';
 import { updateMyProfile } from '../services/AuthService';
@@ -22,9 +22,10 @@ const PAGE_CSS = `
   .pf-save { display:inline-flex; align-items:center; gap:8px; padding:12px 28px; background:#22c55e; color:#052010; border:none; border-radius:999px; font-size:13px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; font-family:'Sora',system-ui,sans-serif; transition:background .15s,transform .15s; }
   .pf-save:hover:not(:disabled) { background:#4ade80; transform:translateY(-1px); }
   .pf-save:disabled { opacity:.5; cursor:not-allowed; }
-  .pf-notice { display:flex; align-items:flex-start; gap:10px; padding:14px 18px; border-radius:14px; font-size:13px; font-weight:600; line-height:1.5; }
+  .pf-notice { display:flex; align-items:flex-start; gap:10px; padding:13px 16px; border-radius:14px; font-size:13px; font-weight:600; line-height:1.5; animation:pf-notice-in .18s ease-out; }
   .pf-notice-err { background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.2); color:#fca5a5; }
-  .pf-notice-ok { background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2); color:#4ade80; }
+  .pf-notice-ok { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.24); color:#8df3b1; }
+  @keyframes pf-notice-in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
   @media(max-width:600px){ .pf-grid { grid-template-columns:1fr; } }
 `;
 
@@ -63,8 +64,14 @@ export default function PerfilPage() {
     });
   }, [user]);
 
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(''), 3500);
+    return () => window.clearTimeout(timer);
+  }, [success]);
+
   if (!authChecked || !user) {
-    return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando sesion...'} />;
+    return <UserLoadingState mode="page" message={authChecked ? 'Redirigiendo...' : 'Validando sesión...'} />;
   }
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -106,7 +113,7 @@ export default function PerfilPage() {
         phoneNumberLocal: phoneLocal,
         dni: safeDni || undefined
       });
-      setSuccess('Perfil actualizado correctamente.');
+      setSuccess('Cambios guardados.');
     } catch (err: any) {
       setError(err?.message || 'No se pudo actualizar el perfil.');
     } finally {
@@ -117,7 +124,14 @@ export default function PerfilPage() {
   const displayName = user.firstName || (user as any).name || 'Usuario';
 
   return (
-    <DarkPageLayout title="Mi Perfil | TuCancha" extraCss={PAGE_CSS}>
+    <DarkPageLayout
+      title="Mi Perfil | TuCancha"
+      extraCss={PAGE_CSS}
+      breadcrumbs={[
+        { label: 'Inicio', href: '/' },
+        { label: 'Mi perfil' },
+      ]}
+    >
       <div className="tc-page-sm">
 
         {/* ── PAGE HEADER ── */}
@@ -133,12 +147,12 @@ export default function PerfilPage() {
 
             {/* Notices */}
             {error && (
-              <div className="pf-notice pf-notice-err" style={{ marginBottom: 24 }}>
+              <div className="pf-notice pf-notice-err" style={{ marginBottom: 24 }} role="alert">
                 <span>⚠</span> {error}
               </div>
             )}
             {success && (
-              <div className="pf-notice pf-notice-ok" style={{ marginBottom: 24 }}>
+              <div className="pf-notice pf-notice-ok" style={{ marginBottom: 24 }} role="status" aria-live="polite">
                 <CheckCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} /> {success}
               </div>
             )}
@@ -229,9 +243,6 @@ export default function PerfilPage() {
                 <Save size={15} />
                 {saving ? 'Guardando...' : 'Guardar cambios'}
               </button>
-              {success && !saving && (
-                <span style={{ fontSize: 13, color: '#22c55e', fontWeight: 600 }}>¡Listo!</span>
-              )}
             </div>
 
           </form>
@@ -246,12 +257,12 @@ export default function PerfilPage() {
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#f2f2f2', marginBottom: 4 }}>Tus reservas activas</div>
                 <div style={{ fontSize: 13, color: '#666', lineHeight: 1.5 }}>Revisá el estado de todas tus reservas en un solo lugar.</div>
               </div>
-              <a
+              <Link
                 href="/bookings"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 999, color: '#22c55e', fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'background .15s' }}
               >
                 Ver reservas →
-              </a>
+              </Link>
             </div>
           </div>
         </div>

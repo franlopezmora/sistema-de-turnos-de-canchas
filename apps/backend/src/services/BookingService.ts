@@ -29,7 +29,7 @@ import { RefundService } from './RefundService';
 import { DiscountService } from './DiscountService';
 import { generateDisplayCode } from '../utils/displayCode';
 import { getPhoneIdentityVariants, normalizeIdentityPhone, toDialablePhoneNumber } from '../utils/phone';
-import { recordUserClientLinkAuditTx, UserClientLinkReason } from './UserClientLinkAudit';
+import { recordUserClientLinkAuditTx } from './UserClientLinkAudit';
 
 type CancelBookingReason = 'MANUAL' | 'AUTO_CANCEL_UNCONFIRMED';
 type CancelBookingOptions = {
@@ -1774,42 +1774,24 @@ export class BookingService {
         const safeDni = this.normalizeDni(input.dni);
         const safeEmail = String(input.email ?? '').trim().toLowerCase();
         const safeUserId = Number.isInteger(Number(input.userId)) && Number(input.userId) > 0 ? Number(input.userId) : null;
-        const findMatchingSignal = (client: any): UserClientLinkReason => {
-            const clientDni = this.normalizeDni(client?.dni);
-            const clientPhone = this.normalizePhone(client?.phone);
-            const clientEmail = String(client?.email || '').trim().toLowerCase();
-            if (safeDni && clientDni && safeDni === clientDni) return 'EXACT_DNI_MATCH';
-            if (safePhone && clientPhone) {
-                const inputVariants = new Set(getPhoneIdentityVariants(safePhone));
-                const clientVariants = getPhoneIdentityVariants(clientPhone);
-                if (clientVariants.some((value) => inputVariants.has(value))) return 'EXACT_PHONE_MATCH';
+
+        if (!safeUserId) {
+            if (!safePhone) {
+                throw new Error('El teléfono es obligatorio para crear un nuevo cliente.');
             }
-            if (safeEmail && clientEmail && safeEmail === clientEmail) return 'EXACT_EMAIL_MATCH';
-            return 'ALREADY_LINKED';
-        };
-        const collectMismatchSignals = (client: any): string[] => {
-            const mismatches: string[] = [];
-            const clientDni = this.normalizeDni(client?.dni);
-            const clientPhone = this.normalizePhone(client?.phone);
-            const clientEmail = String(client?.email || '').trim().toLowerCase();
-            if (safeDni && clientDni && safeDni !== clientDni) mismatches.push('DNI');
-            if (safePhone && clientPhone) {
-                const inputVariants = new Set(getPhoneIdentityVariants(safePhone));
-                const hasPhoneMatch = getPhoneIdentityVariants(clientPhone).some((value) => inputVariants.has(value));
-                if (!hasPhoneMatch) mismatches.push('PHONE');
+            if (!safeEmail) {
+                throw new Error('El email es obligatorio para crear un nuevo cliente.');
             }
-            if (safeEmail && clientEmail && safeEmail !== clientEmail) mismatches.push('EMAIL');
-            return mismatches;
-        };
+        }
 
         if (safeUserId) {
-            const existingByUser = await tx.client.findFirst({
-                where: {
-                    clubId: input.clubId,
-                    userId: safeUserId
-                }
-            });
+            // Logged-in user path: fully self-contained, never falls through to
+            // the anonymous multi-candidate logic below (which can throw CLIENT_POSSIBLE_DUPLICATE).
 
+            // Step 1: already linked to this user in this club?
+            const existingByUser = await tx.client.findFirst({
+                where: { clubId: input.clubId, userId: safeUserId }
+            });
             if (existingByUser) {
                 await recordUserClientLinkAuditTx(tx, {
                     clubId: input.clubId,
@@ -1820,6 +1802,79 @@ export class BookingService {
                 });
                 return existingByUser;
             }
+
+            // Step 2: email is the identity bridge — link silently if a manual
+            // (unlinked) client with the same email exists. No mismatch checks:
+            // admin data (name, phone) stays untouched; differences are expected.
+            if (safeEmail) {
+                const unlinkedByEmail = await tx.client.findFirst({
+                    where: { clubId: input.clubId, email: safeEmail, userId: null }
+                });
+                if (unlinkedByEmail) {
+                    const linked = await tx.client.update({
+                        where: { id: unlinkedByEmail.id },
+                        data: { userId: safeUserId }
+                    });
+                    await recordUserClientLinkAuditTx(tx, {
+                        clubId: input.clubId,
+                        userId: safeUserId,
+                        clientId: String(linked.id),
+                        reason: 'EXACT_EMAIL_MATCH',
+                        source: 'BOOKING'
+                    });
+                    return linked;
+                }
+            }
+
+            // Step 3: no existing client found — create a fresh one for this user.
+            // Phone/DNI/email are optional here. If a manual client already owns
+            // one of those unique fields, do not block the booking or link by it.
+            let phoneForCreate: string | null = safePhone || null;
+            if (safePhone) {
+                const phoneVariants = getPhoneIdentityVariants(safePhone);
+                const clientWithPhone = await tx.client.findFirst({
+                    where: { clubId: input.clubId, phone: { in: phoneVariants } },
+                    select: { id: true }
+                });
+                if (clientWithPhone) phoneForCreate = null;
+            }
+
+            let dniForCreate: string | null = safeDni || null;
+            if (safeDni) {
+                const clientWithDni = await tx.client.findFirst({
+                    where: { clubId: input.clubId, dni: safeDni },
+                    select: { id: true }
+                });
+                if (clientWithDni) dniForCreate = null;
+            }
+
+            let emailForCreate: string | null = safeEmail || null;
+            if (safeEmail) {
+                const clientWithEmail = await tx.client.findFirst({
+                    where: { clubId: input.clubId, email: safeEmail },
+                    select: { id: true }
+                });
+                if (clientWithEmail) emailForCreate = null;
+            }
+
+            const created = await tx.client.create({
+                data: {
+                    clubId: input.clubId,
+                    name: safeName,
+                    phone: phoneForCreate,
+                    email: emailForCreate,
+                    dni: dniForCreate,
+                    userId: safeUserId
+                }
+            });
+            await recordUserClientLinkAuditTx(tx, {
+                clubId: input.clubId,
+                userId: safeUserId,
+                clientId: String(created.id),
+                reason: 'CREATED_CLIENT',
+                source: 'BOOKING'
+            });
+            return created;
         }
 
         let existingByDni: any = null;
@@ -1885,67 +1940,31 @@ export class BookingService {
             : null;
 
         if (existingByIdentity) {
-            const mismatchSignals = collectMismatchSignals(existingByIdentity);
-            if (mismatchSignals.length > 0) {
-                const conflictError: any = new Error('CLIENT_POSSIBLE_DUPLICATE');
-                conflictError.code = 'CLIENT_POSSIBLE_DUPLICATE';
-                conflictError.details = {
-                    clubId: input.clubId,
-                    userId: safeUserId,
-                    candidateClientIds: [existingByIdentity.id],
-                    reasonType: 'LINKING_CONFLICT',
-                    mismatchSignals,
-                    signals: {
-                        dni: safeDni || null,
-                        phone: safePhone || null,
-                        email: safeEmail || null
-                    }
-                };
-                throw conflictError;
-            }
-            if (safeUserId && existingByIdentity.userId && Number(existingByIdentity.userId) !== safeUserId) {
-                const conflictError: any = new Error('CLIENT_POSSIBLE_DUPLICATE');
-                conflictError.code = 'CLIENT_POSSIBLE_DUPLICATE';
-                conflictError.details = {
-                    clubId: input.clubId,
-                    userId: safeUserId,
-                    candidateClientIds: [existingByIdentity.id],
-                    reasonType: 'LINKING_CONFLICT',
-                    signals: {
-                        dni: safeDni || null,
-                        phone: safePhone || null,
-                        email: safeEmail || null
-                    },
-                    linkedToOtherUserId: Number(existingByIdentity.userId)
-                };
-                throw conflictError;
-            }
-            if (safeUserId && !existingByIdentity.userId) {
-                const updated = await tx.client.update({
-                    where: { id: existingByIdentity.id },
-                    data: { userId: safeUserId }
-                });
-                await recordUserClientLinkAuditTx(tx, {
-                    clubId: input.clubId,
-                    userId: safeUserId,
-                    clientId: String(updated.id),
-                    reason: findMatchingSignal(existingByIdentity),
-                    source: 'BOOKING'
-                });
-                return updated;
-            }
-            return existingByIdentity;
-        }
-
-        if (!safePhone) {
-            throw new Error('El teléfono es obligatorio para crear un nuevo cliente.');
+            const conflictError: any = new Error('CLIENT_POSSIBLE_DUPLICATE');
+            conflictError.code = 'CLIENT_POSSIBLE_DUPLICATE';
+            const reasonSignals = new Set<string>();
+            if (existingByDni?.id) reasonSignals.add('DNI');
+            if (existingByPhone?.id) reasonSignals.add('PHONE');
+            if (existingByEmail?.id) reasonSignals.add('EMAIL');
+            conflictError.details = {
+                clubId: input.clubId,
+                userId: safeUserId,
+                candidateClientIds: [existingByIdentity.id],
+                reasonType: reasonSignals.size === 1 ? Array.from(reasonSignals)[0] : 'IDENTITY_MATCH_REQUIRES_SELECTION',
+                signals: {
+                    dni: safeDni || null,
+                    phone: safePhone || null,
+                    email: safeEmail || null
+                }
+            };
+            throw conflictError;
         }
 
         const created = await tx.client.create({
             data: {
                 clubId: input.clubId,
                 name: safeName,
-                phone: safePhone,
+                phone: safePhone || null,
                 email: safeEmail || null,
                 dni: safeDni || null,
                 userId: safeUserId
@@ -2408,6 +2427,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const requestedClientId = String(options?.clientId || '').trim();
         const requestedClientDraftName = String(options?.clientDraft?.name || '').trim();
         const requestedClientDraftPhone = this.normalizePhone(options?.clientDraft?.phone);
+        const requestedClientDraftEmail = String(options?.clientDraft?.email || '').trim().toLowerCase();
 
         if (userId) {
             user = await this.userRepo.findById(userId);
@@ -2416,8 +2436,11 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             if (!requestedClientId && requestedClientDraftName.length < 2) {
                 throw new Error("Debes seleccionar un cliente o cargar un alta rápida válida.");
             }
-            if (!requestedClientId && (!requestedClientDraftPhone || requestedClientDraftPhone.length < 7)) {
+            if (!requestedClientId && !requestedClientDraftPhone) {
                 throw new Error("El teléfono es obligatorio para el alta rápida de cliente.");
+            }
+            if (!requestedClientId && !requestedClientDraftEmail) {
+                throw new Error("El email es obligatorio para el alta rápida de cliente.");
             }
         }
 
@@ -4204,12 +4227,16 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const requestedClientId = String(options?.clientId || '').trim();
         const requestedClientDraftName = String(options?.clientDraft?.name || '').trim();
         const requestedClientDraftPhone = this.normalizePhone(options?.clientDraft?.phone);
+        const requestedClientDraftEmail = String(options?.clientDraft?.email || '').trim().toLowerCase();
 
         if (!requestedClientId && !requestedUserId && requestedClientDraftName.length < 2) {
             throw new Error('Debes seleccionar un cliente o cargar un alta rápida válida.');
         }
-        if (!requestedClientId && !requestedUserId && (!requestedClientDraftPhone || requestedClientDraftPhone.length < 7)) {
+        if (!requestedClientId && !requestedUserId && !requestedClientDraftPhone) {
             throw new Error('El teléfono es obligatorio para el alta rápida de cliente.');
+        }
+        if (!requestedClientId && !requestedUserId && !requestedClientDraftEmail) {
+            throw new Error('El email es obligatorio para el alta rápida de cliente.');
         }
 
         let user: User | null = null;

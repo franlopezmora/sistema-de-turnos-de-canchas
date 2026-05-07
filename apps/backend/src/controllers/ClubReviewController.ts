@@ -14,13 +14,19 @@ const listQuerySchema = z.object({
 });
 
 const upsertBodySchema = z.object({
-  bookingId: z.preprocess((v) => Number(v), z.number().int().positive()),
+  bookingId: z.preprocess(
+    (v) => (v == null || v === '' ? undefined : Number(v)),
+    z.number().int().positive().optional()
+  ),
   rating: z.preprocess((v) => Number(v), z.number().int().min(1).max(5)),
   comment: z.string().trim().max(220).optional().nullable()
 });
 
 const mineQuerySchema = z.object({
-  bookingId: z.preprocess((v) => Number(v), z.number().int().positive())
+  bookingId: z.preprocess(
+    (v) => (v == null || v === '' ? undefined : Number(v)),
+    z.number().int().positive().optional()
+  )
 });
 
 const statusBodySchema = z.object({
@@ -153,9 +159,8 @@ export class ClubReviewController {
       const clubId = await this.resolveClubIdBySlug(slug);
       if (!clubId) return res.status(404).json({ error: 'Club no encontrado' });
 
-      const review = await this.service.getMyReviewForBooking({
+      const review = await this.service.getMyReviewForClub({
         clubId,
-        bookingId: queryParsed.data.bookingId,
         userId
       });
       return res.status(200).json(review);

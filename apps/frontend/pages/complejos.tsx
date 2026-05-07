@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Search, MapPin, Star, ChevronDown, X, SlidersHorizontal, Flame, Tag } from 'lucide-react';
 import DarkPageLayout from '../components/DarkPageLayout';
+import UserLoadingState from '../components/UserLoadingState';
 import { ClubService, Club } from '../services/ClubService';
 import { getClubReviewsSummary } from '../services/ClubReviewService';
 
@@ -96,7 +97,7 @@ const PAGE_CSS = `
   .vn-feat-card-rating { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; color:#22c55e; }
   .vn-feat-empty { padding:40px 20px; text-align:center; color:#444; font-size:13px; font-weight:600; }
   /* Map */
-  .vn-map-sec { border-bottom:1px solid rgba(255,255,255,.06); }
+  .vn-map-sec { border-top:1px solid rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.06); }
   .vn-map-inner { max-width:1360px; margin:0 auto; padding:64px 40px; }
   .vn-map-head { margin-bottom:24px; }
   .vn-map-title { font-size:22px; font-weight:800; color:#f2f2f2; letter-spacing:-.025em; margin:0 0 4px; }
@@ -108,6 +109,9 @@ const PAGE_CSS = `
   /* Body / grid */
   .vn-body { max-width:1360px; margin:0 auto; padding:48px 40px 80px; }
   .vn-results-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; gap:12px; flex-wrap:wrap; }
+  .vn-results-copy { min-width:240px; }
+  .vn-results-section-title { font-size:22px; font-weight:800; color:#f2f2f2; letter-spacing:-.025em; margin:0 0 4px; }
+  .vn-results-section-sub { font-size:13px; color:#555; margin:0; }
   .vn-results-title { font-size:13px; font-weight:700; color:#555; letter-spacing:.04em; }
   .vn-results-title b { color:#f2f2f2; }
   .vn-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:20px; }
@@ -287,14 +291,27 @@ export default function ComplejosPage() {
   useEffect(() => {
     if (typeof window === 'undefined' || mapLoaded) return;
     setMapLoaded(true);
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-    document.head.appendChild(link);
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload = () => setMapReady(true);
-    document.head.appendChild(script);
+    const leafletCss = document.createElement('link');
+    leafletCss.rel = 'stylesheet';
+    leafletCss.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(leafletCss);
+
+    const gestureCss = document.createElement('link');
+    gestureCss.rel = 'stylesheet';
+    gestureCss.href = 'https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css';
+    document.head.appendChild(gestureCss);
+
+    const leafletScript = document.createElement('script');
+    leafletScript.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    leafletScript.onload = () => {
+      const gestureScript = document.createElement('script');
+      gestureScript.src = 'https://unpkg.com/leaflet-gesture-handling';
+      gestureScript.onload = () => setMapReady(true);
+      gestureScript.onerror = () => setMapReady(true); // fallback: init map without plugin
+      document.head.appendChild(gestureScript);
+    };
+    leafletScript.onerror = () => setMapReady(false);
+    document.head.appendChild(leafletScript);
   }, [mapLoaded]);
 
   // Initialize map once Leaflet + clubs are ready
@@ -302,8 +319,27 @@ export default function ComplejosPage() {
     const L = typeof window !== 'undefined' ? (window as any).L : null;
     if (!mapReady || !L || !mapDivRef.current || leafletMapRef.current || clubs.length === 0) return;
 
-    const map = L.map(mapDivRef.current, { zoomControl: true, attributionControl: false })
+    const map = L.map(mapDivRef.current, {
+      zoomControl: true,
+      attributionControl: false,
+      scrollWheelZoom: true,
+      gestureHandling: true,
+      gestureHandlingOptions: {
+        duration: 1200,
+        text: {
+          touch: 'Usa dos dedos para mover el mapa',
+          scroll: 'Usa Ctrl + desplazamiento para acercar o alejar el mapa',
+          scrollMac: 'Usa ⌘ + desplazamiento para acercar o alejar el mapa',
+        },
+      },
+    })
       .setView([-34.6, -60], 5);
+
+    // Fallback si el plugin no carga: evitar zoom accidental con trackpad/rueda.
+    if (!map.gestureHandling) {
+      map.scrollWheelZoom.disable();
+      map.touchZoom.disable();
+    }
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
@@ -370,7 +406,14 @@ export default function ComplejosPage() {
   const clearFilters = () => { setSearch(''); setZone(''); setSport(''); };
 
   return (
-    <DarkPageLayout title="Complejos · TuCancha" extraCss={PAGE_CSS}>
+    <DarkPageLayout
+      title="Complejos · TuCancha"
+      extraCss={PAGE_CSS}
+      breadcrumbs={[
+        { label: 'Inicio', href: '/' },
+        { label: 'Complejos' },
+      ]}
+    >
 
       {/* ── HERO ── */}
       <section className="vn-hero">
@@ -399,7 +442,7 @@ export default function ComplejosPage() {
 
           <div className="vn-filters">
             <div className={`vn-chip${zone ? ' vn-active' : ''}`}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
               {zone || 'Zona'}<ChevronDown size={11} />
               <select value={zone} onChange={e => setZone(e.target.value)}>
                 <option value="">Todas las zonas</option>
@@ -408,7 +451,7 @@ export default function ComplejosPage() {
             </div>
 
             <div className={`vn-chip${sport ? ' vn-active' : ''}`}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 0 20M2 12h20"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 1 0 20M2 12h20"/></svg>
               {sport ? SPORT_LABELS[sport] : 'Deporte'}<ChevronDown size={11} />
               <select value={sport} onChange={e => setSport(e.target.value)}>
                 {SPORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -495,28 +538,13 @@ export default function ComplejosPage() {
         </section>
       )}
 
-      {/* ── MAPA ── */}
-      <section className="vn-map-sec">
-        <div className="vn-map-inner">
-          <div className="vn-map-head">
-            <h2 className="vn-map-title">Mapa de complejos</h2>
-            <p className="vn-map-sub">Encontrá el complejo más cercano a vos.</p>
-          </div>
-          <div className="vn-map-wrap">
-            <div ref={mapDivRef} style={{ width: '100%', height: '100%' }} />
-            {!mapReady && (
-              <div className="vn-map-loading">
-                <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(255,255,255,.08)', borderTopColor: '#22c55e', animation: 'tc-spin 1s linear infinite' }} />
-                Cargando mapa…
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
       {/* ── TODOS LOS COMPLEJOS ── */}
       <div className="vn-body">
         <div className="vn-results-head">
+          <div className="vn-results-copy">
+            <h2 className="vn-results-section-title">Todos los complejos</h2>
+            <p className="vn-results-section-sub">Explorá la red completa de complejos disponibles.</p>
+          </div>
           <p className="vn-results-title">
             {loading
               ? 'Cargando complejos…'
@@ -575,6 +603,38 @@ export default function ComplejosPage() {
           }
         </div>
       </div>
+
+      {/* ── MAPA ── */}
+      <section className="vn-map-sec">
+        <div className="vn-map-inner">
+          <div className="vn-map-head">
+            <h2 className="vn-map-title">Mapa de complejos</h2>
+            <p className="vn-map-sub">Encontrá el complejo más cercano a vos.</p>
+          </div>
+          <div className="vn-map-wrap">
+            <div ref={mapDivRef} style={{ width: '100%', height: '100%' }} />
+            {!mapReady && (
+              <div
+                className="vn-map-loading"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column',
+                  gap: 12,
+                  color: '#555',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                <UserLoadingState mode="inline" message="Cargando mapa..." />
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
     </DarkPageLayout>
   );

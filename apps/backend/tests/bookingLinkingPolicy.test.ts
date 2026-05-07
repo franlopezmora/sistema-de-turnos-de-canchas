@@ -18,18 +18,23 @@ function buildTx(clients: MemoryClient[]) {
     client: {
       findFirst: async ({ where }: any) => {
         const clubId = Number(where?.clubId);
-        if (where?.userId != null) {
-          return clients.find((row) => row.clubId === clubId && Number(row.userId) === Number(where.userId)) || null;
+        const matchesUserId = (row: MemoryClient) => {
+          if (!Object.prototype.hasOwnProperty.call(where || {}, 'userId')) return true;
+          if (where.userId === null) return row.userId === null;
+          return Number(row.userId) === Number(where.userId);
+        };
+        if (where?.userId != null && !where?.dni && !where?.phone && !where?.email) {
+          return clients.find((row) => row.clubId === clubId && matchesUserId(row)) || null;
         }
         if (where?.dni != null) {
-          return clients.find((row) => row.clubId === clubId && row.dni === String(where.dni)) || null;
+          return clients.find((row) => row.clubId === clubId && matchesUserId(row) && row.dni === String(where.dni)) || null;
         }
         if (where?.phone?.in) {
           const accepted = new Set((where.phone.in || []).map((value: any) => String(value)));
-          return clients.find((row) => row.clubId === clubId && accepted.has(String(row.phone || ''))) || null;
+          return clients.find((row) => row.clubId === clubId && matchesUserId(row) && accepted.has(String(row.phone || ''))) || null;
         }
         if (where?.email != null) {
-          return clients.find((row) => row.clubId === clubId && row.email === String(where.email)) || null;
+          return clients.find((row) => row.clubId === clubId && matchesUserId(row) && row.email === String(where.email)) || null;
         }
         return null;
       },
@@ -71,7 +76,7 @@ function createService() {
   return new BookingService({} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
 }
 
-test('auto-link por DNI único sin sobrescribir datos del cliente', async () => {
+test('usuario logueado no auto-linkea por DNI y no bloquea la reserva', async () => {
   const { tx, clients, auditLogs } = buildTx([
     {
       id: 'c-dni',
@@ -94,14 +99,16 @@ test('auto-link por DNI único sin sobrescribir datos del cliente', async () => 
     dni: '30111222'
   });
 
-  assert.equal(resolved.id, 'c-dni');
-  assert.equal(clients[0].userId, 7);
+  assert.notEqual(resolved.id, 'c-dni');
+  assert.equal(resolved.userId, 7);
+  assert.equal(resolved.dni, null);
+  assert.equal(clients[0].userId, null);
   assert.equal(clients[0].name, 'Nombre Cliente');
   assert.equal(clients[0].email, 'cliente@example.com');
-  assert.equal(auditLogs.some((row) => row.payload?.reason === 'EXACT_DNI_MATCH'), true);
+  assert.equal(auditLogs.some((row) => row.payload?.reason === 'CREATED_CLIENT'), true);
 });
 
-test('auto-link por teléfono único sin sobrescribir datos del cliente', async () => {
+test('usuario logueado no auto-linkea por teléfono y no bloquea la reserva', async () => {
   const { tx, clients, auditLogs } = buildTx([
     {
       id: 'c-phone',
@@ -124,13 +131,15 @@ test('auto-link por teléfono único sin sobrescribir datos del cliente', async 
     dni: ''
   });
 
-  assert.equal(resolved.id, 'c-phone');
-  assert.equal(clients[0].userId, 8);
+  assert.notEqual(resolved.id, 'c-phone');
+  assert.equal(resolved.userId, 8);
+  assert.equal(resolved.phone, null);
+  assert.equal(clients[0].userId, null);
   assert.equal(clients[0].name, 'Cliente Original');
-  assert.equal(auditLogs.some((row) => row.payload?.reason === 'EXACT_PHONE_MATCH'), true);
+  assert.equal(auditLogs.some((row) => row.payload?.reason === 'CREATED_CLIENT'), true);
 });
 
-test('auto-link por email único', async () => {
+test('usuario logueado auto-linkea por email único sin pisar datos del club', async () => {
   const { tx, clients, auditLogs } = buildTx([
     {
       id: 'c-email',
@@ -155,11 +164,12 @@ test('auto-link por email único', async () => {
 
   assert.equal(resolved.id, 'c-email');
   assert.equal(clients[0].userId, 9);
+  assert.equal(clients[0].phone, '+5493510000000');
   assert.equal(auditLogs.some((row) => row.payload?.reason === 'EXACT_EMAIL_MATCH'), true);
 });
 
-test('no auto-link con candidatos múltiples', async () => {
-  const { tx } = buildTx([
+test('usuario logueado prioriza email aunque teléfono apunte a otro cliente', async () => {
+  const { tx, clients } = buildTx([
     {
       id: 'c-phone',
       clubId: 10,
@@ -181,22 +191,22 @@ test('no auto-link con candidatos múltiples', async () => {
   ]);
   const service = createService();
 
-  await assert.rejects(
-    () =>
-      (service as any).resolveOrCreateClient(tx, {
-        clubId: 10,
-        userId: 7,
-        name: 'Ada',
-        phone: '+5493511234567',
-        email: 'ada@example.com',
-        dni: ''
-      }),
-    /CLIENT_POSSIBLE_DUPLICATE/
-  );
+  const resolved = await (service as any).resolveOrCreateClient(tx, {
+    clubId: 10,
+    userId: 7,
+    name: 'Ada',
+    phone: '+5493511234567',
+    email: 'ada@example.com',
+    dni: ''
+  });
+
+  assert.equal(resolved.id, 'c-email');
+  assert.equal(clients.find((client) => client.id === 'c-email')?.userId, 7);
+  assert.equal(clients.find((client) => client.id === 'c-phone')?.userId, null);
 });
 
-test('nunca auto-linkea por nombre solo', async () => {
-  const { tx } = buildTx([
+test('usuario logueado nunca auto-linkea por nombre solo', async () => {
+  const { tx, clients } = buildTx([
     {
       id: 'c-name',
       clubId: 10,
@@ -209,16 +219,94 @@ test('nunca auto-linkea por nombre solo', async () => {
   ]);
   const service = createService();
 
+  const resolved = await (service as any).resolveOrCreateClient(tx, {
+    clubId: 10,
+    userId: 7,
+    name: 'Ada Lovelace',
+    phone: '',
+    email: '',
+    dni: ''
+  });
+
+  assert.notEqual(resolved.id, 'c-name');
+  assert.equal(resolved.userId, 7);
+  assert.equal(clients.find((client) => client.id === 'c-name')?.userId, null);
+});
+
+test('alta rápida admin recomienda seleccionar si hay un match fuerte', async () => {
+  const { tx } = buildTx([
+    {
+      id: 'c-phone',
+      clubId: 10,
+      userId: null,
+      name: 'Cliente Original',
+      phone: '+5493511234567',
+      email: 'old@example.com',
+      dni: '30111222'
+    }
+  ]);
+  const service = createService();
+
   await assert.rejects(
     () =>
       (service as any).resolveOrCreateClient(tx, {
         clubId: 10,
-        userId: 7,
-        name: 'Ada Lovelace',
+        userId: null,
+        name: 'Cliente con otro mail',
+        phone: '+54 9 351 123 4567',
+        email: 'nuevo@example.com',
+        dni: ''
+      }),
+    /CLIENT_POSSIBLE_DUPLICATE/
+  );
+});
+
+test('alta rápida admin crea cliente nuevo con nombre teléfono y email', async () => {
+  const { tx, clients } = buildTx([]);
+  const service = createService();
+
+  const resolved = await (service as any).resolveOrCreateClient(tx, {
+    clubId: 10,
+    userId: null,
+    name: 'Cliente Nuevo',
+    phone: '+54 9 351 123 4567',
+    email: 'nuevo@example.com',
+    dni: ''
+  });
+
+  assert.equal(resolved.userId, null);
+  assert.equal(resolved.name, 'Cliente Nuevo');
+  assert.equal(resolved.email, 'nuevo@example.com');
+  assert.equal(clients.length, 1);
+});
+
+test('alta rápida admin exige teléfono y email', async () => {
+  const { tx } = buildTx([]);
+  const service = createService();
+
+  await assert.rejects(
+    () =>
+      (service as any).resolveOrCreateClient(tx, {
+        clubId: 10,
+        userId: null,
+        name: 'Cliente Nuevo',
         phone: '',
-        email: '',
+        email: 'nuevo@example.com',
         dni: ''
       }),
     /teléfono es obligatorio/i
+  );
+
+  await assert.rejects(
+    () =>
+      (service as any).resolveOrCreateClient(tx, {
+        clubId: 10,
+        userId: null,
+        name: 'Cliente Nuevo',
+        phone: '+54 9 351 123 4567',
+        email: '',
+        dni: ''
+      }),
+    /email es obligatorio/i
   );
 });

@@ -17,10 +17,43 @@ const LOGO_URL = SITE_URL ? `${SITE_URL.replace(/\/+$/,'')}${LOGO_PATH}` : LOGO_
 export const APP_NOTICE_EVENT = 'app:notice';
 const PENDING_APP_NOTICE_STORAGE_KEY = 'app:notice:pending';
 const LOGOUT_NOTICE_COOLDOWN_MS = 6000;
+type NoticeTone = 'success' | 'error' | 'info' | 'warning';
 type AppNotice = {
   id: number;
   message: string;
+  tone: NoticeTone;
   phase: 'entering' | 'visible' | 'leaving';
+};
+type AppNoticePayload = {
+  message?: string;
+  tone?: NoticeTone;
+};
+
+const NOTICE_TONES: Record<NoticeTone, { border: string; text: string; dot: string; glow: string }> = {
+  success: {
+    border: 'rgba(34,197,94,.42)',
+    text: '#d8ffe6',
+    dot: '#22c55e',
+    glow: 'rgba(34,197,94,.22)'
+  },
+  error: {
+    border: 'rgba(248,113,113,.4)',
+    text: '#ffe1e1',
+    dot: '#f87171',
+    glow: 'rgba(248,113,113,.2)'
+  },
+  warning: {
+    border: 'rgba(250,204,21,.38)',
+    text: '#fff3c4',
+    dot: '#facc15',
+    glow: 'rgba(250,204,21,.18)'
+  },
+  info: {
+    border: 'rgba(148,163,184,.34)',
+    text: '#e2e8f0',
+    dot: '#94a3b8',
+    glow: 'rgba(148,163,184,.14)'
+  }
 };
 
 export default function MyApp({ Component, pageProps }: AppProps) {
@@ -51,12 +84,18 @@ export default function MyApp({ Component, pageProps }: AppProps) {
       if (!raw) return null;
       sessionStorage.removeItem(PENDING_APP_NOTICE_STORAGE_KEY);
       try {
-        const parsed = JSON.parse(raw) as { message?: unknown; ts?: unknown };
+        const parsed = JSON.parse(raw) as { message?: unknown; ts?: unknown; tone?: unknown };
         const message = String(parsed?.message || '').trim();
         const ts = Number(parsed?.ts || 0);
+        const tone = String(parsed?.tone || '').trim().toLowerCase();
         if (!message) return null;
         if (!Number.isFinite(ts) || Date.now() - ts > 15000) return null;
-        return message;
+        return {
+          message,
+          tone: tone === 'success' || tone === 'error' || tone === 'info' || tone === 'warning'
+            ? tone as NoticeTone
+            : 'info' as NoticeTone
+        };
       } catch {
         return null;
       }
@@ -67,9 +106,9 @@ export default function MyApp({ Component, pageProps }: AppProps) {
       noticeTimeoutsRef.current.push(timeout);
     };
 
-    const showNotice = (message: string) => {
+    const showNotice = (message: string, tone: NoticeTone = 'info') => {
       const id = noticeIdRef.current++;
-      setNotices((prev) => [...prev, { id, message, phase: 'entering' }]);
+      setNotices((prev) => [...prev, { id, message, tone, phase: 'entering' }]);
 
       scheduleTimeout(() => {
         setNotices((prev) => prev.map((notice) => (notice.id === id ? { ...notice, phase: 'visible' } : notice)));
@@ -94,11 +133,11 @@ export default function MyApp({ Component, pageProps }: AppProps) {
           // Solo persistimos cuando hay navegacion para mostrarlo en destino.
           sessionStorage.setItem(
             PENDING_APP_NOTICE_STORAGE_KEY,
-            JSON.stringify({ message: 'Sesion cerrada correctamente.', ts: now })
+            JSON.stringify({ message: 'Sesion cerrada correctamente.', tone: 'success', ts: now })
           );
         } else {
           // Sin navegacion, mostrar una vez y no persistir para evitar duplicados.
-          showNotice('Sesion cerrada correctamente.');
+          showNotice('Sesion cerrada correctamente.', 'success');
         }
         lastLogoutNoticeAtRef.current = now;
       }
@@ -110,10 +149,12 @@ export default function MyApp({ Component, pageProps }: AppProps) {
       }
     };
     const handleAppNotice = (event: Event) => {
-      const custom = event as CustomEvent<{ message?: string }>;
+      const custom = event as CustomEvent<AppNoticePayload>;
       const message = String(custom?.detail?.message || '').trim();
       if (!message) return;
-      showNotice(message);
+      const tone = custom?.detail?.tone;
+      const safeTone = tone === 'success' || tone === 'error' || tone === 'warning' || tone === 'info' ? tone : 'info';
+      showNotice(message, safeTone);
     };
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
@@ -137,7 +178,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
     const consumeAndShowPendingNotice = () => {
       const pending = consumePendingNotice();
-      if (pending) showNotice(pending);
+      if (pending) showNotice(pending.message, pending.tone);
     };
     consumeAndShowPendingNotice();
     Router.events.on('routeChangeComplete', consumeAndShowPendingNotice);
@@ -189,25 +230,37 @@ export default function MyApp({ Component, pageProps }: AppProps) {
         </AuthProvider>
       </ActiveClubProvider>
       {notices.length > 0 && (
-        <div className="fixed bottom-5 left-1/2 z-[100000] -translate-x-1/2 pointer-events-none">
+        <div className="fixed bottom-5 left-1/2 z-[2147483600] -translate-x-1/2 pointer-events-none">
           {[...notices].slice(-3).reverse().map((notice, index) => {
             const depth = Math.min(index, 2);
             const baseOffsetY = depth * -9;
             const phaseOffsetY = notice.phase === 'visible' ? 0 : 20;
             const scale = 1 - depth * 0.025;
             const opacity = notice.phase === 'visible' ? 1 : 0;
+            const toneStyle = NOTICE_TONES[notice.tone];
             return (
               <div
                 key={notice.id}
-                className="absolute left-1/2 w-max max-w-[92vw] rounded-xl border border-[#347048]/20 bg-[#EBE1D8] px-4 py-3 text-sm font-bold text-[#347048] shadow-xl transition-all duration-300"
+                className="absolute left-1/2 w-max max-w-[92vw] rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur-md transition-all duration-300"
                 style={{
                   bottom: 0,
                   zIndex: 100 - depth,
                   opacity,
-                  transform: `translate(-50%, ${baseOffsetY + phaseOffsetY}px) scale(${scale})`
+                  transform: `translate(-50%, ${baseOffsetY + phaseOffsetY}px) scale(${scale})`,
+                  background: 'linear-gradient(145deg, rgba(7,10,9,.95), rgba(5,7,6,.9))',
+                  borderColor: toneStyle.border,
+                  color: toneStyle.text,
+                  boxShadow: `0 16px 34px rgba(0,0,0,.45), 0 0 0 1px ${toneStyle.glow} inset`
                 }}
               >
-                {notice.message}
+                <div className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: toneStyle.dot, boxShadow: `0 0 12px ${toneStyle.dot}` }}
+                  />
+                  <span>{notice.message}</span>
+                </div>
               </div>
             );
           })}

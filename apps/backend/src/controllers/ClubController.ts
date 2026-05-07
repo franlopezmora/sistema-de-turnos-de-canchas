@@ -709,8 +709,11 @@ export class ClubController {
             const hasAnyPhoneInput =
                 Boolean(parsed.data.phone && String(parsed.data.phone).trim()) ||
                 Boolean(parsed.data.phoneNumberLocal && String(parsed.data.phoneNumberLocal).trim());
-            if (hasAnyPhoneInput && !normalizedPhone) {
-                return res.status(400).json({ error: 'Teléfono inválido' });
+            if (!hasAnyPhoneInput || !normalizedPhone) {
+                return res.status(400).json({ error: 'El teléfono es obligatorio' });
+            }
+            if (!parsed.data.email) {
+                return res.status(400).json({ error: 'El email es obligatorio' });
             }
 
             const client = await this.clubService.createClient(Number(club.id), {
@@ -757,8 +760,11 @@ export class ClubController {
             const hasAnyPhoneInput =
                 Boolean(bodyParsed.data.phone && String(bodyParsed.data.phone).trim()) ||
                 Boolean(bodyParsed.data.phoneNumberLocal && String(bodyParsed.data.phoneNumberLocal).trim());
-            if (hasAnyPhoneInput && !normalizedPhone) {
-                return res.status(400).json({ error: 'Teléfono inválido' });
+            if (!hasAnyPhoneInput || !normalizedPhone) {
+                return res.status(400).json({ error: 'El teléfono es obligatorio' });
+            }
+            if (!bodyParsed.data.email) {
+                return res.status(400).json({ error: 'El email es obligatorio' });
             }
 
             const client = await this.clubService.updateClient(Number(club.id), paramsParsed.data.clientId, {

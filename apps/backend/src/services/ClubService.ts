@@ -318,7 +318,8 @@ export class ClubService {
         const normalizedEmail = String(input.email || '').trim().toLowerCase();
 
         if (normalizedName.length < 2) throw new Error('Nombre inválido');
-        if (input.phone && !normalizedPhone) throw new Error('Teléfono inválido');
+        if (!normalizedPhone) throw new Error('El teléfono es obligatorio');
+        if (!normalizedEmail) throw new Error('El email es obligatorio');
         if (normalizedDni && normalizedDni.length < 6) throw new Error('DNI inválido');
 
         try {
@@ -363,7 +364,8 @@ export class ClubService {
         const normalizedEmail = String(input.email || '').trim().toLowerCase();
 
         if (normalizedName.length < 2) throw new Error('Nombre inválido');
-        if (input.phone && !normalizedPhone) throw new Error('Teléfono inválido');
+        if (!normalizedPhone) throw new Error('El teléfono es obligatorio');
+        if (!normalizedEmail) throw new Error('El email es obligatorio');
         if (normalizedDni && normalizedDni.length < 6) throw new Error('DNI inválido');
 
         try {

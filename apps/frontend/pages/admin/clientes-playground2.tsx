@@ -44,6 +44,24 @@ const EPSILON = 0.009;
 const drawerSectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
 const drawerListClass = 'divide-y divide-[#edf0f6] rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px]';
 
+const normalizeClientFormError = (error: unknown) => {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string'
+        ? String((error as { message?: unknown }).message)
+        : '';
+  const message = raw.trim();
+  if (/ya existe un cliente/i.test(message)) {
+    return 'Ya existe un cliente con ese DNI, teléfono o email. Buscalo en la lista y seleccioná el cliente existente.';
+  }
+  return message || 'No se pudo guardar el cliente.';
+};
+
+const isExpectedClientFormError = (message: string) =>
+  /ya existe un cliente/i.test(message) ||
+  /obligatorio|inv[aá]lido|ingresa|dni/i.test(message);
+
 const formatDate = (dateInput: any) => {
   if (!dateInput) return '-';
   if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
@@ -202,9 +220,10 @@ export default function AdminClientesPlayground2Page() {
   useEffect(() => {
     const text = String(errorMessage || '').trim();
     if (!text) return;
+    if (sidebarView === 'client_create' || sidebarView === 'client_edit') return;
     showAdminToast(text);
     setErrorMessage('');
-  }, [errorMessage, showAdminToast]);
+  }, [errorMessage, showAdminToast, sidebarView]);
 
   const resolveClubSlug = useCallback(() => {
     try {
@@ -321,6 +340,7 @@ export default function AdminClientesPlayground2Page() {
   const totalDebt = clients.reduce((sum, client) => sum + Number(client?.totalDebt || 0), 0);
 
   const openCreateClient = () => {
+    setErrorMessage('');
     setEditingClientId('');
     setClientForm({
       name: '',
@@ -334,6 +354,7 @@ export default function AdminClientesPlayground2Page() {
   };
 
   const openEditClient = (client: any) => {
+    setErrorMessage('');
     const splitPhone = splitCanonicalPhone(String(client?.phone || ''), clubPhoneCountryIso2);
     setEditingClientId(String(client?.id || ''));
     setClientForm({
@@ -377,8 +398,16 @@ export default function AdminClientesPlayground2Page() {
       setErrorMessage('Ingresa un nombre valido.');
       return;
     }
-    if (phoneLocal.length > 0 && !canonicalPhone) {
-      setErrorMessage('Si cargas telefono, debe ser valido.');
+    if (!phoneLocal || !canonicalPhone) {
+      setErrorMessage('Ingresa un telefono valido.');
+      return;
+    }
+    if (!email) {
+      setErrorMessage('Ingresa un email valido.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErrorMessage('Ingresa un email valido.');
       return;
     }
     if (dni.length > 0 && dni.length < 6) {
@@ -414,8 +443,11 @@ export default function AdminClientesPlayground2Page() {
         if (found) setSelectedClientId(String(found.id));
       }
     } catch (error: any) {
-      reportUiError({ area: 'ClientesPlayground', action: 'submitClient' }, error);
-      setErrorMessage(String(error?.message || 'No se pudo guardar el cliente.'));
+      const message = normalizeClientFormError(error);
+      if (!isExpectedClientFormError(message)) {
+        reportUiError({ area: 'ClientesPlayground', action: 'submitClient' }, error);
+      }
+      setErrorMessage(message);
     } finally {
       setSubmittingClient(false);
     }
@@ -462,6 +494,7 @@ export default function AdminClientesPlayground2Page() {
 
   const closeActionSidebar = useCallback(() => {
     if (deletingClient || submittingClient) return;
+    setErrorMessage('');
     setSelectedClientId('');
     setSidebarView('none');
   }, [deletingClient, submittingClient]);
@@ -1010,7 +1043,7 @@ export default function AdminClientesPlayground2Page() {
       </AdminPlaygroundShell>
 
       {adminToasts.length > 0 && (
-        <div className="pointer-events-none fixed right-5 top-[84px] z-[150] flex w-full max-w-[360px] flex-col gap-2">
+        <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] flex w-full max-w-[360px] flex-col gap-2">
           {adminToasts.map((toast) => (
             <div
               key={toast.id}
@@ -1076,6 +1109,7 @@ export default function AdminClientesPlayground2Page() {
                 <button
                   type="button"
                   onClick={() => {
+                    setErrorMessage('');
                     setEditingClientId('');
                     setClientForm({
                       name: '',
@@ -1142,8 +1176,17 @@ export default function AdminClientesPlayground2Page() {
         {isClientFormView && (
           <AdminDrawerSection title="Datos basicos" className={drawerSectionCardClass}>
             <div className="space-y-3">
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700"
+                >
+                  {errorMessage}
+                </div>
+              )}
+
               <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Nombre y apellido</span>
+                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Nombre y apellido *</span>
                 <input
                   type="text"
                   value={clientForm.name}
@@ -1169,7 +1212,7 @@ export default function AdminClientesPlayground2Page() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Telefono</span>
+                  <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Telefono *</span>
                   <input
                     type="text"
                     value={clientForm.phone}
@@ -1194,7 +1237,7 @@ export default function AdminClientesPlayground2Page() {
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Email</span>
+                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Email *</span>
                 <input
                   type="email"
                   value={clientForm.email}

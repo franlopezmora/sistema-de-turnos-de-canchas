@@ -432,7 +432,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
       </div>
 
       {adminToasts.length > 0 && (
-        <div className="pointer-events-none fixed right-5 top-[84px] z-[150] flex w-full max-w-[360px] flex-col gap-2">
+        <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] flex w-full max-w-[360px] flex-col gap-2">
           {adminToasts.map((toast) => (
             <div
               key={toast.id}

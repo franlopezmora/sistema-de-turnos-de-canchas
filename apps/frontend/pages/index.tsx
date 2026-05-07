@@ -19,6 +19,9 @@ import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Padel)
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de futbol limpia
 import { IoTennisballOutline } from "react-icons/io5"; // Pelota de tenis limpia
 
+const APP_NOTICE_EVENT = 'app:notice';
+type AppNoticeTone = 'success' | 'error' | 'info' | 'warning';
+
 const countActiveBookings = (rows: any[]): number => {
   const now = Date.now();
   return rows.filter((booking: any) => {
@@ -159,9 +162,25 @@ export default function Home() {
   const [activeBookingsCount, setActiveBookingsCount] = useState(0);
   const [favoriteClubIds, setFavoriteClubIds] = useState<Set<number>>(new Set());
   const [favoriteClubs, setFavoriteClubs] = useState<Club[]>([]);
-  const [favoriteFeedback, setFavoriteFeedback] = useState<string | null>(null);
   const [favoriteBusyByClub, setFavoriteBusyByClub] = useState<Record<number, boolean>>({});
   // track which FAQ item is currently open (null if none)
+  const sportClubCounts = useMemo(() => {
+    if (!clubs.length) return { futbol: 0, padel: 0, tenis: 0, otros: 0 };
+    const counts = { futbol: 0, padel: 0, tenis: 0, otros: 0 };
+    for (const club of clubs) {
+      const keys = club.fixedBookingSettingsByActivity ? Object.keys(club.fixedBookingSettingsByActivity) : [];
+      if (keys.some(k => matchesSport(k, 'futbol'))) counts.futbol++;
+      if (keys.some(k => matchesSport(k, 'padel'))) counts.padel++;
+      if (keys.some(k => matchesSport(k, 'tenis'))) counts.tenis++;
+      if (!keys.length || keys.every(k => !matchesSport(k, 'futbol') && !matchesSport(k, 'padel') && !matchesSport(k, 'tenis'))) counts.otros++;
+    }
+    return counts;
+  }, [clubs]);
+
+  const sportWords = ['fútbol', 'pádel', 'tenis', 'básquet'];
+  const [heroSportIdx, setHeroSportIdx] = useState(0);
+  const [heroWordVisible, setHeroWordVisible] = useState(true);
+  const [navHidden, setNavHidden] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const faqRefs = useRef<Array<HTMLDivElement | null>>([]);
 
@@ -177,9 +196,104 @@ export default function Home() {
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, [openFaqIndex]);
+
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const handler = () => {
+      const y = window.scrollY;
+      if (y < 80) { setNavHidden(false); lastY = y; return; }
+      if (Math.abs(y - lastY) < 4) return; // ignorar micro-scrolls
+      setNavHidden(y > lastY);
+      lastY = y;
+    };
+    window.addEventListener('scroll', handler, { passive: true });
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHeroWordVisible(false);
+      setTimeout(() => {
+        setHeroSportIdx(i => (i + 1) % sportWords.length);
+        setHeroWordVisible(true);
+      }, 380);
+    }, 2700);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const els = document.querySelectorAll('.tc-sr,.tc-sr-up,.tc-sr-left,.tc-sr-right');
+    if (!els.length) return;
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('tc-in'); obs.unobserve(e.target); } });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+    els.forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const closeTransientPanels = () => {
+      setShowContact(false);
+      setContactMenu(null);
+      setShowUserMenu(false);
+    };
+    router.events.on('routeChangeStart', closeTransientPanels);
+    return () => {
+      router.events.off('routeChangeStart', closeTransientPanels);
+    };
+  }, [router.events]);
+
+  useEffect(() => {
+    const closingSection = closingSectionRef.current;
+    const ownerSection = ownerSectionRef.current;
+    if (!closingSection && !ownerSection) return;
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let rafId: number | null = null;
+
+    const applyParallax = (section: HTMLElement, cssVarName: string, amplitude: number) => {
+      const rect = section.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || 1;
+      const progress = (viewportHeight - rect.top) / (viewportHeight + rect.height);
+      const clamped = Math.max(0, Math.min(1, progress));
+      const shift = (clamped - 0.5) * amplitude;
+      section.style.setProperty(cssVarName, `${shift.toFixed(2)}px`);
+    };
+
+    const updateParallax = () => {
+      if (reducedMotion.matches) {
+        if (closingSection) closingSection.style.setProperty('--tc-closing-parallax', '0px');
+        if (ownerSection) ownerSection.style.setProperty('--tc-owner-parallax', '0px');
+        return;
+      }
+      if (closingSection) applyParallax(closingSection, '--tc-closing-parallax', 28); // -14..14
+      if (ownerSection) applyParallax(ownerSection, '--tc-owner-parallax', 24); // -12..12
+    };
+
+    const scheduleParallax = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateParallax();
+      });
+    };
+
+    scheduleParallax();
+    window.addEventListener('scroll', scheduleParallax, { passive: true });
+    window.addEventListener('resize', scheduleParallax);
+
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', scheduleParallax);
+      window.removeEventListener('resize', scheduleParallax);
+    };
+  }, []);
+
   const resultsRef = useRef<HTMLElement>(null);
   const searchBarRef = useRef<HTMLDivElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const ownerSectionRef = useRef<HTMLElement | null>(null);
+  const closingSectionRef = useRef<HTMLElement | null>(null);
   const apiBase = useMemo(() => `${getApiUrl()}/api`, []);
 
   // Estados del Buscador
@@ -396,7 +510,6 @@ export default function Home() {
       if (!user?.id) {
         setFavoriteClubIds(new Set());
         setFavoriteClubs([]);
-        setFavoriteFeedback(null);
         return;
       }
       try {
@@ -417,27 +530,20 @@ export default function Home() {
     void loadFavorites();
   }, [user?.id]);
 
-  const resolveLinkingMessage = (linking: { status?: string; reason?: string } | null | undefined) => {
-    const status = String(linking?.status || '');
-    if (status === 'linked_existing_client') return 'Favorito guardado y cliente vinculado.';
-    if (status === 'created_client') return 'Favorito guardado y cliente creado.';
-    if (status === 'already_linked') return 'Favorito guardado. Ya estabas vinculado en este club.';
-    if (status === 'duplicate_detected_no_link') return 'Favorito guardado. Detectamos posible duplicado y no vinculamos automaticamente.';
-    if (status === 'insufficient_data_no_link') {
-      const reason = String(linking?.reason || '');
-      if (reason === 'missing_phone') return 'Favorito guardado. No se pudo vincular cliente: falta telefono.';
-      if (reason === 'missing_name') return 'Favorito guardado. No se pudo vincular cliente: falta nombre.';
-      return 'Favorito guardado. No se pudo vincular cliente: faltan datos de identidad.';
-    }
-    return null;
+  const showAppNotice = (message: string, tone: AppNoticeTone = 'info') => {
+    if (typeof window === 'undefined') return;
+    const safe = String(message || '').trim();
+    if (!safe) return;
+    window.dispatchEvent(new CustomEvent(APP_NOTICE_EVENT, { detail: { message: safe, tone } }));
   };
+
 
   const handleToggleFavorite = async (e: React.MouseEvent, club: Club) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (!user?.id) {
-      setFavoriteFeedback('Inici sesion para guardar favoritos.');
+      showAppNotice('Iniciá sesión para guardar favoritos.', 'info');
       return;
     }
 
@@ -455,9 +561,9 @@ export default function Home() {
           return next;
         });
         setFavoriteClubs((prev) => prev.filter((item) => Number(item.id) !== clubId));
-        setFavoriteFeedback('Favorito eliminado.');
+        showAppNotice('Club eliminado de favoritos.', 'success');
       } else {
-        const result = await ClubService.markFavorite(clubId);
+        await ClubService.markFavorite(clubId);
         setFavoriteClubIds((prev) => {
           const next = new Set(prev);
           next.add(clubId);
@@ -467,11 +573,11 @@ export default function Home() {
           const exists = prev.some((item) => Number(item.id) === clubId);
           return exists ? prev : [club, ...prev];
         });
-        setFavoriteFeedback(resolveLinkingMessage(result?.linking) || 'Favorito guardado.');
+        showAppNotice('Club agregado a favoritos.', 'success');
       }
     } catch (error) {
       reportUiError({ area: 'HomePage', action: 'toggleFavorite' }, error);
-      setFavoriteFeedback('No se pudo actualizar favorito.');
+      showAppNotice('No pudimos actualizar tus favoritos. Intentá nuevamente.', 'error');
     } finally {
       setFavoriteBusyByClub((prev) => ({ ...prev, [clubId]: false }));
     }
@@ -605,12 +711,13 @@ export default function Home() {
   };
 
   const tcCss = `
-    .tc-root { min-height:100vh; background:#050505; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+    .tc-root { min-height:100vh; background:#050505; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:clip; --tc-bg-a:#050505; --tc-bg-b:#0a0a0a; --tc-bg-c:#08110d; }
     .tc-root *,.tc-root *::before,.tc-root *::after { box-sizing:border-box; }
     .tc-root a { color:inherit; text-decoration:none; }
     .tc-root ::selection { background:#22c55e; color:#052010; }
     /* Header */
-    .tc-header { position:sticky; top:0; z-index:50; background:rgba(5,5,5,.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(255,255,255,.06); }
+    .tc-header { position:fixed; top:0; left:0; right:0; z-index:50; background:rgba(5,5,5,.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(255,255,255,.06); transform:translateY(0); transition:transform .38s cubic-bezier(.4,0,.2,1); }
+    .tc-header-hidden { transform:translateY(-110%); }
     .tc-header-inner { max-width:1360px; margin:0 auto; padding:0 24px; min-height:68px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
     .tc-brand-text { font-size:13px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#22c55e; }
     .tc-btn { display:inline-flex; align-items:center; gap:8px; padding:9px 18px; border-radius:999px; font-size:13px; font-weight:700; border:1px solid rgba(255,255,255,.14); background:#111; color:#e8e8e8; cursor:pointer; transition:transform .15s,box-shadow .15s; font-family:inherit; }
@@ -626,7 +733,8 @@ export default function Home() {
     .tc-user-name { font-size:13px; font-weight:600; color:#e8e8e8; }
     .tc-user-menu { position:absolute; right:0; top:calc(100% + 8px); width:260px; background:#111; border:1px solid rgba(255,255,255,.1); border-radius:16px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,.5); z-index:120; }
     /* Hero */
-    .tc-hero { position:relative; min-height:92vh; display:flex; align-items:flex-end; padding:120px 40px 64px; overflow:hidden; }
+    .tc-hero { position:relative; z-index:10; min-height:92vh; display:flex; align-items:flex-end; padding:120px 40px 64px; overflow:visible; }
+    .tc-hero-visuals { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
     .tc-hero-bg { position:absolute; inset:0; background:linear-gradient(135deg,#0a1f0e 0%,#050505 45%,#0d1a0d 100%); }
     .tc-hero-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 60% 50% at 20% 100%,rgba(34,197,94,.14),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,rgba(34,197,94,.06),transparent 65%); }
     .tc-hero-noise { position:absolute; inset:0; opacity:.022; pointer-events:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
@@ -637,9 +745,10 @@ export default function Home() {
     @keyframes tc-pulse { 0%,100%{opacity:1}50%{opacity:.5} }
     .tc-hero-h1 { font-size:clamp(52px,8vw,108px); font-weight:800; letter-spacing:-.045em; line-height:.96; margin:0 0 24px; color:#fff; }
     .tc-hero-h1 i { font-style:italic; font-weight:700; color:#22c55e; }
+    .tc-hero-h1 .tc-grad-text { color:unset; }
     .tc-hero-sub { font-size:17px; font-weight:400; color:#c8c8c8; line-height:1.55; max-width:500px; margin:0 0 36px; }
     /* Search */
-    .tc-search { display:flex; gap:0; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px; backdrop-filter:blur(20px); max-width:620px; align-items:center; flex-wrap:wrap; }
+    .tc-search { position:relative; z-index:25; display:flex; gap:0; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px; backdrop-filter:blur(20px); max-width:620px; align-items:center; flex-wrap:wrap; }
     .tc-search-seg { display:flex; align-items:center; gap:8px; padding:10px 16px; font-size:13px; font-weight:600; color:#e8e8e8; cursor:pointer; position:relative; white-space:nowrap; border-radius:999px; transition:background .15s; }
     .tc-search-seg:hover { background:rgba(255,255,255,.06); }
     .tc-search-divider { width:1px; height:28px; background:rgba(255,255,255,.12); flex-shrink:0; margin:0 2px; }
@@ -657,14 +766,8 @@ export default function Home() {
     .tc-live-stat { font-size:26px; font-weight:700; letter-spacing:-.03em; color:#fff; }
     .tc-live-label { font-size:12px; color:#c8c8c8; margin-top:8px; line-height:1.5; font-weight:400; }
     /* Trust */
-    .tc-trust { padding:36px 40px; border-top:1px solid rgba(255,255,255,.07); border-bottom:1px solid rgba(255,255,255,.07); background:#0a0a0a; }
-    .tc-trust-inner { max-width:1360px; margin:0 auto; display:flex; align-items:center; gap:48px; flex-wrap:wrap; }
-    .tc-trust-label b { display:block; font-size:18px; font-weight:800; color:#f2f2f2; letter-spacing:-.02em; margin-bottom:4px; }
-    .tc-trust-label span { font-size:12px; color:#666; line-height:1.5; max-width:300px; display:block; }
-    .tc-trust-items { display:flex; gap:28px; flex-wrap:wrap; flex:1; }
-    .tc-trust-item { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:#c8c8c8; }
     /* Sports */
-    .tc-sports { padding:72px 40px; background:#050505; border-bottom:1px solid rgba(255,255,255,.07); }
+    .tc-sports { padding:72px 40px; background:var(--tc-bg-a); border-bottom:1px solid rgba(255,255,255,.07); }
     .tc-sports-head { max-width:1360px; margin:0 auto 36px; display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; }
     .tc-sports-h3 { font-size:32px; font-weight:700; letter-spacing:-.03em; margin:0; color:#f2f2f2; }
     .tc-sports-h3 i { font-style:italic; color:#22c55e; }
@@ -698,44 +801,48 @@ export default function Home() {
     .tc-sec-h i { font-style:italic; color:#22c55e; }
     .tc-sec-sub { font-size:16px; font-weight:400; color:#c8c8c8; line-height:1.55; max-width:560px; margin:0 0 52px; }
     /* Values */
+    .tc-values-band { border-top:1px solid rgba(255,255,255,.07); background:var(--tc-bg-b); }
     .tc-values-grid { display:grid; grid-template-columns:1fr 1fr; gap:80px; align-items:start; }
     .tc-values-h { position:sticky; top:90px; }
     .tc-values-list { display:flex; flex-direction:column; }
     .tc-value { padding:36px 0; border-top:1px solid rgba(255,255,255,.07); display:grid; grid-template-columns:72px 1fr; gap:24px; align-items:start; }
     .tc-value:first-child { border-top:0; padding-top:0; }
-    .tc-value-num { font-size:34px; font-weight:700; color:#333; letter-spacing:-.04em; line-height:1; }
+    .tc-value-num { font-size:34px; font-weight:700; color:#2a2a2a; letter-spacing:-.04em; line-height:1; }
     .tc-value-body h4 { margin:0 0 8px; font-size:20px; font-weight:800; color:#f2f2f2; }
+
     .tc-value-body p { margin:0; color:#c8c8c8; font-size:14px; line-height:1.7; max-width:400px; }
     /* Stats */
-    .tc-bstats { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid rgba(255,255,255,.07); border-bottom:1px solid rgba(255,255,255,.07); margin-top:72px; }
-    .tc-bstat { padding:36px 28px; }
-    .tc-bstat+.tc-bstat { border-left:1px solid rgba(255,255,255,.07); }
-    .tc-bstat-num { font-weight:800; font-size:30px; letter-spacing:-.03em; color:#f2f2f2; }
-    .tc-bstat-label { font-size:11px; font-weight:700; color:#555; letter-spacing:.1em; text-transform:uppercase; margin-top:12px; }
-    .tc-bstat-sub { font-size:13px; color:#c8c8c8; margin-top:6px; line-height:1.6; }
     /* Steps */
-    .tc-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.07); border-radius:24px; overflow:hidden; margin-top:52px; }
-    .tc-step { background:#050505; padding:40px 32px 36px; transition:background .3s; }
     .tc-step:hover { background:#0f0f0f; }
     .tc-step-num { font-weight:800; font-size:60px; color:#2a2a2a; line-height:1; letter-spacing:-.05em; margin-bottom:24px; transition:color .3s; }
     .tc-step:hover .tc-step-num { color:#22c55e; }
-    .tc-step h4 { margin:0 0 8px; font-size:20px; font-weight:800; color:#f2f2f2; }
-    .tc-step p { margin:0; color:#c8c8c8; font-size:13px; line-height:1.7; }
     .tc-step-foot { margin-top:24px; padding-top:24px; border-top:1px solid rgba(255,255,255,.07); font-size:12px; color:#555; display:flex; align-items:center; gap:8px; }
     .tc-step-foot b { color:#f2f2f2; font-weight:700; }
     /* Owner */
-    .tc-owner { background:#0a0a0a; border-top:1px solid rgba(255,255,255,.07); }
-    .tc-owner-inner { max-width:1360px; margin:0 auto; padding:100px 40px; display:grid; grid-template-columns:1.1fr .9fr; gap:72px; align-items:center; }
-    .tc-owner-side { padding:32px; border:1px solid rgba(255,255,255,.08); border-radius:24px; background:rgba(10,10,10,.8); }
-    .tc-owner-side-h { font-size:10px; color:#555; font-weight:700; letter-spacing:.14em; text-transform:uppercase; margin-bottom:20px; }
+    .tc-owner { --tc-owner-parallax:0px; position:relative; isolation:isolate; border-top:1px solid rgba(255,255,255,.07); background:#050505; overflow:hidden; }
+    .tc-owner-media { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; transform:translate3d(0,var(--tc-owner-parallax),0); will-change:transform; }
+    .tc-owner-media-img { position:absolute; inset:-4%; background-image:url('https://images.pexels.com/photos/32474981/pexels-photo-32474981.jpeg?auto=compress&cs=tinysrgb&w=1800'); background-size:cover; background-position:center; opacity:.58; transform:scale(1.03); will-change:transform; animation:tc-owner-kenburns 24s ease-in-out infinite alternate; }
+    .tc-owner::after { content:''; position:absolute; inset:0; background:linear-gradient(112deg,rgba(5,8,6,.88) 12%,rgba(6,8,7,.7) 48%,rgba(5,5,5,.86) 100%),linear-gradient(180deg,rgba(5,5,5,.05) 0%,rgba(5,5,5,.72) 100%); z-index:1; pointer-events:none; }
+    .tc-owner-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; padding:106px 40px; display:grid; grid-template-columns:1.05fr .95fr; gap:72px; align-items:center; }
+    .tc-owner .tc-sec-h { max-width:620px; }
+    .tc-owner .tc-sec-sub { max-width:520px; margin-bottom:30px; color:#d3d3d3; }
+    .tc-owner-side { padding:34px; border:1px solid rgba(255,255,255,.16); border-radius:20px; background:rgba(6,10,8,.58); backdrop-filter:blur(8px); }
+    .tc-owner-side-h { font-size:10px; color:#7f8d86; font-weight:700; letter-spacing:.14em; text-transform:uppercase; margin-bottom:20px; }
     .tc-owner-perk { display:flex; gap:14px; align-items:center; padding:13px 0; border-top:1px solid rgba(255,255,255,.07); font-size:13px; color:#c8c8c8; font-weight:400; }
     .tc-owner-perk:first-child { border-top:0; padding-top:0; }
-    .tc-owner-perk b { color:#f2f2f2; font-size:16px; letter-spacing:-.02em; min-width:84px; font-weight:800; }
+    .tc-owner-perk b { color:#f2f2f2; font-size:16px; letter-spacing:-.02em; min-width:90px; font-weight:800; }
     .tc-owner-ctas { display:flex; gap:10px; margin-top:32px; flex-wrap:wrap; }
+    @keyframes tc-owner-kenburns {
+      0% { transform:scale(1.03) translate3d(-1.2%, -0.8%, 0); }
+      50% { transform:scale(1.07) translate3d(0.9%, 1.1%, 0); }
+      100% { transform:scale(1.05) translate3d(-0.6%, 1.3%, 0); }
+    }
     /* FAQ */
+    .tc-faq-band { border-top:1px solid rgba(255,255,255,.07); background:linear-gradient(180deg,var(--tc-bg-a) 0%,var(--tc-bg-c) 100%); }
     .tc-faq-grid { display:grid; grid-template-columns:1fr 1.2fr; gap:72px; align-items:start; }
-    .tc-faq-list { display:flex; flex-direction:column; }
-    .tc-faq-item { border-top:1px solid rgba(255,255,255,.07); padding:20px 0; cursor:pointer; }
+    .tc-faq-list { position:relative; display:flex; flex-direction:column; padding-left:26px; }
+    .tc-faq-list::before { content:''; position:absolute; left:0; top:6px; bottom:6px; width:1px; background:linear-gradient(180deg,rgba(34,197,94,.45) 0%,rgba(255,255,255,.06) 100%); }
+    .tc-faq-item { border-top:1px solid rgba(255,255,255,.07); padding:22px 0 22px 2px; cursor:pointer; }
     .tc-faq-item:last-child { border-bottom:1px solid rgba(255,255,255,.07); }
     .tc-faq-q { display:flex; justify-content:space-between; align-items:center; gap:16px; font-size:16px; font-weight:700; color:#f2f2f2; }
     .tc-faq-icon { flex-shrink:0; color:#555; transition:transform .3s,color .3s; }
@@ -743,11 +850,25 @@ export default function Home() {
     .tc-faq-a { max-height:0; overflow:hidden; transition:max-height .4s cubic-bezier(.2,.6,.2,1),margin .3s; color:#c8c8c8; font-size:14px; line-height:1.7; }
     .tc-faq-item.tc-open .tc-faq-a { max-height:300px; margin-top:14px; }
     /* Closing */
-    .tc-closing { border-top:1px solid rgba(255,255,255,.07); padding:100px 40px 80px; background:#050505; }
-    .tc-closing-inner { max-width:1360px; margin:0 auto; }
+    .tc-closing { --tc-closing-parallax:0px; position:relative; isolation:isolate; border-top:1px solid rgba(255,255,255,.07); padding:100px 40px 80px; background:#050505; overflow:hidden; }
+    .tc-closing-media { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; transform:translate3d(0,var(--tc-closing-parallax),0); will-change:transform; }
+    .tc-closing-media-img { position:absolute; inset:-4%; background-image:url('/closing-botines.jpg'); background-size:cover; background-position:center 43%; opacity:.84; transform:scale(1.03); will-change:transform; animation:tc-closing-kenburns 26s ease-in-out infinite alternate; }
+    .tc-closing::after { content:''; position:absolute; inset:0; background:linear-gradient(110deg,rgba(5,8,7,.52) 8%,rgba(5,5,5,.24) 48%,rgba(5,5,5,.5) 100%),linear-gradient(180deg,rgba(5,5,5,.03) 0%,rgba(5,5,5,.5) 92%); z-index:1; pointer-events:none; }
+    .tc-closing-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; }
     .tc-big-closing { font-size:clamp(44px,7vw,88px); font-weight:800; letter-spacing:-.05em; line-height:.98; color:#f2f2f2; margin:0 0 36px; }
     .tc-big-closing i { font-style:italic; color:#22c55e; }
     .tc-closing-ctas { display:flex; gap:12px; flex-wrap:wrap; }
+    @keyframes tc-closing-kenburns {
+      0% { transform:scale(1.03) translate3d(-1.3%, -1.1%, 0); }
+      50% { transform:scale(1.08) translate3d(1.2%, 0.9%, 0); }
+      100% { transform:scale(1.05) translate3d(-0.7%, 1.2%, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tc-owner-media { transform:translate3d(0,0,0); }
+      .tc-owner-media-img { animation:none; transform:scale(1.03); }
+      .tc-closing-media { transform:translate3d(0,0,0); }
+      .tc-closing-media-img { animation:none; transform:scale(1.03); }
+    }
     /* Footer */
     .tc-foot { background:#0a0a0a; border-top:1px solid rgba(255,255,255,.06); padding:52px 40px 28px; }
     .tc-foot-inner { max-width:1360px; margin:0 auto; }
@@ -777,16 +898,9 @@ export default function Home() {
       .tc-sports-grid{grid-template-columns:repeat(2,1fr)}
     }
     @media(max-width:900px){
-      .tc-steps{grid-template-columns:1fr}
-      .tc-bstats{grid-template-columns:repeat(2,1fr)}
-      .tc-bstat+.tc-bstat{border-left:0}
-      .tc-bstat:nth-child(3),.tc-bstat:nth-child(4){border-top:1px solid rgba(255,255,255,.07)}
-      .tc-bstat:nth-child(4){border-left:1px solid rgba(255,255,255,.07)}
     }
     @media(max-width:720px){
       .tc-hero{padding:100px 24px 56px;min-height:auto}
-      .tc-trust{padding:28px 24px}
-      .tc-trust-inner{gap:20px}
       .tc-sports{padding:52px 24px}
       .tc-sports-grid{grid-template-columns:1fr;gap:10px}
       .tc-sec-w{padding:64px 24px}
@@ -800,22 +914,67 @@ export default function Home() {
       .tc-search-divider{display:none}
     }
     @media(max-width:480px){
-      .tc-bstats{grid-template-columns:1fr}
-      .tc-bstat+.tc-bstat{border-left:0;border-top:1px solid rgba(255,255,255,.07)}
       .tc-foot-cols{grid-template-columns:1fr}
     }
     @keyframes tc-spin{to{transform:rotate(360deg)}}
+    /* Scroll reveal */
+    .tc-sr { opacity:0; transform:translateY(28px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
+    .tc-sr.tc-in { opacity:1; transform:translateY(0); }
+    .tc-sr-d1 { transition-delay:.08s; }
+    .tc-sr-d2 { transition-delay:.18s; }
+    .tc-sr-d3 { transition-delay:.28s; }
+    .tc-sr-d4 { transition-delay:.38s; }
+    .tc-sr-up { opacity:0; transform:translateY(40px); transition:opacity .8s cubic-bezier(.2,.8,.2,1), transform .8s cubic-bezier(.2,.8,.2,1); }
+    .tc-sr-up.tc-in { opacity:1; transform:translateY(0); }
+    .tc-sr-left { opacity:0; transform:translateX(-24px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
+    .tc-sr-left.tc-in { opacity:1; transform:translateX(0); }
+    .tc-sr-right { opacity:0; transform:translateX(24px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
+    .tc-sr-right.tc-in { opacity:1; transform:translateX(0); }
+    /* Hero fade-in stagger */
+    @keyframes tc-fade-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+    .tc-hero-eyebrow { animation:tc-fade-up .7s ease both .05s; }
+    .tc-hero-h1 { animation:tc-fade-up .85s ease both .18s; }
+    .tc-hero-sub { animation:tc-fade-up .7s ease both .38s; }
+    .tc-search { animation:tc-fade-up .7s ease both .52s; }
+    .tc-search-quicks { animation:tc-fade-up .6s ease both .68s; }
+    /* Hero stat bar */
+    .tc-hero-stat { display:flex; align-items:center; gap:8px; margin-top:18px; font-size:13px; color:#555; font-weight:500; animation:tc-fade-up .6s ease both .82s; }
+    .tc-hero-stat b { color:#22c55e; font-weight:700; }
+    .tc-hero-stat-dot { width:6px; height:6px; border-radius:50%; background:#22c55e; opacity:.7; flex-shrink:0; }
+    /* Marquee strip */
+    .tc-marquee-wrap { overflow:hidden; border-bottom:1px solid rgba(255,255,255,.06); background:#080808; padding:20px 0; }
+    .tc-marquee-track { display:flex; gap:14px; width:max-content; animation:tc-marquee 40s linear infinite; }
+    .tc-marquee-wrap:hover .tc-marquee-track { animation-play-state:paused; }
+    @keyframes tc-marquee { to { transform:translateX(-50%); } }
+    .tc-marquee-item { display:inline-flex; align-items:center; gap:8px; padding:7px 16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); border-radius:999px; font-size:12px; font-weight:600; color:#666; white-space:nowrap; transition:color .2s,border-color .2s; cursor:default; }
+    .tc-marquee-item:hover { color:#c8c8c8; border-color:rgba(255,255,255,.14); }
+    .tc-marquee-dot { width:5px; height:5px; border-radius:50%; background:#22c55e; opacity:.5; flex-shrink:0; }
+    /* Sport card count overlay */
+    .tc-sport-club-count { font-size:11px; color:var(--card-accent,#22c55e); font-weight:700; letter-spacing:.08em; margin-bottom:4px; opacity:.85; }
+    /* Aurora orbs */
+    .tc-aurora-orb { position:absolute; border-radius:50%; filter:blur(90px); pointer-events:none; will-change:transform; }
+    .tc-aurora-1 { width:700px; height:500px; top:-150px; left:-140px; background:rgba(34,197,94,.1); animation:tc-aurora-1 16s ease-in-out infinite; }
+    .tc-aurora-2 { width:580px; height:420px; bottom:-120px; right:8%; background:rgba(56,189,248,.07); animation:tc-aurora-2 20s ease-in-out infinite; }
+    .tc-aurora-3 { width:360px; height:280px; top:35%; right:22%; background:rgba(167,139,250,.055); animation:tc-aurora-3 24s ease-in-out infinite; }
+    @keyframes tc-aurora-1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(70px,-60px) scale(1.1)} 66%{transform:translate(-40px,50px) scale(.93)} }
+    @keyframes tc-aurora-2 { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(-90px,35px) scale(1.13)} 70%{transform:translate(55px,-25px) scale(.97)} }
+    @keyframes tc-aurora-3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(50px,70px) scale(1.18)} }
+    /* Gradient animated text */
+    .tc-grad-text { display:inline-block; overflow:visible; padding-inline:.14em; margin-inline:-.14em; background:linear-gradient(90deg,#22c55e 0%,#86efac 35%,#4ade80 65%,#22c55e 100%); background-size:220% 100%; background-repeat:no-repeat; background-position:0% 50%; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:tc-grad-shift 4.6s ease-in-out infinite alternate; font-style:italic; }
+    @keyframes tc-grad-shift { from{background-position:0% 50%} to{background-position:100% 50%} }
+    /* Rotating sport word */
+    .tc-sport-word { display:inline-block; letter-spacing:0; line-height:1.02; overflow:visible; padding-inline:.1em; margin-inline:-.1em; transition:opacity .36s ease, transform .36s ease; }
+    .tc-sport-word-out { opacity:0; transform:translateY(12px); }
+    /* Sport card per-card glow */
+    .tc-sport-card:hover { border-color:rgba(255,255,255,.12); transform:translateY(-5px); }
   `;
 
   return (
     <>
       <Head>
         <title>TuCancha — Reservá, jugá, encontrá jugadores</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
-        <style dangerouslySetInnerHTML={{ __html: tcCss }} />
       </Head>
+      <style dangerouslySetInnerHTML={{ __html: tcCss }} />
       {/* eslint-disable-next-line @next/next/no-css-tags */}
       <div className="tc-root" onClick={() => {
         setShowCityDropdown(false);
@@ -824,7 +983,7 @@ export default function Home() {
       }}>
       
       {/* ── HEADER ── */}
-      <header className="tc-header">
+      <header className={`tc-header${navHidden ? ' tc-header-hidden' : ''}`}>
         <div className="tc-header-inner">
           <Link href="/" className="tc-brand">
             <span className="tc-brand-text">TuCancha</span>
@@ -880,15 +1039,31 @@ export default function Home() {
 
       {/* ── HERO ── */}
       <section className="tc-hero">
-        <div className="tc-hero-bg" />
-        <div className="tc-hero-noise" />
+        <div className="tc-hero-visuals" aria-hidden="true">
+          <div className="tc-hero-bg" />
+          <div className="tc-hero-noise" />
+          <div className="tc-aurora-orb tc-aurora-1" />
+          <div className="tc-aurora-orb tc-aurora-2" />
+          <div className="tc-aurora-orb tc-aurora-3" />
+        </div>
         <div className="tc-hero-inner">
           <div className="tc-hero-copy">
             <span className="tc-hero-eyebrow">
               <span className="tc-hero-eyebrow-dot" />
               <span>Reservas deportivas en Argentina</span>
             </span>
-            <h1 className="tc-hero-h1">Reservá<br />tu cancha<br /><i>al toque.</i></h1>
+            <h1 className="tc-hero-h1">
+              Reservá<br />
+              <span className={`tc-sport-word${heroWordVisible ? '' : ' tc-sport-word-out'}`}>
+                <span className="tc-grad-text" style={{ backgroundImage: [
+                  'linear-gradient(90deg,#22c55e 0%,#86efac 40%,#4ade80 100%)',
+                  'linear-gradient(90deg,#0ea5e9 0%,#7dd3fc 40%,#38bdf8 100%)',
+                  'linear-gradient(90deg,#f97316 0%,#fbbf24 40%,#fb923c 100%)',
+                  'linear-gradient(90deg,#8b5cf6 0%,#c4b5fd 40%,#a78bfa 100%)',
+                ][heroSportIdx] }}>{sportWords[heroSportIdx]}</span>
+              </span>
+              <br />al toque.
+            </h1>
             <p className="tc-hero-sub">Sin llamadas, sin WhatsApp, sin esperas. Elegí deporte, zona y horario, confirmá online y jugá.</p>
 
             {/* Search bar */}
@@ -973,6 +1148,12 @@ export default function Home() {
                 <button key={i} className="tc-quick-chip" onClick={() => selectCity(loc)}>{loc.label}</button>
               ))}
             </div>
+            {!loadingClubs && clubs.length > 0 && (
+              <div className="tc-hero-stat">
+                <span className="tc-hero-stat-dot" />
+                <span><b>{clubs.length}</b> clubes disponibles en Argentina</span>
+              </div>
+            )}
           </div>
 
           <div className="tc-hero-side">
@@ -990,40 +1171,84 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── TRUST BAR ── */}
-      <section className="tc-trust">
-        <div className="tc-trust-inner">
-          <div className="tc-trust-label">
-            <b>Hecha para jugadores y clubes.</b>
-            <span>Una plataforma pensada para que reservar sea tan fácil como mandar un mensaje — pero más rápido.</span>
-          </div>
-          <div className="tc-trust-items">
-            {['Sin llamadas ni WhatsApp', 'Disponibilidad al instante', 'Confirmación inmediata', 'Pagá como quieras'].map(item => (
-              <div key={item} className="tc-trust-item">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.2"><path d="m5 12 5 5L20 7" /></svg>
-                {item}
+      {/* ── MARQUEE STRIP ── */}
+      {!loadingClubs && clubs.length > 0 && (
+        <div className="tc-marquee-wrap">
+          <div className="tc-marquee-track">
+            {[...clubs, ...clubs].map((club, i) => (
+              <div key={i} className="tc-marquee-item">
+                <span className="tc-marquee-dot" />
+                {club.name}
               </div>
             ))}
           </div>
         </div>
-      </section>
+      )}
 
       {/* ── SPORTS GRID ── */}
       <section className="tc-sports">
         <div className="tc-sports-head">
-          <h3 className="tc-sports-h3">Jugá lo que quieras, <i>donde quieras</i>.</h3>
+          <h3 className="tc-sports-h3 tc-sr">Jugá lo que quieras, <i>donde quieras</i>.</h3>
         </div>
         <div className="tc-sports-grid">
           {[
-            { name: 'Fútbol', count: 'F5 · F7 · F11', sport: 'futbol', bg: 'linear-gradient(135deg,#081a0c,#0f2e14)' },
-            { name: 'Pádel', count: 'Cubierto & Panorámico', sport: 'padel', bg: 'linear-gradient(135deg,#08141a,#0f2233)' },
-            { name: 'Tenis', count: 'Polvo & cemento', sport: 'tenis', bg: 'linear-gradient(135deg,#1a1008,#2e1a0a)' },
-            { name: 'Otros deportes', count: 'Hockey · Vóley · Básquet', sport: '', bg: 'linear-gradient(135deg,#10081a,#1a0f2e)' },
-          ].map(s => (
-            <div key={s.name} className="tc-sport-card" onClick={() => { if (s.sport) setSearchSport(s.sport); setTimeout(() => document.getElementById('cityInput')?.focus(), 100); }}>
-              <div className="tc-sport-bg" style={{ background: s.bg }} />
+            {
+              name: 'Fútbol',
+              sub: 'F5 · F7 · F11',
+              sport: 'futbol',
+              bg: 'linear-gradient(135deg,#061a0a,#0d2e12)',
+              photo: 'https://images.pexels.com/photos/27394466/pexels-photo-27394466.jpeg?auto=compress&cs=tinysrgb&w=1600',
+              bgPosition: 'center 52%',
+              accent: '#22c55e',
+              countKey: 'futbol' as const
+            },
+            {
+              name: 'Pádel',
+              sub: 'Cubierto & Panorámico',
+              sport: 'padel',
+              bg: 'linear-gradient(135deg,#06121a,#0c1e33)',
+              photo: 'https://images.pexels.com/photos/32897038/pexels-photo-32897038.jpeg?auto=compress&cs=tinysrgb&w=1600',
+              bgPosition: 'center 42%',
+              accent: '#38bdf8',
+              countKey: 'padel' as const
+            },
+            {
+              name: 'Tenis',
+              sub: 'Polvo & cemento',
+              sport: 'tenis',
+              bg: 'linear-gradient(135deg,#1a0e06,#2e1a08)',
+              photo: 'https://images.pexels.com/photos/19872965/pexels-photo-19872965.jpeg?auto=compress&cs=tinysrgb&w=1600',
+              bgPosition: 'center 54%',
+              accent: '#fb923c',
+              countKey: 'tenis' as const
+            },
+            {
+              name: 'Otros deportes',
+              sub: 'Hockey · Vóley · Básquet',
+              sport: '',
+              bg: 'linear-gradient(135deg,#0e081a,#180f2e)',
+              photo: 'https://images.pexels.com/photos/9716286/pexels-photo-9716286.jpeg?auto=compress&cs=tinysrgb&w=1600',
+              bgPosition: 'center',
+              accent: '#a78bfa',
+              countKey: 'otros' as const
+            },
+          ].map((s, si) => (
+            <div key={s.name} className={`tc-sport-card tc-sr tc-sr-d${si + 1}`} style={{'--card-accent': s.accent} as React.CSSProperties} onClick={() => router.push({ pathname: '/complejos', query: s.sport ? { sport: s.sport } : {} })}>
+              <div
+                className="tc-sport-bg"
+                style={{
+                  background: s.bg,
+                  backgroundImage: s.photo
+                    ? `linear-gradient(160deg, rgba(5,8,6,.2) 0%, rgba(5,5,5,.55) 58%, rgba(5,5,5,.82) 100%), url('${s.photo}')`
+                    : undefined,
+                  backgroundPosition: s.bgPosition || 'center',
+                }}
+              />
               <div className="tc-sport-content">
-                <div className="tc-sport-count">{s.count}</div>
+                {!loadingClubs && sportClubCounts[s.countKey] > 0 && (
+                  <div className="tc-sport-club-count">{sportClubCounts[s.countKey]} clubes</div>
+                )}
+                <div className="tc-sport-count">{s.sub}</div>
                 <div className="tc-sport-name">{s.name} →</div>
               </div>
             </div>
@@ -1031,89 +1256,52 @@ export default function Home() {
         </div>
       </section>
       {/* ── VALUES (POR QUÉ TUCANCHA) ── */}
-      <section style={{ borderTop: '1px solid rgba(255,255,255,.07)' }}>
+      <section className="tc-values-band">
         <div className="tc-sec-w">
           <div className="tc-values-grid">
-            <div className="tc-values-h">
+            <div className="tc-values-h tc-sr-left">
               <span className="tc-eyebrow">Por qué TuCancha</span>
               <h2 className="tc-sec-h">La forma más<br /><b>fluida</b> de <i>jugar</i>.</h2>
-              <p className="tc-sec-sub">Nada de llamadas, esperar respuestas o pagar señas por WhatsApp. Todo confirmado al instante.</p>
+              <p className="tc-sec-sub">Nada de llamadas, esperar respuestas o señas por WhatsApp. Encontrás la cancha, confirmás y listo.</p>
             </div>
             <div className="tc-values-list">
               {[
-                { num: '01', title: 'Confirmación instantánea', desc: 'Reservás, pagás y listo. Sin esperas, sin "te confirmo más tarde". Si la cancha está libre, es tuya en segundos.' },
-                { num: '02', title: 'Complejos verificados', desc: 'Cada club pasa por un control antes de entrar. Fotos reales, horarios al día, canchas en condiciones.' },
-                { num: '03', title: 'Modificás sin drama', desc: '¿Lluvia? ¿Se cae un jugador? Cambiás el horario o cancelás con anticipación, sin llamar a nadie.' },
-                { num: '04', title: 'Pagá como quieras', desc: 'Online o al llegar al complejo. Vos elegís cómo arreglás con el club.' },
-              ].map(v => (
-                <div key={v.num} className="tc-value">
+                { num: '01', title: 'Confirmación al instante', desc: 'Si la cancha está libre, es tuya en segundos. Sin "te confirmo más tarde", sin esperar que alguien te conteste.' },
+                { num: '02', title: 'Clubes verificados', desc: 'Cada complejo pasa por un control antes de entrar. Fotos reales, precios actualizados, horarios al día.' },
+                { num: '03', title: 'Cancelás sin drama', desc: '¿Lluvia? ¿Se cae un jugador? Modificás o cancelás desde la app, con anticipación y sin llamar a nadie.' },
+                { num: '04', title: 'Pagá como arreglás', desc: 'Online con tarjeta o en efectivo al llegar. Cada club tiene sus opciones y las ves claras antes de confirmar.' },
+              ].map((v, vi) => (
+                <div key={v.num} className={`tc-value tc-sr tc-sr-d${vi + 1}`}>
                   <div className="tc-value-num">{v.num}</div>
                   <div className="tc-value-body"><h4>{v.title}</h4><p>{v.desc}</p></div>
                 </div>
               ))}
             </div>
           </div>
-          <div className="tc-bstats">
-            {[
-              { num: 'Sin llamadas', label: 'Todo online', sub: 'Olvidate del "te confirmo más tarde" y de esperar respuestas por WhatsApp.' },
-              { num: 'Tiempo real', label: 'Disponibilidad', sub: 'Ves qué cancha está libre ahora mismo, con precios actualizados.' },
-              { num: 'Al instante', label: 'Confirmación', sub: 'Reservás, pagás y tu turno queda guardado. Sin trámites.' },
-              { num: 'Creciendo', label: 'Red de clubes', sub: 'Sumamos complejos cada semana. Mirá los disponibles en tu zona.' },
-            ].map(s => (
-              <div key={s.label} className="tc-bstat">
-                <div className="tc-bstat-num">{s.num}</div>
-                <div className="tc-bstat-label">{s.label}</div>
-                <div className="tc-bstat-sub">{s.sub}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── STEPS (CÓMO FUNCIONA) ── */}
-      <section style={{ borderTop: '1px solid rgba(255,255,255,.07)' }}>
-        <div className="tc-sec-w">
-          <div style={{ maxWidth: 660 }}>
-            <span className="tc-eyebrow">Cómo funciona</span>
-            <h2 className="tc-sec-h">De <i>buscar cancha</i> a <b>pisar pasto</b>. Tres pasos.</h2>
-          </div>
-          <div className="tc-steps">
-            {[
-              { num: '01', title: 'Buscá tu cancha', desc: 'Elegí deporte, zona y horario. Ves disponibilidad real, precios y fotos sin tener que llamar a nadie.', foot: 'Filtrá y elegí' },
-              { num: '02', title: 'Elegí el horario', desc: 'Mirás la grilla del club en tiempo real y elegís el turno que te quede bien. Todo claro, sin sorpresas.', foot: 'Elegí el turno' },
-              { num: '03', title: 'Reservá y jugá', desc: 'Pagás online o al llegar. Confirmación al toque y a la cancha.', foot: 'Confirmá y listo' },
-            ].map(s => (
-              <div key={s.num} className="tc-step">
-                <div className="tc-step-num">{s.num}</div>
-                <h4>{s.title}</h4>
-                <p>{s.desc}</p>
-                <div className="tc-step-foot"><b>{s.foot}</b></div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
       {/* ── OWNER (PARA COMPLEJOS) ── */}
-      <section className="tc-owner">
+      <section ref={ownerSectionRef} className="tc-owner">
+        <div className="tc-owner-media" aria-hidden="true">
+          <div className="tc-owner-media-img" />
+        </div>
         <div className="tc-owner-inner">
-          <div>
+          <div className="tc-sr-left">
             <span className="tc-eyebrow">Para complejos</span>
-            <h2 className="tc-sec-h">Llená tu agenda.<br /><i>Nosotros nos ocupamos</i> del resto.</h2>
-            <p className="tc-sec-sub">Sumá tu complejo a una plataforma hecha para digitalizar las reservas en Argentina. Gestioná canchas, horarios y pagos desde un panel simple.</p>
+            <h2 className="tc-sec-h">Convertí horas libres en<br /><i>reservas confirmadas</i>.</h2>
+            <p className="tc-sec-sub">Digitalizá tu operación en un panel claro: agenda, cobros y comunicación con jugadores, todo en un mismo lugar.</p>
             <div className="tc-owner-ctas">
               <button className="tc-btn tc-btn-primary" onClick={() => setShowContact(true)}>Registrá tu complejo →</button>
-              <button className="tc-btn tc-btn-ghost" onClick={() => setShowContact(true)}>Contactar ventas</button>
             </div>
           </div>
-          <div className="tc-owner-side">
-            <div className="tc-owner-side-h">Qué te ofrecemos</div>
+          <div className="tc-owner-side tc-sr-right">
+            <div className="tc-owner-side-h">Qué resolvemos</div>
             <div>
               {[
-                { b: 'Panel', t: 'Gestioná reservas, canchas y pagos desde un solo lugar' },
-                { b: 'Online', t: 'Tu cancha disponible 24/7, sin contestar el teléfono' },
-                { b: 'WhatsApp', t: 'Notificaciones automáticas a tus clientes al confirmar' },
-                { b: 'Soporte', t: 'Te acompañamos para que arranques tranquilo desde el día uno' },
+                { b: 'Agenda', t: 'Horarios y canchas en tiempo real, sin cruces ni planillas.' },
+                { b: 'Cobros', t: 'Pagos más ordenados y trazables, en un flujo simple.' },
+                { b: 'Clientes', t: 'Confirmaciones automáticas y acompañamiento desde el inicio.' },
               ].map(p => (
                 <div key={p.b} className="tc-owner-perk"><b>{p.b}</b>{p.t}</div>
               ))}
@@ -1123,10 +1311,10 @@ export default function Home() {
       </section>
 
       {/* ── FAQ ── */}
-      <section style={{ borderTop: '1px solid rgba(255,255,255,.07)' }} onClick={() => setOpenFaqIndex(null)}>
+      <section className="tc-faq-band" onClick={() => setOpenFaqIndex(null)}>
         <div className="tc-sec-w">
           <div className="tc-faq-grid">
-            <div>
+            <div className="tc-sr-up">
               <span className="tc-eyebrow">FAQ</span>
               <h2 className="tc-sec-h">Preguntas<br /><i>frecuentes</i>.</h2>
               <p className="tc-sec-sub">Todo lo que necesitás saber antes de reservar.</p>
@@ -1159,12 +1347,15 @@ export default function Home() {
       </section>
 
       {/* ── CLOSING CTA ── */}
-      <section className="tc-closing">
+      <section ref={closingSectionRef} className="tc-closing">
+        <div className="tc-closing-media" aria-hidden="true">
+          <div className="tc-closing-media-img" />
+        </div>
         <div className="tc-closing-inner">
-          <div className="tc-big-closing">
+          <div className="tc-big-closing tc-sr-up">
             Ponete los botines.<br /><i>Nosotros nos encargamos del resto.</i>
           </div>
-          <div className="tc-closing-ctas">
+          <div className="tc-closing-ctas tc-sr tc-sr-d2">
             <button className="tc-btn tc-btn-primary" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setTimeout(() => document.getElementById('cityInput')?.focus(), 600); }}>
               Buscar cancha →
             </button>
@@ -1225,7 +1416,16 @@ export default function Home() {
 
       {/* ── CONTACT SIDEBAR ── */}
       <div className="tc-contact-overlay" style={{ opacity: showContact ? 1 : 0, pointerEvents: showContact ? 'auto' : 'none' }} onClick={() => setShowContact(false)} />
-      <div ref={sidebarRef} className={`tc-contact-panel${showContact ? ' tc-open' : ''}`}>
+      <div
+        ref={sidebarRef}
+        className={`tc-contact-panel${showContact ? ' tc-open' : ''}`}
+        style={{
+          transform: showContact ? 'translateX(0)' : 'translateX(100%)',
+          visibility: showContact ? 'visible' : 'hidden',
+          pointerEvents: showContact ? 'auto' : 'none',
+        }}
+        aria-hidden={!showContact}
+      >
         <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: '#22c55e', margin: 0 }}>Contacto</h2>
           <button onClick={() => setShowContact(false)} style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#f87171' }}><X size={16} /></button>

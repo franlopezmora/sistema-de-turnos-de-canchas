@@ -1358,24 +1358,26 @@ function resolveChargedParticipantIds(
   return owner ? [owner.id] : [];
 }
 
-function hashText(value: string) {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
 function resolvePlaygroundClientPhone(owner?: Participant | null) {
   const fromContact = String(owner?.contact || '').replace(/\D/g, '');
   if (fromContact.length >= 8) {
     return fromContact.startsWith('54') ? `+${fromContact}` : `+54${fromContact}`;
   }
 
-  const seed = String(owner?.name || 'cliente').trim().toLowerCase();
-  const suffix = String((hashText(seed) % 90_000_000) + 10_000_000);
-  return `+54911${suffix}`;
+  return '';
+}
+
+function resolvePlaygroundClientEmail(owner?: Participant | null) {
+  const contact = String(owner?.contact || '').trim();
+  const match = contact.match(/[^\s@]+@[^\s@]+\.[^\s@]+/);
+  return match ? match[0].toLowerCase() : '';
+}
+
+function resolveParticipantClientId(participant?: Participant | null) {
+  const ref = String(participant?.entityRef || '').trim();
+  if (ref.startsWith('client:')) return ref.slice('client:'.length).trim();
+  if (ref.startsWith('booking-client:')) return ref.slice('booking-client:'.length).trim();
+  return '';
 }
 
 function normalizeText(value: unknown) {
@@ -6997,6 +6999,18 @@ export default function AdminAgendaPlaygroundPage() {
       return;
     }
 
+    const ownerClientId = resolveParticipantClientId(owner);
+    const ownerPhone = resolvePlaygroundClientPhone(owner);
+    const ownerEmail = resolvePlaygroundClientEmail(owner);
+    if (!ownerClientId && !ownerPhone) {
+      setBlockingFieldError('owner', 'Cargá el teléfono del titular o seleccioná un cliente existente.');
+      return;
+    }
+    if (!ownerClientId && !ownerEmail) {
+      setBlockingFieldError('owner', 'Cargá el email del titular o seleccioná un cliente existente.');
+      return;
+    }
+
     if (simplifiedNewParticipantOpen) {
       setBlockingFieldError('participants', 'Terminá de agregar el nuevo participante antes de guardar.');
       return;
@@ -7278,7 +7292,6 @@ export default function AdminAgendaPlaygroundPage() {
     try {
       setIsSubmittingBooking(true);
       const slotTime = slotToTime(selectedStartSlot);
-      const ownerPhone = resolvePlaygroundClientPhone(owner);
 
       if (isRecurringKind) {
         setRecurringOverlapModalOpen(false);
@@ -7364,10 +7377,15 @@ export default function AdminAgendaPlaygroundPage() {
                   durationMinutes: selectionMinutes,
                   everyDays: frequencyDays,
                   ...(Number.isFinite(repetitionsPerDay) ? { repetitions: repetitionsPerDay } : {}),
-                  client: {
-                    name: owner.name.trim(),
-                    phone: ownerPhone,
-                  },
+                  ...(ownerClientId
+                    ? { clientId: ownerClientId }
+                    : {
+                        client: {
+                          name: owner.name.trim(),
+                          phone: ownerPhone,
+                          email: ownerEmail,
+                        },
+                      }),
                   previewConflictsOnly: true,
                 });
                 previewGeneratedCount += Number(preview?.generatedCount || 0);
@@ -7425,10 +7443,15 @@ export default function AdminAgendaPlaygroundPage() {
             durationMinutes: selectionMinutes,
             everyDays: frequencyDays,
             ...(Number.isFinite(repetitionsPerDay) ? { repetitions: repetitionsPerDay } : {}),
-            client: {
-              name: owner.name.trim(),
-              phone: ownerPhone,
-            },
+            ...(ownerClientId
+              ? { clientId: ownerClientId }
+              : {
+                  client: {
+                    name: owner.name.trim(),
+                    phone: ownerPhone,
+                    email: ownerEmail,
+                  },
+                }),
           });
           return result;
         };
@@ -7633,10 +7656,15 @@ export default function AdminAgendaPlaygroundPage() {
         const bookingDate = new Date(selectedDate);
         const createdPayload: any = await createBooking(Number(selectedCourtId), selectedActivityId, bookingDate, slotTime, {
           durationMinutes: selectionMinutes,
-          client: {
-            name: owner.name.trim(),
-            phone: ownerPhone,
-          },
+          ...(ownerClientId
+            ? { clientId: ownerClientId }
+            : {
+                client: {
+                  name: owner.name.trim(),
+                  phone: ownerPhone,
+                  email: ownerEmail,
+                },
+              }),
         });
         const maybeId = Number(createdPayload?.booking?.id ?? createdPayload?.id ?? createdPayload?.bookingId);
         if (Number.isFinite(maybeId) && maybeId > 0) {
@@ -8762,7 +8790,7 @@ export default function AdminAgendaPlaygroundPage() {
 
           <section ref={agendaSurfaceRef} className="relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-[#f5f6f8]">
             {calendarNotice && (
-              <div className="pointer-events-none absolute right-5 top-5 z-40 max-w-[420px] rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2 text-[12px] font-semibold text-[#b42346] shadow-sm">
+              <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] max-w-[420px] rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2 text-[12px] font-semibold text-[#b42346] shadow-sm">
                 {calendarNotice}
               </div>
             )}
@@ -11324,7 +11352,7 @@ export default function AdminAgendaPlaygroundPage() {
                                               </div>
                                             </label>
                                             <label className="block">
-                                              <span className="text-[12px] font-medium text-[#7a8398]">Contacto</span>
+                                              <span className="text-[12px] font-medium text-[#7a8398]">Email y teléfono</span>
                                               <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
                                                 <input
                                                   ref={participantContactInputRef}
@@ -11340,7 +11368,7 @@ export default function AdminAgendaPlaygroundPage() {
                                                       );
                                                     }
                                                   }}
-                                                  placeholder="Correo o teléfono"
+                                                  placeholder="cliente@email.com · 351..."
                                                   className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
                                                 />
                                               </div>
@@ -12232,7 +12260,7 @@ export default function AdminAgendaPlaygroundPage() {
                                         );
                                       }
                                     }}
-                                    placeholder="Contacto (correo o teléfono)"
+                                    placeholder="Email y teléfono"
                                     className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
                                   />
                                 </div>

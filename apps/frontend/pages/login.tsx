@@ -225,8 +225,8 @@ export default function LoginPage() {
     <>
       <Head>
         <title>{isLogin ? 'Ingresar' : 'Crear cuenta'} | TuCancha</title>
-        <style dangerouslySetInnerHTML={{ __html: LOGIN_CSS }} />
       </Head>
+      <style dangerouslySetInnerHTML={{ __html: LOGIN_CSS }} />
 
       <div className="lg-root">
         {/* Brand top link */}
