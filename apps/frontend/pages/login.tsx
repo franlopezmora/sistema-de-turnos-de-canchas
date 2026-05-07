@@ -8,6 +8,7 @@ import { Mail, Lock, User, Phone, UserPlus, LogIn, AlertCircle, Loader2, IdCard,
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 import { buildCanonicalPhone, DEFAULT_PHONE_COUNTRY_ISO2, normalizePhoneCountryIso2, PHONE_COUNTRY_OPTIONS, resolveCallingCodeByIso2 } from '../utils/phone';
 import { useAuth } from '../contexts/AuthContext';
+import { useUserTheme } from '../contexts/UserThemeContext';
 
 type PostLoginRedirectIntent = { sourceUser?: any };
 
@@ -59,11 +60,39 @@ const LOGIN_CSS = `
   .lg-toggle-btn { background:none; border:none; font-family:${FONT}; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#444; cursor:pointer; transition:color .15s; text-decoration:underline; text-decoration-color:transparent; text-underline-offset:3px; }
   .lg-toggle-btn:hover { color:#22c55e; text-decoration-color:#22c55e; }
   .lg-brand { position:absolute; top:20px; left:50%; transform:translateX(-50%); font-size:11px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; color:#22c55e; white-space:nowrap; }
+  .lg-theme-toggle { position:absolute; top:18px; right:20px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.06); color:#d1d5db; border-radius:999px; padding:7px 12px; font-family:${FONT}; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; z-index:2; transition:background .15s,border-color .15s,color .15s; }
+  .lg-theme-toggle:hover { background:rgba(255,255,255,.12); color:#f3f4f6; border-color:rgba(255,255,255,.2); }
+  .lg-root.lg-theme-light { background:#eef3f8; }
+  .lg-root.lg-theme-light::before { background:radial-gradient(ellipse 70% 60% at 20% 110%,rgba(34,197,94,.12),transparent 65%), radial-gradient(ellipse 50% 40% at 85% -10%,rgba(14,165,233,.08),transparent 60%); }
+  .lg-root.lg-theme-light .lg-card { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 26px 60px rgba(15,23,42,.2); }
+  .lg-root.lg-theme-light .lg-header { border-bottom-color:rgba(15,23,42,.08); }
+  .lg-root.lg-theme-light .lg-title { color:#0f172a; }
+  .lg-root.lg-theme-light .lg-sub { color:#64748b; }
+  .lg-root.lg-theme-light .lg-label { color:#64748b; }
+  .lg-root.lg-theme-light .lg-input,
+  .lg-root.lg-theme-light .lg-phone-wrap { background:#ffffff; border-color:rgba(15,23,42,.14); color:#0f172a; }
+  .lg-root.lg-theme-light .lg-input::placeholder,
+  .lg-root.lg-theme-light .lg-phone-input::placeholder { color:#94a3b8; }
+  .lg-root.lg-theme-light .lg-input-icon,
+  .lg-root.lg-theme-light .lg-eye-btn { color:#94a3b8; }
+  .lg-root.lg-theme-light .lg-phone-prefix { background:rgba(15,23,42,.04); border-right-color:rgba(15,23,42,.08); }
+  .lg-root.lg-theme-light .lg-phone-select { color:#1f2937; }
+  .lg-root.lg-theme-light .lg-phone-input { color:#0f172a; }
+  .lg-root.lg-theme-light .lg-divider-line { background:rgba(15,23,42,.08); }
+  .lg-root.lg-theme-light .lg-divider-text { color:#64748b; }
+  .lg-root.lg-theme-light .lg-btn-ghost { background:rgba(15,23,42,.04); border-color:rgba(15,23,42,.12)!important; color:#475569; }
+  .lg-root.lg-theme-light .lg-btn-ghost:hover:not(:disabled) { background:rgba(15,23,42,.08); color:#1f2937; }
+  .lg-root.lg-theme-light .lg-toggle { border-top-color:rgba(15,23,42,.08); }
+  .lg-root.lg-theme-light .lg-toggle-btn { color:#475569; }
+  .lg-root.lg-theme-light .lg-brand { color:#15803d; }
+  .lg-root.lg-theme-light .lg-theme-toggle { border-color:rgba(15,23,42,.14); background:rgba(255,255,255,.92); color:#334155; }
+  .lg-root.lg-theme-light .lg-theme-toggle:hover { background:#ffffff; color:#0f172a; border-color:rgba(15,23,42,.18); }
   @media(max-width:480px) { .lg-grid2 { grid-template-columns:1fr; } .lg-header { padding:24px 24px 20px; } .lg-body { padding:20px 24px 28px; } }
 `;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { isLight, toggleTheme } = useUserTheme();
   const { status, user: authUser, revalidateSession } = useAuth();
   const returnTo =
     typeof router.query.from === 'string' &&
@@ -228,9 +257,18 @@ export default function LoginPage() {
       </Head>
       <style dangerouslySetInnerHTML={{ __html: LOGIN_CSS }} />
 
-      <div className="lg-root">
+      <div className={`lg-root${isLight ? ' lg-theme-light' : ''}`}>
         {/* Brand top link */}
         <Link href="/" className="lg-brand">TuCancha</Link>
+        <button
+          type="button"
+          className="lg-theme-toggle"
+          onClick={toggleTheme}
+          aria-label={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
+          title={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
+        >
+          {isLight ? 'Oscuro' : 'Claro'}
+        </button>
 
         <div className="lg-card">
 

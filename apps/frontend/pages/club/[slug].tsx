@@ -93,6 +93,35 @@ const PAGE_CSS = `
     .cl-hero-body { flex-direction:column; align-items:flex-start; gap:16px; }
     .cl-hero-actions { align-self:flex-end; }
   }
+  .tc-root.tc-theme-light .cl-hero { border-color:rgba(15,23,42,.12); box-shadow:0 12px 28px rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .cl-hero-bg { background:linear-gradient(135deg,#f8fcff 0%,#eef5fc 52%,#e6eff8 100%); }
+  .tc-root.tc-theme-light .cl-hero-overlay { background:linear-gradient(135deg,rgba(248,252,255,.85) 0%,rgba(244,249,255,.58) 60%,rgba(242,248,254,.78) 100%); }
+  .tc-root.tc-theme-light .cl-logo { background:#ffffff; border-color:rgba(15,23,42,.16); }
+  .tc-root.tc-theme-light .cl-hero-rating,
+  .tc-root.tc-theme-light .cl-hero-meta-item { color:#334155; }
+  .tc-root.tc-theme-light .cl-hero-h { color:#0f172a; }
+  .tc-root.tc-theme-light .cl-icon-btn { background:#ffffff; border-color:rgba(15,23,42,.14); color:#334155; box-shadow:0 4px 12px rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .cl-icon-btn:hover:not(:disabled) { background:#f8fafc; border-color:rgba(15,23,42,.22); }
+  .tc-root.tc-theme-light .cl-panel { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .cl-panel-h,
+  .tc-root.tc-theme-light .cl-panel-icon,
+  .tc-root.tc-theme-light .cl-review-modal-sub { color:#64748b; }
+  .tc-root.tc-theme-light .cl-panel-row { color:#334155; border-bottom-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .cl-panel-row a { color:#1f2937; }
+  .tc-root.tc-theme-light .cl-review-card { background:rgba(15,23,42,.03); border-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .cl-review-name { color:#0f172a; }
+  .tc-root.tc-theme-light .cl-review-comment { color:#475569; }
+  .tc-root.tc-theme-light .cl-feedback { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.24); color:#166534; }
+  .tc-root.tc-theme-light .cl-review-overlay { background:rgba(15,23,42,.56); }
+  .tc-root.tc-theme-light .cl-review-panel { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 22px 46px rgba(15,23,42,.22); }
+  .tc-root.tc-theme-light .cl-review-modal-title { color:#0f172a; }
+  .tc-root.tc-theme-light .cl-review-star { border-color:rgba(15,23,42,.14); background:rgba(15,23,42,.04); color:#94a3b8; }
+  .tc-root.tc-theme-light .cl-review-textarea { background:#ffffff; border-color:rgba(15,23,42,.14); color:#0f172a; }
+  .tc-root.tc-theme-light .cl-review-secondary { border-color:rgba(15,23,42,.14); color:#334155; }
+  .cl-login-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:14px; padding:11px 16px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); border-radius:12px; color:#c8c8c8; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:'Sora',system-ui,sans-serif; transition:background .15s,border-color .15s,color .15s; }
+  .cl-login-btn:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.22); color:#f2f2f2; }
+  .tc-root.tc-theme-light .cl-login-btn { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.16); color:#334155; }
+  .tc-root.tc-theme-light .cl-login-btn:hover { background:rgba(15,23,42,.09); border-color:rgba(15,23,42,.26); color:#0f172a; }
 `;
 
 export default function ClubPage() {
@@ -576,8 +605,8 @@ export default function ClubPage() {
                   {!user && (
                     <button
                       type="button"
+                      className="cl-login-btn"
                       onClick={() => router.push(`/login?from=${encodeURIComponent(router.asPath || `/club/${slug}`)}`)}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginTop: 14, padding: '11px 16px', background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12, color: '#c8c8c8', fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
                       <ChevronRight size={14} />
                       Iniciar sesión
@@ -618,13 +647,13 @@ export default function ClubPage() {
               </div>
               <button
                 type="button"
-                className="cl-icon-btn"
+                className="tc-close-btn"
                 onClick={() => !reviewSaving && setReviewModalOpen(false)}
                 disabled={reviewSaving}
                 aria-label="Cerrar"
                 title="Cerrar"
               >
-                <X size={18} />
+                <X size={15} />
               </button>
             </div>
 

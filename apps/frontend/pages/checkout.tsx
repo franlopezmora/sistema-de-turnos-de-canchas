@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import {
-  ArrowLeft,
   Calendar,
   CheckCircle2,
   Clock,
@@ -27,9 +26,7 @@ import {
 
 const CHECKOUT_CSS = `
   .checkout-shell { max-width:1120px; margin:0 auto; }
-  .checkout-top { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:22px; }
-  .checkout-back { display:inline-flex; align-items:center; gap:8px; color:#777; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
-  .checkout-back:hover { color:#22c55e; }
+  .checkout-top { margin-bottom:22px; }
   .checkout-layout { display:grid; grid-template-columns:minmax(0,1.1fr) 380px; gap:22px; align-items:start; }
   .checkout-card { background:#0f0f0f; border:1px solid rgba(255,255,255,.07); border-radius:24px; overflow:hidden; }
   .checkout-card-pad { padding:24px; }
@@ -39,6 +36,10 @@ const CHECKOUT_CSS = `
   .checkout-pill { display:inline-flex; align-items:center; gap:8px; height:30px; padding:0 11px; border-radius:999px; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.22); color:#4ade80; font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
   .checkout-title { margin:14px 0 7px; color:#f5f5f5; font-size:clamp(28px,4vw,46px); line-height:.98; font-weight:900; letter-spacing:-.06em; }
   .checkout-copy { margin:0; max-width:560px; color:#777; font-size:14px; line-height:1.6; font-weight:600; }
+  .checkout-activity { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+  .checkout-activity-icon { width:44px; height:44px; border-radius:16px; background:rgba(34,197,94,.1); color:#22c55e; border:1px solid rgba(34,197,94,.18); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .checkout-activity-name { margin:0; color:#f2f2f2; font-size:17px; font-weight:900; line-height:1.2; }
+  .checkout-activity-court { margin:2px 0 0; color:#888; font-size:13px; font-weight:650; line-height:1.3; }
   .checkout-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .checkout-detail { min-height:88px; border-radius:18px; background:#0a0a0a; border:1px solid rgba(255,255,255,.06); padding:14px; }
   .checkout-label { display:flex; align-items:center; gap:7px; color:#555; font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; margin-bottom:9px; }
@@ -56,8 +57,8 @@ const CHECKOUT_CSS = `
   .payment-copy { margin:4px 0 0; color:#666; font-size:12px; line-height:1.45; font-weight:600; }
   .checkout-error { border:1px solid rgba(248,113,113,.22); background:rgba(248,113,113,.08); color:#fca5a5; border-radius:16px; padding:13px 14px; font-size:13px; font-weight:700; line-height:1.45; }
   .checkout-actions { display:flex; gap:10px; padding-top:16px; }
-  .checkout-secondary,.checkout-primary { height:48px; border-radius:15px; font-family:'Sora',system-ui,sans-serif; font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; }
-  .checkout-secondary { flex:0 0 auto; min-width:116px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.045); color:#aaa; }
+  .checkout-secondary,.checkout-primary { height:48px; border-radius:15px; font-family:'Sora',system-ui,sans-serif; font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; padding:0 18px; }
+  .checkout-secondary { flex:0 0 auto; min-width:154px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.045); color:#aaa; }
   .checkout-primary { flex:1; border:none; background:#22c55e; color:#052010; }
   .checkout-primary:disabled { cursor:not-allowed; opacity:.65; }
   .checkout-success { max-width:720px; margin:0 auto; text-align:center; }
@@ -72,6 +73,31 @@ const CHECKOUT_CSS = `
     .checkout-actions { flex-direction:column; }
     .checkout-secondary { width:100%; }
   }
+  .tc-root.tc-theme-light .checkout-card { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 12px 30px rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .checkout-hero { border-bottom-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .checkout-hero::before { background:radial-gradient(circle at 10% 0%, rgba(34,197,94,.18), transparent 36%), linear-gradient(135deg, rgba(34,197,94,.08), rgba(14,165,233,.05) 52%); }
+  .tc-root.tc-theme-light .checkout-pill { color:#15803d; background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.24); }
+  .tc-root.tc-theme-light .checkout-title,
+  .tc-root.tc-theme-light .checkout-value,
+  .tc-root.tc-theme-light .checkout-activity-name { color:#0f172a; }
+  .tc-root.tc-theme-light .checkout-copy,
+  .tc-root.tc-theme-light .checkout-price-label,
+  .tc-root.tc-theme-light .payment-copy { color:#475569; }
+  .tc-root.tc-theme-light .checkout-activity-court { color:#475569; }
+  .tc-root.tc-theme-light .checkout-detail,
+  .tc-root.tc-theme-light .payment-option { background:#ffffff; border-color:rgba(15,23,42,.12); }
+  .tc-root.tc-theme-light .checkout-label { color:#64748b; }
+  .tc-root.tc-theme-light .checkout-summary { box-shadow:none; }
+  .tc-root.tc-theme-light .checkout-price { border-bottom-color:rgba(15,23,42,.08); background:linear-gradient(135deg, rgba(34,197,94,.09), rgba(14,165,233,.04)); }
+  .tc-root.tc-theme-light .checkout-price-value { color:#15803d; }
+  .tc-root.tc-theme-light .payment-icon { background:rgba(15,23,42,.05); color:#64748b; }
+  .tc-root.tc-theme-light .payment-option.active { border-color:rgba(34,197,94,.3); background:rgba(34,197,94,.08); }
+  .tc-root.tc-theme-light .payment-option.active .payment-icon { background:rgba(34,197,94,.15); color:#15803d; }
+  .tc-root.tc-theme-light .payment-title { color:#0f172a; }
+  .tc-root.tc-theme-light .checkout-secondary { background:#ffffff; border-color:rgba(15,23,42,.14); color:#334155; }
+  .tc-root.tc-theme-light .checkout-secondary:hover { background:rgba(15,23,42,.05); color:#0f172a; }
+  .tc-root.tc-theme-light .checkout-error { color:#b91c1c; background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.26); }
+  .tc-root.tc-theme-light .checkout-success-icon { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.25); color:#15803d; }
 `;
 
 const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString('es-AR')}`;
@@ -240,7 +266,7 @@ export default function CheckoutPage() {
               </div>
             </div>
             <div className="checkout-actions">
-              <Link href={backHref} className="checkout-secondary">Reservar otro</Link>
+              <Link href={backHref} className="checkout-secondary" style={{ minWidth: 236 }}>Reservar otro</Link>
               <Link href="/bookings" className="checkout-primary">Ver mis reservas</Link>
             </div>
           </section>
@@ -253,13 +279,6 @@ export default function CheckoutPage() {
     <DarkPageLayout title="Checkout | TuCancha" extraCss={CHECKOUT_CSS} breadcrumbs={checkoutBreadcrumbs}>
       <main className="tc-page">
         <div className="checkout-shell">
-          <div className="checkout-top">
-            <Link href={backHref} className="checkout-back">
-              <ArrowLeft size={15} />
-              Volver al club
-            </Link>
-          </div>
-
           <div className="checkout-layout">
             <section className="checkout-card">
               <div className="checkout-hero">
@@ -276,13 +295,13 @@ export default function CheckoutPage() {
               </div>
 
               <div className="checkout-card-pad">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 16, background: 'rgba(34,197,94,.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,.18)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="checkout-activity">
+                  <div className="checkout-activity-icon">
                     <Ticket size={19} />
                   </div>
                   <div>
-                    <p style={{ margin: 0, color: '#f2f2f2', fontSize: 17, fontWeight: 900 }}>{draft.activityName}</p>
-                    <p style={{ margin: '2px 0 0', color: '#666', fontSize: 13, fontWeight: 650 }}>{draft.courtName}</p>
+                    <p className="checkout-activity-name">{draft.activityName}</p>
+                    <p className="checkout-activity-court">{draft.courtName}</p>
                   </div>
                 </div>
 

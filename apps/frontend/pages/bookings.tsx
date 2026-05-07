@@ -64,11 +64,64 @@ const PAGE_CSS = `
   .bk-review-star.bk-star-on { background:rgba(34,197,94,.15); border-color:rgba(34,197,94,.3); color:#22c55e; }
   .bk-review-textarea { width:100%; background:#0a0a0a; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px 16px; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; font-size:14px; outline:none; resize:none; transition:border-color .2s; }
   .bk-review-textarea:focus { border-color:rgba(34,197,94,.3); }
+  /* Review modal actions */
+  .bk-review-action-row { display:flex; gap:10px; margin-top:24px; }
+  .bk-review-secondary { flex:1; height:46px; border-radius:12px; background:none; border:1px solid rgba(255,255,255,.12); color:#888; font-family:'Sora',system-ui,sans-serif; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:background .15s,border-color .15s; }
+  .bk-review-secondary:hover { background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.22); }
+  .bk-review-primary { flex:1; height:46px; border-radius:12px; background:#22c55e; border:none; color:#052010; font-family:'Sora',system-ui,sans-serif; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:background .15s; }
+  .bk-review-primary:hover:not(:disabled) { background:#4ade80; }
+  .bk-review-primary:disabled { opacity:.5; cursor:not-allowed; }
   @media(max-width:900px){
     .bk-layout { grid-template-columns:1fr; }
     .bk-detail { position:static; }
     .bk-list-body { max-height:50vh; }
   }
+  .tc-root.tc-theme-light .bk-list-panel,
+  .tc-root.tc-theme-light .bk-detail { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 12px 28px rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .bk-card { background:#ffffff; border-color:rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .bk-card:hover { border-color:rgba(34,197,94,.3); background:rgba(248,250,252,.9); }
+  .tc-root.tc-theme-light .bk-card.bk-selected { border-color:rgba(34,197,94,.45); background:rgba(34,197,94,.08); }
+  .tc-root.tc-theme-light .bk-date-box-past { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .bk-date-day,
+  .tc-root.tc-theme-light .bk-card-club,
+  .tc-root.tc-theme-light .bk-detail-court,
+  .tc-root.tc-theme-light .bk-detail-total-val,
+  .tc-root.tc-theme-light .bk-review-h { color:#0f172a; }
+  .tc-root.tc-theme-light .bk-date-month,
+  .tc-root.tc-theme-light .bk-card-meta,
+  .tc-root.tc-theme-light .bk-detail-row-label,
+  .tc-root.tc-theme-light .bk-detail-total-label,
+  .tc-root.tc-theme-light .bk-empty-title,
+  .tc-root.tc-theme-light .bk-review-sub { color:#64748b; }
+  .tc-root.tc-theme-light .bk-card-chip { background:rgba(15,23,42,.06); color:#475569; }
+  .tc-root.tc-theme-light .bk-detail-row { border-bottom-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .bk-detail-icon { background:rgba(15,23,42,.05); color:#64748b; }
+  .tc-root.tc-theme-light .bk-detail-row-val { color:#334155; }
+  .tc-root.tc-theme-light .bk-detail-total { border-top-color:rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .bk-empty-icon { color:#cbd5e1; }
+  .tc-root.tc-theme-light .bk-review-overlay { background:rgba(15,23,42,.55); }
+  .tc-root.tc-theme-light .bk-review-panel { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 20px 44px rgba(15,23,42,.24); }
+  .tc-root.tc-theme-light .bk-review-star { border-color:rgba(15,23,42,.16); background:rgba(15,23,42,.04); color:#94a3b8; }
+  .tc-root.tc-theme-light .bk-review-textarea { background:#ffffff; border-color:rgba(15,23,42,.14); color:#0f172a; }
+  .tc-root.tc-theme-light .bk-review-textarea:focus { border-color:rgba(34,197,94,.34); }
+  .tc-root.tc-theme-light .bk-date-box-active { background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.26); }
+  .tc-root.tc-theme-light .bk-date-box-cancelled { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.2); }
+  .tc-root.tc-theme-light .bk-ticket-label { background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.24); color:#15803d; }
+  .tc-root.tc-theme-light .bk-detail-activity { color:#94a3b8; }
+  .tc-root.tc-theme-light .bk-action-cancel { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.22)!important; color:#dc2626; }
+  .tc-root.tc-theme-light .bk-action-cancel:hover { background:rgba(248,113,113,.14); }
+  .tc-root.tc-theme-light .bk-action-review { background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.2)!important; color:#15803d; }
+  .tc-root.tc-theme-light .bk-action-review:hover { background:rgba(34,197,94,.14); }
+  .tc-root.tc-theme-light .bk-star-on { background:rgba(34,197,94,.12)!important; border-color:rgba(34,197,94,.28)!important; color:#15803d!important; }
+  .tc-root.tc-theme-light .bk-list-body::-webkit-scrollbar-thumb { background:rgba(15,23,42,.14); }
+  .bk-detail-empty { background:rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.1); border-radius:24px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:320px; padding:40px; text-align:center; gap:12px; }
+  .bk-detail-empty-icon { color:#2a2a2a; }
+  .bk-detail-empty-label { font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#333; line-height:1.5; }
+  .tc-root.tc-theme-light .bk-detail-empty { background:rgba(15,23,42,.025); border-color:rgba(15,23,42,.14); }
+  .tc-root.tc-theme-light .bk-detail-empty-icon { color:#cbd5e1; }
+  .tc-root.tc-theme-light .bk-detail-empty-label { color:#94a3b8; }
+  .tc-root.tc-theme-light .bk-review-secondary { border-color:rgba(15,23,42,.16); color:#334155; }
+  .tc-root.tc-theme-light .bk-review-secondary:hover { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.25); }
 `;
 
 export default function MyBookingsPage() {
@@ -464,9 +517,9 @@ export default function MyBookingsPage() {
               </div>
             </div>
           ) : (
-            <div style={{ background: 'rgba(255,255,255,.02)', border: '1px dashed rgba(255,255,255,.08)', borderRadius: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, padding: 40, textAlign: 'center', gap: 12 }}>
-              <Ticket size={48} style={{ color: '#222' }} />
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#333' }}>Seleccioná un turno<br />para ver el ticket</div>
+            <div className="bk-detail-empty">
+              <Ticket size={48} className="bk-detail-empty-icon" />
+              <div className="bk-detail-empty-label">Seleccioná un turno<br />para ver el ticket</div>
             </div>
           )}
 
@@ -497,15 +550,23 @@ export default function MyBookingsPage() {
             if (started && e.target === e.currentTarget && !reviewSaving) setReviewModalOpen(false);
           }}
         >
-          <div className="bk-review-panel" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div className="bk-review-h">Tu reseña del club</div>
-              <button onClick={() => setReviewModalOpen(false)} style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#f87171', flexShrink: 0 }}>
-                <X size={16} />
+          <div className="bk-review-panel" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22 }}>
+              <div>
+                <div className="bk-review-h">Tu reseña del club</div>
+                <div className="bk-review-sub">{selectedBooking?.court?.club?.name || 'Club'} · Una reseña por club, editala cuando quieras.</div>
+              </div>
+              <button
+                type="button"
+                className="tc-close-btn"
+                onClick={() => setReviewModalOpen(false)}
+                disabled={reviewSaving}
+                aria-label="Cerrar"
+              >
+                <X size={15} />
               </button>
-            </div>
-            <div className="bk-review-sub">
-              {selectedBooking?.court?.club?.name || 'Club'}
             </div>
 
             {reviewLoading ? (
@@ -516,8 +577,8 @@ export default function MyBookingsPage() {
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#555', marginBottom: 10 }}>Calificación</div>
                   <div className="bk-review-stars">
                     {[1, 2, 3, 4, 5].map(v => (
-                      <button key={v} type="button" className={`bk-review-star${reviewRating >= v ? ' bk-star-on' : ''}`} onClick={() => setReviewRating(v)} aria-label={`${v} estrellas`}>
-                        <Star size={16} className={reviewRating >= v ? 'fill-current' : ''} />
+                      <button key={v} type="button" className={`bk-review-star${reviewRating >= v ? ' bk-star-on' : ''}`} onClick={() => setReviewRating(v)} disabled={reviewSaving} aria-label={`${v} ${v === 1 ? 'estrella' : 'estrellas'}`}>
+                        <Star size={16} style={{ fill: reviewRating >= v ? 'currentColor' : 'none' }} />
                       </button>
                     ))}
                   </div>
@@ -530,29 +591,32 @@ export default function MyBookingsPage() {
                     value={reviewComment}
                     onChange={e => setReviewComment(e.target.value.slice(0, 220))}
                     placeholder="Contá tu experiencia..."
+                    disabled={reviewSaving}
                   />
                   <div style={{ fontSize: 11, color: '#444', textAlign: 'right', marginTop: 4 }}>{reviewComment.length}/220</div>
                 </div>
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+            <div className="bk-review-action-row">
               <button
                 type="button"
+                className="bk-review-secondary"
                 onClick={() => setReviewModalOpen(false)}
-                style={{ flex: 1, height: 46, borderRadius: 12, background: 'none', border: '1px solid rgba(255,255,255,.1)', color: '#888', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', cursor: 'pointer' }}
+                disabled={reviewSaving}
               >
                 Cancelar
               </button>
               <button
                 type="button"
+                className="bk-review-primary"
                 onClick={handleSubmitReview}
-                disabled={reviewLoading || reviewSaving}
-                style={{ flex: 1, height: 46, borderRadius: 12, background: '#22c55e', border: 'none', color: '#052010', fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: 'pointer', opacity: (reviewLoading || reviewSaving) ? .5 : 1 }}
+                disabled={reviewLoading || reviewSaving || reviewRating < 1}
               >
                 {reviewSaving ? 'Guardando...' : 'Guardar reseña'}
               </button>
             </div>
+
           </div>
         </div>
       )}

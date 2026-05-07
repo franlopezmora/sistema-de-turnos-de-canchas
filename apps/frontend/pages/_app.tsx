@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Router from 'next/router';
 import { ActiveClubProvider } from '../contexts/ActiveClubContext';
 import { AuthProvider } from '../contexts/AuthContext';
+import { UserThemeProvider, useUserTheme } from '../contexts/UserThemeContext';
 import { AUTH_LOGOUT_EVENT, clearPendingLogoutRedirect, type AuthLogoutEventDetail } from '../services/AuthService';
 import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 
@@ -18,15 +19,16 @@ export const APP_NOTICE_EVENT = 'app:notice';
 const PENDING_APP_NOTICE_STORAGE_KEY = 'app:notice:pending';
 const LOGOUT_NOTICE_COOLDOWN_MS = 6000;
 type NoticeTone = 'success' | 'error' | 'info' | 'warning';
-type AppNotice = {
+type AppNoticePayload = {
+  message?: string;
+  tone?: NoticeTone;
+};
+
+type NoticeWithPhase = {
   id: number;
   message: string;
   tone: NoticeTone;
   phase: 'entering' | 'visible' | 'leaving';
-};
-type AppNoticePayload = {
-  message?: string;
-  tone?: NoticeTone;
 };
 
 const NOTICE_TONES: Record<NoticeTone, { border: string; text: string; dot: string; glow: string }> = {
@@ -56,8 +58,55 @@ const NOTICE_TONES: Record<NoticeTone, { border: string; text: string; dot: stri
   }
 };
 
+function AppNoticeViewport({ notices }: { notices: NoticeWithPhase[] }) {
+  const { isLight } = useUserTheme();
+  if (notices.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-5 left-1/2 z-[2147483600] -translate-x-1/2 pointer-events-none">
+      {[...notices].slice(-3).reverse().map((notice, index) => {
+        const depth = Math.min(index, 2);
+        const baseOffsetY = depth * -9;
+        const phaseOffsetY = notice.phase === 'visible' ? 0 : 20;
+        const scale = 1 - depth * 0.025;
+        const opacity = notice.phase === 'visible' ? 1 : 0;
+        const toneStyle = NOTICE_TONES[notice.tone];
+        return (
+          <div
+            key={notice.id}
+            className="absolute left-1/2 w-max max-w-[92vw] rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur-md transition-all duration-300"
+            style={{
+              bottom: 0,
+              zIndex: 100 - depth,
+              opacity,
+              transform: `translate(-50%, ${baseOffsetY + phaseOffsetY}px) scale(${scale})`,
+              background: isLight
+                ? 'linear-gradient(145deg, rgba(255,255,255,.98), rgba(245,248,251,.94))'
+                : 'linear-gradient(145deg, rgba(7,10,9,.95), rgba(5,7,6,.9))',
+              borderColor: toneStyle.border,
+              color: isLight ? '#0f172a' : toneStyle.text,
+              boxShadow: isLight
+                ? `0 14px 32px rgba(15,23,42,.16), 0 0 0 1px ${toneStyle.glow} inset`
+                : `0 16px 34px rgba(0,0,0,.45), 0 0 0 1px ${toneStyle.glow} inset`
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: toneStyle.dot, boxShadow: `0 0 12px ${toneStyle.dot}` }}
+              />
+              <span>{notice.message}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function MyApp({ Component, pageProps }: AppProps) {
-  const [notices, setNotices] = useState<AppNotice[]>([]);
+  const [notices, setNotices] = useState<NoticeWithPhase[]>([]);
   const noticeIdRef = useRef(1);
   const noticeTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const lastLogoutNoticeAtRef = useRef(0);
@@ -226,46 +275,12 @@ export default function MyApp({ Component, pageProps }: AppProps) {
       </Head>
       <ActiveClubProvider>
         <AuthProvider>
-          <Component {...pageProps} />
+          <UserThemeProvider>
+            <Component {...pageProps} />
+            <AppNoticeViewport notices={notices} />
+          </UserThemeProvider>
         </AuthProvider>
       </ActiveClubProvider>
-      {notices.length > 0 && (
-        <div className="fixed bottom-5 left-1/2 z-[2147483600] -translate-x-1/2 pointer-events-none">
-          {[...notices].slice(-3).reverse().map((notice, index) => {
-            const depth = Math.min(index, 2);
-            const baseOffsetY = depth * -9;
-            const phaseOffsetY = notice.phase === 'visible' ? 0 : 20;
-            const scale = 1 - depth * 0.025;
-            const opacity = notice.phase === 'visible' ? 1 : 0;
-            const toneStyle = NOTICE_TONES[notice.tone];
-            return (
-              <div
-                key={notice.id}
-                className="absolute left-1/2 w-max max-w-[92vw] rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur-md transition-all duration-300"
-                style={{
-                  bottom: 0,
-                  zIndex: 100 - depth,
-                  opacity,
-                  transform: `translate(-50%, ${baseOffsetY + phaseOffsetY}px) scale(${scale})`,
-                  background: 'linear-gradient(145deg, rgba(7,10,9,.95), rgba(5,7,6,.9))',
-                  borderColor: toneStyle.border,
-                  color: toneStyle.text,
-                  boxShadow: `0 16px 34px rgba(0,0,0,.45), 0 0 0 1px ${toneStyle.glow} inset`
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: toneStyle.dot, boxShadow: `0 0 12px ${toneStyle.dot}` }}
-                  />
-                  <span>{notice.message}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
       {/* Portal para react-datepicker - renderiza fuera del stacking context */}
       <div id="datepicker-portal" />
     </>

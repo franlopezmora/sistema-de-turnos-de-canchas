@@ -3,10 +3,11 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import AppModal from './AppModal';
-import { LogOut, Calendar, Users, ShieldCheck, MapPin, X, Phone, Mail, Instagram } from 'lucide-react';
+import { LogOut, Calendar, Users, ShieldCheck, MapPin, X, Phone, Mail, Instagram, Sun, Moon } from 'lucide-react';
 import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { useAuth } from '../contexts/AuthContext';
+import { useUserTheme } from '../contexts/UserThemeContext';
 import { hasAdminAccess, normalizeSessionUser, getActiveClubSlug } from '../utils/session';
 import { reportUiError } from '../utils/uiError';
 import { isAuthSessionInvalidatedError } from '../utils/apiClient';
@@ -79,8 +80,8 @@ const BASE_CSS = `
   }
   .tc-breadcrumb-sep { color:#3a3a3a; font-size:10px; font-weight:700; }
   /* Section heading */
-  .tc-page-eyebrow { display:inline-flex; align-items:center; gap:10px; font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#555; margin-bottom:14px; }
-  .tc-page-eyebrow::before { content:''; display:inline-block; width:24px; height:1px; background:#555; }
+  .tc-page-eyebrow { display:inline-flex; align-items:center; gap:10px; font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#22c55e; margin-bottom:14px; }
+  .tc-page-eyebrow::before { content:''; display:inline-block; width:24px; height:1px; background:#22c55e; }
   .tc-page-h { font-size:clamp(30px,4vw,52px); font-weight:800; letter-spacing:-.04em; line-height:1; margin:0 0 8px; color:#f2f2f2; }
   .tc-page-h i { font-style:italic; color:#22c55e; }
   .tc-page-sub { font-size:14px; color:#777; font-weight:400; margin:0; }
@@ -112,6 +113,65 @@ const BASE_CSS = `
   .tc-star:hover { color:#4ade80; }
   /* Divider */
   .tc-divider { height:1px; background:rgba(255,255,255,.06); margin:0; border:none; }
+  /* Theme toggle */
+  .tc-theme-toggle { min-width:112px; justify-content:center; }
+  .tc-theme-toggle svg { width:14px; height:14px; }
+  /* Universal close button */
+  .tc-close-btn { width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center; cursor:pointer; color:#888; flex-shrink:0; transition:background .15s,color .15s; }
+  .tc-close-btn:hover { background:rgba(255,255,255,.12); color:#c8c8c8; }
+  .tc-close-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .tc-root.tc-theme-light .tc-close-btn { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.1); color:#64748b; }
+  .tc-root.tc-theme-light .tc-close-btn:hover { background:rgba(15,23,42,.1); color:#334155; }
+  /* Light theme */
+  .tc-root.tc-theme-light { background:#eef3f8; color:#0f172a; }
+  .tc-root.tc-theme-light ::selection { background:#16a34a; color:#f8fffb; }
+  .tc-root.tc-theme-light .tc-header { background:rgba(248,252,255,.92); border-bottom:1px solid rgba(15,23,42,.1); box-shadow:0 8px 30px rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .tc-brand-text { color:#15803d; }
+  .tc-root.tc-theme-light .tc-btn { background:#ffffff; color:#0f172a; border-color:rgba(15,23,42,.16); box-shadow:0 2px 10px rgba(15,23,42,.06); }
+  .tc-root.tc-theme-light .tc-btn:hover { box-shadow:0 6px 18px rgba(15,23,42,.14); }
+  .tc-root.tc-theme-light .tc-btn-primary { background:#22c55e!important; color:#052010!important; border-color:#22c55e!important; box-shadow:none; }
+  .tc-root.tc-theme-light .tc-btn-primary:hover { background:#16a34a!important; }
+  .tc-root.tc-theme-light .tc-btn-ghost { background:rgba(255,255,255,.84); border-color:rgba(15,23,42,.14); }
+  .tc-root.tc-theme-light .tc-btn-ghost:hover { background:#ffffff; }
+  .tc-root.tc-theme-light .tc-user-btn { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 4px 14px rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .tc-user-btn:hover { background:#ffffff; }
+  .tc-root.tc-theme-light .tc-user-name { color:#0f172a; }
+  .tc-root.tc-theme-light .tc-user-menu { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 16px 36px rgba(15,23,42,.18); }
+  .tc-root.tc-theme-light .tc-user-menu a,
+  .tc-root.tc-theme-light .tc-user-menu button { color:#1f2937!important; }
+  .tc-root.tc-theme-light .tc-user-menu a:hover,
+  .tc-root.tc-theme-light .tc-user-menu button:hover { background:rgba(15,23,42,.05)!important; }
+  .tc-root.tc-theme-light .tc-contact-overlay { background:rgba(15,23,42,.28); }
+  .tc-root.tc-theme-light .tc-contact-panel { background:#ffffff; border-left:1px solid rgba(15,23,42,.12); box-shadow:-10px 0 30px rgba(15,23,42,.2); }
+  .tc-root.tc-theme-light .tc-contact-panel p,
+  .tc-root.tc-theme-light .tc-contact-panel div,
+  .tc-root.tc-theme-light .tc-contact-panel button { color:#1f2937!important; }
+  .tc-root.tc-theme-light .tc-breadcrumbs-cloud { border-color:rgba(15,23,42,.12); background:rgba(255,255,255,.92); box-shadow:0 8px 24px rgba(15,23,42,.12); }
+  .tc-root.tc-theme-light .tc-breadcrumb-link { color:#64748b; }
+  .tc-root.tc-theme-light .tc-breadcrumb-link:hover { color:#15803d; }
+  .tc-root.tc-theme-light .tc-breadcrumb-current { color:#0f172a; background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .tc-breadcrumb-sep { color:#94a3b8; }
+  .tc-root.tc-theme-light .tc-page-eyebrow { color:#16a34a; }
+  .tc-root.tc-theme-light .tc-page-eyebrow::before { background:#16a34a; }
+  .tc-root.tc-theme-light .tc-page-h { color:#0f172a; }
+  .tc-root.tc-theme-light .tc-page-sub { color:#475569; }
+  .tc-root.tc-theme-light .tc-card { background:#ffffff; border-color:rgba(15,23,42,.1); box-shadow:0 10px 26px rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .tc-card-inset { background:rgba(248,250,252,.9); border-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .tc-field { background:#ffffff; border-color:rgba(15,23,42,.14); }
+  .tc-root.tc-theme-light .tc-field:focus-within { border-color:rgba(34,197,94,.48); box-shadow:0 0 0 3px rgba(34,197,94,.14); }
+  .tc-root.tc-theme-light .tc-field-label { color:#64748b; }
+  .tc-root.tc-theme-light .tc-field-label svg { color:#94a3b8; }
+  .tc-root.tc-theme-light .tc-input { color:#111827; }
+  .tc-root.tc-theme-light .tc-input::placeholder { color:#94a3b8; }
+  .tc-root.tc-theme-light .tc-input:disabled { color:#64748b; }
+  .tc-root.tc-theme-light .tc-select { background:#ffffff; border-color:rgba(15,23,42,.14); color:#1f2937; }
+  .tc-root.tc-theme-light .tc-tabs { background:rgba(15,23,42,.04); border-color:rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .tc-tab { color:#475569; }
+  .tc-root.tc-theme-light .tc-tab.tc-active { color:#052010; background:#22c55e; }
+  .tc-root.tc-theme-light .tc-tab:not(.tc-active):hover { color:#0f172a; background:rgba(15,23,42,.06); }
+  .tc-root.tc-theme-light .tc-badge-gray { background:rgba(15,23,42,.05); color:#334155; border-color:rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .tc-star { color:#94a3b8; }
+  .tc-root.tc-theme-light .tc-divider { background:rgba(15,23,42,.08); }
   /* Responsive */
   @media(max-width:720px){
     .tc-page,.tc-page-sm { padding:32px 20px 64px; }
@@ -133,6 +193,7 @@ interface DarkPageLayoutProps {
 export default function DarkPageLayout({ title, children, extraCss = '', breadcrumbs = [] }: DarkPageLayoutProps) {
   const router = useRouter();
   const { user: rawUser } = useAuth();
+  const { isLight, toggleTheme } = useUserTheme();
   const user = rawUser ? normalizeSessionUser(rawUser) : null;
   const isAdmin = user ? hasAdminAccess(user) : false;
   const adminClubSlug = user ? getActiveClubSlug() : null;
@@ -144,7 +205,6 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
   const [activeBookingsCount, setActiveBookingsCount] = useState(0);
   const [navHidden, setNavHidden] = useState(false);
   const [contactMenu, setContactMenu] = useState<{ type: 'whatsapp' | 'email' | 'instagram'; top: number; left: number; href: string; copyText: string } | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -229,14 +289,13 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
   };
 
   const handleCopy = async (text: string) => {
+    setContactMenu(null);
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      window.dispatchEvent(new CustomEvent('app:notice', { detail: { message: `¡Copiado! ${text}`, tone: 'success' } }));
     } catch {
       reportUiError({ area: 'DarkPageLayout', action: 'copyContact' }, new Error('clipboard error'));
     }
-    setContactMenu(null);
   };
 
   const handleLogout = async () => {
@@ -260,7 +319,7 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
         }}
       />
 
-      <div className="tc-root" onClick={() => { setShowUserMenu(false); }}>
+      <div className={`tc-root${isLight ? ' tc-theme-light' : ''}`} onClick={() => { setShowUserMenu(false); }}>
 
         {/* ── HEADER ── */}
         <header className={`tc-header${navHidden ? ' tc-header-hidden' : ''}`}>
@@ -269,6 +328,16 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
               <span className="tc-brand-text">TuCancha</span>
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                className="tc-btn tc-btn-ghost tc-theme-toggle"
+                onClick={toggleTheme}
+                aria-label={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
+                title={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
+              >
+                {isLight ? <Moon /> : <Sun />}
+                <span>{isLight ? 'Oscuro' : 'Claro'}</span>
+              </button>
               <button onClick={() => setShowContact(true)} className="tc-btn tc-btn-ghost">Contacto</button>
               {user ? (
                 <div style={{ position: 'relative' }}>
@@ -368,10 +437,10 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
           }}
           aria-hidden={!showContact}
         >
-          <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+          <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${isLight ? 'rgba(15,23,42,.1)' : 'rgba(255,255,255,.08)'}` }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: '#22c55e', margin: 0 }}>Contacto</h2>
-            <button onClick={() => setShowContact(false)} style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#f87171' }}>
-              <X size={16} />
+            <button className="tc-close-btn" onClick={() => setShowContact(false)} aria-label="Cerrar">
+              <X size={15} />
             </button>
           </div>
           <div ref={sidebarRef} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10, position: 'relative' }}>
@@ -381,32 +450,32 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
               { type: 'email' as const, label: 'Email', value: 'soporte.tucancha@gmail.com', icon: <Mail size={16} /> },
             ]).map(c => (
               <button key={c.type} type="button" onClick={e => openContactMenu(e, c.type)}
-                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s', width: '100%' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: isLight ? 'rgba(15,23,42,.04)' : 'rgba(255,255,255,.04)', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)'}`, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s', width: '100%' }}
                 onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(34,197,94,.3)')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)')}>
+                onMouseLeave={e => (e.currentTarget.style.borderColor = isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)')}>
                 <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(34,197,94,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e', flexShrink: 0 }}>{c.icon}</div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: '#555' }}>{c.label}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#f2f2f2' }}>{c.value}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: isLight ? '#64748b' : '#555' }}>{c.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: isLight ? '#0f172a' : '#f2f2f2' }}>{c.value}</div>
                 </div>
               </button>
             ))}
-            <div style={{ marginTop: 8, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.07)' }}>
+            <div style={{ marginTop: 8, paddingTop: 14, borderTop: `1px solid ${isLight ? 'rgba(15,23,42,.1)' : 'rgba(255,255,255,.07)'}` }}>
               <button type="button" onClick={e => openContactMenu(e, 'instagram')}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', color: '#e8e8e8', fontSize: 13, fontWeight: 600 }}>
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: isLight ? 'rgba(15,23,42,.04)' : 'rgba(255,255,255,.04)', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)'}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', color: isLight ? '#334155' : '#e8e8e8', fontSize: 13, fontWeight: 600 }}>
                 <Instagram size={15} /> @tucancha.app_
               </button>
             </div>
             {contactMenu && (
-              <div ref={menuRef} role="dialog" style={{ position: 'absolute', top: contactMenu.top, left: contactMenu.left, zIndex: 90, background: '#1a1a1a', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12, padding: 6, minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,.4)' }}>
+              <div ref={menuRef} role="dialog" style={{ position: 'absolute', top: contactMenu.top, left: contactMenu.left, zIndex: 90, background: isLight ? '#ffffff' : '#1a1a1a', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.1)'}`, borderRadius: 12, padding: 6, minWidth: 150, boxShadow: isLight ? '0 8px 24px rgba(15,23,42,.14)' : '0 8px 24px rgba(0,0,0,.4)' }}>
                 <button onClick={() => handleOpenHref(contactMenu.href)}
-                  style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.06)')}
+                  style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? '#0f172a' : '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>Abrir</button>
                 <button onClick={() => handleCopy(contactMenu.copyText)}
-                  style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.06)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>{copied ? '¡Copiado!' : 'Copiar'}</button>
+                  style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? '#0f172a' : '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>Copiar</button>
               </div>
             )}
           </div>

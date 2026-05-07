@@ -11,6 +11,7 @@ import { getApiUrl } from '../utils/apiUrl';
 import { ClubService, Club } from '../services/ClubService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
 import { useAuth } from '../contexts/AuthContext';
+import { useUserTheme } from '../contexts/UserThemeContext';
 import { lockBodyScroll } from '../utils/bodyScrollLock';
 import { createBookingCheckoutDraftId, saveBookingCheckoutDraft } from '../utils/bookingCheckoutDraft';
 import { ChevronDown, Check, Calendar, Clock, MapPin, Zap, MousePointerClick, Hourglass, Moon, Ban, AlertCircle, Activity, ChevronLeft, ChevronRight, LayoutGrid, Rows3, Info, Mail, Lock, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
@@ -72,8 +73,9 @@ const normalizeSlotLabel = (slot: string) => {
   return formatHourFromMinutes(parsed);
 };
 
-// -- DARK CUSTOM SELECT --
+// -- CUSTOM SELECT (theme-aware) --
 const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
+  const { isLight } = useUserTheme();
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -94,24 +96,27 @@ const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           height: 46, padding: '0 14px',
-          background: '#0f0f0f',
-          border: `1px solid ${isOpen ? 'rgba(34,197,94,.5)' : 'rgba(255,255,255,.1)'}`,
+          background: isLight ? '#ffffff' : '#0f0f0f',
+          border: `1px solid ${isOpen ? 'rgba(34,197,94,.5)' : (isLight ? 'rgba(15,23,42,.14)' : 'rgba(255,255,255,.1)')}`,
           borderRadius: 12, cursor: 'pointer',
-          boxShadow: isOpen ? '0 0 0 3px rgba(34,197,94,.1)' : 'none',
+          boxShadow: isOpen ? '0 0 0 3px rgba(34,197,94,.1)' : (isLight ? '0 2px 8px rgba(15,23,42,.06)' : 'none'),
           transition: 'border-color .2s, box-shadow .2s',
         }}
       >
-        <span style={{ fontSize: 14, fontWeight: 600, color: selectedOption ? '#f2f2f2' : '#444', fontFamily: "'Sora',system-ui,sans-serif" }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: selectedOption ? (isLight ? '#0f172a' : '#f2f2f2') : (isLight ? '#94a3b8' : '#444'), fontFamily: "'Sora',system-ui,sans-serif" }}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <ChevronDown size={16} style={{ color: isOpen ? '#22c55e' : '#555', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .3s, color .2s', flexShrink: 0 }} />
+        <ChevronDown size={16} style={{ color: isOpen ? '#22c55e' : (isLight ? '#64748b' : '#555'), transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .3s, color .2s', flexShrink: 0 }} />
       </div>
 
       {isOpen && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0, width: '100%',
-          background: '#111', border: '1px solid rgba(255,255,255,.1)', borderRadius: 14,
-          boxShadow: '0 8px 32px rgba(0,0,0,.5)', zIndex: 110, overflow: 'hidden',
+          background: isLight ? '#ffffff' : '#111',
+          border: isLight ? '1px solid rgba(15,23,42,.12)' : '1px solid rgba(255,255,255,.1)',
+          borderRadius: 14,
+          boxShadow: isLight ? '0 8px 32px rgba(15,23,42,.18)' : '0 8px 32px rgba(0,0,0,.5)',
+          zIndex: 110, overflow: 'hidden',
           maxHeight: 220, overflowY: 'auto',
         }}>
           {options.map((opt: any) => (
@@ -125,10 +130,10 @@ const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
                 opacity: opt.disabled ? 0.4 : 1,
                 transition: 'background .15s',
               }}
-              onMouseEnter={e => { if (!opt.disabled && value !== opt.value) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,.05)'; }}
+              onMouseEnter={e => { if (!opt.disabled && value !== opt.value) (e.currentTarget as HTMLDivElement).style.background = isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.05)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = value === opt.value ? 'rgba(34,197,94,.1)' : 'transparent'; }}
             >
-              <span style={{ fontSize: 13, fontWeight: 700, color: value === opt.value ? '#22c55e' : '#c8c8c8', fontFamily: "'Sora',system-ui,sans-serif" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: value === opt.value ? '#22c55e' : (isLight ? '#334155' : '#c8c8c8'), fontFamily: "'Sora',system-ui,sans-serif" }}>
                 {opt.label}
               </span>
               {opt.disabled && (
@@ -196,6 +201,30 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   const [loginModalMagicLoading, setLoginModalMagicLoading] = useState(false);
   const [loginModalShowPassword, setLoginModalShowPassword] = useState(false);
   const [isLoginPromptOpen, setIsLoginPromptOpen] = useState(false);
+  const { isLight } = useUserTheme();
+
+  // Theme tokens — avoids repeating ternaries throughout the JSX
+  const T = useMemo(() => ({
+    bg:            isLight ? '#ffffff'                    : '#0f0f0f',
+    bgCard:        isLight ? '#f8fafc'                   : '#111',
+    bgInput:       isLight ? '#ffffff'                   : '#0a0a0a',
+    bgSubtle:      isLight ? 'rgba(15,23,42,.025)'       : 'rgba(255,255,255,.03)',
+    bgSubtle2:     isLight ? 'rgba(15,23,42,.04)'        : 'rgba(255,255,255,.05)',
+    border:        isLight ? 'rgba(15,23,42,.12)'        : 'rgba(255,255,255,.1)',
+    borderSubtle:  isLight ? 'rgba(15,23,42,.08)'        : 'rgba(255,255,255,.06)',
+    borderFaint:   isLight ? 'rgba(15,23,42,.06)'        : 'rgba(255,255,255,.04)',
+    textPrimary:   isLight ? '#0f172a'                   : '#f2f2f2',
+    textPrimary2:  isLight ? '#1e293b'                   : '#e8e8e8',
+    textSecondary: isLight ? '#475569'                   : '#c8c8c8',
+    textMuted:     isLight ? '#64748b'                   : '#555',
+    textDisabled:  isLight ? '#94a3b8'                   : '#444',
+    arrowDisabled: isLight ? '#cbd5e1'                   : '#2a2a2a',
+    spinnerTrack:  isLight ? '#e2e8f0'                   : '#1a1a1a',
+    shadow:        isLight ? '0 8px 24px rgba(15,23,42,.1)'  : 'none',
+    shadowModal:   isLight ? '0 24px 64px rgba(15,23,42,.22)': '0 24px 64px rgba(0,0,0,.7)',
+    backdrop:      isLight ? 'rgba(15,23,42,.45)'        : 'rgba(0,0,0,.82)',
+    divider:       isLight ? 'rgba(15,23,42,.08)'        : 'rgba(255,255,255,.07)',
+  }), [isLight]);
 
   const closeModal = useCallback(() => {
     setModalState(p => ({ ...p, show: false }));
@@ -297,7 +326,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
     nightSurcharge?: { applied: boolean; amount: number; fromHour?: string | null };
   }) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Tu reserva fue registrada con éxito.</p>
+      <p style={{ fontSize: 13, color: T.textMuted, margin: 0 }}>Tu reserva fue registrada con éxito.</p>
       <div style={{ background: 'rgba(34,197,94,.05)', border: '1px solid rgba(34,197,94,.15)', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {[
           ['Cancha', params.courtName],
@@ -308,20 +337,20 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
           ['Precio', `$${params.price.toLocaleString()}`],
         ].map(([label, val]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '.08em' }}>{label}</span>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#f2f2f2' }}>{val}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{label}</span>
+            <span style={{ fontSize: 14, fontWeight: 800, color: T.textPrimary }}>{val}</span>
           </div>
         ))}
         {Number(params.discountAmount || 0) > 0.009 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '.08em' }}>Descuento</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>Descuento</span>
             <span style={{ fontSize: 14, fontWeight: 800, color: '#22c55e' }}>-${Number(params.discountAmount || 0).toLocaleString()}</span>
           </div>
         )}
         {params.nightSurcharge?.applied && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '.08em' }}>Recargo nocturno</span>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#f2f2f2' }}>+${Number(params.nightSurcharge.amount || 0).toLocaleString()}{params.nightSurcharge.fromHour ? ` (desde ${params.nightSurcharge.fromHour})` : ''}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>Recargo nocturno</span>
+            <span style={{ fontSize: 14, fontWeight: 800, color: T.textPrimary }}>+${Number(params.nightSurcharge.amount || 0).toLocaleString()}{params.nightSurcharge.fromHour ? ` (desde ${params.nightSurcharge.fromHour})` : ''}</span>
           </div>
         )}
       </div>
@@ -852,18 +881,18 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   }, [selectedDate, selectedActivityFilter, selectedDuration, activeScheduleViewMode]);
 
   const canConfirm = Boolean(selectedSlot && selectedCourt);
-  const labelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#555', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontFamily: "'Sora',system-ui,sans-serif" };
+  const labelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: T.textMuted, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontFamily: "'Sora',system-ui,sans-serif" };
   const sectionStyle: React.CSSProperties = { marginBottom: 28 };
 
   return (
-    <div style={{ width: '100%', background: '#0f0f0f', border: '1px solid rgba(255,255,255,.07)', borderRadius: 24, padding: '28px 28px 24px', fontFamily: "'Sora',system-ui,sans-serif", boxSizing: 'border-box' }}>
+    <div style={{ width: '100%', background: T.bg, border: `1px solid ${T.borderSubtle}`, borderRadius: 24, padding: '28px 28px 24px', fontFamily: "'Sora',system-ui,sans-serif", boxSizing: 'border-box', boxShadow: T.shadow }}>
 
       {/* Header */}
-      <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: '#f2f2f2', letterSpacing: '-.03em', margin: '0 0 4px' }}>
+      <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: `1px solid ${T.borderSubtle}` }}>
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: T.textPrimary, letterSpacing: '-.03em', margin: '0 0 4px' }}>
           Reservar <span style={{ fontStyle: 'italic', color: '#22c55e' }}>cancha</span>
         </h2>
-        <p style={{ fontSize: 12, color: '#555', margin: 0, fontWeight: 500 }}>Elegí deporte, día y horario</p>
+        <p style={{ fontSize: 12, color: T.textMuted, margin: 0, fontWeight: 500 }}>Elegí deporte, día y horario</p>
       </div>
 
       {/* Filters row */}
@@ -883,23 +912,23 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
         {/* Fecha */}
         <div>
           <div style={labelStyle}><Calendar size={12} style={{ color: '#22c55e' }} /> Fecha</div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 46, padding: '0 6px', background: '#0f0f0f', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 46, padding: '0 6px', background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: isLight ? '0 2px 8px rgba(15,23,42,.06)' : 'none' }}>
             <button
               type="button"
               onClick={handlePrevDay}
               disabled={isPrevDisabled()}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'none', border: 'none', cursor: isPrevDisabled() ? 'not-allowed' : 'pointer', color: isPrevDisabled() ? '#2a2a2a' : '#888', borderRadius: 8, transition: 'color .15s, background .15s' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'none', border: 'none', cursor: isPrevDisabled() ? 'not-allowed' : 'pointer', color: isPrevDisabled() ? T.arrowDisabled : T.textMuted, borderRadius: 8, transition: 'color .15s, background .15s' }}
             >
               <ChevronLeft size={18} />
             </button>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#f2f2f2', textAlign: 'center', letterSpacing: '.02em' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.textPrimary, textAlign: 'center', letterSpacing: '.02em' }}>
               {getFormattedDate(selectedDate)}
             </span>
             <button
               type="button"
               onClick={handleNextDay}
               disabled={isNextDisabled()}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'none', border: 'none', cursor: isNextDisabled() ? 'not-allowed' : 'pointer', color: isNextDisabled() ? '#2a2a2a' : '#888', borderRadius: 8, transition: 'color .15s' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'none', border: 'none', cursor: isNextDisabled() ? 'not-allowed' : 'pointer', color: isNextDisabled() ? T.arrowDisabled : T.textMuted, borderRadius: 8, transition: 'color .15s' }}
             >
               <ChevronRight size={18} />
             </button>
@@ -922,7 +951,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       {/* View mode */}
       {!isMobileListOnly && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'inline-flex', padding: 4, borderRadius: 12, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', gap: 4 }}>
+          <div style={{ display: 'inline-flex', padding: 4, borderRadius: 12, border: `1px solid ${T.borderSubtle}`, background: T.bgSubtle, gap: 4 }}>
             <button
               type="button"
               onClick={() => setScheduleViewMode('timeline')}
@@ -939,7 +968,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                 letterSpacing: '.08em',
                 textTransform: 'uppercase',
                 background: scheduleViewMode === 'timeline' ? 'rgba(34,197,94,.16)' : 'transparent',
-                color: scheduleViewMode === 'timeline' ? '#22c55e' : '#666',
+                color: scheduleViewMode === 'timeline' ? '#22c55e' : T.textMuted,
                 fontFamily: "'Sora',system-ui,sans-serif",
               }}
             >
@@ -961,7 +990,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                 letterSpacing: '.08em',
                 textTransform: 'uppercase',
                 background: scheduleViewMode === 'list' ? 'rgba(34,197,94,.16)' : 'transparent',
-                color: scheduleViewMode === 'list' ? '#22c55e' : '#666',
+                color: scheduleViewMode === 'list' ? '#22c55e' : T.textMuted,
                 fontFamily: "'Sora',system-ui,sans-serif",
               }}
             >
@@ -978,8 +1007,8 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
             <Clock size={12} style={{ color: '#22c55e' }} />
             {activeScheduleViewMode === 'timeline' ? 'Agenda de canchas' : 'Horarios disponibles'}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '36px 0', border: '1px dashed rgba(255,255,255,.08)', borderRadius: 16, background: 'rgba(255,255,255,.02)' }}>
-            <div style={{ width: 32, height: 32, border: '3px solid #1a1a1a', borderTopColor: '#22c55e', borderRadius: '50%', animation: 'bg-spin .8s linear infinite' }} />
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '36px 0', border: `1px dashed ${T.borderSubtle}`, borderRadius: 16, background: T.bgSubtle }}>
+            <div style={{ width: 32, height: 32, border: `3px solid ${T.spinnerTrack}`, borderTopColor: '#22c55e', borderRadius: '50%', animation: 'bg-spin .8s linear infinite' }} />
             <style>{`@keyframes bg-spin{to{transform:rotate(360deg)}}`}</style>
           </div>
         </div>
@@ -1001,30 +1030,30 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
           </div>
 
           {!selectedActivityFilter ? (
-            <div style={{ textAlign: 'center', padding: '32px 20px', background: 'rgba(255,255,255,.02)', border: '1px dashed rgba(255,255,255,.07)', borderRadius: 16, fontSize: 13, fontWeight: 600, color: '#444' }}>
+            <div style={{ textAlign: 'center', padding: '32px 20px', background: T.bgSubtle, border: `1px dashed ${T.borderSubtle}`, borderRadius: 16, fontSize: 13, fontWeight: 600, color: T.textDisabled }}>
               Elegí un deporte para ver los horarios.
             </div>
           ) : activeScheduleViewMode === 'timeline' ? (
             atcTimeline && atcCourts.length > 0 ? (
               <>
-                <div style={{ border: '1px solid rgba(255,255,255,.08)', borderRadius: 16, overflow: 'hidden', background: 'rgba(255,255,255,.015)' }}>
+                <div style={{ border: `1px solid ${T.borderSubtle}`, borderRadius: 16, overflow: 'hidden', background: T.bgSubtle }}>
                   <div style={{ overflowX: 'auto' }}>
                     <div style={{ minWidth: 280 + atcTimeline.totalMinutes * TIMELINE_PIXELS_PER_MINUTE }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-                        <div style={{ padding: '10px 14px', fontSize: 12, fontWeight: 800, color: '#f2f2f2' }}>Canchas</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', borderBottom: `1px solid ${T.borderSubtle}` }}>
+                        <div style={{ padding: '10px 14px', fontSize: 12, fontWeight: 800, color: T.textPrimary }}>Canchas</div>
                         <div style={{ position: 'relative', height: 38 }}>
                           {atcTimeline.hourTicks.map((tick, index) => {
                             const isFirstTick = index === 0;
                             const isLastTick = index === atcTimeline.hourTicks.length - 1;
                             const left = (tick - atcTimeline.startMinute) * TIMELINE_PIXELS_PER_MINUTE;
                             return (
-                              <div key={tick} style={{ position: 'absolute', left, top: 0, bottom: 0, borderLeft: '1px solid rgba(255,255,255,.06)' }}>
+                              <div key={tick} style={{ position: 'absolute', left, top: 0, bottom: 0, borderLeft: `1px solid ${T.borderSubtle}` }}>
                                 <span
                                   style={{
                                     position: 'absolute',
                                     top: 0,
                                     fontSize: 12,
-                                    color: '#777',
+                                    color: T.textMuted,
                                     fontWeight: 700,
                                     whiteSpace: 'nowrap',
                                     left: isFirstTick ? 6 : isLastTick ? -6 : 0,
@@ -1053,10 +1082,10 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                           hoveredAtcSlot?.slotTime === slot.slotTime
                         );
                         return (
-                          <div key={court.id} style={{ display: 'grid', gridTemplateColumns: '280px 1fr', borderBottom: '1px solid rgba(255,255,255,.05)' }}>
-                            <div style={{ padding: '10px 14px', minHeight: TIMELINE_ROW_HEIGHT, display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '1px solid rgba(255,255,255,.06)' }}>
-                              <span style={{ fontSize: 14, fontWeight: 800, color: '#e8e8e8' }}>{court.name}</span>
-                              <span style={{ fontSize: 11, color: '#555', fontWeight: 600 }}>
+                          <div key={court.id} style={{ display: 'grid', gridTemplateColumns: '280px 1fr', borderBottom: `1px solid ${T.borderFaint}` }}>
+                            <div style={{ padding: '10px 14px', minHeight: TIMELINE_ROW_HEIGHT, display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: `1px solid ${T.borderSubtle}` }}>
+                              <span style={{ fontSize: 14, fontWeight: 800, color: T.textPrimary2 }}>{court.name}</span>
+                              <span style={{ fontSize: 11, color: T.textMuted, fontWeight: 600 }}>
                                 {court.price ? `$${court.price.toLocaleString()} · ${selectedDuration} min` : `Duración ${selectedDuration} min`}
                               </span>
                             </div>
@@ -1087,7 +1116,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                               onMouseLeave={() => setHoveredAtcSlot(current => (current?.courtId === Number(court.id) ? null : current))}
                             >
                               {atcTimeline.hourTicks.map(tick => (
-                                <div key={`${court.id}-${tick}`} style={{ position: 'absolute', left: (tick - atcTimeline.startMinute) * TIMELINE_PIXELS_PER_MINUTE, top: 0, bottom: 0, borderLeft: '1px solid rgba(255,255,255,.04)' }} />
+                                <div key={`${court.id}-${tick}`} style={{ position: 'absolute', left: (tick - atcTimeline.startMinute) * TIMELINE_PIXELS_PER_MINUTE, top: 0, bottom: 0, borderLeft: `1px solid ${T.borderFaint}` }} />
                               ))}
                               {blockedRanges.map((range, rangeIndex) => {
                                 const left = (range.startMinute - atcTimeline.startMinute) * TIMELINE_PIXELS_PER_MINUTE + 2;
@@ -1179,20 +1208,20 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 10 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: '#556476' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: T.textMuted }}>
                     <span style={{ width: 12, height: 12, borderRadius: 4, background: 'rgba(92,111,130,.72)', border: '1px solid rgba(106,122,139,.62)' }} />
                     Ocupado / no disponible
                     <span style={{ width: 12, height: 12, borderRadius: 4, background: 'rgba(34,197,94,.28)', border: '1px solid rgba(34,197,94,.7)', marginLeft: 8 }} />
                     Tu selección
                   </div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#4f5b6b', fontSize: 11, fontWeight: 700 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: T.textMuted, fontSize: 11, fontWeight: 700 }}>
                     <Info size={12} />
                     Pasá el mouse por espacio libre para previsualizar turno
                   </div>
                 </div>
               </>
             ) : (
-              <div style={{ textAlign: 'center', padding: '20px', borderRadius: 14, border: '1px dashed rgba(255,255,255,.08)', color: '#555', fontSize: 12, fontWeight: 600 }}>
+              <div style={{ textAlign: 'center', padding: '20px', borderRadius: 14, border: `1px dashed ${T.borderSubtle}`, color: T.textMuted, fontSize: 12, fontWeight: 600 }}>
                 Sin datos suficientes para dibujar agenda.
               </div>
             )
@@ -1208,9 +1237,9 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                       onClick={() => { setSelectedSlot(slot.slotTime); setSelectedCourt(null); }}
                       style={{
                         padding: '10px 6px', borderRadius: 10, fontSize: 13, fontWeight: 700,
-                        border: `1px solid ${isSelected ? 'rgba(34,197,94,.5)' : 'rgba(255,255,255,.08)'}`,
-                        background: isSelected ? 'rgba(34,197,94,.15)' : 'rgba(255,255,255,.03)',
-                        color: isSelected ? '#22c55e' : '#c8c8c8',
+                        border: `1px solid ${isSelected ? 'rgba(34,197,94,.5)' : T.border}`,
+                        background: isSelected ? 'rgba(34,197,94,.15)' : T.bgSubtle,
+                        color: isSelected ? '#22c55e' : T.textSecondary,
                         cursor: 'pointer', transition: 'all .15s', fontFamily: "'Sora',system-ui,sans-serif",
                         boxShadow: isSelected ? '0 0 0 1px rgba(34,197,94,.3)' : 'none',
                       }}
@@ -1282,18 +1311,18 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '14px 16px', borderRadius: 14, textAlign: 'left', width: '100%',
-                    border: `1px solid ${isSelected ? 'rgba(34,197,94,.4)' : 'rgba(255,255,255,.07)'}`,
-                    background: isSelected ? 'rgba(34,197,94,.08)' : 'rgba(255,255,255,.03)',
+                    border: `1px solid ${isSelected ? 'rgba(34,197,94,.4)' : T.border}`,
+                    background: isSelected ? 'rgba(34,197,94,.08)' : T.bgSubtle,
                     cursor: 'pointer', transition: 'all .15s', fontFamily: "'Sora',system-ui,sans-serif",
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#f2f2f2', marginBottom: 3 }}>{court.name}</div>
-                    <div style={{ fontSize: 11, color: '#555', fontWeight: 600 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: T.textPrimary, marginBottom: 3 }}>{court.name}</div>
+                    <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600 }}>
                       {court.price ? `$${court.price.toLocaleString()} · ${selectedDuration} min` : 'Precio a confirmar'}
                     </div>
                   </div>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: isSelected ? '#22c55e' : 'rgba(255,255,255,.1)', border: isSelected ? 'none' : '1px solid rgba(255,255,255,.15)', flexShrink: 0, boxShadow: isSelected ? '0 0 0 3px rgba(34,197,94,.2)' : 'none', transition: 'all .15s' }} />
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: isSelected ? '#22c55e' : T.border, border: isSelected ? 'none' : `1px solid ${T.border}`, flexShrink: 0, boxShadow: isSelected ? '0 0 0 3px rgba(34,197,94,.2)' : 'none', transition: 'all .15s' }} />
                 </button>
               );
             })}
@@ -1302,7 +1331,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       )}
       {/* No slots */}
       {!loading && selectedActivityFilter && availableSlots.length === 0 && selectedDate && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '32px 20px', background: 'rgba(255,255,255,.02)', border: '1px dashed rgba(255,255,255,.07)', borderRadius: 16, fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 20, textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '32px 20px', background: T.bgSubtle, border: `1px dashed ${T.borderSubtle}`, borderRadius: 16, fontSize: 13, fontWeight: 600, color: T.textDisabled, marginBottom: 20, textAlign: 'center' }}>
           {(() => {
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1325,8 +1354,8 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
           fontSize: 13, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
           fontFamily: "'Sora',system-ui,sans-serif", cursor: !canConfirm ? 'not-allowed' : 'pointer',
           border: 'none', transition: 'all .2s',
-          background: !canConfirm ? 'rgba(255,255,255,.04)' : '#22c55e',
-          color: !canConfirm ? '#333' : '#052010',
+          background: !canConfirm ? (isLight ? 'rgba(15,23,42,.06)' : 'rgba(255,255,255,.04)') : '#22c55e',
+          color: !canConfirm ? T.textMuted : '#052010',
           marginTop: 8,
         }}
       >
@@ -1343,13 +1372,13 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
 
       {/* Price info */}
       {canConfirm && (
-        <div style={{ marginTop: 10, textAlign: 'center', fontSize: 13, color: '#555', fontWeight: 500 }}>
+        <div style={{ marginTop: 10, textAlign: 'center', fontSize: 13, color: T.textMuted, fontWeight: 500 }}>
           Precio:{' '}
           <span style={{ fontWeight: 800, color: '#22c55e', fontSize: 15 }}>
             ${priceInfo.final.toLocaleString()}
           </span>
           {priceInfo.hasLights && clubConfig && (
-            <span style={{ fontSize: 11, color: '#444', marginLeft: 6 }}>
+            <span style={{ fontSize: 11, color: T.textDisabled, marginLeft: 6 }}>
               (incluye luces +${priceInfo.extra.toLocaleString()}{clubConfig.lightsFromHour ? ` desde ${clubConfig.lightsFromHour}` : ''})
             </span>
           )}
@@ -1360,20 +1389,20 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
         <div
           role="dialog"
           aria-modal="true"
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 2147483201 }}
+          style={{ position: 'fixed', inset: 0, background: T.backdrop, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 2147483201 }}
           onMouseDown={event => {
             if (event.target !== event.currentTarget) return;
             if (loginModalLoading || loginModalMagicLoading) return;
             closeLoginPromptModal();
           }}
         >
-          <div style={{ width: '100%', maxWidth: 420, background: '#111', border: '1px solid rgba(255,255,255,.1)', borderRadius: 24, boxShadow: '0 24px 64px rgba(0,0,0,.7)', overflow: 'hidden', fontFamily: "'Sora',system-ui,sans-serif" }}>
-            <div style={{ padding: '30px 28px 22px', borderBottom: '1px solid rgba(255,255,255,.06)', textAlign: 'center' }}>
+          <div style={{ width: '100%', maxWidth: 420, background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 24, boxShadow: T.shadowModal, overflow: 'hidden', fontFamily: "'Sora',system-ui,sans-serif" }}>
+            <div style={{ padding: '30px 28px 22px', borderBottom: `1px solid ${T.divider}`, textAlign: 'center' }}>
               <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(34,197,94,.25)', margin: '0 auto 16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e' }}>
                 <LogIn size={22} />
               </div>
-              <h3 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#f2f2f2', letterSpacing: '-.03em' }}>Bienvenido</h3>
-              <p style={{ margin: '6px 0 0', fontSize: 11, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: '#444' }}>Ingresa a tu cuenta</p>
+              <h3 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: T.textPrimary, letterSpacing: '-.03em' }}>Bienvenido</h3>
+              <p style={{ margin: '6px 0 0', fontSize: 11, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: T.textDisabled }}>Ingresa a tu cuenta</p>
             </div>
 
             <div style={{ padding: '22px 28px 28px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1392,14 +1421,14 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#555' }}>Correo electronico</label>
+                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: T.textMuted }}>Correo electronico</label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: 13, color: '#444', display: 'flex', pointerEvents: 'none' }}><Mail size={14} /></span>
+                  <span style={{ position: 'absolute', left: 13, color: T.textDisabled, display: 'flex', pointerEvents: 'none' }}><Mail size={14} /></span>
                   <input
                     type="email"
                     value={loginModalEmail}
                     onChange={event => setLoginModalEmail(event.target.value)}
-                    style={{ width: '100%', padding: '11px 14px 11px 38px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,.09)', borderRadius: 12, color: '#f2f2f2', fontSize: 14, fontWeight: 600, outline: 'none' }}
+                    style={{ width: '100%', padding: '11px 14px 11px 38px', background: T.bgInput, border: `1px solid ${T.border}`, borderRadius: 12, color: T.textPrimary, fontSize: 14, fontWeight: 600, outline: 'none' }}
                     placeholder="tu@email.com"
                     autoComplete="email"
                   />
@@ -1407,9 +1436,9 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#555' }}>Contrasena</label>
+                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: T.textMuted }}>Contrasena</label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: 13, color: '#444', display: 'flex', pointerEvents: 'none' }}><Lock size={14} /></span>
+                  <span style={{ position: 'absolute', left: 13, color: T.textDisabled, display: 'flex', pointerEvents: 'none' }}><Lock size={14} /></span>
                   <input
                     type={loginModalShowPassword ? 'text' : 'password'}
                     value={loginModalPassword}
@@ -1420,7 +1449,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                         void handleLoginFromModal();
                       }
                     }}
-                    style={{ width: '100%', padding: '11px 44px 11px 38px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,.09)', borderRadius: 12, color: '#f2f2f2', fontSize: 14, fontWeight: 600, outline: 'none' }}
+                    style={{ width: '100%', padding: '11px 44px 11px 38px', background: T.bgInput, border: `1px solid ${T.border}`, borderRadius: 12, color: T.textPrimary, fontSize: 14, fontWeight: 600, outline: 'none' }}
                     placeholder="••••••••"
                     autoComplete="current-password"
                   />
@@ -1431,7 +1460,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                     onMouseLeave={() => setLoginModalShowPassword(false)}
                     onTouchStart={() => setLoginModalShowPassword(true)}
                     onTouchEnd={() => setLoginModalShowPassword(false)}
-                    style={{ position: 'absolute', right: 12, background: 'none', border: 'none', color: '#555', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4 }}
+                    style={{ position: 'absolute', right: 12, background: 'none', border: 'none', color: T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4 }}
                     aria-label="Ver contrasena"
                   >
                     {loginModalShowPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1443,7 +1472,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                 type="button"
                 onClick={() => { void handleLoginFromModal(); }}
                 disabled={loginModalLoading || !String(loginModalEmail).trim() || !String(loginModalPassword).trim()}
-                style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px 20px', borderRadius: 12, border: 'none', background: '#22c55e', color: '#052010', fontSize: 13, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: loginModalLoading ? 'not-allowed' : 'pointer', opacity: loginModalLoading ? 0.65 : 1 }}
+                style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px 20px', borderRadius: 12, border: 'none', background: '#22c55e', color: '#052010', fontSize: 13, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: (loginModalLoading || !String(loginModalEmail).trim() || !String(loginModalPassword).trim()) ? 'not-allowed' : 'pointer', opacity: (loginModalLoading || !String(loginModalEmail).trim() || !String(loginModalPassword).trim()) ? 0.5 : 1 }}
               >
                 {loginModalLoading ? (
                   <>
@@ -1459,16 +1488,16 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
               </button>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.07)' }} />
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#333' }}>o</span>
-                <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.07)' }} />
+                <div style={{ flex: 1, height: 1, background: T.divider }} />
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: T.textDisabled }}>o</span>
+                <div style={{ flex: 1, height: 1, background: T.divider }} />
               </div>
 
               <button
                 type="button"
                 onClick={() => { void handleRequestLoginMagicLink(); }}
                 disabled={loginModalMagicLoading || loginModalLoading || !String(loginModalEmail).trim()}
-                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px 20px', borderRadius: 12, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.09)', color: '#888', fontSize: 13, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: loginModalMagicLoading || loginModalLoading ? 'not-allowed' : 'pointer', opacity: loginModalMagicLoading || loginModalLoading ? 0.6 : 1 }}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '13px 20px', borderRadius: 12, background: T.bgSubtle2, border: `1px solid ${T.border}`, color: T.textMuted, fontSize: 13, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: loginModalMagicLoading || loginModalLoading ? 'not-allowed' : 'pointer', opacity: loginModalMagicLoading || loginModalLoading ? 0.6 : 1 }}
               >
                 {loginModalMagicLoading ? (
                   <>
@@ -1483,21 +1512,15 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                 )}
               </button>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 4, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.06)' }}>
-                <button
-                  type="button"
-                  onClick={closeLoginPromptModal}
-                  disabled={loginModalLoading || loginModalMagicLoading}
-                  style={{ background: 'none', border: 'none', color: '#666', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', cursor: loginModalLoading || loginModalMagicLoading ? 'not-allowed' : 'pointer' }}
-                >
-                  Cancelar
-                </button>
+              <div style={{ textAlign: 'center', paddingTop: 14, borderTop: `1px solid ${T.divider}` }}>
                 <button
                   type="button"
                   onClick={() => { const from = encodeURIComponent(router.asPath || '/'); void router.push(`/login?mode=register&from=${from}`); }}
-                  style={{ background: 'none', border: 'none', color: '#444', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent' }}
+                  style={{ background: 'none', border: 'none', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: T.textDisabled, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', textUnderlineOffset: '3px', transition: 'color .15s, text-decoration-color .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#22c55e'; e.currentTarget.style.textDecorationColor = '#22c55e'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = T.textDisabled; e.currentTarget.style.textDecorationColor = 'transparent'; }}
                 >
-                  No tenes cuenta? Registrate gratis
+                  ¿No tenés cuenta? Registrate gratis
                 </button>
               </div>
             </div>

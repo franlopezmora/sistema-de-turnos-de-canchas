@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { lockBodyScroll } from '../utils/bodyScrollLock';
+import { useUserTheme } from '../contexts/UserThemeContext';
 
 type AppModalProps = {
   show: boolean;
@@ -51,6 +52,7 @@ export default function AppModal({
   hideCloseButton = false
 }: AppModalProps) {
   const [mounted, setMounted] = useState(false);
+  const { isLight } = useUserTheme();
   const [inputText, setInputText] = useState(inputValue);
   const [holdProgress, setHoldProgress] = useState(0);
   const [holding, setHolding] = useState(false);
@@ -135,7 +137,7 @@ export default function AppModal({
       role="dialog"
       aria-modal="true"
       className={`fixed inset-0 ${zIndexClass}`}
-      style={{ background: 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'am-fadein .15s ease' }}
+      style={{ background: isLight ? 'rgba(15,23,42,.45)' : 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'am-fadein .15s ease' }}
       onMouseDown={e => { if (!closeOnBackdrop) return; backdropMouseDownRef.current = e.target === e.currentTarget; }}
       onTouchStart={e => { if (!closeOnBackdrop) return; backdropMouseDownRef.current = e.target === e.currentTarget; }}
       onClick={closeOnBackdrop ? e => {
@@ -153,10 +155,10 @@ export default function AppModal({
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 440, maxHeight: '90vh',
-          background: '#111',
-          border: '1px solid rgba(255,255,255,.1)',
+          background: isLight ? '#ffffff' : '#111',
+          border: isLight ? '1px solid rgba(15,23,42,.12)' : '1px solid rgba(255,255,255,.1)',
           borderRadius: 20,
-          boxShadow: '0 24px 64px rgba(0,0,0,.7)',
+          boxShadow: isLight ? '0 24px 64px rgba(15,23,42,.22)' : '0 24px 64px rgba(0,0,0,.7)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           animation: 'am-scalein .2s ease',
           fontFamily: FONT,
@@ -166,20 +168,20 @@ export default function AppModal({
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
           padding: '18px 22px',
-          borderBottom: '1px solid rgba(255,255,255,.07)',
-          background: isWarning ? 'rgba(239,68,68,.05)' : 'transparent',
+          borderBottom: isLight ? '1px solid rgba(15,23,42,.08)' : '1px solid rgba(255,255,255,.07)',
+          background: isWarning ? (isLight ? 'rgba(239,68,68,.06)' : 'rgba(239,68,68,.05)') : 'transparent',
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {titleIcon}
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: isWarning ? '#f87171' : '#f2f2f2', letterSpacing: '-.02em' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: isWarning ? (isLight ? '#dc2626' : '#f87171') : (isLight ? '#0f172a' : '#f2f2f2'), letterSpacing: '-.02em' }}>
               {title}
             </h3>
           </div>
           {!hideCloseButton && (
             <button
               onClick={onClose}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 8, cursor: 'pointer', color: '#888', flexShrink: 0, transition: 'background .15s, color .15s' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)', border: isLight ? '1px solid rgba(15,23,42,.1)' : '1px solid rgba(255,255,255,.1)', borderRadius: 8, cursor: 'pointer', color: isLight ? '#64748b' : '#888', flexShrink: 0, transition: 'background .15s, color .15s' }}
               title="Cerrar"
             >
               <X size={15} />
@@ -189,7 +191,7 @@ export default function AppModal({
 
         {/* Body */}
         <div style={{ padding: '20px 22px', flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ fontSize: 14, color: '#c8c8c8', lineHeight: 1.6, fontWeight: 400 }}>
+          <div style={{ fontSize: 14, color: isLight ? '#475569' : '#c8c8c8', lineHeight: 1.6, fontWeight: 400 }}>
             {typeof message === 'string' ? <p style={{ margin: 0 }}>{message}</p> : message}
           </div>
 
@@ -203,10 +205,10 @@ export default function AppModal({
               autoFocus
               style={{
                 width: '100%', padding: '11px 14px', boxSizing: 'border-box',
-                background: '#0a0a0a',
-                border: `1px solid ${inputFocused ? 'rgba(34,197,94,.5)' : 'rgba(255,255,255,.1)'}`,
+                background: isLight ? '#ffffff' : '#0a0a0a',
+                border: `1px solid ${inputFocused ? 'rgba(34,197,94,.5)' : (isLight ? 'rgba(15,23,42,.14)' : 'rgba(255,255,255,.1)')}`,
                 borderRadius: 12, outline: 'none',
-                fontSize: 14, fontWeight: 600, color: '#f2f2f2',
+                fontSize: 14, fontWeight: 600, color: isLight ? '#0f172a' : '#f2f2f2',
                 fontFamily: FONT,
                 boxShadow: inputFocused ? '0 0 0 3px rgba(34,197,94,.12)' : 'none',
                 transition: 'border-color .2s, box-shadow .2s',
@@ -221,7 +223,7 @@ export default function AppModal({
         <div style={{
           display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8,
           padding: '14px 22px',
-          borderTop: '1px solid rgba(255,255,255,.07)',
+          borderTop: isLight ? '1px solid rgba(15,23,42,.08)' : '1px solid rgba(255,255,255,.07)',
           flexShrink: 0,
         }}>
           {cancelText && (
@@ -230,9 +232,9 @@ export default function AppModal({
               onClick={onCancel ?? onClose}
               style={{
                 padding: '9px 18px', borderRadius: 10,
-                background: 'rgba(255,255,255,.06)',
-                border: '1px solid rgba(255,255,255,.1)',
-                color: '#888', fontSize: 12, fontWeight: 700,
+                background: isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)',
+                border: isLight ? '1px solid rgba(15,23,42,.12)' : '1px solid rgba(255,255,255,.1)',
+                color: isLight ? '#475569' : '#888', fontSize: 12, fontWeight: 700,
                 letterSpacing: '.06em', textTransform: 'uppercase',
                 cursor: 'pointer', fontFamily: FONT, transition: 'background .15s, color .15s',
               }}

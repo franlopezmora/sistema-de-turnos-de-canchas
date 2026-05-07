@@ -25,7 +25,16 @@ const PAGE_CSS = `
   .pf-notice { display:flex; align-items:flex-start; gap:10px; padding:13px 16px; border-radius:14px; font-size:13px; font-weight:600; line-height:1.5; animation:pf-notice-in .18s ease-out; }
   .pf-notice-err { background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.2); color:#fca5a5; }
   .pf-notice-ok { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.24); color:#8df3b1; }
+  .pf-zone-link:hover { background:rgba(34,197,94,.16)!important; }
   @keyframes pf-notice-in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+  .tc-root.tc-theme-light .pf-save { box-shadow:0 8px 18px rgba(34,197,94,.24); }
+  .tc-root.tc-theme-light .pf-notice-err { background:rgba(248,113,113,.12); color:#b91c1c; }
+  .tc-root.tc-theme-light .pf-notice-ok { background:rgba(34,197,94,.12); color:#166534; }
+  .tc-root.tc-theme-light .pf-head { border-bottom-color:rgba(15,23,42,.12)!important; }
+  .tc-root.tc-theme-light .pf-zone-title { color:#64748b!important; }
+  .tc-root.tc-theme-light .pf-zone-copy-title { color:#0f172a!important; }
+  .tc-root.tc-theme-light .pf-zone-copy-sub { color:#475569!important; }
+  .tc-root.tc-theme-light .pf-zone-link { background:rgba(34,197,94,.12)!important; border-color:rgba(34,197,94,.24)!important; color:#15803d!important; }
   @media(max-width:600px){ .pf-grid { grid-template-columns:1fr; } }
 `;
 
@@ -135,7 +144,7 @@ export default function PerfilPage() {
       <div className="tc-page-sm">
 
         {/* ── PAGE HEADER ── */}
-        <div style={{ marginBottom: 40, paddingBottom: 32, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+        <div className="pf-head" style={{ marginBottom: 40, paddingBottom: 32, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
           <span className="tc-page-eyebrow">Cuenta</span>
           <h1 className="tc-page-h">Mi <i>perfil</i></h1>
           <p className="tc-page-sub">Editá los datos de tu cuenta, {displayName}.</p>
@@ -194,7 +203,6 @@ export default function PerfilPage() {
                   className="tc-input"
                   value={form.email}
                   disabled
-                  style={{ color: '#444' }}
                 />
               </div>
 
@@ -250,15 +258,16 @@ export default function PerfilPage() {
 
         {/* ── DANGER ZONE ── */}
         <div style={{ marginTop: 40 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#444', marginBottom: 16 }}>Zona de cuenta</div>
+          <div className="pf-zone-title" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#444', marginBottom: 16 }}>Zona de cuenta</div>
           <div className="tc-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#f2f2f2', marginBottom: 4 }}>Tus reservas activas</div>
-                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.5 }}>Revisá el estado de todas tus reservas en un solo lugar.</div>
+                <div className="pf-zone-copy-title" style={{ fontSize: 14, fontWeight: 700, color: '#f2f2f2', marginBottom: 4 }}>Tus reservas activas</div>
+                <div className="pf-zone-copy-sub" style={{ fontSize: 13, color: '#666', lineHeight: 1.5 }}>Revisá el estado de todas tus reservas en un solo lugar.</div>
               </div>
               <Link
                 href="/bookings"
+                className="pf-zone-link"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 999, color: '#22c55e', fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'background .15s' }}
               >
                 Ver reservas →

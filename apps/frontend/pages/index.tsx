@@ -13,6 +13,7 @@ import { getMyBookings } from '../services/BookingService';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 import { reportUiError } from '../utils/uiError';
 import { useAuth } from '../contexts/AuthContext';
+import { useUserTheme } from '../contexts/UserThemeContext';
 import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 // Importamos los iconos de la libreria
 import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Padel)
@@ -151,6 +152,7 @@ const formatClubAddress = (club: Club) => {
 export default function Home() {
   const router = useRouter();
   const { user: authUser } = useAuth();
+  const { isLight, toggleTheme } = useUserTheme();
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loadingClubs, setLoadingClubs] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -327,7 +329,6 @@ export default function Home() {
     href: string;
     copyText: string;
   } | null>(null);
-  const [copied, setCopied] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -382,14 +383,13 @@ export default function Home() {
   };
 
   const handleCopy = async (text: string) => {
+    setContactMenu(null);
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      showAppNotice(`¡Copiado! ${text}`, 'success');
     } catch (err) {
       reportUiError({ area: 'HomePage', action: 'copyContactData' }, err);
     }
-    setContactMenu(null);
   };
 
   const userInitials = useMemo(() => {
@@ -967,6 +967,110 @@ export default function Home() {
     .tc-sport-word-out { opacity:0; transform:translateY(12px); }
     /* Sport card per-card glow */
     .tc-sport-card:hover { border-color:rgba(255,255,255,.12); transform:translateY(-5px); }
+    /* Universal close button */
+    .tc-close-btn { width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center; cursor:pointer; color:#888; flex-shrink:0; transition:background .15s,color .15s; }
+    .tc-close-btn:hover { background:rgba(255,255,255,.12); color:#c8c8c8; }
+    .tc-root.tc-theme-light .tc-close-btn { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.1); color:#64748b; }
+    .tc-root.tc-theme-light .tc-close-btn:hover { background:rgba(15,23,42,.1); color:#334155; }
+    /* Light theme */
+    .tc-root.tc-theme-light { background:#edf2f7; color:#0f172a; --tc-bg-a:#f8fbff; --tc-bg-b:#f3f7fc; --tc-bg-c:#eef4fb; }
+    .tc-root.tc-theme-light .tc-header { background:rgba(248,252,255,.92); border-bottom:1px solid rgba(15,23,42,.1); box-shadow:0 8px 30px rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-brand-text { color:#15803d; }
+    .tc-root.tc-theme-light .tc-btn { background:#ffffff; color:#0f172a; border-color:rgba(15,23,42,.16); box-shadow:0 2px 12px rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-btn-primary { background:#22c55e!important; color:#052010!important; border-color:#22c55e!important; box-shadow:none; }
+    .tc-root.tc-theme-light .tc-btn-ghost { background:rgba(255,255,255,.9); border-color:rgba(15,23,42,.14); }
+    .tc-root.tc-theme-light .tc-user-btn { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 4px 14px rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-user-name { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-user-menu { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 16px 36px rgba(15,23,42,.16); }
+    .tc-root.tc-theme-light .tc-user-menu a,
+    .tc-root.tc-theme-light .tc-user-menu button { color:#1f2937!important; }
+    .tc-root.tc-theme-light .tc-user-menu a:hover,
+    .tc-root.tc-theme-light .tc-user-menu button:hover { background:rgba(15,23,42,.05)!important; }
+    .tc-root.tc-theme-light .tc-hero-bg { background:linear-gradient(135deg,#f8fcff 0%,#eff5fb 45%,#e8eff7 100%); }
+    .tc-root.tc-theme-light .tc-hero-bg::after { background:radial-gradient(ellipse 60% 50% at 20% 100%,rgba(34,197,94,.16),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,rgba(14,165,233,.1),transparent 65%); }
+    .tc-root.tc-theme-light .tc-hero-noise { opacity:.012; }
+    .tc-root.tc-theme-light .tc-hero-h1 { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-hero-sub { color:#334155; }
+    .tc-root.tc-theme-light .tc-hero-eyebrow { background:rgba(255,255,255,.92); border-color:rgba(15,23,42,.1); color:#334155; box-shadow:0 8px 20px rgba(15,23,42,.1); }
+    .tc-root.tc-theme-light .tc-search { background:rgba(255,255,255,.92); border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.1); }
+    .tc-root.tc-theme-light .tc-search-seg { color:#1f2937; }
+    .tc-root.tc-theme-light .tc-search-seg:hover { background:rgba(15,23,42,.04); }
+    .tc-root.tc-theme-light .tc-search-divider { background:rgba(15,23,42,.12); }
+    .tc-root.tc-theme-light .tc-search-input { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-search-input::placeholder { color:#94a3b8; }
+    .tc-root.tc-theme-light .tc-quick-chip { background:#ffffff; border-color:rgba(15,23,42,.12); color:#334155; }
+    .tc-root.tc-theme-light .tc-quick-chip:hover { background:rgba(15,23,42,.05); color:#0f172a; }
+    .tc-root.tc-theme-light .tc-live-card { background:rgba(255,255,255,.9); border-color:rgba(15,23,42,.12); box-shadow:0 10px 28px rgba(15,23,42,.1); }
+    .tc-root.tc-theme-light .tc-live-head { color:#64748b; }
+    .tc-root.tc-theme-light .tc-live-stat { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-live-label { color:#334155; }
+    .tc-root.tc-theme-light .tc-sports { border-bottom-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-sports-h3,
+    .tc-root.tc-theme-light .tc-sec-h,
+    .tc-root.tc-theme-light .tc-value-body h4,
+    .tc-root.tc-theme-light .tc-clubs-h,
+    .tc-root.tc-theme-light .tc-big-closing { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-sport-card { border-color:rgba(15,23,42,.1); box-shadow:0 8px 26px rgba(15,23,42,.1); }
+    .tc-root.tc-theme-light .tc-sport-bg::after { background:linear-gradient(0deg,rgba(15,23,42,.58),transparent 62%); }
+    .tc-root.tc-theme-light .tc-sport-count { color:#dbeafe; }
+    .tc-root.tc-theme-light .tc-sport-name { color:#ffffff; }
+    .tc-root.tc-theme-light .tc-clubs { background:#f5f9fd; border-top-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-club-card { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-club-name { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-club-addr { color:#475569; }
+    .tc-root.tc-theme-light .tc-sec-sub,
+    .tc-root.tc-theme-light .tc-value-body p,
+    .tc-root.tc-theme-light .tc-faq-a { color:#475569; }
+    .tc-root.tc-theme-light .tc-eyebrow,
+    .tc-root.tc-theme-light .tc-foot-col h6,
+    .tc-root.tc-theme-light .tc-owner-side-h { color:#64748b; }
+    .tc-root.tc-theme-light .tc-eyebrow::before { background:#94a3b8; }
+    .tc-root.tc-theme-light .tc-values-band,
+    .tc-root.tc-theme-light .tc-owner,
+    .tc-root.tc-theme-light .tc-faq-band,
+    .tc-root.tc-theme-light .tc-closing { border-top-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-value { border-top-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-value-num,
+    .tc-root.tc-theme-light .tc-step-num { color:#cbd5e1; }
+    .tc-root.tc-theme-light .tc-step-foot { border-top-color:rgba(15,23,42,.08); color:#64748b; }
+    .tc-root.tc-theme-light .tc-step-foot b { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-owner::after { background:linear-gradient(112deg,rgba(241,247,253,.76) 12%,rgba(238,245,251,.62) 48%,rgba(233,241,249,.8) 100%),linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(237,243,249,.62) 100%); }
+    .tc-root.tc-theme-light .tc-owner .tc-sec-sub { color:#334155; }
+    .tc-root.tc-theme-light .tc-owner-side { background:rgba(255,255,255,.88); border-color:rgba(15,23,42,.14); box-shadow:0 12px 30px rgba(15,23,42,.12); }
+    .tc-root.tc-theme-light .tc-owner-perk { border-top-color:rgba(15,23,42,.08); color:#475569; }
+    .tc-root.tc-theme-light .tc-owner-perk b { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-faq-list::before { background:linear-gradient(180deg,rgba(34,197,94,.45) 0%,rgba(15,23,42,.14) 100%); }
+    .tc-root.tc-theme-light .tc-faq-item { border-top-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-faq-item:last-child { border-bottom-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-faq-q { color:#0f172a; }
+    .tc-root.tc-theme-light .tc-faq-icon { color:#64748b; }
+    .tc-root.tc-theme-light .tc-closing::after { background:linear-gradient(110deg,rgba(241,247,253,.58) 8%,rgba(238,245,251,.2) 48%,rgba(233,241,249,.48) 100%),linear-gradient(180deg,rgba(255,255,255,.12) 0%,rgba(233,241,249,.42) 92%); }
+    .tc-root.tc-theme-light .tc-foot { background:#f8fbff; border-top-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-foot-cols { border-bottom-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-foot-brand p,
+    .tc-root.tc-theme-light .tc-foot-col li a,
+    .tc-root.tc-theme-light .tc-foot-col li button,
+    .tc-root.tc-theme-light .tc-foot-base { color:#64748b; }
+    .tc-root.tc-theme-light .tc-foot-col li a:hover,
+    .tc-root.tc-theme-light .tc-foot-col li button:hover { color:#15803d; }
+    .tc-root.tc-theme-light .tc-contact-overlay { background:rgba(15,23,42,.28); }
+    .tc-root.tc-theme-light .tc-contact-panel { background:#ffffff; border-left-color:rgba(15,23,42,.12); box-shadow:-10px 0 30px rgba(15,23,42,.2); }
+    .tc-root.tc-theme-light .tc-contact-panel p,
+    .tc-root.tc-theme-light .tc-contact-panel div,
+    .tc-root.tc-theme-light .tc-contact-panel button { color:#1f2937!important; }
+    .tc-root.tc-theme-light .tc-dropdown { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 12px 28px rgba(15,23,42,.14); }
+    .tc-root.tc-theme-light .tc-dropdown button { color:#1f2937!important; }
+    .tc-root.tc-theme-light .tc-dropdown button:hover { background:rgba(15,23,42,.05)!important; }
+    .tc-root.tc-theme-light .tc-marquee-wrap { background:#f5f9fd; border-bottom-color:rgba(15,23,42,.08); }
+    .tc-root.tc-theme-light .tc-marquee-item { background:#ffffff; border-color:rgba(15,23,42,.1); color:#334155; }
+    .tc-root.tc-theme-light .tc-marquee-item:hover { color:#0f172a; border-color:rgba(15,23,42,.16); }
+    /* Aurora orbs — reduce intensity on light background */
+    .tc-root.tc-theme-light .tc-aurora-1 { background:rgba(34,197,94,.18); opacity:.6; }
+    .tc-root.tc-theme-light .tc-aurora-2 { background:rgba(56,189,248,.14); opacity:.6; }
+    .tc-root.tc-theme-light .tc-aurora-3 { background:rgba(167,139,250,.1); opacity:.6; }
+    /* Value/step section numbers — stronger contrast in light mode */
+    .tc-root.tc-theme-light .tc-value-num,
+    .tc-root.tc-theme-light .tc-step-num { color:#94a3b8; }
   `;
 
   return (
@@ -976,7 +1080,7 @@ export default function Home() {
       </Head>
       <style dangerouslySetInnerHTML={{ __html: tcCss }} />
       {/* eslint-disable-next-line @next/next/no-css-tags */}
-      <div className="tc-root" onClick={() => {
+      <div className={`tc-root${isLight ? ' tc-theme-light' : ''}`} onClick={() => {
         setShowCityDropdown(false);
         setShowSportDropdown(false);
         setShowUserMenu(false);
@@ -989,6 +1093,15 @@ export default function Home() {
             <span className="tc-brand-text">TuCancha</span>
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="tc-btn tc-btn-ghost"
+              aria-label={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
+              title={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
+            >
+              {isLight ? 'Oscuro' : 'Claro'}
+            </button>
             {user ? (
               <div style={{ position: 'relative' }}>
                 <button className="tc-user-btn" onClick={(e) => { e.stopPropagation(); setShowUserMenu(p => !p); }}>
@@ -1426,9 +1539,11 @@ export default function Home() {
         }}
         aria-hidden={!showContact}
       >
-        <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+        <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${isLight ? 'rgba(15,23,42,.1)' : 'rgba(255,255,255,.08)'}` }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: '#22c55e', margin: 0 }}>Contacto</h2>
-          <button onClick={() => setShowContact(false)} style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#f87171' }}><X size={16} /></button>
+          <button className="tc-close-btn" onClick={() => setShowContact(false)} aria-label="Cerrar">
+            <X size={15} />
+          </button>
         </div>
         <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p style={{ fontSize: 13, color: '#777', lineHeight: 1.6, margin: 0 }}>¿Tenés dudas o querés dar de alta tu club? Escribinos.</p>
@@ -1437,29 +1552,29 @@ export default function Home() {
             { type: 'email' as const, label: 'Email', value: 'soporte.tucancha@gmail.com', icon: <Mail size={16} /> },
           ]).map(c => (
             <button key={c.type} type="button" onClick={e => openContactMenu(e, c.type)}
-              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s', width: '100%' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: isLight ? 'rgba(15,23,42,.04)' : 'rgba(255,255,255,.04)', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)'}`, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s', width: '100%' }}
               onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(34,197,94,.3)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)')}>
+              onMouseLeave={e => (e.currentTarget.style.borderColor = isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)')}>
               <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(34,197,94,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e', flexShrink: 0 }}>{c.icon}</div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: '#555' }}>{c.label}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#f2f2f2' }}>{c.value}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: isLight ? '#64748b' : '#555' }}>{c.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: isLight ? '#0f172a' : '#f2f2f2' }}>{c.value}</div>
               </div>
             </button>
           ))}
-          <div style={{ marginTop: 8, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.07)' }}>
-            <button type="button" onClick={e => openContactMenu(e, 'instagram')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', color: '#e8e8e8', fontSize: 13, fontWeight: 600 }}>
+          <div style={{ marginTop: 8, paddingTop: 14, borderTop: `1px solid ${isLight ? 'rgba(15,23,42,.1)' : 'rgba(255,255,255,.07)'}` }}>
+            <button type="button" onClick={e => openContactMenu(e, 'instagram')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: isLight ? 'rgba(15,23,42,.04)' : 'rgba(255,255,255,.04)', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)'}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', color: isLight ? '#334155' : '#e8e8e8', fontSize: 13, fontWeight: 600 }}>
               <Instagram size={15} /> @tucancha.app_
             </button>
           </div>
           {contactMenu && (
-            <div ref={menuRef} role="dialog" style={{ position: 'absolute', top: contactMenu.top, left: contactMenu.left, zIndex: 90, background: '#1a1a1a', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12, padding: 6, minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,.4)' }}>
-              <button onClick={() => handleOpenHref(contactMenu.href)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.06)')}
+            <div ref={menuRef} role="dialog" style={{ position: 'absolute', top: contactMenu.top, left: contactMenu.left, zIndex: 90, background: isLight ? '#ffffff' : '#1a1a1a', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.1)'}`, borderRadius: 12, padding: 6, minWidth: 150, boxShadow: isLight ? '0 8px 24px rgba(15,23,42,.14)' : '0 8px 24px rgba(0,0,0,.4)' }}>
+              <button onClick={() => handleOpenHref(contactMenu.href)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? '#0f172a' : '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
+                onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>Abrir</button>
-              <button onClick={() => handleCopy(contactMenu.copyText)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.06)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>{copied ? '¡Copiado!' : 'Copiar'}</button>
+              <button onClick={() => handleCopy(contactMenu.copyText)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? '#0f172a' : '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
+                onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>Copiar</button>
             </div>
           )}
         </div>

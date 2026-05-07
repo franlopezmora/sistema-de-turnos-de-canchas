@@ -7,6 +7,7 @@ import DarkPageLayout from '../components/DarkPageLayout';
 import UserLoadingState from '../components/UserLoadingState';
 import { ClubService, Club } from '../services/ClubService';
 import { getClubReviewsSummary } from '../services/ClubReviewService';
+import { useUserTheme } from '../contexts/UserThemeContext';
 
 /* ── Geocoding (Nominatim, sin API key) ──────────────────────────── */
 const geocode = async (address: string): Promise<{ lat: number; lon: number } | null> => {
@@ -84,12 +85,12 @@ const PAGE_CSS = `
   .vn-feat-tab.vn-feat-tab-active { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.3); color:#22c55e; }
   .vn-feat-tab svg { width:13px; height:13px; }
   /* Featured cards track */
-  .vn-feat-track { display:flex; gap:16px; overflow-x:auto; padding-bottom:4px; scroll-snap-type:x mandatory; -ms-overflow-style:none; scrollbar-width:none; }
+  .vn-feat-track { display:flex; gap:16px; overflow-x:auto; padding-top:6px; padding-bottom:4px; scroll-snap-type:x mandatory; -ms-overflow-style:none; scrollbar-width:none; }
   .vn-feat-track::-webkit-scrollbar { display:none; }
   .vn-feat-card { flex:0 0 300px; scroll-snap-align:start; background:#0f0f0f; border:1px solid rgba(255,255,255,.07);
-    border-radius:18px; overflow:hidden; text-decoration:none; color:inherit;
+    border-radius:18px; overflow:hidden; text-decoration:none; color:inherit; position:relative; z-index:0;
     transition:border-color .2s,transform .2s,box-shadow .2s; display:flex; flex-direction:column; }
-  .vn-feat-card:hover { border-color:rgba(34,197,94,.25); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .vn-feat-card:hover { border-color:rgba(34,197,94,.25); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.5); z-index:2; }
   .vn-feat-card-img { position:relative; height:160px; background:#1a1a1a; flex-shrink:0; overflow:hidden; }
   .vn-feat-card-body { padding:14px 16px 16px; display:flex; flex-direction:column; gap:6px; flex:1; }
   .vn-feat-card-name { font-size:14px; font-weight:800; color:#f2f2f2; }
@@ -117,9 +118,9 @@ const PAGE_CSS = `
   .vn-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:20px; }
   /* Club card */
   .vn-card { background:#0f0f0f; border:1px solid rgba(255,255,255,.07); border-radius:20px; overflow:hidden;
-    transition:border-color .2s,transform .2s,box-shadow .2s; text-decoration:none; color:inherit;
+    transition:border-color .2s,transform .2s,box-shadow .2s; text-decoration:none; color:inherit; position:relative; z-index:0;
     display:flex; flex-direction:column; }
-  .vn-card:hover { border-color:rgba(34,197,94,.25); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .vn-card:hover { border-color:rgba(34,197,94,.25); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.5); z-index:2; }
   .vn-card-img { position:relative; height:200px; background:#1a1a1a; overflow:hidden; flex-shrink:0; }
   .vn-card-img-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(135deg,#111 0%,#1a1a1a 50%,#0f0f0f 100%); }
@@ -160,6 +161,57 @@ const PAGE_CSS = `
     .vn-feat-inner,.vn-map-inner { padding-top:48px; padding-bottom:48px; }
     .vn-feat-head { flex-direction:column; }
   }
+  .tc-root.tc-theme-light .vn-hero { border-bottom-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .vn-hero-bg { background:radial-gradient(ellipse 70% 60% at 60% 80%, rgba(34,197,94,.11) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 10% 20%, rgba(14,165,233,.08) 0%, transparent 60%); }
+  .tc-root.tc-theme-light .vn-badge { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.28); color:#15803d; }
+  .tc-root.tc-theme-light .vn-eyebrow { color:#64748b; }
+  .tc-root.tc-theme-light .vn-h1,
+  .tc-root.tc-theme-light .vn-feat-title,
+  .tc-root.tc-theme-light .vn-map-title,
+  .tc-root.tc-theme-light .vn-results-section-title,
+  .tc-root.tc-theme-light .vn-card-name,
+  .tc-root.tc-theme-light .vn-feat-card-name,
+  .tc-root.tc-theme-light .vn-empty-title { color:#0f172a; }
+  .tc-root.tc-theme-light .vn-sub,
+  .tc-root.tc-theme-light .vn-card-desc,
+  .tc-root.tc-theme-light .vn-empty-sub,
+  .tc-root.tc-theme-light .vn-results-section-sub,
+  .tc-root.tc-theme-light .vn-feat-sub,
+  .tc-root.tc-theme-light .vn-map-sub { color:#475569; }
+  .tc-root.tc-theme-light .vn-search { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 12px 30px rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .vn-search:focus-within { border-color:rgba(34,197,94,.45); }
+  .tc-root.tc-theme-light .vn-search-ico { color:#94a3b8; }
+  .tc-root.tc-theme-light .vn-search-input { color:#0f172a; }
+  .tc-root.tc-theme-light .vn-search-input::placeholder { color:#94a3b8; }
+  .tc-root.tc-theme-light .vn-search-clear { color:#64748b; }
+  .tc-root.tc-theme-light .vn-chip,
+  .tc-root.tc-theme-light .vn-adv-btn { background:#ffffff; border-color:rgba(15,23,42,.12); color:#334155; box-shadow:0 4px 12px rgba(15,23,42,.06); }
+  .tc-root.tc-theme-light .vn-chip:hover,
+  .tc-root.tc-theme-light .vn-adv-btn:hover { border-color:rgba(15,23,42,.2); color:#0f172a; }
+  .tc-root.tc-theme-light .vn-chip.vn-active { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.28); color:#15803d; }
+  .tc-root.tc-theme-light .vn-chip-sep { background:rgba(15,23,42,.1); }
+  .tc-root.tc-theme-light .vn-adv { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 16px 34px rgba(15,23,42,.14); }
+  .tc-root.tc-theme-light .vn-adv label { color:#64748b; }
+  .tc-root.tc-theme-light .vn-adv input[type="number"] { background:#ffffff; border-color:rgba(15,23,42,.14); color:#0f172a; }
+  .tc-root.tc-theme-light .vn-feat,
+  .tc-root.tc-theme-light .vn-map-sec { border-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .vn-feat-tab { background:#ffffff; border-color:rgba(15,23,42,.1); color:#475569; }
+  .tc-root.tc-theme-light .vn-feat-tab:hover { color:#0f172a; border-color:rgba(15,23,42,.16); }
+  .tc-root.tc-theme-light .vn-feat-tab.vn-feat-tab-active { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.28); color:#15803d; }
+  .tc-root.tc-theme-light .vn-feat-card,
+  .tc-root.tc-theme-light .vn-card,
+  .tc-root.tc-theme-light .vn-map-wrap,
+  .tc-root.tc-theme-light .vn-skel-card { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .vn-feat-card-addr,
+  .tc-root.tc-theme-light .vn-card-addr,
+  .tc-root.tc-theme-light .vn-results-title,
+  .tc-root.tc-theme-light .vn-feat-empty,
+  .tc-root.tc-theme-light .vn-map-loading { color:#64748b; }
+  .tc-root.tc-theme-light .vn-card-addr svg { color:#94a3b8; }
+  .tc-root.tc-theme-light .vn-results-title b { color:#0f172a; }
+  .tc-root.tc-theme-light .vn-card-footer { border-top-color:rgba(15,23,42,.08); }
+  .tc-root.tc-theme-light .vn-skel-img { background:rgba(15,23,42,.06); }
+  .tc-root.tc-theme-light .vn-skel-line { background:rgba(15,23,42,.08); }
 `;
 
 const SPORTS = [
@@ -231,9 +283,11 @@ function FeatCard({ club, rating }: { club: Club; rating?: { average: number; to
 
 export default function ComplejosPage() {
   const router = useRouter();
+  const { isLight } = useUserTheme();
   const searchRef = useRef<HTMLInputElement>(null);
   const mapDivRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<any>(null);
+  const mapTileLayerRef = useRef<any>(null);
 
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
@@ -341,9 +395,12 @@ export default function ComplejosPage() {
       map.touchZoom.disable();
     }
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(map);
+    mapTileLayerRef.current = L.tileLayer(
+      isLight
+        ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      { maxZoom: 19 }
+    ).addTo(map);
     L.control.attribution({ prefix: '© OpenStreetMap · CartoDB' }).addTo(map);
     leafletMapRef.current = map;
 
@@ -371,7 +428,21 @@ export default function ComplejosPage() {
         <a href="/club/${club.slug}" style="display:inline-block;padding:5px 12px;border-radius:8px;background:#22c55e;color:#052010;font-size:11px;font-weight:800;text-decoration:none">Ver cancha →</a>
       </div>`, { maxWidth: 220 });
     });
-  }, [mapReady, clubs]);
+  }, [mapReady, clubs, isLight]);
+
+  useEffect(() => {
+    const L = typeof window !== 'undefined' ? (window as any).L : null;
+    if (!L || !leafletMapRef.current) return;
+    if (mapTileLayerRef.current) {
+      leafletMapRef.current.removeLayer(mapTileLayerRef.current);
+    }
+    mapTileLayerRef.current = L.tileLayer(
+      isLight
+        ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      { maxZoom: 19 }
+    ).addTo(leafletMapRef.current);
+  }, [isLight]);
 
   const zones = useMemo(
     () => [...new Set(clubs.map(c => c.city).filter((c): c is string => Boolean(c)))].sort(),
