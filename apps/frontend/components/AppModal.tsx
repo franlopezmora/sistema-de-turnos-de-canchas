@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { lockBodyScroll } from '../utils/bodyScrollLock';
-import { useUserTheme } from '../contexts/UserThemeContext';
 
 type AppModalProps = {
   show: boolean;
@@ -27,7 +26,7 @@ type AppModalProps = {
   hideCloseButton?: boolean;
 };
 
-const FONT = "'Sora',system-ui,sans-serif";
+const FONT = "'Geist',system-ui,sans-serif";
 
 export default function AppModal({
   show,
@@ -52,7 +51,6 @@ export default function AppModal({
   hideCloseButton = false
 }: AppModalProps) {
   const [mounted, setMounted] = useState(false);
-  const { isLight } = useUserTheme();
   const [inputText, setInputText] = useState(inputValue);
   const [holdProgress, setHoldProgress] = useState(0);
   const [holding, setHolding] = useState(false);
@@ -119,25 +117,25 @@ export default function AppModal({
 
   // Colour tokens
   const confirmBg = disabled
-    ? 'rgba(255,255,255,.06)'
+    ? 'var(--surface-3)'
     : isWarning
-    ? '#ef4444'
-    : '#22c55e';
-  const confirmColor = disabled ? '#333' : isWarning ? '#fff' : '#052010';
-  const confirmHoverBg = isWarning ? '#dc2626' : '#4ade80';
+    ? 'var(--error-fg)'
+    : 'var(--brand)';
+  const confirmColor = disabled ? 'var(--text-muted)' : isWarning ? 'var(--surface-1)' : 'var(--brand-on)';
+  const confirmHoverBg = isWarning ? 'var(--error-fg)' : 'var(--brand-hover)';
 
   const titleIcon = isWarning
-    ? <AlertTriangle size={20} style={{ color: '#f87171', flexShrink: 0 }} />
+    ? <AlertTriangle size={20} style={{ color: 'var(--error-fg)', flexShrink: 0 }} />
     : title.toLowerCase().includes('éxito') || title.toLowerCase().includes('listo') || title.toLowerCase().includes('confirmad')
-    ? <CheckCircle2 size={20} style={{ color: '#22c55e', flexShrink: 0 }} />
-    : <Info size={20} style={{ color: '#555', flexShrink: 0 }} />;
+    ? <CheckCircle2 size={20} style={{ color: 'var(--brand)', flexShrink: 0 }} />
+    : <Info size={20} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />;
 
   const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
       className={`fixed inset-0 ${zIndexClass}`}
-      style={{ background: isLight ? 'rgba(15,23,42,.45)' : 'rgba(0,0,0,.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'am-fadein .15s ease' }}
+      style={{ background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'am-fadein .15s ease' }}
       onMouseDown={e => { if (!closeOnBackdrop) return; backdropMouseDownRef.current = e.target === e.currentTarget; }}
       onTouchStart={e => { if (!closeOnBackdrop) return; backdropMouseDownRef.current = e.target === e.currentTarget; }}
       onClick={closeOnBackdrop ? e => {
@@ -155,10 +153,10 @@ export default function AppModal({
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 440, maxHeight: '90vh',
-          background: isLight ? '#ffffff' : '#111',
-          border: isLight ? '1px solid rgba(15,23,42,.12)' : '1px solid rgba(255,255,255,.1)',
+          background: 'var(--surface-1)',
+          border: '1px solid var(--border)',
           borderRadius: 20,
-          boxShadow: isLight ? '0 24px 64px rgba(15,23,42,.22)' : '0 24px 64px rgba(0,0,0,.7)',
+          boxShadow: 'var(--shadow-lg)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           animation: 'am-scalein .2s ease',
           fontFamily: FONT,
@@ -168,20 +166,20 @@ export default function AppModal({
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
           padding: '18px 22px',
-          borderBottom: isLight ? '1px solid rgba(15,23,42,.08)' : '1px solid rgba(255,255,255,.07)',
-          background: isWarning ? (isLight ? 'rgba(239,68,68,.06)' : 'rgba(239,68,68,.05)') : 'transparent',
+          borderBottom: '1px solid var(--border)',
+          background: isWarning ? 'var(--error-bg)' : 'transparent',
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {titleIcon}
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: isWarning ? (isLight ? '#dc2626' : '#f87171') : (isLight ? '#0f172a' : '#f2f2f2'), letterSpacing: '-.02em' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: isWarning ? 'var(--error-fg)' : 'var(--text-primary)', letterSpacing: '-.02em' }}>
               {title}
             </h3>
           </div>
           {!hideCloseButton && (
             <button
               onClick={onClose}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)', border: isLight ? '1px solid rgba(15,23,42,.1)' : '1px solid rgba(255,255,255,.1)', borderRadius: 8, cursor: 'pointer', color: isLight ? '#64748b' : '#888', flexShrink: 0, transition: 'background .15s, color .15s' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0, transition: 'background .15s, color .15s' }}
               title="Cerrar"
             >
               <X size={15} />
@@ -191,7 +189,7 @@ export default function AppModal({
 
         {/* Body */}
         <div style={{ padding: '20px 22px', flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ fontSize: 14, color: isLight ? '#475569' : '#c8c8c8', lineHeight: 1.6, fontWeight: 400 }}>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, fontWeight: 400 }}>
             {typeof message === 'string' ? <p style={{ margin: 0 }}>{message}</p> : message}
           </div>
 
@@ -205,12 +203,12 @@ export default function AppModal({
               autoFocus
               style={{
                 width: '100%', padding: '11px 14px', boxSizing: 'border-box',
-                background: isLight ? '#ffffff' : '#0a0a0a',
-                border: `1px solid ${inputFocused ? 'rgba(34,197,94,.5)' : (isLight ? 'rgba(15,23,42,.14)' : 'rgba(255,255,255,.1)')}`,
+                background: 'var(--surface-1)',
+                border: `1px solid ${inputFocused ? 'var(--accent-border-strong)' : 'var(--border)'}`,
                 borderRadius: 12, outline: 'none',
-                fontSize: 14, fontWeight: 600, color: isLight ? '#0f172a' : '#f2f2f2',
+                fontSize: 14, fontWeight: 600, color: 'var(--text-primary)',
                 fontFamily: FONT,
-                boxShadow: inputFocused ? '0 0 0 3px rgba(34,197,94,.12)' : 'none',
+                boxShadow: inputFocused ? 'var(--shadow-focus)' : 'none',
                 transition: 'border-color .2s, box-shadow .2s',
               }}
               onFocus={() => setInputFocused(true)}
@@ -223,7 +221,7 @@ export default function AppModal({
         <div style={{
           display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8,
           padding: '14px 22px',
-          borderTop: isLight ? '1px solid rgba(15,23,42,.08)' : '1px solid rgba(255,255,255,.07)',
+          borderTop: '1px solid var(--border)',
           flexShrink: 0,
         }}>
           {cancelText && (
@@ -232,9 +230,9 @@ export default function AppModal({
               onClick={onCancel ?? onClose}
               style={{
                 padding: '9px 18px', borderRadius: 10,
-                background: isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)',
-                border: isLight ? '1px solid rgba(15,23,42,.12)' : '1px solid rgba(255,255,255,.1)',
-                color: isLight ? '#475569' : '#888', fontSize: 12, fontWeight: 700,
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700,
                 letterSpacing: '.06em', textTransform: 'uppercase',
                 cursor: 'pointer', fontFamily: FONT, transition: 'background .15s, color .15s',
               }}
@@ -270,7 +268,7 @@ export default function AppModal({
                 aria-hidden="true"
                 style={{
                   position: 'absolute', inset: 0, pointerEvents: 'none', transformOrigin: 'left',
-                  background: 'rgba(255,255,255,.25)',
+                  background: 'var(--accent-bg-strong)',
                   transform: `scaleX(${holding ? holdProgress : 0})`,
                   transition: holding ? 'none' : 'transform .2s ease',
                 }}

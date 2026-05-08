@@ -110,10 +110,10 @@ const shortId = (id: string) => (id.length <= 8 ? id : `${id.slice(0, 4)}…${id
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
-    <div className="flex items-center justify-between border-b border-[#edf0f6] px-4 py-2.5">
-      <p className="text-[12px] font-semibold text-[#2a3245]">{title}</p>
+    <div className="flex items-center justify-between border-b border-p-border px-4 py-2.5">
+      <p className="text-[12px] font-semibold text-p-text">{title}</p>
       {count !== undefined && (
-        <span className="rounded-full bg-[#f0f2f7] px-2 py-0.5 text-[10px] font-semibold text-[#6f7890]">
+        <span className="rounded-full bg-p-surface-3 px-2 py-0.5 text-[10px] font-semibold text-p-text-muted">
           {count}
         </span>
       )}
@@ -123,7 +123,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function EmptyRow({ message }: { message: string }) {
   return (
-    <p className="px-4 py-5 text-center text-[12px] text-[#98a1b3]">{message}</p>
+    <p className="px-4 py-5 text-center text-[12px] text-p-text-muted">{message}</p>
   );
 }
 
@@ -150,12 +150,12 @@ export default function CashAccountDetailPanel({
   // ── Empty state ──
   if (!account) {
     return (
-      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-[#dce2ee] bg-white px-6 py-10 text-center">
-        <div className="mb-2 grid h-10 w-10 place-items-center rounded-full bg-[#f0f2f7]">
-          <span className="text-[18px] text-[#b0b8c8]">$</span>
+      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-p-border bg-p-surface px-6 py-10 text-center">
+        <div className="mb-2 grid h-10 w-10 place-items-center rounded-full bg-p-surface-3">
+          <span className="text-[18px] text-p-text-muted">$</span>
         </div>
-        <p className="text-[13px] font-semibold text-[#6f7890]">Seleccioná una cuenta</p>
-        <p className="mt-1 text-[12px] text-[#b0b8c8]">
+        <p className="text-[13px] font-semibold text-p-text-muted">Seleccioná una cuenta</p>
+        <p className="mt-1 text-[12px] text-p-text-muted">
           El detalle aparece aquí al hacer clic en una cuenta de la lista.
         </p>
       </div>
@@ -168,16 +168,16 @@ export default function CashAccountDetailPanel({
   const canClose = Boolean(detail && isOpen && !hasPending);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-[#dce2ee] bg-white">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-p-border bg-p-surface">
 
       {/* ── Header ── */}
-      <div className="shrink-0 border-b border-[#edf0f6] px-4 py-3">
+      <div className="shrink-0 border-b border-p-border px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-semibold leading-snug text-[#1a2035]">
+            <p className="truncate text-[14px] font-semibold leading-snug text-p-text">
               {clientName}
             </p>
-            <p className="mt-0.5 text-[11px] text-[#6f7890]">
+            <p className="mt-0.5 text-[11px] text-p-text-muted">
               {sourceLabel[account.sourceType]}
               {account.booking?.courtName ? ` · ${account.booking.courtName}` : ''}
               {' · '}
@@ -187,8 +187,8 @@ export default function CashAccountDetailPanel({
           <span
             className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
               isOpen
-                ? 'border border-[#bfdbfe] bg-[#eff6ff] text-[#1e40af]'
-                : 'border border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]'
+                ? 'border border-p-accent bg-p-surface-2 text-p-accent'
+                : 'border border-p-positive bg-p-positive-bg text-[var(--positive-fg)]'
             }`}
           >
             {isOpen ? 'Abierta' : 'Cerrada'}
@@ -203,27 +203,27 @@ export default function CashAccountDetailPanel({
             {[40, 28, 64, 48].map((w, i) => (
               <div
                 key={i}
-                className="h-3 animate-pulse rounded bg-[#f0f2f7]"
+                className="h-3 animate-pulse rounded bg-p-surface-3"
                 style={{ width: `${w}%` }}
               />
             ))}
           </div>
         ) : error ? (
-          <div className="m-4 rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2 text-[12px] font-semibold text-[#b42346]">
+          <div className="m-4 rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-[var(--error-fg)]">
             {error}
           </div>
         ) : detail ? (
-          <div className="space-y-0 divide-y divide-[#f0f2f7]">
+          <div className="space-y-0 divide-y divide-p-border">
 
             {/* ── Financial summary ── */}
-            <div className="grid grid-cols-3 gap-px bg-[#f0f2f7] border-b border-[#edf0f6]">
+            <div className="grid grid-cols-3 gap-px bg-p-surface-3 border-b border-p-border">
               {[
-                { label: 'Total', value: detail.total, color: 'text-[#2a3245]' },
-                { label: 'Pagado', value: detail.paid, color: 'text-[#15803d]' },
-                { label: 'Pendiente', value: detail.remaining, color: hasPending ? 'text-[#b45309]' : 'text-[#98a1b3]' },
+                { label: 'Total', value: detail.total, color: 'text-p-text' },
+                { label: 'Pagado', value: detail.paid, color: 'text-[var(--positive-fg)]' },
+                { label: 'Pendiente', value: detail.remaining, color: hasPending ? 'text-[var(--warn-fg)]' : 'text-p-text-muted' },
               ].map(({ label, value, color }) => (
-                <div key={label} className="bg-white px-3 py-3 text-center">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#98a1b3]">
+                <div key={label} className="bg-p-surface px-3 py-3 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-p-text-muted">
                     {label}
                   </p>
                   <p className={`mt-1 text-[15px] font-bold leading-none ${color}`}>
@@ -236,24 +236,24 @@ export default function CashAccountDetailPanel({
             {/* ── Items / conceptos ── */}
             <div>
               <SectionHeader title="Conceptos" count={detail.items.length} />
-              <div className="max-h-[200px] overflow-y-auto divide-y divide-[#f0f2f7]">
+              <div className="max-h-[200px] overflow-y-auto divide-y divide-p-border">
                 {detail.items.length === 0 ? (
                   <EmptyRow message="Sin conceptos cargados." />
                 ) : (
                   detail.items.map((item) => (
                     <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                       <div className="min-w-0">
-                        <p className="truncate text-[12px] font-semibold text-[#2a3245]">
+                        <p className="truncate text-[12px] font-semibold text-p-text">
                           {item.description}
                         </p>
                         <div className="mt-0.5 flex items-center gap-1.5">
-                          <span className="inline-flex rounded-full bg-[#f0f2f7] px-1.5 py-0.5 text-[10px] font-semibold text-[#6f7890]">
+                          <span className="inline-flex rounded-full bg-p-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-p-text-muted">
                             {itemTypeLabel[String(item.type).toUpperCase()] ?? item.type}
                           </span>
-                          <span className="text-[10px] text-[#98a1b3]">× {item.quantity}</span>
+                          <span className="text-[10px] text-p-text-muted">× {item.quantity}</span>
                         </div>
                       </div>
-                      <p className="shrink-0 text-[12px] font-semibold text-[#2a3245]">
+                      <p className="shrink-0 text-[12px] font-semibold text-p-text">
                         {formatMoney(item.total)}
                       </p>
                     </div>
@@ -265,7 +265,7 @@ export default function CashAccountDetailPanel({
             {/* ── Pagos asociados ── */}
             <div>
               <SectionHeader title="Pagos" count={detail.payments.length} />
-              <div className="max-h-[180px] overflow-y-auto divide-y divide-[#f0f2f7]">
+              <div className="max-h-[180px] overflow-y-auto divide-y divide-p-border">
                 {detail.payments.length === 0 ? (
                   <EmptyRow message="Sin pagos registrados." />
                 ) : (
@@ -276,18 +276,18 @@ export default function CashAccountDetailPanel({
                       <div key={payment.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="inline-flex rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-1.5 py-0.5 text-[10px] font-semibold text-[#1e40af]">
+                            <span className="inline-flex rounded-full border border-p-accent bg-p-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-p-accent">
                               {methodLabel(payment.method)}
                             </span>
                             {channel && (
-                              <span className="text-[10px] text-[#98a1b3]">{channel}</span>
+                              <span className="text-[10px] text-p-text-muted">{channel}</span>
                             )}
                           </div>
                           {time && (
-                            <p className="mt-0.5 text-[10px] text-[#98a1b3]">{time}</p>
+                            <p className="mt-0.5 text-[10px] text-p-text-muted">{time}</p>
                           )}
                         </div>
-                        <p className="shrink-0 text-[12px] font-semibold text-[#15803d]">
+                        <p className="shrink-0 text-[12px] font-semibold text-[var(--positive-fg)]">
                           {formatMoney(payment.amount)}
                         </p>
                       </div>
@@ -298,7 +298,7 @@ export default function CashAccountDetailPanel({
             </div>
           </div>
         ) : (
-          <div className="px-4 py-6 text-center text-[12px] text-[#98a1b3]">
+          <div className="px-4 py-6 text-center text-[12px] text-p-text-muted">
             No se encontró detalle para esta cuenta.
           </div>
         )}
@@ -306,13 +306,13 @@ export default function CashAccountDetailPanel({
 
       {/* ── Actions ── */}
       {account && (
-        <div className="shrink-0 border-t border-[#edf0f6] px-4 py-3">
+        <div className="shrink-0 border-t border-p-border px-4 py-3">
           <div className="flex flex-wrap items-center justify-end gap-2">
             {hasPending && isOpen && (
               <button
                 type="button"
                 onClick={onPay}
-                className="h-9 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+                className="h-9 rounded-lg bg-ink-900 px-4 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-800"
               >
                 Cobrar
               </button>
@@ -321,7 +321,7 @@ export default function CashAccountDetailPanel({
               <button
                 type="button"
                 onClick={onCloseAccount}
-                className="h-9 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+                className="h-9 rounded-lg bg-ink-900 px-4 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-800"
               >
                 Cerrar cuenta
               </button>
@@ -329,7 +329,7 @@ export default function CashAccountDetailPanel({
             <button
               type="button"
               onClick={onManage}
-              className="h-9 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f5f6f8]"
+              className="h-9 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
             >
               Gestionar cuenta
             </button>
@@ -337,7 +337,7 @@ export default function CashAccountDetailPanel({
               type="button"
               onClick={onRefund}
               disabled={!detail || detail.payments.length === 0}
-              className="h-9 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#6f7890] transition hover:bg-[#f5f6f8] disabled:cursor-not-allowed disabled:opacity-45"
+              className="h-9 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-muted transition hover:bg-p-surface-2 disabled:cursor-not-allowed disabled:opacity-45"
             >
               Devolución
             </button>

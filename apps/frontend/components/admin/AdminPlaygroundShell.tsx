@@ -14,6 +14,7 @@ import {
 import { logout } from '../../services/AuthService';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser, setActiveClubId } from '../../utils/session';
 import { PLAYGROUND_SIDEBAR_ITEMS } from './playgroundNavigation';
+import PuntoLogo from '../PuntoLogo';
 
 type AdminPlaygroundShellProps = {
   activeItem: string;
@@ -23,7 +24,7 @@ type AdminPlaygroundShellProps = {
 };
 
 const HELP_WHATSAPP_URL = 'https://wa.me/5493513436163';
-const HELP_EMAIL_URL = 'mailto:soporte.tucancha@gmail.com';
+const HELP_EMAIL_URL = 'mailto:soporte.punto@gmail.com';
 
 const HELP_TIPS_BY_SECTION: Record<string, string[]> = {
   Calendario: [
@@ -170,9 +171,9 @@ export default function AdminPlaygroundShell({
 
   useLayoutEffect(() => {
     const nextLeft = isSidebarCollapsed ? '66px' : '168px';
-    document.documentElement.style.setProperty('--admin-playground-sidebar-left', nextLeft);
+    document.documentElement.style.setProperty('--admin-shell-sidebar-left', nextLeft);
     return () => {
-      document.documentElement.style.removeProperty('--admin-playground-sidebar-left');
+      document.documentElement.style.removeProperty('--admin-shell-sidebar-left');
     };
   }, [isSidebarCollapsed]);
 
@@ -197,36 +198,27 @@ export default function AdminPlaygroundShell({
   };
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-[#f5f6f8] text-[#1a1a1a]">
+    <div className="h-screen w-full overflow-hidden bg-p-bg text-p-text punto-root">
       <div className="flex h-full w-full flex-col">
-        <header className="relative z-50 flex h-16 items-center overflow-visible bg-white px-4 lg:px-6">
+        <header className="relative z-50 flex h-16 items-center overflow-visible bg-p-surface border-b border-p-border px-4 lg:px-6">
           <div className="hidden w-[168px] items-center gap-2 overflow-hidden transition-[width] duration-200 ease-out lg:flex">
-            <div className="grid h-8 w-8 place-items-center rounded-lg border border-[#d9dfeb] bg-[#f5f7ff] text-[11px] font-black text-[#2a2f5b]">
-              TC
-            </div>
-            <span
-              className={`whitespace-nowrap text-[12px] font-black tracking-[0.22em] text-[#2a2f5b] transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
-                isSidebarCollapsed
-                  ? 'max-w-0 -translate-x-1 opacity-0 blur-[1px]'
-                  : 'max-w-[118px] translate-x-0 opacity-100 blur-0'
+            <PuntoLogo
+              variant={isSidebarCollapsed ? 'isotipo' : 'horizontal'}
+              className={`transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
+                isSidebarCollapsed ? 'h-8 w-8' : 'h-9 w-auto'
               }`}
-            >
-              TUCANCHA
-            </span>
+            />
           </div>
 
           <div className="flex items-center gap-2 lg:hidden">
-            <div className="grid h-8 w-8 place-items-center rounded-lg border border-[#d9dfeb] bg-[#f5f7ff] text-[11px] font-black text-[#2a2f5b]">
-              TC
-            </div>
-            <span className="text-[12px] font-black tracking-[0.22em] text-[#2a2f5b]">TUCANCHA</span>
+            <PuntoLogo variant="horizontal" className="h-9 w-auto" />
           </div>
 
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
               onClick={() => setHelpOpen(true)}
-              className="h-9 rounded-lg px-3 text-sm font-semibold text-[#4a5eaa] hover:bg-[#f3f6ff]"
+              className="h-9 rounded-lg px-3 text-sm font-semibold text-p-accent hover:bg-p-surface-2"
             >
               Ayuda
             </button>
@@ -246,23 +238,23 @@ export default function AdminPlaygroundShell({
                 }}
                 aria-haspopup="menu"
                 aria-expanded={clubMenuOpen}
-                className={`inline-flex h-9 min-w-[180px] items-center justify-between gap-2 rounded-lg border bg-white px-3 text-sm font-semibold shadow-sm transition outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dce6ff] focus-visible:ring-offset-0 ${
+                className={`inline-flex h-9 min-w-[180px] items-center justify-between gap-2 rounded-lg border bg-p-surface px-3 text-sm font-semibold shadow-sm transition outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40 focus-visible:ring-offset-0 ${
                   clubMenuOpen
-                    ? 'border-[#bfc8da] text-[#1f2a44] ring-2 ring-[#ebf0ff]'
-                    : 'border-[#dfe4ee] text-[#2a3348] hover:border-[#cfd7e6]'
+                    ? 'border-p-border-strong text-p-text ring-2 ring-lima-300/25'
+                    : 'border-p-border text-p-text-secondary hover:border-p-border-strong'
                 }`}
               >
                 <span className="truncate">{selectedClubLabel}</span>
                 <ChevronDown
                   size={14}
-                  className={`text-[#7a8398] transition-transform ${clubMenuOpen ? 'rotate-180' : ''}`}
+                  className={`text-p-text-muted transition-transform ${clubMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
               {clubMenuOpen && (
-                <div className="absolute right-0 z-50 mt-2 w-[240px] rounded-xl border border-[#dbe2ef] bg-white p-1 shadow-xl">
+                <div className="absolute right-0 z-50 mt-2 w-[240px] rounded-xl border border-p-border bg-p-surface p-1 shadow-p-lg">
                   {clubOptions.length === 0 ? (
-                    <div className="px-3 py-2 text-[13px] text-[#7a8398]">Sin clubes disponibles</div>
+                    <div className="px-3 py-2 text-[13px] text-p-text-muted">Sin clubes disponibles</div>
                   ) : (
                     clubOptions.map((club) => {
                       const active = club.id === selectedClubId;
@@ -273,8 +265,8 @@ export default function AdminPlaygroundShell({
                           onClick={() => handleChangeActiveClub(club.id)}
                           className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] transition ${
                             active
-                              ? 'bg-[#edf1ff] font-semibold text-[#2748cc]'
-                              : 'text-[#3a435b] hover:bg-[#f5f7fb]'
+                              ? 'bg-p-brand font-semibold text-p-brand-on'
+                              : 'text-p-text-secondary hover:bg-p-surface-2'
                           }`}
                         >
                           <span className="truncate">{club.label}</span>
@@ -296,10 +288,10 @@ export default function AdminPlaygroundShell({
                 }}
                 aria-haspopup="menu"
                 aria-expanded={profileMenuOpen}
-                className={`grid h-9 w-9 place-items-center rounded-full border bg-white text-sm font-bold transition ${
+                className={`grid h-9 w-9 place-items-center rounded-full border bg-p-surface text-sm font-bold transition ${
                   profileMenuOpen
-                    ? 'border-[#bac8e5] text-[#1f2a44] ring-2 ring-[#ebf0ff]'
-                    : 'border-[#e5e7eb] text-[#2a3348] hover:border-[#cfd7e6]'
+                    ? 'border-p-border-strong text-p-text ring-2 ring-lima-300/25'
+                    : 'border-p-border text-p-text-secondary hover:border-p-border-strong'
                 }`}
                 title="Cuenta"
                 aria-label="Abrir menú de cuenta"
@@ -309,7 +301,7 @@ export default function AdminPlaygroundShell({
               {profileMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 z-50 mt-2 w-[220px] rounded-xl border border-[#dbe2ef] bg-white p-1 shadow-xl"
+                  className="absolute right-0 z-50 mt-2 w-[220px] rounded-xl border border-p-border bg-p-surface p-1 shadow-p-lg"
                 >
                   {isAdmin && (
                     <button
@@ -318,7 +310,7 @@ export default function AdminPlaygroundShell({
                         setProfileMenuOpen(false);
                         void router.push('/admin/agenda');
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-[#3a435b] transition hover:bg-[#f5f7fb]"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-p-text-secondary transition hover:bg-p-surface-2"
                     >
                       <ShieldCheck size={14} />
                       Gestión
@@ -331,7 +323,7 @@ export default function AdminPlaygroundShell({
                         setProfileMenuOpen(false);
                         void router.push(`/club/${adminClubSlug}`);
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-[#3a435b] transition hover:bg-[#f5f7fb]"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-p-text-secondary transition hover:bg-p-surface-2"
                     >
                       <MapPin size={14} />
                       Mi club
@@ -343,7 +335,7 @@ export default function AdminPlaygroundShell({
                       setProfileMenuOpen(false);
                       void router.push('/perfil');
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-[#3a435b] transition hover:bg-[#f5f7fb]"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-p-text-secondary transition hover:bg-p-surface-2"
                   >
                     <Users size={14} />
                     Mi perfil
@@ -354,7 +346,7 @@ export default function AdminPlaygroundShell({
                       setProfileMenuOpen(false);
                       void router.push('/bookings');
                     }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-[#3a435b] transition hover:bg-[#f5f7fb]"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-p-text-secondary transition hover:bg-p-surface-2"
                   >
                     <Calendar size={14} />
                     Mis reservas
@@ -365,18 +357,18 @@ export default function AdminPlaygroundShell({
                       setProfileMenuOpen(false);
                       void router.push('/admin/ajustes');
                     }}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-[13px] text-[#3a435b] transition hover:bg-[#f5f7fb]"
+                    className="block w-full rounded-lg px-3 py-2 text-left text-[13px] text-p-text-secondary transition hover:bg-p-surface-2"
                   >
                     Configuración
                   </button>
-                  <div className="my-1 h-px bg-[#eef1f6]" />
+                  <div className="my-1 h-px bg-p-border" />
                   <button
                     type="button"
                     onClick={() => {
                       setProfileMenuOpen(false);
                       setLogoutConfirmOpen(true);
                     }}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-[#b42346] transition hover:bg-[#fff5f8]"
+                    className="block w-full rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-p-error transition hover:bg-p-error-bg"
                   >
                     Cerrar sesión
                   </button>
@@ -386,14 +378,14 @@ export default function AdminPlaygroundShell({
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 bg-white">
+        <div className="flex min-h-0 flex-1 bg-p-surface">
           <aside
-            className={`relative z-[120] hidden h-full ${sidebarWidthClass} flex-col items-center overflow-visible bg-white py-4 transition-[width,opacity] duration-200 ease-out will-change-[width] opacity-100 lg:flex`}
+            className={`relative z-[120] hidden h-full ${sidebarWidthClass} flex-col items-center overflow-visible bg-p-surface py-4 transition-[width,opacity] duration-200 ease-out will-change-[width] opacity-100 lg:flex`}
           >
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed((previous) => !previous)}
-              className="absolute -right-3 top-1/2 z-[130] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-[#dfe4ec] bg-white text-[#6f7890] shadow-sm transition-transform duration-200 hover:bg-[#f7f9fc]"
+              className="absolute -right-3 top-1/2 z-[130] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-p-border bg-p-surface text-p-text-muted shadow-sm transition-transform duration-200 hover:bg-p-surface-2"
               title={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
               aria-label={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
             >
@@ -412,10 +404,10 @@ export default function AdminPlaygroundShell({
                     }}
                     className={`w-full rounded-md py-2 text-left text-[11px] transition-colors ${
                       active
-                        ? 'bg-[#eef1ff] text-[#2b3fa8]'
+                        ? 'bg-p-brand text-p-brand-on'
                         : comingSoon
-                          ? 'text-[#9aa2b4] hover:bg-[#f4f5f7]'
-                          : 'text-[#8b92a0] hover:bg-[#f4f5f7]'
+                          ? 'text-p-text-muted hover:bg-p-surface-2'
+                          : 'text-p-text-muted hover:bg-p-surface-2'
                     } px-0`}
                     title={comingSoon ? 'Proximamente' : label}
                   >
@@ -433,7 +425,7 @@ export default function AdminPlaygroundShell({
                         <span className="inline-flex items-center gap-1">
                           <span>{label}</span>
                           {comingSoon && (
-                            <span className="rounded bg-[#eef1ff] px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-[#4c5ec6]">
+                            <span className="rounded bg-p-positive-bg px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-p-positive">
                               Proximamente
                             </span>
                           )}
@@ -447,14 +439,14 @@ export default function AdminPlaygroundShell({
           </aside>
 
           <main
-            className={`relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-[#f5f6f8] transition ${
+            className={`relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-p-bg transition ${
               contentMuted ? 'pointer-events-none select-none opacity-80' : 'opacity-100'
             }`}
           >
             {children}
           </main>
         </div>
-        <nav className="flex h-[62px] shrink-0 items-center gap-1 overflow-x-auto border-t border-[#e7ebf4] bg-white px-2 lg:hidden">
+        <nav className="flex h-[62px] shrink-0 items-center gap-1 overflow-x-auto border-t border-p-border bg-p-surface px-2 lg:hidden">
           {PLAYGROUND_SIDEBAR_ITEMS.map(({ label, icon: Icon, href, comingSoon }) => {
             const active = label === activeItem;
             return (
@@ -466,10 +458,10 @@ export default function AdminPlaygroundShell({
                 }}
                 className={`flex h-12 min-w-[76px] flex-col items-center justify-center rounded-xl px-2 text-[10px] font-semibold transition ${
                   active
-                    ? 'bg-[#eef1ff] text-[#2b3fa8]'
+                    ? 'bg-p-brand text-p-brand-on'
                     : comingSoon
-                      ? 'text-[#9aa2b4] hover:bg-[#f4f5f7]'
-                      : 'text-[#8b92a0] hover:bg-[#f4f5f7]'
+                      ? 'text-p-text-muted hover:bg-p-surface-2'
+                      : 'text-p-text-muted hover:bg-p-surface-2'
                 }`}
                 title={label}
                 aria-label={label}
@@ -483,7 +475,7 @@ export default function AdminPlaygroundShell({
       </div>
       {helpOpen && (
         <div
-          className="fixed inset-0 z-[2147483200] bg-[#0f172a]/40 backdrop-blur-[1px] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[2147483200] bg-ink-900/55 backdrop-blur-[1px] flex items-center justify-center p-4"
           onClick={() => setHelpOpen(false)}
           role="presentation"
         >
@@ -491,53 +483,53 @@ export default function AdminPlaygroundShell({
             role="dialog"
             aria-modal="true"
             aria-label="Centro de ayuda"
-            className="w-full max-w-[680px] rounded-2xl border border-[#dbe2ef] bg-white shadow-2xl"
+            className="w-full max-w-[680px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-[#eef1f6] px-5 py-4">
+            <div className="flex items-center justify-between border-b border-p-border px-5 py-4">
               <div>
-                <h2 className="text-[21px] font-bold tracking-[-0.01em] text-[#1f2a44]">Centro de ayuda</h2>
-                <p className="mt-1 text-[12px] text-[#6f7890]">Sección actual: {activeItem}</p>
+                <h2 className="text-[21px] font-bold tracking-[-0.01em] text-p-text">Centro de ayuda</h2>
+                <p className="mt-1 text-[12px] text-p-text-muted">Sección actual: {activeItem}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setHelpOpen(false)}
-                className="grid h-8 w-8 place-items-center rounded-full border border-[#dce3ef] text-[#76819b] hover:bg-[#f6f8fc]"
+                className="grid h-8 w-8 place-items-center rounded-full border border-p-border text-p-text-muted hover:bg-p-surface-2"
                 aria-label="Cerrar ayuda"
               >
                 <X size={14} />
               </button>
             </div>
             <div className="space-y-4 px-5 py-5">
-              <section className="rounded-xl border border-[#e7ebf4] bg-[#f8faff] px-4 py-3">
-                <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#5670d1]">
+              <section className="rounded-xl border border-p-border bg-p-surface-2 px-4 py-3">
+                <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-p-accent">
                   Qué podés hacer acá
                 </p>
-                <ul className="mt-2 space-y-2 text-[14px] text-[#2e3b57]">
+                <ul className="mt-2 space-y-2 text-[14px] text-p-text-secondary">
                   {sectionHelpTips.map((tip) => (
                     <li key={tip} className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#5670d1]" />
+                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-p-accent" />
                       <span>{tip}</span>
                     </li>
                   ))}
                 </ul>
               </section>
 
-              <section className="rounded-xl border border-[#eceff5] bg-white px-4 py-3">
-                <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#5f6b85]">
+              <section className="rounded-xl border border-p-border bg-p-surface px-4 py-3">
+                <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-p-text-muted">
                   Problemas frecuentes
                 </p>
-                <ul className="mt-2 space-y-2 text-[13px] text-[#42506d]">
+                <ul className="mt-2 space-y-2 text-[13px] text-p-text-secondary">
                   <li>Si no te deja continuar, revisá fecha, cancha y horario antes de cobros o participantes.</li>
                   <li>Si no ves una reserva, verificá filtros activos y club seleccionado.</li>
                   <li>Ante inconsistencias, recargá la pantalla y reintentá la operación.</li>
                 </ul>
               </section>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#eef1f6] px-5 py-4">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-p-border px-5 py-4">
               <a
                 href={HELP_EMAIL_URL}
-                className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] inline-flex items-center"
+                className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary inline-flex items-center"
               >
                 Enviar email
               </a>
@@ -545,7 +537,7 @@ export default function AdminPlaygroundShell({
                 href={HELP_WHATSAPP_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="h-10 rounded-xl bg-[#3053e2] px-4 text-sm font-bold text-white inline-flex items-center hover:bg-[#2748cc]"
+                className="h-10 rounded-xl bg-p-brand px-4 text-sm font-bold text-p-brand-on inline-flex items-center hover:bg-lima-200"
               >
                 Contactar por WhatsApp
               </a>
@@ -555,7 +547,7 @@ export default function AdminPlaygroundShell({
       )}
       {logoutConfirmOpen && (
         <div
-          className="fixed inset-0 z-[2147483200] bg-[#0f172a]/40 backdrop-blur-[1px] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[2147483200] bg-ink-900/55 backdrop-blur-[1px] flex items-center justify-center p-4"
           onClick={() => setLogoutConfirmOpen(false)}
           role="presentation"
         >
@@ -563,37 +555,37 @@ export default function AdminPlaygroundShell({
             role="dialog"
             aria-modal="true"
             aria-label="Confirmar cierre de sesión"
-            className="w-full max-w-[420px] rounded-2xl border border-[#e3e7f0] bg-white shadow-2xl"
+            className="w-full max-w-[420px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-[#eef1f6] px-5 py-4">
-              <h2 className="text-[19px] font-bold tracking-[-0.01em] text-[#1f2a44]">Cerrar sesión</h2>
+            <div className="flex items-center justify-between border-b border-p-border px-5 py-4">
+              <h2 className="text-[19px] font-bold tracking-[-0.01em] text-p-text">Cerrar sesión</h2>
               <button
                 type="button"
                 onClick={() => setLogoutConfirmOpen(false)}
-                className="grid h-8 w-8 place-items-center rounded-full border border-[#dce3ef] text-[#76819b] hover:bg-[#f6f8fc]"
+                className="grid h-8 w-8 place-items-center rounded-full border border-p-border text-p-text-muted hover:bg-p-surface-2"
                 aria-label="Cerrar confirmación de cierre de sesión"
               >
                 <X size={14} />
               </button>
             </div>
             <div className="px-5 py-5">
-              <p className="text-[14px] text-[#44506b]">
+              <p className="text-[14px] text-p-text-secondary">
                 ¿Querés cerrar sesión ahora? Vas a volver a la pantalla de login.
               </p>
             </div>
-            <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-5 py-4">
+            <div className="flex items-center justify-end gap-2 border-t border-p-border px-5 py-4">
               <button
                 type="button"
                 onClick={() => setLogoutConfirmOpen(false)}
-                className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={() => logout({ redirectTo: '/login' })}
-                className="h-10 rounded-xl bg-[#cf3f57] px-4 text-sm font-bold text-white hover:bg-[#b8354b]"
+                className="h-10 rounded-xl bg-p-error px-4 text-sm font-bold text-ink-50 hover:opacity-90"
               >
                 Sí, cerrar sesión
               </button>

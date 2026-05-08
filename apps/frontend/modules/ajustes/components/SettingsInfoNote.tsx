@@ -33,22 +33,22 @@ const variantStyles: Record<
   { container: string; icon: string; title: string; text: string }
 > = {
   info: {
-    container: 'border-[#bfdbfe] bg-[#eff6ff]',
-    icon: 'text-[#1d4ed8]',
-    title: 'text-[#1d4ed8]',
-    text: 'text-[#1e40af]',
+    container: 'border-p-accent bg-p-surface-2',
+    icon: 'text-p-accent',
+    title: 'text-p-accent',
+    text: 'text-p-accent',
   },
   warning: {
-    container: 'border-[#fde68a] bg-[#fffbeb]',
-    icon: 'text-[#92400e]',
-    title: 'text-[#92400e]',
-    text: 'text-[#78350f]',
+    container: 'border-p-warning bg-p-warning-bg',
+    icon: 'text-p-warning',
+    title: 'text-p-warning',
+    text: 'text-p-warning',
   },
   neutral: {
-    container: 'border-[#dce2ee] bg-[#f8f9fc]',
-    icon: 'text-[#6f7890]',
-    title: 'text-[#4e5870]',
-    text: 'text-[#4e5870]',
+    container: 'border-p-border bg-p-surface-2',
+    icon: 'text-p-text-muted',
+    title: 'text-p-text-secondary',
+    text: 'text-p-text-secondary',
   },
 };
 

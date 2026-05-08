@@ -45,9 +45,9 @@ type ProductDrawerProps = {
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  'h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition-all focus:border-[#3053e2]';
-const labelClass = 'mb-1.5 block text-[12px] font-medium text-[#4e5870]';
-const sectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
+  'h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text placeholder:text-p-text-muted outline-none transition-all focus:border-p-accent';
+const labelClass = 'mb-1.5 block text-[12px] font-medium text-p-text-secondary';
+const sectionCardClass = 'rounded-2xl border border-p-border bg-p-surface-2 p-4';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -79,14 +79,14 @@ export default function ProductDrawer({
       <button
         type="button"
         onClick={onClose}
-        className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fc]"
+        className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
       >
         Cancelar
       </button>
       <button
         form="product-drawer-form"
         type="submit"
-        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-800"
       >
         {isEditing ? <Pencil size={14} /> : <Plus size={14} />}
         {isEditing ? 'Guardar cambios' : 'Confirmar ingreso'}
@@ -117,7 +117,7 @@ export default function ProductDrawer({
                 onChange={(e) => onFormChange({ ...formData, name: e.target.value })}
               />
               <Tag
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted"
                 size={15}
                 strokeWidth={2.5}
               />
@@ -132,8 +132,8 @@ export default function ProductDrawer({
                 onClick={() => onFormChange({ ...formData, isCombo: false })}
                 className={`h-9 rounded-xl border text-[12px] font-semibold transition ${
                   !formData.isCombo
-                    ? 'border-[#3053e2] bg-[#eef1fd] text-[#3053e2]'
-                    : 'border-[#dce2ee] bg-white text-[#6f7890] hover:bg-[#f8f9fc]'
+                    ? 'border-p-accent bg-p-positive-bg text-p-accent'
+                    : 'border-p-border bg-p-surface text-p-text-muted hover:bg-p-surface-2'
                 }`}
               >
                 Producto simple
@@ -143,8 +143,8 @@ export default function ProductDrawer({
                 onClick={() => onFormChange({ ...formData, isCombo: true })}
                 className={`h-9 rounded-xl border text-[12px] font-semibold transition ${
                   formData.isCombo
-                    ? 'border-[#3053e2] bg-[#eef1fd] text-[#3053e2]'
-                    : 'border-[#dce2ee] bg-white text-[#6f7890] hover:bg-[#f8f9fc]'
+                    ? 'border-p-accent bg-p-positive-bg text-p-accent'
+                    : 'border-p-border bg-p-surface text-p-text-muted hover:bg-p-surface-2'
                 }`}
               >
                 Combo
@@ -169,7 +169,7 @@ export default function ProductDrawer({
                 onWheel={(e) => e.currentTarget.blur()}
               />
               <DollarSign
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted"
                 size={15}
                 strokeWidth={2.5}
               />
@@ -191,12 +191,12 @@ export default function ProductDrawer({
                   onWheel={(e) => e.currentTarget.blur()}
                 />
                 <Box
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted"
                   size={15}
                   strokeWidth={2.5}
                 />
               </div>
-              <p className="mt-1 text-[11px] text-[#6f7890]">
+              <p className="mt-1 text-[11px] text-p-text-muted">
                 {isEditing
                   ? 'Este valor reemplaza el stock disponible del producto al guardar.'
                   : 'Se usa para definir el stock con el que arranca el producto.'}
@@ -214,7 +214,7 @@ export default function ProductDrawer({
                 onChange={(e) => onFormChange({ ...formData, category: e.target.value })}
               />
               <Package
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted"
                 size={15}
                 strokeWidth={2.5}
               />
@@ -225,14 +225,14 @@ export default function ProductDrawer({
         {/* ── Composición del combo ── */}
         {formData.isCombo && (
           <AdminDrawerSection title="Composición del combo" className={`${sectionCardClass} mt-5`}>
-            <p className="text-[12px] text-[#6f7890]">
+            <p className="text-[12px] text-p-text-muted">
               Seleccioná los productos que forman el combo.
             </p>
             <div className="space-y-2">
               {formData.components.map((component, index) => (
                 <div key={index} className="grid grid-cols-12 items-center gap-2">
                   <select
-                    className="col-span-7 h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] outline-none transition focus:border-[#3053e2]"
+                    className="col-span-7 h-10 rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none transition focus:border-p-accent"
                     value={component.componentProductId}
                     onChange={(e) =>
                       onUpdateComponent(index, 'componentProductId', e.target.value)
@@ -248,14 +248,14 @@ export default function ProductDrawer({
                   <input
                     type="number"
                     min="1"
-                    className="col-span-3 h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] outline-none transition focus:border-[#3053e2]"
+                    className="col-span-3 h-10 rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none transition focus:border-p-accent"
                     value={component.quantity}
                     onChange={(e) => onUpdateComponent(index, 'quantity', e.target.value)}
                   />
                   <button
                     type="button"
                     onClick={() => onRemoveComponent(index)}
-                    className="col-span-2 grid h-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] transition hover:bg-[#b42318] hover:text-white"
+                    className="col-span-2 grid h-9 place-items-center rounded-lg border border-p-error bg-p-error-bg text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-ink-50"
                   >
                     <X size={14} />
                   </button>
@@ -265,7 +265,7 @@ export default function ProductDrawer({
             <button
               type="button"
               onClick={onAddComponent}
-              className="h-9 w-full rounded-lg border border-[#dce2ee] bg-white text-[12px] font-semibold text-[#3053e2] transition hover:bg-[#eef1fd]"
+              className="h-9 w-full rounded-lg border border-p-border bg-p-surface text-[12px] font-semibold text-p-accent transition hover:bg-p-positive-bg"
             >
               + Agregar componente
             </button>
@@ -274,7 +274,7 @@ export default function ProductDrawer({
 
         {/* ── Error ── */}
         {formError && (
-          <p className="mt-4 rounded-lg border border-[#ffd6d6] bg-[#fff5f5] px-3 py-2 text-[12px] font-semibold text-[#b42318]">
+          <p className="mt-4 rounded-lg border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-[var(--error-fg)]">
             {formError}
           </p>
         )}

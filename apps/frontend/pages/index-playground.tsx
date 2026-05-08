@@ -11,6 +11,7 @@ import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 import { reportUiError } from '../utils/uiError';
+import PuntoLogo from '../components/PuntoLogo';
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de fútbol limpia
 import { IoTennisballOutline } from "react-icons/io5"; // Pelota de tenis limpia
 
@@ -256,11 +257,11 @@ export default function Home() {
       href = 'https://wa.me/5493513436163';
       copyText = '+5493513436163';
     } else if (type === 'email') {
-      href = 'mailto:soporte.tucancha@gmail.com';
-      copyText = 'soporte.tucancha@gmail.com';
+      href = 'mailto:soporte.punto@gmail.com';
+      copyText = 'soporte.punto@gmail.com';
     } else if (type === 'instagram') {
-      href = 'https://www.instagram.com/tucancha.app_/';
-      copyText = '@tucancha.app_';
+      href = 'https://www.instagram.com/punto.app_/';
+      copyText = '@punto.app_';
     }
     setContactMenu({ type, top: Math.max(top, 10), left: Math.max(left, 10), href, copyText });
   };
@@ -835,41 +836,34 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Inicio | TuCancha</title>
+        <title>Inicio | Punto</title>
       </Head>
       <div
-        className="min-h-screen relative overflow-x-hidden bg-[#1a4a38] text-[#e8ddd1] selection:bg-[#B9CF32] selection:text-[#1b4a37]"
+        className="min-h-screen relative overflow-x-hidden bg-ink-900 text-ink-50 selection:bg-lima-300 selection:text-ink-900"
         style={{ fontFamily: '"DM Sans","Manrope",sans-serif' }}
       >
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-[460px] w-[760px] rounded-full bg-[#c9f55f]/10 blur-3xl ambient-drift soft-breathe" />
-          <div className="absolute top-[220px] -left-28 h-[380px] w-[380px] rounded-full bg-[#64d3f5]/10 blur-3xl float-slow" />
-          <div className="absolute bottom-[120px] -right-20 h-[360px] w-[360px] rounded-full bg-[#7a8bff]/10 blur-3xl float-medium float-delay" />
-          <div className="absolute inset-0 gradient-pan bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_52%),linear-gradient(180deg,#2d6a51_0%,#20523f_45%,#1a4a38_100%)]" />
+          <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-[460px] w-[760px] rounded-full bg-lima-300/10 blur-3xl ambient-drift soft-breathe" />
+          <div className="absolute top-[220px] -left-28 h-[380px] w-[380px] rounded-full bg-lima-200/10 blur-3xl float-slow" />
+          <div className="absolute bottom-[120px] -right-20 h-[360px] w-[360px] rounded-full bg-lima-100/10 blur-3xl float-medium float-delay" />
+          <div className="absolute inset-0 gradient-pan bg-[radial-gradient(circle_at_top,var(--accent-bg-muted),transparent_52%),linear-gradient(180deg,var(--lima-900)_0%,var(--ink-800)_45%,var(--ink-900)_100%)]" />
         </div>
 
         <nav className="sticky top-0 z-50">
-          <div className="mx-auto mt-5 flex w-[min(1120px,calc(100%-2rem))] items-center justify-between rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-xl md:px-6">
+          <div className="mx-auto mt-5 flex w-[min(1120px,calc(100%-2rem))] items-center justify-between rounded-2xl border border-white/20 bg-p-surface/10 px-4 py-3 backdrop-blur-xl md:px-6">
             <div className="flex items-center gap-3">
-              <div className="relative h-9 w-9 rounded-xl border border-white/30 bg-gradient-to-br from-[#c9f55f] to-[#7ce3b4] text-[#1b4a37] shadow-lg shadow-[#c9f55f]/30">
-                <div className="absolute inset-[7px] rounded-full border-2 border-[#1b4a37]/75" />
-                <div className="absolute top-1/2 left-[2px] right-[2px] h-[2.5px] -translate-y-1/2 rounded-full bg-[#1b4a37]/75" />
-              </div>
-              <div>
-                <span className="block text-xl md:text-2xl font-black tracking-tight text-white leading-none">TuCancha</span>
-                <span className="hidden md:block text-[10px] uppercase tracking-[0.2em] font-bold text-white/60 mt-1">Turnos para canchas</span>
-              </div>
+              <PuntoLogo variant="horizontalDark" className="h-10 w-auto md:h-11" />
             </div>
 
             <div
               ref={navMenuRef}
               onMouseMove={handleNavMenuMove}
               onMouseLeave={handleNavMenuLeave}
-              className="hidden md:flex relative items-center gap-2 p-1 rounded-full border border-white/10 bg-white/5 text-sm font-semibold text-white/80 overflow-hidden"
+              className="hidden md:flex relative items-center gap-2 p-1 rounded-full border border-white/10 bg-p-surface/5 text-sm font-semibold text-ink-50/80 overflow-hidden"
             >
               <span
                 ref={navGlowRef}
-                className="pointer-events-none absolute top-1/2 left-0 h-10 w-28 -translate-y-1/2 rounded-full bg-gradient-to-r from-[#c9f55f]/50 via-[#7ce3b4]/50 to-[#c9f55f]/50 blur-md transition-opacity duration-200 opacity-0"
+                className="pointer-events-none absolute top-1/2 left-0 h-10 w-28 -translate-y-1/2 rounded-full bg-gradient-to-r from-lima-300/50 via-lima-200/50 to-lima-300/50 blur-md transition-opacity duration-200 opacity-0"
               />
               <button type="button" className="nav-pill-button" onClick={() => scrollToSection('resultados')}>Reservas</button>
               <button type="button" className="nav-pill-button" onClick={() => scrollToSection('funcionalidades')}>Funcionalidades</button>
@@ -885,61 +879,61 @@ export default function Home() {
                       e.stopPropagation();
                       setShowUserMenu((prev) => !prev);
                     }}
-                    className="flex items-center gap-2 rounded-full border border-white/20 bg-white/15 px-1.5 py-1.5 pr-3 hover:bg-white/20 transition-all"
+                    className="flex items-center gap-2 rounded-full border border-white/20 bg-p-surface/15 px-1.5 py-1.5 pr-3 hover:bg-p-surface/20 transition-all"
                   >
                     <div className="relative">
-                      <div className="h-8 w-8 rounded-full bg-[#c9f55f] text-[#1b4a37] flex items-center justify-center font-black text-xs">{userInitials}</div>
+                      <div className="h-8 w-8 rounded-full bg-lima-300 text-ink-900 flex items-center justify-center font-black text-xs">{userInitials}</div>
                       {activeBookingsCount > 0 && (
-                        <span className="absolute -right-1 -top-1 min-w-[16px] h-4 px-1 rounded-full bg-[#ff6b7a] text-white text-[9px] font-black flex items-center justify-center">
+                        <span className="absolute -right-1 -top-1 min-w-[16px] h-4 px-1 rounded-full bg-p-error text-ink-50 text-[9px] font-black flex items-center justify-center">
                           {activeBookingsCount}
                         </span>
                       )}
                     </div>
-                    <span className="hidden sm:inline text-white text-sm font-bold">{user.firstName || user.name || 'Usuario'}</span>
+                    <span className="hidden sm:inline text-ink-50 text-sm font-bold">{user.firstName || user.name || 'Usuario'}</span>
                   </button>
 
                   {showUserMenu && (
                     <div
-                      className="absolute right-0 mt-3 w-[290px] rounded-2xl border border-[#245640]/20 bg-[#f7efe6] shadow-2xl overflow-hidden z-[120]"
+                      className="absolute right-0 mt-3 w-[290px] rounded-2xl border border-ink-700/20 bg-ink-50 shadow-2xl overflow-hidden z-[120]"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="p-5 text-center">
-                        <div className="relative mx-auto mb-3 h-16 w-16 rounded-full bg-[#2a6148] text-[#f7efe6] flex items-center justify-center text-lg font-black">
+                        <div className="relative mx-auto mb-3 h-16 w-16 rounded-full bg-lima-800 text-ink-50 flex items-center justify-center text-lg font-black">
                           {userInitials}
-                          <span className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-[#c9f55f] text-[#1b4a37] border-2 border-[#f7efe6] flex items-center justify-center">
+                          <span className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-lima-300 text-ink-900 border-2 border-ink-50 flex items-center justify-center">
                             <Check size={12} strokeWidth={3} />
                           </span>
                         </div>
-                        <h3 className="text-[#245640] text-lg font-black">{user.firstName || user.name || 'Usuario'}</h3>
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-[#245640]/60 font-bold">{isAdmin ? 'Administrador' : 'Miembro'}</p>
+                        <h3 className="text-ink-700 text-lg font-black">{user.firstName || user.name || 'Usuario'}</h3>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-ink-700/60 font-bold">{isAdmin ? 'Administrador' : 'Miembro'}</p>
                       </div>
-                      <div className="border-t border-[#245640]/10 px-5 py-4 text-sm space-y-3 text-[#245640]">
-                        <div className="flex items-center gap-2"><Phone size={15} className="text-[#1f6b48]" /> {user.phoneNumber || user.phone || 'Sin teléfono'}</div>
-                        <div className="flex items-center gap-2 truncate"><Mail size={15} className="text-[#1f6b48]" /> {user.email || 'Sin email'}</div>
+                      <div className="border-t border-ink-700/10 px-5 py-4 text-sm space-y-3 text-ink-700">
+                        <div className="flex items-center gap-2"><Phone size={15} className="text-lima-700" /> {user.phoneNumber || user.phone || 'Sin teléfono'}</div>
+                        <div className="flex items-center gap-2 truncate"><Mail size={15} className="text-lima-700" /> {user.email || 'Sin email'}</div>
                       </div>
-                      <div className="border-t border-[#245640]/10 px-4 py-3 text-sm font-bold">
+                      <div className="border-t border-ink-700/10 px-4 py-3 text-sm font-bold">
                         {isAdmin && (
-                          <Link href="/admin/agenda" className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-[#245640]/5" onClick={() => setShowUserMenu(false)}>
+                          <Link href="/admin/agenda" className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-ink-700/5" onClick={() => setShowUserMenu(false)}>
                             <ShieldCheck size={16} /> Gestión
                           </Link>
                         )}
                         {isAdmin && adminClubSlug && (
-                          <Link href={`/club/${adminClubSlug}`} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-[#245640]/5" onClick={() => setShowUserMenu(false)}>
+                          <Link href={`/club/${adminClubSlug}`} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-ink-700/5" onClick={() => setShowUserMenu(false)}>
                             <MapPin size={16} /> Mi club
                           </Link>
                         )}
                         {router.pathname !== '/perfil' && (
-                          <Link href="/perfil" className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-[#245640]/5" onClick={() => setShowUserMenu(false)}>
+                          <Link href="/perfil" className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-ink-700/5" onClick={() => setShowUserMenu(false)}>
                             <Users size={16} /> Mi perfil
                           </Link>
                         )}
-                        <Link href="/bookings" className="flex items-center justify-between rounded-lg px-2 py-2 hover:bg-[#245640]/5" onClick={() => setShowUserMenu(false)}>
+                        <Link href="/bookings" className="flex items-center justify-between rounded-lg px-2 py-2 hover:bg-ink-700/5" onClick={() => setShowUserMenu(false)}>
                           <span className="flex items-center gap-2"><Calendar size={16} /> Mis reservas</span>
-                          {activeBookingsCount > 0 && <span className="h-5 min-w-[20px] px-1 rounded-full bg-[#ff6b7a] text-white text-[10px] font-black flex items-center justify-center">{activeBookingsCount}</span>}
+                          {activeBookingsCount > 0 && <span className="h-5 min-w-[20px] px-1 rounded-full bg-p-error text-ink-50 text-[10px] font-black flex items-center justify-center">{activeBookingsCount}</span>}
                         </Link>
                         <button
                           type="button"
-                          className="w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-red-500 hover:bg-red-50"
+                          className="w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-p-error hover:bg-p-error-bg"
                           onClick={() => {
                             logout();
                             setUser(null);
@@ -953,7 +947,7 @@ export default function Home() {
                   )}
                 </div>
               ) : (
-                <Link href="/login" className="btn-aurora border-neon border-neon-slow rounded-full bg-white text-[#1b4a37] px-5 py-2 text-sm font-black hover:bg-[#c9f55f] transition-colors">
+                <Link href="/login" className="btn-aurora border-neon border-neon-slow rounded-full bg-p-surface text-ink-900 px-5 py-2 text-sm font-black hover:bg-lima-300 transition-colors">
                   <span>Ingresar</span>
                 </Link>
               )}
@@ -964,7 +958,7 @@ export default function Home() {
                   if (user) setShowUserMenu((prev) => !prev);
                   else setShowContact(true);
                 }}
-                className="md:hidden rounded-lg p-2 text-white hover:bg-white/10"
+                className="md:hidden rounded-lg p-2 text-ink-50 hover:bg-p-surface/10"
               >
                 <Menu size={20} />
               </button>
@@ -976,60 +970,60 @@ export default function Home() {
           <section className="mx-auto w-[min(1120px,calc(100%-2rem))] pt-14 md:pt-20 pb-10">
             <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-8 items-center">
               <RevealOnScroll>
-                <div className="tc-pill tc-pill-on-dark text-xs md:text-sm mb-6 float-slow">
-                  <Sparkles size={15} className="text-[#c9f55f] icon-pop" />
+                <div className="p-legacy-pill p-legacy-pill-on-dark text-xs md:text-sm mb-6 float-slow">
+                  <Sparkles size={15} className="text-lima-300 icon-pop" />
                   Agenda premium para canchas y clubes deportivos
                 </div>
-                <h1 className="text-4xl sm:text-5xl md:text-6xl leading-[0.95] font-black text-white tracking-tight">
+                <h1 className="text-4xl sm:text-5xl md:text-6xl leading-[0.95] font-black text-ink-50 tracking-tight">
                   Reservas simples.
                   <br />
-                  <span className="bg-gradient-to-r from-[#c9f55f] via-[#8de7ff] to-[#7ea8ff] bg-clip-text text-transparent">Imagen profesional.</span>
+                  <span className="bg-gradient-to-r from-lima-300 via-lima-200 to-lima-100 bg-clip-text text-transparent">Imagen profesional.</span>
                 </h1>
-                <p className="mt-6 text-base md:text-xl text-white/80 max-w-2xl">
+                <p className="mt-6 text-base md:text-xl text-ink-50/80 max-w-2xl">
                   Buscá canchas en tiempo real, guardá favoritos y convertí tu home en algo serio, con ritmo visual y mejor experiencia en desktop y mobile.
                 </p>
-                <div className="mt-8 flex flex-wrap items-center gap-3 text-sm text-white/75">
-                  <div className="tc-pill tc-pill-on-dark hover-lift float-slow"><Clock3 size={15} className="text-[#c9f55f] icon-pop" /> Disponibilidad instantánea</div>
-                  <div className="tc-pill tc-pill-on-dark hover-lift float-medium"><Building2 size={15} className="text-[#8de7ff] icon-pop" /> Clubes verificados</div>
-                  <div className="tc-pill tc-pill-on-dark hover-lift float-medium float-delay"><TrendingUp size={15} className="text-[#7ea8ff] icon-pop" /> Más reservas, menos fricción</div>
+                <div className="mt-8 flex flex-wrap items-center gap-3 text-sm text-ink-50/75">
+                  <div className="p-legacy-pill p-legacy-pill-on-dark hover-lift float-slow"><Clock3 size={15} className="text-lima-300 icon-pop" /> Disponibilidad instantánea</div>
+                  <div className="p-legacy-pill p-legacy-pill-on-dark hover-lift float-medium"><Building2 size={15} className="text-lima-200 icon-pop" /> Clubes verificados</div>
+                  <div className="p-legacy-pill p-legacy-pill-on-dark hover-lift float-medium float-delay"><TrendingUp size={15} className="text-lima-100 icon-pop" /> Más reservas, menos fricción</div>
                 </div>
               </RevealOnScroll>
 
               <RevealOnScroll delay={150}>
                 <div className="relative">
                   <div
-                    className="rounded-[28px] border border-white/15 bg-gradient-to-br from-white/20 to-white/5 p-5 md:p-6 backdrop-blur-xl shadow-[0_30px_100px_-30px_rgba(0,0,0,0.6)] float-slow gradient-pan mouse-flyer interactive-tilt"
+                    className="rounded-[28px] border border-white/15 bg-gradient-to-br from-white/20 to-white/5 p-5 md:p-6 backdrop-blur-xl shadow-p-lg float-slow gradient-pan mouse-flyer interactive-tilt"
                     onMouseMove={handleInteractiveMove}
                     onMouseLeave={handleInteractiveLeave}
                   >
-                    <div className="rounded-2xl border border-white/15 bg-[#f6efe7] p-5 text-[#1b4a37]">
+                    <div className="rounded-2xl border border-white/15 bg-ink-50 p-5 text-ink-900">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs uppercase tracking-[0.2em] font-bold text-[#1b4a37]/60">Panel de hoy</p>
-                        <span className="rounded-full bg-[#c9f55f] px-2 py-1 text-[10px] font-black soft-breathe">Live</span>
+                        <p className="text-xs uppercase tracking-[0.2em] font-bold text-ink-900/60">Panel de hoy</p>
+                        <span className="rounded-full bg-lima-300 px-2 py-1 text-[10px] font-black soft-breathe">Live</span>
                       </div>
                       <div className="mt-5 grid grid-cols-3 gap-3">
-                        <div className="rounded-xl bg-[#1b4a37]/5 p-3 hover-lift">
-                          <p className="text-xs text-[#1b4a37]/60">Reservas</p>
+                        <div className="rounded-xl bg-ink-900/5 p-3 hover-lift">
+                          <p className="text-xs text-ink-900/60">Reservas</p>
                           <p className="text-xl font-black">14</p>
                         </div>
-                        <div className="rounded-xl bg-[#1b4a37]/5 p-3 hover-lift">
-                          <p className="text-xs text-[#1b4a37]/60">Ingreso</p>
+                        <div className="rounded-xl bg-ink-900/5 p-3 hover-lift">
+                          <p className="text-xs text-ink-900/60">Ingreso</p>
                           <p className="text-xl font-black">$210K</p>
                         </div>
-                        <div className="rounded-xl bg-[#1b4a37]/5 p-3 hover-lift">
-                          <p className="text-xs text-[#1b4a37]/60">Ocupación</p>
+                        <div className="rounded-xl bg-ink-900/5 p-3 hover-lift">
+                          <p className="text-xs text-ink-900/60">Ocupación</p>
                           <p className="text-xl font-black">78%</p>
                         </div>
                       </div>
                       <div className="mt-5 space-y-3">
                         {['Cancha 1', 'Cancha 2', 'Cancha 3'].map((label, i) => (
                           <div key={label}>
-                            <div className="flex justify-between text-xs font-bold text-[#1b4a37]/70">
+                            <div className="flex justify-between text-xs font-bold text-ink-900/70">
                               <span>{label}</span>
                               <span>{[94, 71, 66][i]}%</span>
                             </div>
-                            <div className="mt-1 h-2 rounded-full bg-[#1b4a37]/10 overflow-hidden">
-                              <div className="h-full rounded-full bg-gradient-to-r from-[#2f7a56] to-[#88d4ff]" style={{ width: `${[94, 71, 66][i]}%` }} />
+                            <div className="mt-1 h-2 rounded-full bg-ink-900/10 overflow-hidden">
+                              <div className="h-full rounded-full bg-gradient-to-r from-lima-700 to-lima-200" style={{ width: `${[94, 71, 66][i]}%` }} />
                             </div>
                           </div>
                         ))}
@@ -1037,21 +1031,21 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="hidden md:block pointer-events-none absolute -right-8 top-10 rounded-2xl border border-white/35 bg-white/95 px-4 py-3 text-[#1b4a37] shadow-2xl shadow-[#1a4a38]/40 float-medium hover-lift">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-[#1b4a37]/55 font-bold">Ingresos del dia</p>
+                  <div className="hidden md:block pointer-events-none absolute -right-8 top-10 rounded-2xl border border-white/35 bg-p-surface/95 px-4 py-3 text-ink-900 shadow-2xl shadow-ink-900/40 float-medium hover-lift">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-ink-900/55 font-bold">Ingresos del dia</p>
                     <p className="mt-1 text-2xl leading-none font-black">$210.000</p>
-                    <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#dcf8ea] px-2 py-1 text-[10px] font-black text-[#1d6a46]">
+                    <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-p-positive-bg px-2 py-1 text-[10px] font-black text-lima-700">
                       <TrendingUp size={11} />
                       +15% vs ayer
                     </div>
                   </div>
 
-                  <div className="hidden md:flex pointer-events-none absolute -bottom-7 -left-6 rounded-2xl border border-white/35 bg-white/95 px-3.5 py-3 text-[#1b4a37] shadow-2xl shadow-[#1a4a38]/40 float-slow float-delay hover-lift items-center gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-[#dcf8ea] text-[#1d6a46] flex items-center justify-center icon-pop">
+                  <div className="hidden md:flex pointer-events-none absolute -bottom-7 -left-6 rounded-2xl border border-white/35 bg-p-surface/95 px-3.5 py-3 text-ink-900 shadow-2xl shadow-ink-900/40 float-slow float-delay hover-lift items-center gap-3">
+                    <div className="h-8 w-8 rounded-xl bg-p-positive-bg text-lima-700 flex items-center justify-center icon-pop">
                       <CalendarCheck size={15} />
                     </div>
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-[#1b4a37]/55 font-bold">Reserva confirmada</p>
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-900/55 font-bold">Reserva confirmada</p>
                       <p className="text-sm font-black leading-tight">20:30 - Cancha 2</p>
                     </div>
                   </div>
@@ -1061,7 +1055,7 @@ export default function Home() {
 
             <div
               ref={searchBarRef}
-              className="mt-10 rounded-[28px] border border-white/20 bg-white/90 p-2 md:p-3 shadow-2xl shadow-black/20 relative z-30 interactive-tilt"
+              className="mt-10 rounded-[28px] border border-white/20 bg-p-surface/90 p-2 md:p-3 shadow-2xl shadow-black/20 relative z-30 interactive-tilt"
               onMouseMove={handleInteractiveMove}
               onMouseLeave={handleInteractiveLeave}
               onClick={(e) => e.stopPropagation()}
@@ -1069,7 +1063,7 @@ export default function Home() {
               <div className="grid gap-2 md:gap-0 md:grid-cols-[1.35fr_0.9fr_1fr_auto]">
                 <div className="relative group">
                   <div
-                    className="h-full rounded-2xl px-4 py-3 hover:bg-[#1b4a37]/5 transition-colors cursor-pointer flex items-center gap-3"
+                    className="h-full rounded-2xl px-4 py-3 hover:bg-ink-900/5 transition-colors cursor-pointer flex items-center gap-3"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowSportDropdown(false);
@@ -1078,14 +1072,14 @@ export default function Home() {
                       document.getElementById('cityInput')?.focus();
                     }}
                   >
-                    <MapPin className="text-[#1d5f3d] group-hover:text-[#0e3e29] shrink-0" size={20} />
+                    <MapPin className="text-lima-700 group-hover:text-lima-900 shrink-0" size={20} />
                     <div className="flex flex-col w-full">
-                      <label className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1b4a37]/50">Ubicación</label>
+                      <label className="text-[10px] font-black uppercase tracking-[0.18em] text-ink-900/50">Ubicación</label>
                       <input
                         id="cityInput"
                         type="text"
                         placeholder="¿Dónde jugás?"
-                        className="bg-transparent border-none outline-none text-[#1b4a37] font-bold placeholder:text-[#1b4a37]/35 w-full p-0"
+                        className="bg-transparent border-none outline-none text-ink-900 font-bold placeholder:text-ink-900/35 w-full p-0"
                         value={searchCity}
                         onChange={(e) => {
                           const nextValue = e.target.value;
@@ -1111,32 +1105,32 @@ export default function Home() {
                   </div>
 
                   {showCityDropdown && (
-                    <div className="absolute top-full left-0 mt-3 w-full md:w-[320px] rounded-2xl border border-[#1b4a37]/10 bg-white shadow-xl overflow-hidden z-[160]">
-                      <div className="px-4 py-3 border-b border-[#1b4a37]/10 bg-[#f6efe7]">
-                        <span className="text-xs font-black uppercase tracking-[0.14em] text-[#1b4a37]/70">Lugares disponibles</span>
+                    <div className="absolute top-full left-0 mt-3 w-full md:w-[320px] rounded-2xl border border-ink-900/10 bg-p-surface shadow-xl overflow-hidden z-[160]">
+                      <div className="px-4 py-3 border-b border-ink-900/10 bg-ink-50">
+                        <span className="text-xs font-black uppercase tracking-[0.14em] text-ink-900/70">Lugares disponibles</span>
                       </div>
                       <ul className="max-h-64 overflow-y-auto">
                         {loadingLocations ? (
-                          <li className="px-4 py-6 text-center text-[#1b4a37]/45 text-sm">Cargando ubicaciones...</li>
+                          <li className="px-4 py-6 text-center text-ink-900/45 text-sm">Cargando ubicaciones...</li>
                         ) : locationSuggestions.length > 0 ? (
                           locationSuggestions.map((location, idx) => (
                             <li
                               key={idx}
                               onClick={() => selectCity(location)}
-                              className="px-4 py-3 hover:bg-[#edf7e7] cursor-pointer flex items-center justify-between group transition-colors border-b border-[#1b4a37]/5 last:border-0"
+                              className="px-4 py-3 hover:bg-lima-50 cursor-pointer flex items-center justify-between group transition-colors border-b border-ink-900/5 last:border-0"
                             >
                               <div className="flex items-center gap-3">
-                                <div className="h-7 w-7 rounded-full bg-[#edf7e7] text-[#1d5f3d] flex items-center justify-center"><MapPin size={13} /></div>
+                                <div className="h-7 w-7 rounded-full bg-lima-50 text-lima-700 flex items-center justify-center"><MapPin size={13} /></div>
                                 <div>
-                                  <p className="text-sm font-bold text-[#1b4a37]">{location.label}</p>
-                                  <p className="text-xs text-[#1b4a37]/55">{location.country}</p>
+                                  <p className="text-sm font-bold text-ink-900">{location.label}</p>
+                                  <p className="text-xs text-ink-900/55">{location.country}</p>
                                 </div>
                               </div>
-                              <ChevronRight size={15} className="text-[#1d5f3d] opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <ChevronRight size={15} className="text-lima-700 opacity-0 group-hover:opacity-100 transition-opacity" />
                             </li>
                           ))
                         ) : (
-                          <li className="px-4 py-6 text-center text-[#1b4a37]/45 text-sm">No encontramos ubicaciones con ese texto.</li>
+                          <li className="px-4 py-6 text-center text-ink-900/45 text-sm">No encontramos ubicaciones con ese texto.</li>
                         )}
                       </ul>
                     </div>
@@ -1145,7 +1139,7 @@ export default function Home() {
 
                 <div className="relative group">
                   <div
-                    className="h-full rounded-2xl px-4 py-3 hover:bg-[#1b4a37]/5 transition-colors cursor-pointer flex items-center gap-3"
+                    className="h-full rounded-2xl px-4 py-3 hover:bg-ink-900/5 transition-colors cursor-pointer flex items-center gap-3"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowCityDropdown(false);
@@ -1153,10 +1147,10 @@ export default function Home() {
                       setShowSportDropdown((prev) => !prev);
                     }}
                   >
-                    <Activity className="text-[#1d5f3d] shrink-0" size={20} />
+                    <Activity className="text-lima-700 shrink-0" size={20} />
                     <div className="flex flex-col overflow-hidden">
-                      <label className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1b4a37]/50">Deporte</label>
-                      <div className="flex items-center gap-2 text-[#1b4a37] font-bold text-sm truncate">
+                      <label className="text-[10px] font-black uppercase tracking-[0.18em] text-ink-900/50">Deporte</label>
+                      <div className="flex items-center gap-2 text-ink-900 font-bold text-sm truncate">
                         {selectedSport.icon}
                         <span>{selectedSport.label}</span>
                       </div>
@@ -1164,9 +1158,9 @@ export default function Home() {
                   </div>
 
                   {showSportDropdown && (
-                    <div className="absolute top-full left-0 mt-3 w-full md:w-[260px] rounded-2xl border border-[#1b4a37]/10 bg-white shadow-xl overflow-hidden z-[160]">
-                      <div className="px-4 py-3 border-b border-[#1b4a37]/10 bg-[#f6efe7] text-center">
-                        <span className="text-xs font-black uppercase tracking-[0.18em] text-[#1b4a37]/70">Elegí deporte</span>
+                    <div className="absolute top-full left-0 mt-3 w-full md:w-[260px] rounded-2xl border border-ink-900/10 bg-p-surface shadow-xl overflow-hidden z-[160]">
+                      <div className="px-4 py-3 border-b border-ink-900/10 bg-ink-50 text-center">
+                        <span className="text-xs font-black uppercase tracking-[0.18em] text-ink-900/70">Elegí deporte</span>
                       </div>
                       <ul className="py-1">
                         {sportOptions.map((sport) => {
@@ -1178,12 +1172,12 @@ export default function Home() {
                                 setSearchSport(sport.value);
                                 setShowSportDropdown(false);
                               }}
-                              className="px-4 py-3 hover:bg-[#edf7e7] cursor-pointer flex items-center gap-3 border-b border-[#1b4a37]/5 last:border-0"
+                              className="px-4 py-3 hover:bg-lima-50 cursor-pointer flex items-center gap-3 border-b border-ink-900/5 last:border-0"
                             >
-                              <div className={`h-9 w-9 rounded-full flex items-center justify-center ${isSelected ? 'bg-[#1b4a37] text-white' : 'bg-[#edf7e7] text-[#1b4a37]'}`}>
+                              <div className={`h-9 w-9 rounded-full flex items-center justify-center ${isSelected ? 'bg-ink-900 text-ink-50' : 'bg-lima-50 text-ink-900'}`}>
                                 {sport.icon}
                               </div>
-                              <span className={`text-sm ${isSelected ? 'font-black text-[#1b4a37]' : 'font-semibold text-[#1b4a37]/80'}`}>{sport.label}</span>
+                              <span className={`text-sm ${isSelected ? 'font-black text-ink-900' : 'font-semibold text-ink-900/80'}`}>{sport.label}</span>
                             </li>
                           );
                         })}
@@ -1193,10 +1187,10 @@ export default function Home() {
                 </div>
 
                 <div className="group" onClick={(e) => e.stopPropagation()}>
-                  <div className="h-full rounded-2xl px-4 py-3 hover:bg-[#1b4a37]/5 transition-colors flex items-center gap-3">
-                    <Calendar className="text-[#1d5f3d] shrink-0" size={20} />
+                  <div className="h-full rounded-2xl px-4 py-3 hover:bg-ink-900/5 transition-colors flex items-center gap-3">
+                    <Calendar className="text-lima-700 shrink-0" size={20} />
                     <div className="flex flex-col w-full">
-                      <label className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1b4a37]/50">Fecha</label>
+                      <label className="text-[10px] font-black uppercase tracking-[0.18em] text-ink-900/50">Fecha</label>
                       <div className="grid grid-cols-[24px,1fr,24px] items-center gap-1">
                         <button
                           type="button"
@@ -1205,7 +1199,7 @@ export default function Home() {
                             changeDateBy(-1);
                           }}
                           disabled={!canGoPrev()}
-                          className="rounded-md p-1 text-[#1b4a37] disabled:opacity-25 hover:bg-[#1b4a37]/10 transition-colors"
+                          className="rounded-md p-1 text-ink-900 disabled:opacity-25 hover:bg-ink-900/10 transition-colors"
                           aria-label="Fecha anterior"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -1231,7 +1225,7 @@ export default function Home() {
                           showIcon={false}
                           inputSize="compact"
                           dateFormat="EEE dd MMM yyyy"
-                          inputClassName="bg-transparent border-none outline-none text-[#1b4a37] font-bold text-sm w-full text-center p-0 uppercase cursor-pointer placeholder-[#1b4a37]/40 h-auto focus:ring-0"
+                          inputClassName="bg-transparent border-none outline-none text-ink-900 font-bold text-sm w-full text-center p-0 uppercase cursor-pointer placeholder-ink-900/40 h-auto focus:ring-0"
                           variant="light"
                         />
 
@@ -1241,7 +1235,7 @@ export default function Home() {
                             e.stopPropagation();
                             changeDateBy(1);
                           }}
-                          className="rounded-md p-1 text-[#1b4a37] hover:bg-[#1b4a37]/10 transition-colors"
+                          className="rounded-md p-1 text-ink-900 hover:bg-ink-900/10 transition-colors"
                           aria-label="Fecha siguiente"
                         >
                           <ChevronRight className="w-4 h-4" />
@@ -1260,8 +1254,8 @@ export default function Home() {
                     disabled={isSearching}
                     className={`btn-aurora border-neon border-neon-fast border-neon-strong border-neon-search w-full rounded-2xl px-8 py-4 font-black text-sm flex items-center justify-center gap-2 transition-all ${
                       isSearching
-                        ? 'bg-[#1b4a37]/70 text-white cursor-not-allowed'
-                        : 'bg-[#1b4a37] text-white hover:bg-[#2a6148] hover:-translate-y-[1px]'
+                        ? 'bg-ink-900/70 text-ink-50 cursor-not-allowed'
+                        : 'bg-ink-900 text-ink-50 hover:bg-lima-800 hover:-translate-y-[1px]'
                     }`}
                   >
                     <Search size={18} strokeWidth={3} />
@@ -1275,14 +1269,14 @@ export default function Home() {
           <section id="funcionalidades" className="mx-auto w-[min(1120px,calc(100%-2rem))] pt-2 pb-8">
             <RevealOnScroll>
               <div className="text-center mb-7">
-                <span className="tc-pill tc-pill-on-dark text-xs md:text-sm">
-                  <Sparkles size={14} className="text-[#c9f55f]" />
+                <span className="p-legacy-pill p-legacy-pill-on-dark text-xs md:text-sm">
+                  <Sparkles size={14} className="text-lima-300" />
                   Funcionalidades
                 </span>
-                <h2 className="mt-4 text-3xl md:text-5xl font-black text-white tracking-tight">
-                  Todo lo que necesita <span className="text-[#9fd9ff]">tu club</span>
+                <h2 className="mt-4 text-3xl md:text-5xl font-black text-ink-50 tracking-tight">
+                  Todo lo que necesita <span className="text-lima-200">tu club</span>
                 </h2>
-                <p className="mt-3 text-white/75 text-base md:text-lg">
+                <p className="mt-3 text-ink-50/75 text-base md:text-lg">
                   Reservas, comunicación y cobros en una sola plataforma.
                 </p>
               </div>
@@ -1291,7 +1285,7 @@ export default function Home() {
             <RevealOnScroll delay={120}>
               <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-4 items-start">
                 <div
-                  className="self-start h-fit rounded-[30px] border border-[#d4def8]/30 bg-gradient-to-br from-[#3468d6] via-[#3264cb] to-[#2f5cbc] p-5 md:p-7 shadow-2xl shadow-[#133524]/45 mouse-flyer interactive-tilt"
+                  className="self-start h-fit rounded-[30px] border border-ink-100/30 bg-gradient-to-br from-ink-700 via-ink-700 to-ink-800 p-5 md:p-7 shadow-2xl shadow-ink-900/45 mouse-flyer interactive-tilt"
                   onMouseMove={handleInteractiveMove}
                   onMouseLeave={handleInteractiveLeave}
                 >
@@ -1347,17 +1341,17 @@ export default function Home() {
                 </div>
 
                 <div
-                  className="self-start rounded-[30px] border border-[#d9e2ff]/55 bg-[#e9eefb] p-5 md:p-6 text-center mouse-flyer interactive-tilt"
+                  className="self-start rounded-[30px] border border-ink-100/55 bg-ink-50 p-5 md:p-6 text-center mouse-flyer interactive-tilt"
                   onMouseMove={handleInteractiveMove}
                   onMouseLeave={handleInteractiveLeave}
                 >
-                  <p className="text-[#3564ca] text-lg md:text-[1.65rem] leading-tight">
+                  <p className="text-ink-700 text-lg md:text-[1.65rem] leading-tight">
                     Cobrá una seña y reducí el
                   </p>
-                  <p className="mt-2 text-[#3564ca] text-5xl md:text-6xl font-black leading-none">
+                  <p className="mt-2 text-ink-700 text-5xl md:text-6xl font-black leading-none">
                     <AnimatedPercent target={82} />
                   </p>
-                  <p className="mt-3 text-[#3564ca] text-lg md:text-[1.65rem] leading-tight">
+                  <p className="mt-3 text-ink-700 text-lg md:text-[1.65rem] leading-tight">
                     de las inasistencias a turnos
                   </p>
                 </div>
@@ -1365,7 +1359,7 @@ export default function Home() {
             </RevealOnScroll>
 
             <RevealOnScroll delay={220}>
-              <div className="mt-2 rounded-[26px] border border-[#d9e2ff]/45 bg-[#e9eefb] py-3 px-3 md:py-4 md:px-4 overflow-hidden">
+              <div className="mt-2 rounded-[26px] border border-ink-100/45 bg-ink-50 py-3 px-3 md:py-4 md:px-4 overflow-hidden">
                 <div className="payment-carousel-track">
                   {[
                     { label: 'Transferencia bancaria', icon: <Landmark size={20} /> },
@@ -1398,19 +1392,19 @@ export default function Home() {
             <RevealOnScroll>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <div>
-                  <span className="tc-pill tc-pill-on-dark text-xs md:text-sm">
-                    <MapPin size={14} className="text-[#c9f55f]" />
+                  <span className="p-legacy-pill p-legacy-pill-on-dark text-xs md:text-sm">
+                    <MapPin size={14} className="text-lima-300" />
                     Resultados
                   </span>
-                  <h2 className="mt-3 text-2xl md:text-3xl font-black text-white tracking-tight">
+                  <h2 className="mt-3 text-2xl md:text-3xl font-black text-ink-50 tracking-tight">
                     {lastSearchLabel ? `Resultados cerca de ${lastSearchLabel}` : 'Clubes disponibles'}
                   </h2>
                 </div>
                 {user?.id && favoriteClubs.length > 0 && (
                   <div className="flex items-center gap-2 flex-wrap">
                     {favoriteClubs.slice(0, 3).map((club) => (
-                      <Link key={`favorite-chip-${club.id}`} href={`/club/${club.slug}`} className="tc-pill tc-pill-accent text-xs">
-                        <Heart size={11} className="fill-[#c9f55f] text-[#c9f55f]" />
+                      <Link key={`favorite-chip-${club.id}`} href={`/club/${club.slug}`} className="p-legacy-pill p-legacy-pill-accent text-xs">
+                        <Heart size={11} className="fill-lima-300 text-lima-300" />
                         {club.name}
                       </Link>
                     ))}
@@ -1421,7 +1415,7 @@ export default function Home() {
 
             {favoriteFeedback && (
               <RevealOnScroll delay={40}>
-                <div className="mb-5 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white/90">
+                <div className="mb-5 rounded-xl border border-white/15 bg-p-surface/10 px-4 py-3 text-sm font-semibold text-ink-50/90">
                   {favoriteFeedback}
                 </div>
               </RevealOnScroll>
@@ -1429,21 +1423,21 @@ export default function Home() {
 
             {searchError && (
               <RevealOnScroll delay={60}>
-                <div className="mb-5 rounded-xl border border-[#ff9a76]/40 bg-[#ff9a76]/10 px-4 py-3 text-sm font-semibold text-[#ffd8c9]">{searchError}</div>
+                <div className="mb-5 rounded-xl border border-p-border bg-p-error-bg px-4 py-3 text-sm font-semibold text-p-error">{searchError}</div>
               </RevealOnScroll>
             )}
 
             {loadingClubs ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-72 rounded-3xl border border-white/15 bg-white/10 animate-pulse" />
+                  <div key={i} className="h-72 rounded-3xl border border-white/15 bg-p-surface/10 animate-pulse" />
                 ))}
               </div>
             ) : isSearching ? (
               <RevealOnScroll>
-                <div className="py-16 rounded-3xl border border-white/20 bg-white/10 text-center flex flex-col items-center gap-3">
-                  <div className="h-10 w-10 rounded-full border-4 border-white/20 border-t-[#c9f55f] animate-spin" />
-                  <p className="font-semibold text-white/85">Buscando canchas...</p>
+                <div className="py-16 rounded-3xl border border-white/20 bg-p-surface/10 text-center flex flex-col items-center gap-3">
+                  <div className="h-10 w-10 rounded-full border-4 border-white/20 border-t-lima-300 animate-spin" />
+                  <p className="font-semibold text-ink-50/85">Buscando canchas...</p>
                 </div>
               </RevealOnScroll>
             ) : displayedClubs.length > 0 ? (
@@ -1452,7 +1446,7 @@ export default function Home() {
                   <RevealOnScroll key={club.id} delay={index * 80} className="h-full block">
                     <Link
                       href={`/club/${club.slug}`}
-                      className="group card-gradient-edge mouse-flyer interactive-tilt h-full flex flex-col rounded-3xl border border-white/20 bg-white/95 overflow-hidden shadow-xl hover:-translate-y-1 hover:shadow-2xl transition-all hover-lift"
+                      className="group card-gradient-edge mouse-flyer interactive-tilt h-full flex flex-col rounded-3xl border border-white/20 bg-p-surface/95 overflow-hidden shadow-xl hover:-translate-y-1 hover:shadow-2xl transition-all hover-lift"
                       onMouseMove={handleInteractiveMove}
                       onMouseLeave={handleInteractiveLeave}
                     >
@@ -1463,11 +1457,11 @@ export default function Home() {
                           disabled={Boolean(favoriteBusyByClub[Number(club.id)])}
                           className={`absolute top-3 right-3 z-20 rounded-xl p-2 border transition-all ${
                             favoriteClubIds.has(Number(club.id))
-                              ? 'bg-[#1b4a37] border-[#c9f55f] text-[#c9f55f]'
-                              : 'bg-white/90 border-[#1b4a37]/20 text-[#1b4a37]/70 hover:bg-[#1b4a37] hover:text-[#c9f55f]'
+                              ? 'bg-ink-900 border-lima-300 text-lima-300'
+                              : 'bg-p-surface/90 border-ink-900/20 text-ink-900/70 hover:bg-ink-900 hover:text-lima-300'
                           }`}
                         >
-                          <Heart size={16} className={favoriteClubIds.has(Number(club.id)) ? 'fill-[#c9f55f]' : ''} />
+                          <Heart size={16} className={favoriteClubIds.has(Number(club.id)) ? 'fill-lima-300' : ''} />
                         </button>
 
                         {club.clubImageUrl ? (
@@ -1475,27 +1469,27 @@ export default function Home() {
                             <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: `url(${club.clubImageUrl})` }} />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                             {club.logoUrl && (
-                              <div className="absolute top-3 left-3 h-10 w-10 rounded-xl bg-white/85 backdrop-blur flex items-center justify-center p-1">
+                              <div className="absolute top-3 left-3 h-10 w-10 rounded-xl bg-p-surface/85 backdrop-blur flex items-center justify-center p-1">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={club.logoUrl} alt={club.name} className="max-h-full max-w-full object-contain" />
                               </div>
                             )}
                           </>
                         ) : (
-                          <div className="absolute inset-0 bg-gradient-to-br from-[#163f2b] to-[#31674a] flex items-center justify-center">
+                          <div className="absolute inset-0 bg-gradient-to-br from-ink-900 to-lima-800 flex items-center justify-center">
                             {club.logoUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={club.logoUrl} alt={club.name} className="h-20 w-20 object-contain opacity-95" />
                             ) : (
-                              <Activity size={36} className="text-white/35" />
+                              <Activity size={36} className="text-ink-50/35" />
                             )}
                           </div>
                         )}
                       </div>
 
-                      <div className="p-5 text-[#1b4a37] flex-1 flex flex-col">
+                      <div className="p-5 text-ink-900 flex-1 flex flex-col">
                         <h3 className="text-xl font-black leading-tight">{club.name}</h3>
-                        <p className="text-sm text-[#1b4a37]/65 mt-1">{formatClubAddress(club) || 'Ubicación no disponible'}</p>
+                        <p className="text-sm text-ink-900/65 mt-1">{formatClubAddress(club) || 'Ubicación no disponible'}</p>
 
                         {searchDate && (availableTimesByClub[club.id]?.length ?? 0) > 0 ? (
                           <div className="mt-4 mb-5">
@@ -1504,7 +1498,7 @@ export default function Home() {
                                 <Link
                                   key={`${club.id}-${time}`}
                                   href={{ pathname: `/club/${club.slug}`, query: { date: searchDate, time, sport: searchSport } }}
-                                  className="shrink-0 rounded-full border border-[#1b4a37]/25 bg-[#f5f0e7] px-3 py-1 text-xs font-black hover:border-[#1d5f3d] hover:text-[#1d5f3d] transition-colors"
+                                  className="shrink-0 rounded-full border border-ink-900/25 bg-ink-50 px-3 py-1 text-xs font-black hover:border-lima-700 hover:text-lima-700 transition-colors"
                                 >
                                   {time}
                                 </Link>
@@ -1512,12 +1506,12 @@ export default function Home() {
                             </div>
                           </div>
                         ) : (
-                          <div className="mt-4 mb-5 text-xs text-[#1b4a37]/40">
+                          <div className="mt-4 mb-5 text-xs text-ink-900/40">
                             {searchDate ? 'Sin horarios visibles para este filtro.' : 'Elegí una fecha para ver horarios.'}
                           </div>
                         )}
 
-                        <div className="mt-auto border-neon border-neon-subtle border-neon-slow rounded-xl bg-[#1b4a37] text-white text-center py-3 text-xs font-black uppercase tracking-[0.2em] group-hover:bg-[#1d5f3d] transition-colors">
+                        <div className="mt-auto border-neon border-neon-subtle border-neon-slow rounded-xl bg-ink-900 text-ink-50 text-center py-3 text-xs font-black uppercase tracking-[0.2em] group-hover:bg-lima-700 transition-colors">
                           Reservar
                         </div>
                       </div>
@@ -1527,8 +1521,8 @@ export default function Home() {
               </div>
             ) : (
               <RevealOnScroll>
-                <div className="rounded-3xl border border-white/15 bg-white/10 px-6 py-14 text-center">
-                  <p className="text-white/80">No encontramos canchas con ese criterio.</p>
+                <div className="rounded-3xl border border-white/15 bg-p-surface/10 px-6 py-14 text-center">
+                  <p className="text-ink-50/80">No encontramos canchas con ese criterio.</p>
                   <button
                     onClick={() => {
                       setSearchCity('');
@@ -1538,7 +1532,7 @@ export default function Home() {
                       setAvailableTimesByClub({});
                       setDisplayedClubs(clubs);
                     }}
-                    className="mt-4 text-[#c9f55f] font-bold hover:underline"
+                    className="mt-4 text-lima-300 font-bold hover:underline"
                   >
                     Ver todos
                   </button>
@@ -1550,47 +1544,47 @@ export default function Home() {
           <section id="como-funciona" className="mx-auto w-[min(1120px,calc(100%-2rem))] py-16">
             <RevealOnScroll>
               <div className="text-center mb-10">
-                <span className="tc-pill tc-pill-on-dark text-xs md:text-sm">
-                  <PlayCircle size={14} className="text-[#c9f55f]" />
+                <span className="p-legacy-pill p-legacy-pill-on-dark text-xs md:text-sm">
+                  <PlayCircle size={14} className="text-lima-300" />
                   Flujo rápido
                 </span>
-                <h2 className="mt-4 text-3xl md:text-4xl font-black text-white">Cómo reservás en 3 pasos</h2>
-                <p className="mt-3 text-white/75 text-base md:text-lg">Un recorrido simple para pasar de búsqueda a reserva confirmada.</p>
+                <h2 className="mt-4 text-3xl md:text-4xl font-black text-ink-50">Cómo reservás en 3 pasos</h2>
+                <p className="mt-3 text-ink-50/75 text-base md:text-lg">Un recorrido simple para pasar de búsqueda a reserva confirmada.</p>
               </div>
             </RevealOnScroll>
 
             <div className="grid md:grid-cols-3 gap-5">
               <RevealOnScroll delay={80}>
                 <div
-                  className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-sm h-full hover-lift float-slow mouse-flyer interactive-tilt"
+                  className="rounded-3xl border border-white/15 bg-p-surface/10 p-6 backdrop-blur-sm h-full hover-lift float-slow mouse-flyer interactive-tilt"
                   onMouseMove={handleInteractiveMove}
                   onMouseLeave={handleInteractiveLeave}
                 >
-                  <div className="h-12 w-12 rounded-xl bg-[#c9f55f] text-[#1b4a37] flex items-center justify-center mb-4 icon-pop"><Search size={24} /></div>
-                  <h3 className="text-xl font-black text-white">Buscá tu zona</h3>
-                  <p className="mt-2 text-white/75">Filtrá por ubicación, deporte y fecha para quedarte sólo con opciones útiles.</p>
+                  <div className="h-12 w-12 rounded-xl bg-lima-300 text-ink-900 flex items-center justify-center mb-4 icon-pop"><Search size={24} /></div>
+                  <h3 className="text-xl font-black text-ink-50">Buscá tu zona</h3>
+                  <p className="mt-2 text-ink-50/75">Filtrá por ubicación, deporte y fecha para quedarte sólo con opciones útiles.</p>
                 </div>
               </RevealOnScroll>
               <RevealOnScroll delay={160}>
                 <div
-                  className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-sm h-full hover-lift float-medium mouse-flyer interactive-tilt"
+                  className="rounded-3xl border border-white/15 bg-p-surface/10 p-6 backdrop-blur-sm h-full hover-lift float-medium mouse-flyer interactive-tilt"
                   onMouseMove={handleInteractiveMove}
                   onMouseLeave={handleInteractiveLeave}
                 >
-                  <div className="h-12 w-12 rounded-xl bg-[#8de7ff] text-[#1b4a37] flex items-center justify-center mb-4 icon-pop"><CalendarCheck size={24} /></div>
-                  <h3 className="text-xl font-black text-white">Elegí horario</h3>
-                  <p className="mt-2 text-white/75">Entrá al club, compará disponibilidad y resolvé la reserva sin fricción.</p>
+                  <div className="h-12 w-12 rounded-xl bg-lima-200 text-ink-900 flex items-center justify-center mb-4 icon-pop"><CalendarCheck size={24} /></div>
+                  <h3 className="text-xl font-black text-ink-50">Elegí horario</h3>
+                  <p className="mt-2 text-ink-50/75">Entrá al club, compará disponibilidad y resolvé la reserva sin fricción.</p>
                 </div>
               </RevealOnScroll>
               <RevealOnScroll delay={240}>
                 <div
-                  className="rounded-3xl border border-white/15 bg-white/10 p-6 backdrop-blur-sm h-full hover-lift float-medium float-delay mouse-flyer interactive-tilt"
+                  className="rounded-3xl border border-white/15 bg-p-surface/10 p-6 backdrop-blur-sm h-full hover-lift float-medium float-delay mouse-flyer interactive-tilt"
                   onMouseMove={handleInteractiveMove}
                   onMouseLeave={handleInteractiveLeave}
                 >
-                  <div className="h-12 w-12 rounded-xl bg-[#7ea8ff] text-[#1b4a37] flex items-center justify-center mb-4 icon-pop"><PlayCircle size={24} /></div>
-                  <h3 className="text-xl font-black text-white">Salí a jugar</h3>
-                  <p className="mt-2 text-white/75">Todo listo: confirmación clara, datos del club y experiencia más prolija.</p>
+                  <div className="h-12 w-12 rounded-xl bg-lima-100 text-ink-900 flex items-center justify-center mb-4 icon-pop"><PlayCircle size={24} /></div>
+                  <h3 className="text-xl font-black text-ink-50">Salí a jugar</h3>
+                  <p className="mt-2 text-ink-50/75">Todo listo: confirmación clara, datos del club y experiencia más prolija.</p>
                 </div>
               </RevealOnScroll>
             </div>
@@ -1599,77 +1593,77 @@ export default function Home() {
           <section id="precios" className="mx-auto w-[min(1120px,calc(100%-2rem))] pb-16">
             <RevealOnScroll>
               <div className="text-center mb-6">
-                <span className="tc-pill tc-pill-on-dark text-xs md:text-sm">
-                  <Calculator size={14} className="text-[#c9f55f]" />
+                <span className="p-legacy-pill p-legacy-pill-on-dark text-xs md:text-sm">
+                  <Calculator size={14} className="text-lima-300" />
                   Precios
                 </span>
               </div>
-              <div className="rounded-[34px] border border-[#dbe1ea] bg-[#f5f7fb] p-6 md:p-10 shadow-[0_30px_80px_-45px_rgba(0,0,0,0.45)]">
+              <div className="rounded-[34px] border border-ink-100 bg-p-surface-2 p-6 md:p-10 shadow-p-lg">
                 <div className="grid lg:grid-cols-[0.9fr_1fr_1fr] gap-5 md:gap-6 items-stretch">
                   <div className="p-2 md:p-4">
-                    <h3 className="mt-1 text-3xl md:text-4xl leading-[0.98] font-black tracking-tight text-[#1f2833]">
+                    <h3 className="mt-1 text-3xl md:text-4xl leading-[0.98] font-black tracking-tight text-ink-900">
                       Planes
                     </h3>
-                    <p className="mt-4 text-base md:text-lg leading-relaxed text-[#5f6978] max-w-[340px]">
+                    <p className="mt-4 text-base md:text-lg leading-relaxed text-ink-500 max-w-[340px]">
                       Elegí el plan que mejor se ajuste a tu club. Pausalo o cancelalo cuando quieras.
                     </p>
                   </div>
 
                   <div
-                    className="rounded-[34px] border border-[#d9dde6] bg-white p-6 md:p-7 hover-lift mouse-flyer interactive-tilt"
+                    className="rounded-[34px] border border-ink-100 bg-p-surface p-6 md:p-7 hover-lift mouse-flyer interactive-tilt"
                     onMouseMove={handleInteractiveMove}
                     onMouseLeave={handleInteractiveLeave}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h4 className="text-2xl md:text-[2rem] font-black text-[#1f2833] leading-none">Gratuito</h4>
-                        <p className="mt-2 text-[#6c7480] text-base md:text-lg">De por vida</p>
+                        <h4 className="text-2xl md:text-[2rem] font-black text-ink-900 leading-none">Gratuito</h4>
+                        <p className="mt-2 text-ink-400 text-base md:text-lg">De por vida</p>
                       </div>
-                      <span className="tc-pill tc-pill-soft-blue text-sm font-bold">Más elegido</span>
+                      <span className="p-legacy-pill p-legacy-pill-soft text-sm font-bold">Más elegido</span>
                     </div>
 
                     <div className="mt-7 flex items-end gap-2">
-                      <span className="text-4xl md:text-5xl font-black leading-none text-[#1f2833]">$0</span>
-                      <span className="text-xl text-[#6c7480] pb-1">/mes</span>
+                      <span className="text-4xl md:text-5xl font-black leading-none text-ink-900">$0</span>
+                      <span className="text-xl text-ink-400 pb-1">/mes</span>
                     </div>
 
-                    <div className="mt-6 border-t border-[#d9dde6] pt-5 space-y-3 text-[#5f6978] text-base md:text-lg">
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Hasta 2 canchas.</div>
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Hasta 100 reservas /mes.</div>
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Todas las integraciones.</div>
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Soporte por correo.</div>
+                    <div className="mt-6 border-t border-ink-100 pt-5 space-y-3 text-ink-500 text-base md:text-lg">
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Hasta 2 canchas.</div>
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Hasta 100 reservas /mes.</div>
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Todas las integraciones.</div>
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Soporte por correo.</div>
                     </div>
                   </div>
 
                   <div
-                    className="rounded-[34px] border border-[#d9dde6] bg-white p-6 md:p-7 hover-lift mouse-flyer interactive-tilt"
+                    className="rounded-[34px] border border-ink-100 bg-p-surface p-6 md:p-7 hover-lift mouse-flyer interactive-tilt"
                     onMouseMove={handleInteractiveMove}
                     onMouseLeave={handleInteractiveLeave}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h4 className="text-2xl md:text-[2rem] font-black text-[#1f2833] leading-none">Avance</h4>
-                        <p className="mt-2 text-[#6c7480] text-base md:text-lg">Para crecer</p>
+                        <h4 className="text-2xl md:text-[2rem] font-black text-ink-900 leading-none">Avance</h4>
+                        <p className="mt-2 text-ink-400 text-base md:text-lg">Para crecer</p>
                       </div>
-                      <span className="tc-pill tc-pill-soft-blue text-sm font-bold">Mejor opción</span>
+                      <span className="p-legacy-pill p-legacy-pill-soft text-sm font-bold">Mejor opción</span>
                     </div>
 
                     <div className="mt-7 flex items-end gap-2">
-                      <span className="text-4xl md:text-5xl font-black leading-none text-[#1f2833]">$89.900</span>
-                      <span className="text-xl text-[#6c7480] pb-1">/mes</span>
+                      <span className="text-4xl md:text-5xl font-black leading-none text-ink-900">$89.900</span>
+                      <span className="text-xl text-ink-400 pb-1">/mes</span>
                     </div>
 
-                    <div className="mt-6 border-t border-[#d9dde6] pt-5 space-y-3 text-[#5f6978] text-base md:text-lg">
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Agendas y reservas ilimitadas.</div>
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Caja y stock integrados.</div>
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Recordatorios automáticos por WhatsApp.</div>
-                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-[#3964c3] shrink-0" /> Soporte preferencial y onboarding.</div>
+                    <div className="mt-6 border-t border-ink-100 pt-5 space-y-3 text-ink-500 text-base md:text-lg">
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Agendas y reservas ilimitadas.</div>
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Caja y stock integrados.</div>
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Recordatorios automáticos por WhatsApp.</div>
+                      <div className="flex items-start gap-3"><Check size={18} className="mt-1 text-ink-700 shrink-0" /> Soporte preferencial y onboarding.</div>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => setShowContact(true)}
-                      className="mt-8 w-full btn-aurora border-neon border-neon-fast inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1f2833] text-white px-6 py-4 text-base font-black hover:translate-y-[-1px] transition-transform"
+                      className="mt-8 w-full btn-aurora border-neon border-neon-fast inline-flex items-center justify-center gap-2 rounded-2xl bg-ink-900 text-ink-50 px-6 py-4 text-base font-black hover:translate-y-[-1px] transition-transform"
                     >
                       <span>Pedir cotización</span> <ArrowRight size={18} />
                     </button>
@@ -1682,12 +1676,12 @@ export default function Home() {
           <section id="faqs" onClick={() => setOpenFaqIndex(null)} className="mx-auto w-[min(900px,calc(100%-2rem))] pb-24">
             <RevealOnScroll>
               <div className="text-center mb-8">
-                <span className="tc-pill tc-pill-on-dark text-xs md:text-sm">
-                  <MessageSquare size={14} className="text-[#c9f55f]" />
+                <span className="p-legacy-pill p-legacy-pill-on-dark text-xs md:text-sm">
+                  <MessageSquare size={14} className="text-lima-300" />
                   FAQs
                 </span>
-                <h2 className="mt-4 text-3xl md:text-4xl font-black text-white">Preguntas frecuentes</h2>
-                <p className="mt-3 text-white/75 text-base md:text-lg">Respuestas rápidas sobre reservas, gestión y uso de la plataforma.</p>
+                <h2 className="mt-4 text-3xl md:text-4xl font-black text-ink-50">Preguntas frecuentes</h2>
+                <p className="mt-3 text-ink-50/75 text-base md:text-lg">Respuestas rápidas sobre reservas, gestión y uso de la plataforma.</p>
               </div>
             </RevealOnScroll>
             <div className="space-y-3">
@@ -1713,8 +1707,11 @@ export default function Home() {
           </section>
         </main>
 
-        <footer className="border-t border-white/10 py-8 text-center text-white/55 text-sm">
-          <p className="font-medium">&copy; {new Date().getFullYear()} TuCancha App. Todos los derechos reservados.</p>
+        <footer className="border-t border-white/10 py-8 text-center text-ink-50/55 text-sm">
+          <div className="flex flex-col items-center justify-center gap-3">
+            <PuntoLogo variant="horizontalDark" className="h-9 w-auto opacity-80" />
+            <p className="font-medium">&copy; {new Date().getFullYear()} Todos los derechos reservados.</p>
+          </div>
         </footer>
 
         <div
@@ -1722,21 +1719,21 @@ export default function Home() {
           onClick={() => setShowContact(false)}
         />
 
-        <div ref={sidebarRef} className={`fixed top-0 right-0 h-full w-full max-w-sm bg-[#f7efe6] z-[70] shadow-2xl transform transition-transform duration-300 ease-out overflow-hidden ${showContact ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="pointer-events-none absolute -top-14 -right-12 h-56 w-56 rounded-full bg-[#c9f55f]/25 blur-3xl" />
-          <div className="pointer-events-none absolute top-40 -left-20 h-52 w-52 rounded-full bg-[#8de7ff]/20 blur-3xl" />
+        <div ref={sidebarRef} className={`fixed top-0 right-0 h-full w-full max-w-sm bg-ink-50 z-[70] shadow-2xl transform transition-transform duration-300 ease-out overflow-hidden ${showContact ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="pointer-events-none absolute -top-14 -right-12 h-56 w-56 rounded-full bg-lima-300/25 blur-3xl" />
+          <div className="pointer-events-none absolute top-40 -left-20 h-52 w-52 rounded-full bg-lima-200/20 blur-3xl" />
 
-          <div className="relative p-6 flex justify-between items-center border-b border-[#245640]/10 bg-white/55 backdrop-blur-md">
+          <div className="relative p-6 flex justify-between items-center border-b border-ink-700/10 bg-p-surface/55 backdrop-blur-md">
             <div>
-              <span className="tc-pill tc-pill-soft-blue text-[11px]">
+              <span className="p-legacy-pill p-legacy-pill-soft text-[11px]">
                 <MessageSquare size={12} />
-                Soporte TuCancha
+                Soporte Punto
               </span>
-              <h2 className="mt-3 text-2xl font-black text-[#245640] leading-none">Contacto</h2>
+              <h2 className="mt-3 text-2xl font-black text-ink-700 leading-none">Contacto</h2>
             </div>
             <button
               onClick={() => setShowContact(false)}
-              className="h-10 w-10 rounded-full bg-[#245640]/10 text-[#245640] hover:bg-[#245640] hover:text-white transition-colors flex items-center justify-center"
+              className="h-10 w-10 rounded-full bg-ink-700/10 text-ink-700 hover:bg-ink-700 hover:text-ink-50 transition-colors flex items-center justify-center"
               title="Cerrar ventana"
             >
               <X size={18} strokeWidth={3} />
@@ -1744,58 +1741,58 @@ export default function Home() {
           </div>
 
           <div className="relative p-6 md:p-7 flex flex-col gap-4">
-            <p className="text-[#245640]/80 font-medium leading-relaxed">
+            <p className="text-ink-700/80 font-medium leading-relaxed">
               ¿Tenés dudas o querés activar tu club? Escribinos y coordinamos una demo con setup inicial.
             </p>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-[#245640]/10 bg-white/80 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-[#245640]/55 font-bold">Tiempo de respuesta</p>
-                <p className="mt-1 text-sm font-black text-[#245640]">Menos de 24h</p>
+              <div className="rounded-xl border border-ink-700/10 bg-p-surface/80 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-ink-700/55 font-bold">Tiempo de respuesta</p>
+                <p className="mt-1 text-sm font-black text-ink-700">Menos de 24h</p>
               </div>
-              <div className="rounded-xl border border-[#245640]/10 bg-white/80 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-[#245640]/55 font-bold">Atención</p>
-                <p className="mt-1 text-sm font-black text-[#245640]">Lun a Sáb</p>
+              <div className="rounded-xl border border-ink-700/10 bg-p-surface/80 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-ink-700/55 font-bold">Atención</p>
+                <p className="mt-1 text-sm font-black text-ink-700">Lun a Sáb</p>
               </div>
             </div>
 
             <button
               type="button"
               onClick={(e) => openContactMenu(e, 'whatsapp')}
-              className="group flex items-center gap-4 px-4 py-3.5 bg-white rounded-2xl shadow-sm border border-[#245640]/10 hover:border-[#1f6b48] hover:-translate-y-[1px] transition-all"
+              className="group flex items-center gap-4 px-4 py-3.5 bg-p-surface rounded-2xl shadow-sm border border-ink-700/10 hover:border-lima-700 hover:-translate-y-[1px] transition-all"
             >
-              <div className="bg-[#c9f55f] h-11 w-11 rounded-full flex items-center justify-center text-[#1b4a37] shrink-0">
+              <div className="bg-lima-300 h-11 w-11 rounded-full flex items-center justify-center text-ink-900 shrink-0">
                 <Phone size={19} />
               </div>
               <div className="text-left">
-                <p className="text-[#245640]/55 text-xs font-bold uppercase tracking-[0.16em]">WhatsApp</p>
-                <p className="text-[#245640] font-bold">+54 351 343 6163</p>
+                <p className="text-ink-700/55 text-xs font-bold uppercase tracking-[0.16em]">WhatsApp</p>
+                <p className="text-ink-700 font-bold">+54 351 343 6163</p>
               </div>
-              <ChevronRight size={16} className="ml-auto text-[#245640]/35 group-hover:text-[#245640] transition-colors" />
+              <ChevronRight size={16} className="ml-auto text-ink-700/35 group-hover:text-ink-700 transition-colors" />
             </button>
 
             <button
               type="button"
               onClick={(e) => openContactMenu(e, 'email')}
-              className="group w-full flex items-center gap-4 px-4 py-3.5 bg-white rounded-2xl shadow-sm border border-[#245640]/10 hover:border-[#1f6b48] hover:-translate-y-[1px] transition-all"
+              className="group w-full flex items-center gap-4 px-4 py-3.5 bg-p-surface rounded-2xl shadow-sm border border-ink-700/10 hover:border-lima-700 hover:-translate-y-[1px] transition-all"
             >
-              <div className="bg-[#245640] h-11 w-11 rounded-full flex items-center justify-center text-[#f7efe6] shrink-0">
+              <div className="bg-ink-700 h-11 w-11 rounded-full flex items-center justify-center text-ink-50 shrink-0">
                 <Mail size={18} />
               </div>
               <div className="flex-1 min-w-0 text-left">
-                <p className="text-[#245640]/55 text-xs font-bold uppercase tracking-[0.16em]">Email</p>
-                <p className="text-[#245640] font-bold truncate">soporte.tucancha@gmail.com</p>
+                <p className="text-ink-700/55 text-xs font-bold uppercase tracking-[0.16em]">Email</p>
+                <p className="text-ink-700 font-bold truncate">soporte.punto@gmail.com</p>
               </div>
-              <ChevronRight size={16} className="text-[#245640]/35 group-hover:text-[#245640] transition-colors" />
+              <ChevronRight size={16} className="text-ink-700/35 group-hover:text-ink-700 transition-colors" />
             </button>
 
             <button
               type="button"
               onClick={(e) => openContactMenu(e, 'instagram')}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-[#245640] text-[#f7efe6] rounded-2xl hover:bg-[#1f6b48] transition-colors font-bold"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-ink-700 text-ink-50 rounded-2xl hover:bg-lima-700 transition-colors font-bold"
             >
               <Instagram size={18} />
-              <span>@tucancha.app_</span>
+              <span>@punto.app_</span>
             </button>
           </div>
           {contactMenu && (
@@ -1804,10 +1801,10 @@ export default function Home() {
               role="dialog"
               aria-label="Acciones de contacto"
               style={{ position: 'absolute', top: contactMenu.top, left: contactMenu.left }}
-              className="z-[90] bg-white rounded-xl shadow-lg border border-[#245640]/10 p-2 w-52"
+              className="z-[90] bg-p-surface rounded-xl shadow-lg border border-ink-700/10 p-2 w-52"
             >
-              <button onClick={() => handleOpenHref(contactMenu.href)} className="w-full text-left px-3 py-2.5 hover:bg-[#f4efe8] rounded text-sm text-[#245640] font-medium">Abrir</button>
-              <button onClick={() => handleCopy(contactMenu.copyText)} className="w-full text-left px-3 py-2.5 hover:bg-[#f4efe8] rounded text-sm text-[#245640] font-medium">
+              <button onClick={() => handleOpenHref(contactMenu.href)} className="w-full text-left px-3 py-2.5 hover:bg-ink-50 rounded text-sm text-ink-700 font-medium">Abrir</button>
+              <button onClick={() => handleCopy(contactMenu.copyText)} className="w-full text-left px-3 py-2.5 hover:bg-ink-50 rounded text-sm text-ink-700 font-medium">
                 {copied ? 'Copiado!' : 'Copiar'}
               </button>
             </div>
@@ -1818,18 +1815,18 @@ export default function Home() {
           type="button"
           onClick={handleBackToTop}
           aria-label="Volver arriba"
-          className={`fixed bottom-7 right-6 z-[80] h-14 w-14 rounded-full bg-white/92 backdrop-blur-md shadow-xl shadow-[#1a4a38]/35 border border-white/80 text-[#204f94] transition-all duration-300 ${
+          className={`fixed bottom-7 right-6 z-[80] h-14 w-14 rounded-full bg-p-surface/92 backdrop-blur-md shadow-xl shadow-ink-900/35 border border-white/80 text-ink-700 transition-all duration-300 ${
             showBackToTop ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'
           }`}
         >
           <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full">
-            <circle cx="32" cy="32" r="21.5" fill="none" stroke="rgba(32,79,148,0.14)" strokeWidth="3" />
+            <circle cx="32" cy="32" r="21.5" fill="none" stroke="var(--border)" strokeWidth="3" />
             <circle
               cx="32"
               cy="32"
               r="21.5"
               fill="none"
-              stroke="#2f67cf"
+              stroke="var(--accent-fg)"
               strokeWidth="3.3"
               strokeLinecap="round"
               pathLength="100"
@@ -1848,10 +1845,10 @@ export default function Home() {
 
 const FeatureItem = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
   <li className="flex items-center gap-3">
-    <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-white text-[#1b4a37] shadow-sm shrink-0">
+    <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-p-surface text-ink-900 shadow-sm shrink-0">
       {icon}
     </div>
-    <span className="text-white/95 font-bold text-lg tracking-tight">{text}</span>
+    <span className="text-ink-50/95 font-bold text-lg tracking-tight">{text}</span>
   </li>
 );
 
@@ -1913,7 +1910,7 @@ const FAQItem = ({
   onToggle: () => void;
 }) => {
   return (
-    <div className="rounded-2xl overflow-hidden border border-white/15 bg-white/10 backdrop-blur-sm transition-all duration-300 hover:bg-white/15">
+    <div className="rounded-2xl overflow-hidden border border-white/15 bg-p-surface/10 backdrop-blur-sm transition-all duration-300 hover:bg-p-surface/15">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -1921,11 +1918,11 @@ const FAQItem = ({
         }}
         className="w-full px-6 py-5 text-left flex justify-between items-center focus:outline-none"
       >
-        <span className="font-bold text-white pr-4">{question}</span>
-        <ChevronDown className={`text-[#c9f55f] shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="font-bold text-ink-50 pr-4">{question}</span>
+        <ChevronDown className={`text-lima-300 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       <div className={`px-6 overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-48 pb-5 opacity-100' : 'max-h-0 opacity-0'}`}>
-        <p className="text-white/75 text-sm leading-relaxed">{answer}</p>
+        <p className="text-ink-50/75 text-sm leading-relaxed">{answer}</p>
       </div>
     </div>
   );

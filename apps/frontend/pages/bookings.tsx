@@ -12,116 +12,116 @@ import { Calendar, Clock, MapPin, Ticket, ArrowRight, Search, XCircle, CheckCirc
 
 const PAGE_CSS = `
   .bk-layout { display:grid; grid-template-columns:1.4fr 1fr; gap:24px; align-items:start; }
-  .bk-list-panel { background:#0f0f0f; border:1px solid rgba(255,255,255,.07); border-radius:24px; overflow:hidden; }
+  .bk-list-panel { background:var(--surface-1); border:1px solid var(--border); border-radius:24px; overflow:hidden; }
   .bk-list-body { padding:0 16px 16px; max-height:68vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
   .bk-list-body::-webkit-scrollbar { width:4px; }
   .bk-list-body::-webkit-scrollbar-track { background:transparent; }
-  .bk-list-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:4px; }
-  .bk-card { display:flex; align-items:center; gap:16px; padding:16px 18px; background:#111; border:1px solid rgba(255,255,255,.06); border-radius:16px; cursor:pointer; transition:border-color .2s,background .2s; }
-  .bk-card:hover { border-color:rgba(34,197,94,.2); background:#161616; }
-  .bk-card.bk-selected { border-color:rgba(34,197,94,.45); background:#0d1a0d; }
+  .bk-list-body::-webkit-scrollbar-thumb { background:var(--surface-2); border-radius:4px; }
+  .bk-card { display:flex; align-items:center; gap:16px; padding:16px 18px; background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:16px; cursor:pointer; transition:border-color .2s,background .2s; }
+  .bk-card:hover { border-color:var(--accent-border-subtle); background:var(--surface-2); }
+  .bk-card.bk-selected { border-color:var(--accent-border-strong); background:var(--positive-bg); }
   .bk-date-box { width:48px; height:48px; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; }
-  .bk-date-box-active { background:rgba(34,197,94,.15); border:1px solid rgba(34,197,94,.25); }
-  .bk-date-box-past { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.07); }
-  .bk-date-box-cancelled { background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.15); }
-  .bk-date-day { font-size:20px; font-weight:800; line-height:1; color:#f2f2f2; }
-  .bk-date-month { font-size:9px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#666; }
-  .bk-card-club { font-size:15px; font-weight:800; color:#f2f2f2; line-height:1.2; margin-bottom:4px; }
-  .bk-card-meta { display:flex; align-items:center; gap:8px; font-size:11px; color:#555; font-weight:600; flex-wrap:wrap; }
-  .bk-card-chip { padding:2px 8px; background:rgba(255,255,255,.05); border-radius:6px; font-size:10px; color:#888; font-weight:600; }
+  .bk-date-box-active { background:var(--positive-bg); border:1px solid var(--accent-border-subtle); }
+  .bk-date-box-past { background:var(--surface-2); border:1px solid var(--border); }
+  .bk-date-box-cancelled { background:var(--error-bg); border:1px solid var(--error-bg); }
+  .bk-date-day { font-size:20px; font-weight:800; line-height:1; color:var(--text-primary); }
+  .bk-date-month { font-size:9px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); }
+  .bk-card-club { font-size:15px; font-weight:800; color:var(--text-primary); line-height:1.2; margin-bottom:4px; }
+  .bk-card-meta { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted); font-weight:600; flex-wrap:wrap; }
+  .bk-card-chip { padding:2px 8px; background:var(--surface-2); border-radius:6px; font-size:10px; color:var(--text-muted); font-weight:600; }
   /* Detail panel */
-  .bk-detail { background:#0f0f0f; border:1px solid rgba(255,255,255,.07); border-radius:24px; padding:28px; position:sticky; top:84px; }
-  .bk-ticket-label { display:inline-flex; align-items:center; gap:6px; padding:5px 14px; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.2); border-radius:999px; font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#22c55e; margin-bottom:20px; }
-  .bk-detail-court { font-size:22px; font-weight:800; color:#f2f2f2; letter-spacing:-.02em; line-height:1.1; margin-bottom:6px; }
-  .bk-detail-activity { font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#555; margin-bottom:24px; }
-  .bk-detail-row { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+  .bk-detail { background:var(--surface-1); border:1px solid var(--border); border-radius:24px; padding:28px; position:sticky; top:84px; }
+  .bk-ticket-label { display:inline-flex; align-items:center; gap:6px; padding:5px 14px; background:var(--positive-bg); border:1px solid var(--accent-border-subtle); border-radius:999px; font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-fg); margin-bottom:20px; }
+  .bk-detail-court { font-size:22px; font-weight:800; color:var(--text-primary); letter-spacing:-.02em; line-height:1.1; margin-bottom:6px; }
+  .bk-detail-activity { font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); margin-bottom:24px; }
+  .bk-detail-row { display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:1px solid var(--border-subtle); }
   .bk-detail-row:last-of-type { border-bottom:none; }
-  .bk-detail-icon { width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,.04); display:flex; align-items:center; justify-content:center; color:#444; flex-shrink:0; }
-  .bk-detail-row-label { font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#444; margin-bottom:3px; }
-  .bk-detail-row-val { font-size:14px; font-weight:700; color:#c8c8c8; line-height:1.4; }
-  .bk-detail-total { display:flex; align-items:center; justify-content:space-between; padding:20px 0 16px; border-top:1px solid rgba(255,255,255,.08); margin-top:8px; }
-  .bk-detail-total-label { font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#555; }
-  .bk-detail-total-val { font-size:26px; font-weight:800; color:#f2f2f2; letter-spacing:-.03em; }
-  .bk-action-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px 16px; border-radius:14px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:'Sora',system-ui,sans-serif; border:none; transition:background .15s,transform .15s; text-decoration:none; }
+  .bk-detail-icon { width:36px; height:36px; border-radius:10px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; color:var(--text-muted); flex-shrink:0; }
+  .bk-detail-row-label { font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); margin-bottom:3px; }
+  .bk-detail-row-val { font-size:14px; font-weight:700; color:var(--text-secondary); line-height:1.4; }
+  .bk-detail-total { display:flex; align-items:center; justify-content:space-between; padding:20px 0 16px; border-top:1px solid var(--border); margin-top:8px; }
+  .bk-detail-total-label { font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); }
+  .bk-detail-total-val { font-size:26px; font-weight:800; color:var(--text-primary); letter-spacing:-.03em; }
+  .bk-action-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px 16px; border-radius:14px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:var(--font-sans); border:none; transition:background .15s,transform .15s; text-decoration:none; }
   .bk-action-btn:hover { transform:translateY(-1px); }
-  .bk-action-cancel { background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.2)!important; color:#f87171; }
-  .bk-action-cancel:hover { background:rgba(248,113,113,.15); }
-  .bk-action-review { background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2)!important; color:#22c55e; }
-  .bk-action-review:hover { background:rgba(34,197,94,.14); }
-  .bk-action-rebook { background:#22c55e; color:#052010; }
-  .bk-action-rebook:hover { background:#4ade80; }
+  .bk-action-cancel { background:var(--error-bg); border:1px solid var(--error-bg)!important; color:var(--error-fg); }
+  .bk-action-cancel:hover { background:var(--error-bg); }
+  .bk-action-review { background:var(--positive-bg); border:1px solid var(--accent-border-subtle)!important; color:var(--accent-fg); }
+  .bk-action-review:hover { background:var(--accent-bg-muted); }
+  .bk-action-rebook { background:var(--brand); color:var(--brand-on); }
+  .bk-action-rebook:hover { background:var(--brand-hover); }
   /* Empty state */
   .bk-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:64px 32px; text-align:center; gap:16px; }
-  .bk-empty-icon { color:#222; }
-  .bk-empty-title { font-size:13px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#444; }
+  .bk-empty-icon { color:var(--border-strong); }
+  .bk-empty-title { font-size:13px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); }
   /* Review modal */
-  .bk-review-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
-  .bk-review-panel { background:#111; border:1px solid rgba(255,255,255,.1); border-radius:24px; width:100%; max-width:480px; padding:32px; box-shadow:0 24px 64px rgba(0,0,0,.6); }
-  .bk-review-h { font-size:20px; font-weight:800; color:#f2f2f2; letter-spacing:-.02em; margin-bottom:6px; }
-  .bk-review-sub { font-size:13px; color:#555; margin-bottom:24px; font-weight:500; }
+  .bk-review-overlay { position:fixed; inset:0; background:var(--overlay); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .bk-review-panel { background:var(--surface-1); border:1px solid var(--border); border-radius:24px; width:100%; max-width:480px; padding:32px; box-shadow:var(--shadow-lg); }
+  .bk-review-h { font-size:20px; font-weight:800; color:var(--text-primary); letter-spacing:-.02em; margin-bottom:6px; }
+  .bk-review-sub { font-size:13px; color:var(--text-muted); margin-bottom:24px; font-weight:500; }
   .bk-review-stars { display:flex; gap:8px; }
-  .bk-review-star { width:40px; height:40px; border-radius:12px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.04); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,border-color .15s; color:#555; }
-  .bk-review-star.bk-star-on { background:rgba(34,197,94,.15); border-color:rgba(34,197,94,.3); color:#22c55e; }
-  .bk-review-textarea { width:100%; background:#0a0a0a; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px 16px; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; font-size:14px; outline:none; resize:none; transition:border-color .2s; }
-  .bk-review-textarea:focus { border-color:rgba(34,197,94,.3); }
+  .bk-review-star { width:40px; height:40px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,border-color .15s; color:var(--text-muted); }
+  .bk-review-star.bk-star-on { background:var(--positive-bg); border-color:var(--accent-border); color:var(--accent-fg); }
+  .bk-review-textarea { width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:14px 16px; color:var(--text-primary); font-family:var(--font-sans); font-size:14px; outline:none; resize:none; transition:border-color .2s; }
+  .bk-review-textarea:focus { border-color:var(--accent-border); }
   /* Review modal actions */
   .bk-review-action-row { display:flex; gap:10px; margin-top:24px; }
-  .bk-review-secondary { flex:1; height:46px; border-radius:12px; background:none; border:1px solid rgba(255,255,255,.12); color:#888; font-family:'Sora',system-ui,sans-serif; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:background .15s,border-color .15s; }
-  .bk-review-secondary:hover { background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.22); }
-  .bk-review-primary { flex:1; height:46px; border-radius:12px; background:#22c55e; border:none; color:#052010; font-family:'Sora',system-ui,sans-serif; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:background .15s; }
-  .bk-review-primary:hover:not(:disabled) { background:#4ade80; }
+  .bk-review-secondary { flex:1; height:46px; border-radius:12px; background:none; border:1px solid var(--border); color:var(--text-muted); font-family:var(--font-sans); font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:background .15s,border-color .15s; }
+  .bk-review-secondary:hover { background:var(--surface-2); border-color:var(--border-strong); }
+  .bk-review-primary { flex:1; height:46px; border-radius:12px; background:var(--brand); border:none; color:var(--brand-on); font-family:var(--font-sans); font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:background .15s; }
+  .bk-review-primary:hover:not(:disabled) { background:var(--brand-hover); }
   .bk-review-primary:disabled { opacity:.5; cursor:not-allowed; }
   @media(max-width:900px){
     .bk-layout { grid-template-columns:1fr; }
     .bk-detail { position:static; }
     .bk-list-body { max-height:50vh; }
   }
-  .tc-root.tc-theme-light .bk-list-panel,
-  .tc-root.tc-theme-light .bk-detail { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 12px 28px rgba(15,23,42,.1); }
-  .tc-root.tc-theme-light .bk-card { background:#ffffff; border-color:rgba(15,23,42,.1); }
-  .tc-root.tc-theme-light .bk-card:hover { border-color:rgba(34,197,94,.3); background:rgba(248,250,252,.9); }
-  .tc-root.tc-theme-light .bk-card.bk-selected { border-color:rgba(34,197,94,.45); background:rgba(34,197,94,.08); }
-  .tc-root.tc-theme-light .bk-date-box-past { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.1); }
-  .tc-root.tc-theme-light .bk-date-day,
-  .tc-root.tc-theme-light .bk-card-club,
-  .tc-root.tc-theme-light .bk-detail-court,
-  .tc-root.tc-theme-light .bk-detail-total-val,
-  .tc-root.tc-theme-light .bk-review-h { color:#0f172a; }
-  .tc-root.tc-theme-light .bk-date-month,
-  .tc-root.tc-theme-light .bk-card-meta,
-  .tc-root.tc-theme-light .bk-detail-row-label,
-  .tc-root.tc-theme-light .bk-detail-total-label,
-  .tc-root.tc-theme-light .bk-empty-title,
-  .tc-root.tc-theme-light .bk-review-sub { color:#64748b; }
-  .tc-root.tc-theme-light .bk-card-chip { background:rgba(15,23,42,.06); color:#475569; }
-  .tc-root.tc-theme-light .bk-detail-row { border-bottom-color:rgba(15,23,42,.08); }
-  .tc-root.tc-theme-light .bk-detail-icon { background:rgba(15,23,42,.05); color:#64748b; }
-  .tc-root.tc-theme-light .bk-detail-row-val { color:#334155; }
-  .tc-root.tc-theme-light .bk-detail-total { border-top-color:rgba(15,23,42,.1); }
-  .tc-root.tc-theme-light .bk-empty-icon { color:#cbd5e1; }
-  .tc-root.tc-theme-light .bk-review-overlay { background:rgba(15,23,42,.55); }
-  .tc-root.tc-theme-light .bk-review-panel { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 20px 44px rgba(15,23,42,.24); }
-  .tc-root.tc-theme-light .bk-review-star { border-color:rgba(15,23,42,.16); background:rgba(15,23,42,.04); color:#94a3b8; }
-  .tc-root.tc-theme-light .bk-review-textarea { background:#ffffff; border-color:rgba(15,23,42,.14); color:#0f172a; }
-  .tc-root.tc-theme-light .bk-review-textarea:focus { border-color:rgba(34,197,94,.34); }
-  .tc-root.tc-theme-light .bk-date-box-active { background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.26); }
-  .tc-root.tc-theme-light .bk-date-box-cancelled { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.2); }
-  .tc-root.tc-theme-light .bk-ticket-label { background:rgba(34,197,94,.1); border-color:rgba(34,197,94,.24); color:#15803d; }
-  .tc-root.tc-theme-light .bk-detail-activity { color:#94a3b8; }
-  .tc-root.tc-theme-light .bk-action-cancel { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.22)!important; color:#dc2626; }
-  .tc-root.tc-theme-light .bk-action-cancel:hover { background:rgba(248,113,113,.14); }
-  .tc-root.tc-theme-light .bk-action-review { background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.2)!important; color:#15803d; }
-  .tc-root.tc-theme-light .bk-action-review:hover { background:rgba(34,197,94,.14); }
-  .tc-root.tc-theme-light .bk-star-on { background:rgba(34,197,94,.12)!important; border-color:rgba(34,197,94,.28)!important; color:#15803d!important; }
-  .tc-root.tc-theme-light .bk-list-body::-webkit-scrollbar-thumb { background:rgba(15,23,42,.14); }
-  .bk-detail-empty { background:rgba(255,255,255,.02); border:1px dashed rgba(255,255,255,.1); border-radius:24px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:320px; padding:40px; text-align:center; gap:12px; }
-  .bk-detail-empty-icon { color:#2a2a2a; }
-  .bk-detail-empty-label { font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#333; line-height:1.5; }
-  .tc-root.tc-theme-light .bk-detail-empty { background:rgba(15,23,42,.025); border-color:rgba(15,23,42,.14); }
-  .tc-root.tc-theme-light .bk-detail-empty-icon { color:#cbd5e1; }
-  .tc-root.tc-theme-light .bk-detail-empty-label { color:#94a3b8; }
-  .tc-root.tc-theme-light .bk-review-secondary { border-color:rgba(15,23,42,.16); color:#334155; }
-  .tc-root.tc-theme-light .bk-review-secondary:hover { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.25); }
+  .p-public-root.p-public-theme-light .bk-list-panel,
+  .p-public-root.p-public-theme-light .bk-detail { background:var(--surface-1); border-color:var(--border); box-shadow:0 12px 28px var(--border); }
+  .p-public-root.p-public-theme-light .bk-card { background:var(--surface-1); border-color:var(--border); }
+  .p-public-root.p-public-theme-light .bk-card:hover { border-color:var(--accent-border); background:var(--surface-2); }
+  .p-public-root.p-public-theme-light .bk-card.bk-selected { border-color:var(--accent-border-strong); background:var(--positive-bg); }
+  .p-public-root.p-public-theme-light .bk-date-box-past { background:var(--surface-2); border-color:var(--border); }
+  .p-public-root.p-public-theme-light .bk-date-day,
+  .p-public-root.p-public-theme-light .bk-card-club,
+  .p-public-root.p-public-theme-light .bk-detail-court,
+  .p-public-root.p-public-theme-light .bk-detail-total-val,
+  .p-public-root.p-public-theme-light .bk-review-h { color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .bk-date-month,
+  .p-public-root.p-public-theme-light .bk-card-meta,
+  .p-public-root.p-public-theme-light .bk-detail-row-label,
+  .p-public-root.p-public-theme-light .bk-detail-total-label,
+  .p-public-root.p-public-theme-light .bk-empty-title,
+  .p-public-root.p-public-theme-light .bk-review-sub { color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .bk-card-chip { background:var(--surface-2); color:var(--text-secondary); }
+  .p-public-root.p-public-theme-light .bk-detail-row { border-bottom-color:var(--border-subtle); }
+  .p-public-root.p-public-theme-light .bk-detail-icon { background:var(--surface-2); color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .bk-detail-row-val { color:var(--text-secondary); }
+  .p-public-root.p-public-theme-light .bk-detail-total { border-top-color:var(--border); }
+  .p-public-root.p-public-theme-light .bk-empty-icon { color:var(--border-strong); }
+  .p-public-root.p-public-theme-light .bk-review-overlay { background:var(--overlay-strong); }
+  .p-public-root.p-public-theme-light .bk-review-panel { background:var(--surface-1); border-color:var(--border); box-shadow:var(--shadow-lg); }
+  .p-public-root.p-public-theme-light .bk-review-star { border-color:var(--border-strong); background:var(--surface-2); color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .bk-review-textarea { background:var(--surface-1); border-color:var(--border); color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .bk-review-textarea:focus { border-color:var(--accent-border); }
+  .p-public-root.p-public-theme-light .bk-date-box-active { background:var(--positive-bg); border-color:var(--accent-border-subtle); }
+  .p-public-root.p-public-theme-light .bk-date-box-cancelled { background:var(--error-bg); border-color:var(--error-bg); }
+  .p-public-root.p-public-theme-light .bk-ticket-label { background:var(--positive-bg); border-color:var(--accent-border-subtle); color:var(--accent-fg); }
+  .p-public-root.p-public-theme-light .bk-detail-activity { color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .bk-action-cancel { background:var(--error-bg); border-color:var(--error-bg)!important; color:var(--error-fg); }
+  .p-public-root.p-public-theme-light .bk-action-cancel:hover { background:var(--error-bg); }
+  .p-public-root.p-public-theme-light .bk-action-review { background:var(--positive-bg); border-color:var(--accent-border-subtle)!important; color:var(--accent-fg); }
+  .p-public-root.p-public-theme-light .bk-action-review:hover { background:var(--accent-bg-muted); }
+  .p-public-root.p-public-theme-light .bk-star-on { background:var(--positive-bg)!important; border-color:var(--accent-border)!important; color:var(--accent-fg)!important; }
+  .p-public-root.p-public-theme-light .bk-list-body::-webkit-scrollbar-thumb { background:var(--border); }
+  .bk-detail-empty { background:var(--surface-2); border:1px dashed var(--border); border-radius:24px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:320px; padding:40px; text-align:center; gap:12px; }
+  .bk-detail-empty-icon { color:var(--border-strong); }
+  .bk-detail-empty-label { font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); line-height:1.5; }
+  .p-public-root.p-public-theme-light .bk-detail-empty { background:var(--surface-2); border-color:var(--border); }
+  .p-public-root.p-public-theme-light .bk-detail-empty-icon { color:var(--border-strong); }
+  .p-public-root.p-public-theme-light .bk-detail-empty-label { color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .bk-review-secondary { border-color:var(--border-strong); color:var(--text-secondary); }
+  .p-public-root.p-public-theme-light .bk-review-secondary:hover { background:var(--surface-2); border-color:var(--border-strong); }
 `;
 
 export default function MyBookingsPage() {
@@ -331,25 +331,25 @@ export default function MyBookingsPage() {
 
   return (
     <DarkPageLayout
-      title="Mis Reservas | TuCancha"
+      title="Mis Reservas | Punto"
       extraCss={PAGE_CSS}
       breadcrumbs={[
         { label: 'Inicio', href: '/' },
         { label: 'Mis reservas' },
       ]}
     >
-      <div className="tc-page">
+      <div className="p-public-page">
 
         {/* ── PAGE HEADER ── */}
-        <div style={{ marginBottom: 36, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, paddingBottom: 28, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
+        <div style={{ marginBottom: 36, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, paddingBottom: 28, borderBottom: '1px solid var(--border-subtle)' }}>
           <div>
-            <span className="tc-page-eyebrow">Mi cuenta</span>
-            <h1 className="tc-page-h">Mis <i>reservas</i></h1>
-            <p className="tc-page-sub">Próximos partidos e historial</p>
+            <span className="p-public-page-eyebrow">Mi cuenta</span>
+            <h1 className="p-public-page-h">Mis <i>reservas</i></h1>
+            <p className="p-public-page-sub">Próximos partidos e historial</p>
           </div>
           <Link
             href="/complejos"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#22c55e', color: '#052010', borderRadius: 999, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', textDecoration: 'none' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--brand)', color: 'var(--brand-on)', borderRadius: 999, fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', textDecoration: 'none' }}
           >
             + Nueva reserva
           </Link>
@@ -357,12 +357,12 @@ export default function MyBookingsPage() {
 
         {/* ── TABS ── */}
         <div style={{ marginBottom: 24 }}>
-          <div className="tc-tabs" style={{ display: 'inline-flex' }}>
+          <div className="p-public-tabs" style={{ display: 'inline-flex' }}>
             {(['ACTIVE', 'PAST', 'CANCELLED'] as const).map(tab => (
               <button
                 key={tab}
                 ref={el => { tabRefs.current[tab] = el; }}
-                className={`tc-tab${activeTab === tab ? ' tc-active' : ''}`}
+                className={`p-public-tab${activeTab === tab ? ' p-public-active' : ''}`}
                 onClick={() => { setActiveTab(tab); setSelectedBooking(null); }}
               >
                 {TAB_LABELS[tab]}
@@ -376,8 +376,8 @@ export default function MyBookingsPage() {
 
           {/* LIST PANEL */}
           <div className="bk-list-panel">
-            <div style={{ padding: '20px 20px 12px', borderBottom: '1px solid rgba(255,255,255,.05)' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#444' }}>
+            <div style={{ padding: '20px 20px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
                 {visibleBookings.length} {activeTab === 'ACTIVE' ? 'próximas' : activeTab === 'PAST' ? 'pasadas' : 'canceladas'}
               </div>
             </div>
@@ -387,7 +387,7 @@ export default function MyBookingsPage() {
                   <UserLoadingState mode="inline" message="Cargando reservas..." />
                 </div>
               ) : error ? (
-                <div style={{ padding: '20px 16px', background: 'rgba(248,113,113,.06)', border: '1px solid rgba(248,113,113,.15)', borderRadius: 12, fontSize: 13, color: '#f87171', fontWeight: 600 }}>
+                <div style={{ padding: '20px 16px', background: 'var(--error-bg)', border: '1px solid var(--error-bg)', borderRadius: 12, fontSize: 13, color: 'var(--error-fg)', fontWeight: 600 }}>
                   {error}
                 </div>
               ) : visibleBookings.length === 0 ? (
@@ -397,7 +397,7 @@ export default function MyBookingsPage() {
                     {activeTab === 'CANCELLED' ? 'Sin cancelaciones' : activeTab === 'PAST' ? 'Sin historial' : 'No hay reservas activas'}
                   </div>
                   {activeTab === 'ACTIVE' && (
-                    <Link href="/complejos" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: '#22c55e', color: '#052010', borderRadius: 999, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em', textDecoration: 'none', marginTop: 4 }}>
+                    <Link href="/complejos" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--brand)', color: 'var(--brand-on)', borderRadius: 999, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em', textDecoration: 'none', marginTop: 4 }}>
                       Reservar ahora
                     </Link>
                   )}
@@ -407,7 +407,7 @@ export default function MyBookingsPage() {
                   const date = new Date(booking.startDateTime);
                   const isSelected = selectedBooking?.id === booking.id;
                   const boxClass = activeTab === 'ACTIVE' ? 'bk-date-box-active' : activeTab === 'CANCELLED' ? 'bk-date-box-cancelled' : 'bk-date-box-past';
-                  const dayColor = activeTab === 'ACTIVE' ? '#22c55e' : activeTab === 'CANCELLED' ? '#f87171' : '#666';
+                  const dayColor = activeTab === 'ACTIVE' ? 'var(--brand)' : activeTab === 'CANCELLED' ? 'var(--error-fg)' : 'var(--text-muted)';
                   return (
                     <div
                       key={booking.id}
@@ -427,10 +427,10 @@ export default function MyBookingsPage() {
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Clock size={10} /> {formatTime(date)}
                           </span>
-                          {booking.court?.name && <span style={{ color: '#444' }}>{booking.court.name}</span>}
+                          {booking.court?.name && <span style={{ color: 'var(--text-muted)' }}>{booking.court.name}</span>}
                         </div>
                       </div>
-                      <ArrowRight size={16} style={{ color: isSelected ? '#22c55e' : '#333', flexShrink: 0, transition: 'color .2s' }} />
+                      <ArrowRight size={16} style={{ color: isSelected ? 'var(--brand)' : 'var(--text-muted)', flexShrink: 0, transition: 'color .2s' }} />
                     </div>
                   );
                 })
@@ -451,7 +451,7 @@ export default function MyBookingsPage() {
               <div className="bk-detail-court">{selectedBooking.court?.name || 'Cancha'}</div>
               <div className="bk-detail-activity">{selectedBooking.activity?.name || 'Deporte'} · {selectedBooking.court?.club?.name}</div>
 
-              <hr className="tc-divider" style={{ margin: '0 0 16px' }} />
+              <hr className="p-public-divider" style={{ margin: '0 0 16px' }} />
 
               <div>
                 <div className="bk-detail-row">
@@ -489,7 +489,7 @@ export default function MyBookingsPage() {
                 <div>
                   <div className="bk-detail-total-label">Total</div>
                   {activeTab === 'PAST' && getConsumptionTotal(selectedBooking) > 0 && (
-                    <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>+ consumos: {formatCurrency(getConsumptionTotal(selectedBooking))}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>+ consumos: {formatCurrency(getConsumptionTotal(selectedBooking))}</div>
                   )}
                 </div>
                 <div className="bk-detail-total-val">{formatCurrency(selectedBooking.price || 0)}</div>
@@ -560,7 +560,7 @@ export default function MyBookingsPage() {
               </div>
               <button
                 type="button"
-                className="tc-close-btn"
+                className="p-public-close-btn"
                 onClick={() => setReviewModalOpen(false)}
                 disabled={reviewSaving}
                 aria-label="Cerrar"
@@ -570,11 +570,11 @@ export default function MyBookingsPage() {
             </div>
 
             {reviewLoading ? (
-              <div style={{ padding: '40px 0', textAlign: 'center', color: '#555', fontSize: 13 }}>Cargando reseña...</div>
+              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Cargando reseña...</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#555', marginBottom: 10 }}>Calificación</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>Calificación</div>
                   <div className="bk-review-stars">
                     {[1, 2, 3, 4, 5].map(v => (
                       <button key={v} type="button" className={`bk-review-star${reviewRating >= v ? ' bk-star-on' : ''}`} onClick={() => setReviewRating(v)} disabled={reviewSaving} aria-label={`${v} ${v === 1 ? 'estrella' : 'estrellas'}`}>
@@ -584,7 +584,7 @@ export default function MyBookingsPage() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: '#555', marginBottom: 10 }}>Comentario (opcional)</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>Comentario (opcional)</div>
                   <textarea
                     className="bk-review-textarea"
                     rows={4}
@@ -593,7 +593,7 @@ export default function MyBookingsPage() {
                     placeholder="Contá tu experiencia..."
                     disabled={reviewSaving}
                   />
-                  <div style={{ fontSize: 11, color: '#444', textAlign: 'right', marginTop: 4 }}>{reviewComment.length}/220</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', marginTop: 4 }}>{reviewComment.length}/220</div>
                 </div>
               </div>
             )}

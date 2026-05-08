@@ -20,7 +20,7 @@ type ActivePaymentMethod = {
   index: number;
 };
 
-const COLORS = ['#1f2638', '#3053e2', '#17b26a', '#f79009', '#8b5cf6', '#0ea5e9'];
+const COLORS = ['var(--ink-900)', 'var(--brand)', 'var(--positive-fg)', 'var(--warn-fg)', 'var(--accent-fg)', 'var(--info-fg)'];
 
 const getMethodFromSector = (entry: any): PaymentMethodDatum => (entry?.payload || entry) as PaymentMethodDatum;
 
@@ -39,30 +39,30 @@ function PaymentMethodTooltip({
   const percent = total > 0 ? (value / total) * 100 : 0;
 
   return (
-    <div className="h-[122px] w-[248px] rounded-lg border border-[#dce2ee] bg-white px-3 py-2 text-[12px] shadow-[0_10px_28px_rgba(31,38,56,0.10)]">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#98a1b3]">
+    <div className="h-[122px] w-[248px] rounded-lg border border-p-border bg-p-surface px-3 py-2 text-[12px] shadow-p-lg">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-p-text-muted">
         Metodo seleccionado
       </p>
       <div className="mt-1 flex items-center justify-between gap-4">
-        <span className="inline-flex min-w-0 items-center gap-2 font-semibold text-[#1f2638]">
+        <span className="inline-flex min-w-0 items-center gap-2 font-semibold text-p-text">
           <span
             className="h-2 w-2 shrink-0 rounded-full"
             style={{ backgroundColor: COLORS[active.index % COLORS.length] }}
           />
           <span className="truncate whitespace-nowrap">{active.method.name}</span>
         </span>
-        <strong className="shrink-0 whitespace-nowrap text-[#1f2638]">
+        <strong className="shrink-0 whitespace-nowrap text-p-text">
           {formatReportsMoney(value)}
         </strong>
       </div>
-      <div className="mt-2 space-y-1 border-t border-[#eef2f8] pt-2 text-[#6f7890]">
+      <div className="mt-2 space-y-1 border-t border-p-border pt-2 text-p-text-muted">
         <p className="flex justify-between gap-4 whitespace-nowrap">
           <span>Participacion</span>
-          <strong className="shrink-0 text-[#3053e2]">{formatReportsPercent(percent)}</strong>
+          <strong className="shrink-0 text-p-accent">{formatReportsPercent(percent)}</strong>
         </p>
         <p className="flex justify-between gap-4 whitespace-nowrap">
           <span>Total metodos</span>
-          <strong className="shrink-0 text-[#1f2638]">{formatReportsMoney(total)}</strong>
+          <strong className="shrink-0 text-p-text">{formatReportsMoney(total)}</strong>
         </p>
       </div>
     </div>
@@ -149,10 +149,10 @@ export default function PaymentMethodsDonut({
           </ChartFollowTooltip>
         )}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-[#98a1b3]">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-p-text-muted">
             Total
           </span>
-          <span className="text-[24px] font-bold text-[#1a2035]">
+          <span className="text-[24px] font-bold text-p-text">
             {formatReportsCompactMoney(total)}
           </span>
         </div>
@@ -181,7 +181,7 @@ export default function PaymentMethodsDonut({
               }}
               className={[
                 'cursor-pointer space-y-1 rounded-lg border px-2 py-1.5 transition',
-                active ? 'border-[#cfd9ff] bg-[#f8faff]' : 'border-transparent',
+                active ? 'border-p-accent bg-p-surface-2' : 'border-transparent',
               ].join(' ')}
             >
               <div className="flex items-center justify-between gap-3">
@@ -190,15 +190,15 @@ export default function PaymentMethodsDonut({
                     className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ backgroundColor: COLORS[index % COLORS.length] }}
                   />
-                  <span className="truncate text-[13px] font-semibold text-[#30384c]">
+                  <span className="truncate text-[13px] font-semibold text-p-text">
                     {item.name}
                   </span>
                 </div>
-                <span className="shrink-0 text-[12px] font-semibold text-[#5a6478]">
+                <span className="shrink-0 text-[12px] font-semibold text-p-text-secondary">
                   {formatReportsPercent(percent)}
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-[#eef2f8]">
+              <div className="h-2 rounded-full bg-p-surface-2">
                 <div
                   className="h-2 rounded-full"
                   style={{
@@ -207,7 +207,7 @@ export default function PaymentMethodsDonut({
                   }}
                 />
               </div>
-              <p className="text-right text-[11px] font-medium text-[#98a1b3]">
+              <p className="text-right text-[11px] font-medium text-p-text-muted">
                 {formatReportsMoney(Number(item.value || 0))}
               </p>
             </div>

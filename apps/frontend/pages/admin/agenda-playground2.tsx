@@ -477,7 +477,7 @@ function PlaygroundCombo({
   }, [open, value]);
 
   return (
-    <div ref={containerRef} className={`playground-combo ${className}`}>
+    <div ref={containerRef} className={`p-admin-combo ${className}`}>
       <button
         type="button"
         onClick={() => {
@@ -485,19 +485,19 @@ function PlaygroundCombo({
           setOpen((previous) => !previous);
         }}
         disabled={disabled}
-        className={`playground-combo-trigger ${compact ? 'playground-combo-trigger-compact' : ''} ${
+        className={`p-admin-combo-trigger ${compact ? 'p-admin-combo-trigger-compact' : ''} ${
           disabled ? 'cursor-not-allowed opacity-60' : ''
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         <span className="min-w-0 flex-1 truncate text-left">{selected?.label || ''}</span>
-        <ChevronDown size={14} className={`playground-combo-chevron ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`p-admin-combo-chevron ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && !disabled && (
         <div
-          className={`playground-combo-menu ${align === 'right' ? 'right-0' : 'left-0'} ${
-            variant === 'participant' ? 'playground-combo-menu-participant' : ''
+          className={`p-admin-combo-menu ${align === 'right' ? 'right-0' : 'left-0'} ${
+            variant === 'participant' ? 'p-admin-combo-menu-participant' : ''
           }`}
         >
           <div ref={optionsListRef} className="max-h-64 overflow-y-auto py-1">
@@ -514,13 +514,13 @@ function PlaygroundCombo({
                     onChange(option.value);
                     setOpen(false);
                   }}
-                  className={`playground-combo-option ${
-                    active ? 'playground-combo-option-active' : ''
-                  } ${variant === 'participant' ? 'playground-combo-option-participant' : ''}`}
+                  className={`p-admin-combo-option ${
+                    active ? 'p-admin-combo-option-active' : ''
+                  } ${variant === 'participant' ? 'p-admin-combo-option-participant' : ''}`}
                 >
-                  <span className="playground-combo-option-primary">{option.label}</span>
+                  <span className="p-admin-combo-option-primary">{option.label}</span>
                   {option.secondary && (
-                    <span className="playground-combo-option-secondary">{option.secondary}</span>
+                    <span className="p-admin-combo-option-secondary">{option.secondary}</span>
                   )}
                 </button>
               );
@@ -596,10 +596,10 @@ function toSelectionRange(selection: DraftSelection) {
 }
 
 function bookingColor(state: Booking['state']) {
-  if (state === 'completed') return 'bg-[#1d2248] text-[#f7f7fb]';
-  if (state === 'confirmed') return 'bg-[#dce7ff] text-[#1d3b8f] border border-[#c7d8ff]';
-  if (state === 'blocked') return 'bg-[#ff5d7a] text-white bg-[linear-gradient(135deg,rgba(255,255,255,0.18)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.18)_50%,rgba(255,255,255,0.18)_75%,transparent_75%,transparent)] bg-[length:14px_14px]';
-  return 'bg-[#d7f2d7] text-[#123525] border border-[#c3e9c3]';
+  if (state === 'completed') return 'bg-ink-900 text-ink-50';
+  if (state === 'confirmed') return 'bg-p-positive-bg text-p-accent border border-p-accent';
+  if (state === 'blocked') return 'bg-p-error text-ink-50 bg-[repeating-linear-gradient(135deg,var(--error-bg)_0_7px,var(--surface-1)_7px_14px)] bg-[length:14px_14px]';
+  return 'bg-p-positive-bg text-p-positive border border-p-positive';
 }
 
 function bookingStatusLabel(state: Booking['state']) {
@@ -610,10 +610,10 @@ function bookingStatusLabel(state: Booking['state']) {
 }
 
 function bookingBadgeColor(state: Booking['state']) {
-  if (state === 'completed') return 'bg-[#eef2ff] text-[#1d2248]';
-  if (state === 'confirmed') return 'bg-[#2d4fc9] text-white';
-  if (state === 'blocked') return 'bg-[#9f1635] text-white';
-  return 'bg-[#2f6b45] text-white';
+  if (state === 'completed') return 'bg-p-positive-bg text-p-text';
+  if (state === 'confirmed') return 'bg-ink-900 text-ink-50';
+  if (state === 'blocked') return 'bg-p-error text-ink-50';
+  return 'bg-p-positive text-ink-50';
 }
 
 function bookingPaymentLabel(state: Booking['paymentState']) {
@@ -623,9 +623,9 @@ function bookingPaymentLabel(state: Booking['paymentState']) {
 }
 
 function bookingPaymentBadgeColor(state: Booking['paymentState']) {
-  if (state === 'paid') return 'bg-[#166534] text-white';
-  if (state === 'partial') return 'bg-[#9a5a00] text-white';
-  return 'bg-[#6b7280] text-white';
+  if (state === 'paid') return 'bg-p-positive text-ink-50';
+  if (state === 'partial') return 'bg-p-warning text-ink-50';
+  return 'bg-p-surface-3 text-ink-50';
 }
 
 function distributePaidByParticipants(
@@ -4366,7 +4366,7 @@ export default function AdminAgendaPlaygroundPage() {
               assignments: payloadAssignments,
               metadata: {
                 schemaVersion: 1,
-                client: 'agenda-playground-v2',
+                client: 'agenda-admin-v2',
                 sidebarParticipants: sidebarParticipantsMetadata,
                 sidebar: {
                   participants: sidebarParticipantsMetadata,
@@ -5103,11 +5103,11 @@ export default function AdminAgendaPlaygroundPage() {
     return 'Pendiente';
   }, [bookingKind, editingBooking]);
   const reservationStatusTone = useMemo(() => {
-    if (bookingKind === 'block' || editingBooking?.state === 'blocked') return 'bg-[#fff1f3] text-[#9f1635]';
-    if (editingBooking?.state === 'completed') return 'bg-[#eceffd] text-[#2f3d89]';
-    if (editingBooking?.state === 'confirmed') return 'bg-[#e9f8ec] text-[#16733f]';
-    if (!editingBooking) return 'bg-[#eef2ff] text-[#3155df]';
-    return 'bg-[#fff4e5] text-[#9a5a00]';
+    if (bookingKind === 'block' || editingBooking?.state === 'blocked') return 'bg-p-error-bg text-p-error';
+    if (editingBooking?.state === 'completed') return 'bg-p-positive-bg text-p-accent';
+    if (editingBooking?.state === 'confirmed') return 'bg-p-positive-bg text-p-positive';
+    if (!editingBooking) return 'bg-p-positive-bg text-p-accent';
+    return 'bg-p-warning-bg text-p-warning';
   }, [bookingKind, editingBooking]);
   const paymentStatusLabel = useMemo(() => {
     if (!persistedEditingBookingId || bookingKind === 'block') return 'Sin pago';
@@ -5117,10 +5117,10 @@ export default function AdminAgendaPlaygroundPage() {
     return 'Sin pago';
   }, [bookingFinancial, bookingKind, editingBooking?.paymentState, persistedEditingBookingId]);
   const paymentStatusTone = paymentStatusLabel === 'Pagada'
-    ? 'bg-[#e8f8ec] text-[#16733f]'
+    ? 'bg-p-positive-bg text-p-positive'
     : paymentStatusLabel === 'Parcial'
-      ? 'bg-[#fff4e5] text-[#9a5a00]'
-      : 'bg-[#eef1f7] text-[#5c667f]';
+      ? 'bg-p-warning-bg text-p-warning'
+      : 'bg-p-surface-3 text-p-text-secondary';
   const isEditingRecurringSeries = Boolean(
     editingBookingId && Number(editingBooking?.fixedBookingId || 0) > 0
   );
@@ -6862,7 +6862,7 @@ export default function AdminAgendaPlaygroundPage() {
           assignments: payloadAssignments,
           metadata: {
             schemaVersion: 1,
-            client: 'agenda-playground-v2',
+            client: 'agenda-admin-v2',
             sidebarParticipants: sidebarParticipantsMetadata,
             sidebar: {
               participants: sidebarParticipantsMetadata,
@@ -8786,7 +8786,7 @@ export default function AdminAgendaPlaygroundPage() {
   return (
     <>
       <Head>
-        <title>Agenda de reservas | TuCancha Admin</title>
+        <title>Agenda de reservas | Punto Admin</title>
       </Head>
       <style jsx global>{`
         input[type='number']::-webkit-outer-spin-button,
@@ -8801,9 +8801,9 @@ export default function AdminAgendaPlaygroundPage() {
       `}</style>
       <AdminPlaygroundShell activeItem="Calendario" user={user}>
 
-          <section ref={agendaSurfaceRef} className="relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-[#f5f6f8]">
+          <section ref={agendaSurfaceRef} className="relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-p-surface-2">
             {calendarNotice && (
-              <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] max-w-[420px] rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2 text-[12px] font-semibold text-[#b42346] shadow-sm">
+              <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] max-w-[420px] rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error shadow-sm">
                 {calendarNotice}
               </div>
             )}
@@ -8825,7 +8825,7 @@ export default function AdminAgendaPlaygroundPage() {
                   onCreateBooking={() => openQuickCreateBooking(visibleCourts[0]?.id)}
                 />
 
-                <div className="flex-1 rounded-2xl border border-[#e5e7eb] bg-white overflow-hidden">
+                <div className="flex-1 rounded-2xl border border-p-border bg-p-surface overflow-hidden">
                   <div ref={agendaScrollContainerRef} className="h-full overflow-auto">
                     <div className="min-w-max px-4 pb-4 pt-0">
                       <div className="flex min-w-full">
@@ -8842,8 +8842,8 @@ export default function AdminAgendaPlaygroundPage() {
                           {visibleCourts.map((court) => {
                             const courtBookings = visibleBookings.filter((booking) => booking.courtId === court.id);
                             return (
-                              <div key={court.id} className="min-w-[132px] flex-1 border-l border-[#eef1f3] last:border-r">
-                                <div className="sticky top-0 z-40 h-10 border-b border-[#eef1f3] bg-white grid place-items-center text-xs font-semibold text-[#4b5563]">
+                              <div key={court.id} className="min-w-[132px] flex-1 border-l border-p-border last:border-r">
+                                <div className="sticky top-0 z-40 h-10 border-b border-p-border bg-p-surface grid place-items-center text-xs font-semibold text-p-text-secondary">
                                   {court.name}
                                 </div>
                                 <AgendaSlotLayer
@@ -8922,7 +8922,7 @@ export default function AdminAgendaPlaygroundPage() {
                                           bookingStatusLabel={bookingStatusLabel}
                                           bookingPaymentBadgeColor={bookingPaymentBadgeColor}
                                           bookingPaymentLabel={bookingPaymentLabel}
-                                          colorClass={isDropConflicted ? 'border border-[#d13d57] bg-[#ffe8ee] text-[#8b1f3a]' : bookingColor(draggingBookingMeta.state)}
+                                          colorClass={isDropConflicted ? 'border border-p-error bg-p-error-bg text-p-error' : bookingColor(draggingBookingMeta.state)}
                                           isConflict={isDropConflicted}
                                           className="pointer-events-none z-20 overflow-hidden"
                                           style={{ top, height, opacity: isDropConflicted ? 0.9 : 1 }}
@@ -9015,29 +9015,29 @@ export default function AdminAgendaPlaygroundPage() {
 
             {customRecurrenceModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => setCustomRecurrenceModalOpen(false))
                 }
               >
                 <div
-                  className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[560px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[25px] font-bold tracking-[-0.01em] text-[#222a3d]">Frecuencia personalizada</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[25px] font-bold tracking-[-0.01em] text-p-text">Frecuencia personalizada</h3>
                     <button
                       type="button"
                       onClick={() => setCustomRecurrenceModalOpen(false)}
-                      className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
                     >
                       <X size={15} />
                     </button>
                   </div>
                   <div className="px-5 py-5 space-y-4">
                     <div>
-                      <p className="text-[13px] text-[#727b90] mb-2">Days</p>
+                      <p className="text-[13px] text-p-text-muted mb-2">Days</p>
                       <div className="flex flex-wrap gap-2">
                         {(() => {
                           const weekdays = [1, 2, 3, 4, 5];
@@ -9063,8 +9063,8 @@ export default function AdminAgendaPlaygroundPage() {
                           }
                           className={`h-9 rounded-xl border px-3 text-[13px] font-semibold ${
                             weekdaysActive
-                              ? 'border-[#3a63e0] bg-[#3a63e0] text-white'
-                              : 'border-[#cdd6ea] bg-white text-[#3f4c6a] hover:bg-[#f5f7ff]'
+                              ? 'border-p-accent bg-ink-900 text-ink-50'
+                              : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
                           }`}
                         >
                           Días hábiles
@@ -9086,8 +9086,8 @@ export default function AdminAgendaPlaygroundPage() {
                           }
                           className={`h-9 rounded-xl border px-3 text-[13px] font-semibold ${
                             weekendsActive
-                              ? 'border-[#3a63e0] bg-[#3a63e0] text-white'
-                              : 'border-[#cdd6ea] bg-white text-[#3f4c6a] hover:bg-[#f5f7ff]'
+                              ? 'border-p-accent bg-ink-900 text-ink-50'
+                              : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
                           }`}
                         >
                           Fines de semana
@@ -9112,8 +9112,8 @@ export default function AdminAgendaPlaygroundPage() {
                               }}
                               className={`h-9 min-w-[44px] rounded-xl border px-3 text-[13px] font-semibold ${
                                 active
-                                  ? 'border-[#3a63e0] bg-[#3a63e0] text-white'
-                                  : 'border-[#cdd6ea] bg-white text-[#3f4c6a] hover:bg-[#f5f7ff]'
+                                  ? 'border-p-accent bg-ink-900 text-ink-50'
+                                  : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
                               }`}
                             >
                               {day.short}
@@ -9123,14 +9123,14 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                     </div>
                     <label className="block">
-                      <span className="text-[13px] text-[#727b90]">Repetir cada N semanas</span>
+                      <span className="text-[13px] text-p-text-muted">Repetir cada N semanas</span>
                       <input
                         type="number"
                         min={1}
                         step={1}
                         value={customRepeatEveryWeeks}
                         onChange={(event) => setCustomRepeatEveryWeeks(Math.max(1, Number(event.target.value || 1)))}
-                        className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245] outline-none"
+                        className="mt-2 h-11 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[15px] text-p-text outline-none"
                       />
                     </label>
                     <div className="block">
@@ -9145,9 +9145,9 @@ export default function AdminAgendaPlaygroundPage() {
                             }
                             setCustomEndAfterExpanded((previous) => !previous);
                           }}
-                          className={`text-left ${customEndAfterEnabled ? '' : 'text-[#2f4fd8] font-semibold hover:underline'}`}
+                          className={`text-left ${customEndAfterEnabled ? '' : 'text-p-accent font-semibold hover:underline'}`}
                         >
-                          <span className={`text-[13px] ${customEndAfterEnabled ? 'text-[#727b90]' : 'text-[#2f4fd8]'}`}>
+                          <span className={`text-[13px] ${customEndAfterEnabled ? 'text-p-text-muted' : 'text-p-accent'}`}>
                             {customEndAfterEnabled
                               ? `Finalizar luego de ${customEndAfterReservations} reservas`
                               : 'Finalizar luego de N reservas'}
@@ -9160,7 +9160,7 @@ export default function AdminAgendaPlaygroundPage() {
                               setCustomEndAfterEnabled(false);
                               setCustomEndAfterExpanded(false);
                             }}
-                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#de5a76] hover:underline shrink-0"
+                            className="inline-flex items-center gap-1 text-[12px] font-semibold text-p-error hover:underline shrink-0"
                           >
                             <X size={12} />
                             Quitar
@@ -9175,7 +9175,7 @@ export default function AdminAgendaPlaygroundPage() {
                             step={1}
                             value={customEndAfterReservations}
                             onChange={(event) => setCustomEndAfterReservations(Math.max(1, Number(event.target.value || 1)))}
-                            className="h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245] outline-none"
+                            className="h-11 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[15px] text-p-text outline-none"
                           />
                         </div>
                       )}
@@ -9200,7 +9200,7 @@ export default function AdminAgendaPlaygroundPage() {
                           setFormError('');
                           setCustomRecurrenceModalOpen(false);
                         }}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900"
                       >
                         <Check size={14} />
                         Confirmar
@@ -9213,7 +9213,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {recurringCreateConfirmOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -9223,56 +9223,56 @@ export default function AdminAgendaPlaygroundPage() {
                 }
               >
                 <div
-                  className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[560px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar creación de serie</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-text">Confirmar creación de serie</h3>
                     <button
                       type="button"
                       onClick={() => {
                         setRecurringCreateConfirmOpen(false);
                         setRecurringPreviewSummary(null);
                       }}
-                      className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
                     >
                       <X size={15} />
                     </button>
                   </div>
                   <div className="px-5 py-5 space-y-4">
-                    <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[13px] text-[#2f4fd8]">
+                    <div className="rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[13px] text-p-accent">
                       Previsualización lista: revisá superposiciones antes de crear la serie.
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                      <div className="rounded-lg bg-p-surface-2 px-3 py-2 text-xs text-p-text-secondary flex justify-between">
                         <span>Disponibles para crear</span>
                         <strong>{recurringPreviewSummary?.generatedCount ?? 0}</strong>
                       </div>
-                      <div className="rounded-lg bg-[#fff4f6] px-3 py-2 text-xs text-[#8f2f46] flex justify-between">
+                      <div className="rounded-lg bg-p-error-bg px-3 py-2 text-xs text-p-error flex justify-between">
                         <span>Superpuestas</span>
                         <strong>{recurringPreviewSummary?.skippedCount ?? recurringOverlapItems.length}</strong>
                       </div>
                     </div>
                     {recurringOverlapItems.length > 0 ? (
                       <div>
-                        <p className="text-[13px] font-semibold text-[#4e5870] mb-2">
+                        <p className="text-[13px] font-semibold text-p-text-secondary mb-2">
                           Detalle de superposiciones ({recurringOverlapItems.length})
                         </p>
-                        <div className="max-h-56 overflow-y-auto rounded-xl border border-[#e3e8f2] bg-white divide-y divide-[#eef1f6]">
+                        <div className="max-h-56 overflow-y-auto rounded-xl border border-p-border bg-p-surface divide-y divide-p-border">
                           {recurringOverlapItems.map((item, index) => (
                             <div key={`preview-overlap-item-${index}`} className="px-3 py-2">
-                              <p className="text-[13px] font-semibold text-[#27314b]">{item.courtName}</p>
-                              <p className="text-[12px] text-[#68738e]">
+                              <p className="text-[13px] font-semibold text-p-text">{item.courtName}</p>
+                              <p className="text-[12px] text-p-text-secondary">
                                 Solicitada: {item.requestedDateLabel} · {item.requestedTimeLabel}
                               </p>
                               {(item.conflictingDateLabel || item.conflictingTimeLabel) && (
-                                <p className="text-[11px] text-[#8a93a7]">
+                                <p className="text-[11px] text-p-text-muted">
                                   Ocupada: {item.conflictingDateLabel || item.requestedDateLabel}
                                   {item.conflictingTimeLabel ? ` · ${item.conflictingTimeLabel}` : ''}
                                 </p>
                               )}
                               {(item.clientName || item.activityName) && (
-                                <p className="text-[11px] text-[#8a93a7]">
+                                <p className="text-[11px] text-p-text-muted">
                                   En conflicto con: {[item.clientName, item.activityName].filter(Boolean).join(' · ')}
                                 </p>
                               )}
@@ -9281,7 +9281,7 @@ export default function AdminAgendaPlaygroundPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-[#d5ebdc] bg-[#eefbf2] px-3 py-2 text-[13px] text-[#237247]">
+                      <div className="rounded-xl border border-p-positive bg-p-positive-bg px-3 py-2 text-[13px] text-p-positive">
                         No se detectaron superposiciones.
                       </div>
                     )}
@@ -9292,7 +9292,7 @@ export default function AdminAgendaPlaygroundPage() {
                           setRecurringCreateConfirmOpen(false);
                           setRecurringPreviewSummary(null);
                         }}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2"
                       >
                         <X size={14} />
                         Cancelar
@@ -9303,7 +9303,7 @@ export default function AdminAgendaPlaygroundPage() {
                           setRecurringCreateConfirmOpen(false);
                           void handleCreateBooking(true);
                         }}
-                        className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="h-10 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900"
                       >
                         {recurringOverlapItems.length > 0 ? 'Crear serie igualmente' : 'Crear serie'}
                       </button>
@@ -9315,18 +9315,18 @@ export default function AdminAgendaPlaygroundPage() {
 
             {recurringOverlapModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, closeRecurringResultModal)
                 }
               >
                 <div
-                  className="w-full max-w-[680px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[680px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-text">
                       {(recurringResult?.generatedCount ?? 0) === 0
                         ? 'No se pudo crear la serie'
                         : (recurringResult?.skippedCount ?? 0) > 0
@@ -9336,13 +9336,13 @@ export default function AdminAgendaPlaygroundPage() {
                     <button
                       type="button"
                       onClick={closeRecurringResultModal}
-                      className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
                     >
                       <X size={15} />
                     </button>
                   </div>
                   <div className="px-5 py-5 space-y-4">
-                    <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[13px] text-[#2f4fd8]">
+                    <div className="rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[13px] text-p-accent">
                       {(recurringResult?.generatedCount ?? 0) === 0
                         ? 'No se creó ningún turno porque todos los horarios se superponen.'
                         : (recurringResult?.skippedCount ?? 0) > 0
@@ -9350,12 +9350,12 @@ export default function AdminAgendaPlaygroundPage() {
                           : 'La serie se creó correctamente.'}
                     </div>
                     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-                      <div className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between">
+                      <div className="rounded-lg bg-p-surface-2 px-3 py-2 text-xs text-p-text-secondary flex justify-between">
                         <span>Creadas</span>
                         <strong>{recurringResult?.generatedCount ?? 0}</strong>
                       </div>
                       {(recurringResult?.skippedCount ?? 0) > 0 && (
-                        <div className="rounded-lg bg-[#fff4f6] px-3 py-2 text-xs text-[#8f2f46] flex justify-between">
+                        <div className="rounded-lg bg-p-error-bg px-3 py-2 text-xs text-p-error flex justify-between">
                           <span>Omitidas por superposición</span>
                           <strong>{recurringResult?.skippedCount ?? recurringOverlapItems.length}</strong>
                         </div>
@@ -9363,18 +9363,18 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
                     {Boolean(recurringResult?.hasExplicitLimit) && recurringCreatedItems.length > 0 && (
                       <div>
-                        <p className="text-[13px] font-semibold text-[#4e5870] mb-2">
+                        <p className="text-[13px] font-semibold text-p-text-secondary mb-2">
                           Turnos creados ({recurringCreatedItems.length})
                         </p>
-                        <div className="max-h-64 overflow-y-auto rounded-xl border border-[#e3e8f2] bg-white divide-y divide-[#eef1f6]">
+                        <div className="max-h-64 overflow-y-auto rounded-xl border border-p-border bg-p-surface divide-y divide-p-border">
                           {recurringCreatedItems.map((item, index) => (
                             <div key={`created-item-${item.bookingId ?? index}`} className="px-3 py-2">
-                              <p className="text-[13px] font-semibold text-[#27314b]">{item.courtName}</p>
-                              <p className="text-[12px] text-[#68738e]">
+                              <p className="text-[13px] font-semibold text-p-text">{item.courtName}</p>
+                              <p className="text-[12px] text-p-text-secondary">
                                 {item.requestedDateLabel} · {item.requestedTimeLabel}
                               </p>
                               {item.activityName && (
-                                <p className="text-[11px] text-[#8a93a7]">
+                                <p className="text-[11px] text-p-text-muted">
                                   Actividad: {item.activityName}
                                 </p>
                               )}
@@ -9385,24 +9385,24 @@ export default function AdminAgendaPlaygroundPage() {
                     )}
                     {recurringOverlapItems.length > 0 && (
                       <div>
-                        <p className="text-[13px] font-semibold text-[#4e5870] mb-2">
+                        <p className="text-[13px] font-semibold text-p-text-secondary mb-2">
                           Detalle ({recurringOverlapItems.length})
                         </p>
-                        <div className="max-h-64 overflow-y-auto rounded-xl border border-[#e3e8f2] bg-white divide-y divide-[#eef1f6]">
+                        <div className="max-h-64 overflow-y-auto rounded-xl border border-p-border bg-p-surface divide-y divide-p-border">
                           {recurringOverlapItems.map((item, index) => (
                             <div key={`overlap-item-${index}`} className="px-3 py-2">
-                              <p className="text-[13px] font-semibold text-[#27314b]">{item.courtName}</p>
-                              <p className="text-[12px] text-[#68738e]">
+                              <p className="text-[13px] font-semibold text-p-text">{item.courtName}</p>
+                              <p className="text-[12px] text-p-text-secondary">
                                 Solicitada: {item.requestedDateLabel} · {item.requestedTimeLabel}
                               </p>
                               {(item.conflictingDateLabel || item.conflictingTimeLabel) && (
-                                <p className="text-[11px] text-[#8a93a7]">
+                                <p className="text-[11px] text-p-text-muted">
                                   Ocupada: {item.conflictingDateLabel || item.requestedDateLabel}
                                   {item.conflictingTimeLabel ? ` · ${item.conflictingTimeLabel}` : ''}
                                 </p>
                               )}
                               {(item.clientName || item.activityName) && (
-                                <p className="text-[11px] text-[#8a93a7]">
+                                <p className="text-[11px] text-p-text-muted">
                                   En conflicto con: {[item.clientName, item.activityName].filter(Boolean).join(' · ')}
                                 </p>
                               )}
@@ -9415,7 +9415,7 @@ export default function AdminAgendaPlaygroundPage() {
                       <button
                         type="button"
                         onClick={closeRecurringResultModal}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900"
                       >
                         <Check size={14} />
                         Entendido
@@ -9428,7 +9428,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {editSeriesScopeModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/40 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -9440,11 +9440,11 @@ export default function AdminAgendaPlaygroundPage() {
                 }
               >
                 <div
-                  className="w-full max-w-[640px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[640px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">Editar serie</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-text">Editar serie</h3>
                     <button
                       type="button"
                       onClick={() => {
@@ -9453,7 +9453,7 @@ export default function AdminAgendaPlaygroundPage() {
                         setSeriesEditPreviewSummary(null);
                       }}
                       disabled={isSubmittingBooking}
-                      className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc] disabled:opacity-50"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2 disabled:opacity-50"
                     >
                       <X size={15} />
                     </button>
@@ -9461,7 +9461,7 @@ export default function AdminAgendaPlaygroundPage() {
                   <div className="px-5 py-5 space-y-4">
                     {!seriesEditPreviewScope ? (
                       <>
-                        <p className="text-[13px] text-[#5e6880]">
+                        <p className="text-[13px] text-p-text-secondary">
                           Elegí el alcance de esta edición para previsualizar impacto y superposiciones.
                         </p>
                         <div className="space-y-2">
@@ -9469,34 +9469,34 @@ export default function AdminAgendaPlaygroundPage() {
                             type="button"
                             onClick={() => void previewSeriesEditScope('THIS_OCCURRENCE')}
                             disabled={isSubmittingBooking || seriesEditPreviewLoading}
-                            className="w-full rounded-xl border border-[#dce2ee] bg-white px-4 py-3 text-left hover:bg-[#f8faff] disabled:opacity-50"
+                            className="w-full rounded-xl border border-p-border bg-p-surface px-4 py-3 text-left hover:bg-p-surface-2 disabled:opacity-50"
                           >
-                            <p className="text-[14px] font-semibold text-[#27314b]">Editar solo esta ocurrencia</p>
-                            <p className="mt-1 text-[12px] text-[#6f7890]">Solo cambia este turno puntual.</p>
+                            <p className="text-[14px] font-semibold text-p-text">Editar solo esta ocurrencia</p>
+                            <p className="mt-1 text-[12px] text-p-text-muted">Solo cambia este turno puntual.</p>
                           </button>
                           <button
                             type="button"
                             onClick={() => void previewSeriesEditScope('NEXT_OCCURRENCES')}
                             disabled={isSubmittingBooking || seriesEditPreviewLoading}
-                            className="w-full rounded-xl border border-[#dce2ee] bg-white px-4 py-3 text-left hover:bg-[#f8faff] disabled:opacity-50"
+                            className="w-full rounded-xl border border-p-border bg-p-surface px-4 py-3 text-left hover:bg-p-surface-2 disabled:opacity-50"
                           >
-                            <p className="text-[14px] font-semibold text-[#27314b]">Editar esta y las siguientes ocurrencias</p>
-                            <p className="mt-1 text-[12px] text-[#6f7890]">Aplica desde este turno en adelante dentro de la serie.</p>
+                            <p className="text-[14px] font-semibold text-p-text">Editar esta y las siguientes ocurrencias</p>
+                            <p className="mt-1 text-[12px] text-p-text-muted">Aplica desde este turno en adelante dentro de la serie.</p>
                           </button>
                           <button
                             type="button"
                             onClick={() => void previewSeriesEditScope('ALL_OCCURRENCES')}
                             disabled={isSubmittingBooking || seriesEditPreviewLoading}
-                            className="w-full rounded-xl border border-[#dce2ee] bg-white px-4 py-3 text-left hover:bg-[#f8faff] disabled:opacity-50"
+                            className="w-full rounded-xl border border-p-border bg-p-surface px-4 py-3 text-left hover:bg-p-surface-2 disabled:opacity-50"
                           >
-                            <p className="text-[14px] font-semibold text-[#27314b]">Editar toda la serie</p>
-                            <p className="mt-1 text-[12px] text-[#6f7890]">Aplica a las ocurrencias futuras de la serie.</p>
+                            <p className="text-[14px] font-semibold text-p-text">Editar toda la serie</p>
+                            <p className="mt-1 text-[12px] text-p-text-muted">Aplica a las ocurrencias futuras de la serie.</p>
                           </button>
                         </div>
                       </>
                     ) : (
                       <>
-                        <p className="text-[13px] text-[#5e6880]">
+                        <p className="text-[13px] text-p-text-secondary">
                           Previsualización: {
                             seriesEditPreviewScope === 'THIS_OCCURRENCE'
                               ? 'solo esta ocurrencia'
@@ -9506,27 +9506,27 @@ export default function AdminAgendaPlaygroundPage() {
                           }.
                         </p>
                         {seriesEditPreviewLoading && !seriesEditPreviewSummary && (
-                          <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-4 py-5">
+                          <div className="rounded-xl border border-p-accent bg-p-positive-bg px-4 py-5">
                             <div className="flex items-center justify-center">
-                              <span className="h-4 w-4 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
+                              <span className="h-4 w-4 rounded-full border-2 border-p-accent border-t-p-accent animate-spin" />
                             </div>
                           </div>
                         )}
                         {seriesEditPreviewSummary && (
-                          <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[13px] text-[#2f4fd8]">
+                          <div className="rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[13px] text-p-accent">
                             <p>Se actualizarán <strong>{seriesEditPreviewSummary.applicableCount}</strong> ocurrencias.</p>
                             <p>Se omitirán <strong>{seriesEditPreviewSummary.skippedCount}</strong> ocurrencias.</p>
                           </div>
                         )}
                         {Boolean(seriesEditPreviewSummary?.applicableItems.length) && (
-                          <div className="rounded-xl border border-[#dce2ee] bg-white">
-                            <div className="border-b border-[#e8edf7] px-3 py-2 text-[12px] font-semibold text-[#465474]">
+                          <div className="rounded-xl border border-p-border bg-p-surface">
+                            <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                               Ocurrencias a actualizar ({seriesEditPreviewSummary.applicableItems.length})
                             </div>
-                            <div className="max-h-44 overflow-y-auto divide-y divide-[#eef2f8]">
+                            <div className="max-h-44 overflow-y-auto divide-y divide-p-border">
                               {seriesEditPreviewSummary.applicableItems.map((item, index) => (
-                                <div key={`edit-series-applicable-${index}`} className="px-3 py-2 text-[12px] text-[#4f5a72]">
-                                  <p className="font-semibold text-[#2a3245]">{item.courtName}</p>
+                                <div key={`edit-series-applicable-${index}`} className="px-3 py-2 text-[12px] text-p-text-secondary">
+                                  <p className="font-semibold text-p-text">{item.courtName}</p>
                                   <p>{item.requestedDateLabel} · {item.requestedTimeLabel}</p>
                                   {item.activityName && <p>{item.activityName}</p>}
                                 </div>
@@ -9535,17 +9535,17 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
                         )}
                         {Boolean(seriesEditPreviewSummary?.overlapItems.length) && (
-                          <div className="rounded-xl border border-[#dce2ee] bg-[#fbfcff]">
-                            <div className="border-b border-[#e8edf7] px-3 py-2 text-[12px] font-semibold text-[#5b6681]">
+                          <div className="rounded-xl border border-p-border bg-p-surface-2">
+                            <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                               Superposiciones detectadas ({seriesEditPreviewSummary.overlapItems.length})
                             </div>
-                            <div className="max-h-48 overflow-y-auto divide-y divide-[#eef2f8]">
+                            <div className="max-h-48 overflow-y-auto divide-y divide-p-border">
                               {seriesEditPreviewSummary.overlapItems.map((item, index) => (
-                                <div key={`edit-series-overlap-${index}`} className="px-3 py-2 text-[12px] text-[#4f5a72]">
-                                  <p className="font-semibold text-[#2a3245]">{item.courtName}</p>
+                                <div key={`edit-series-overlap-${index}`} className="px-3 py-2 text-[12px] text-p-text-secondary">
+                                  <p className="font-semibold text-p-text">{item.courtName}</p>
                                   <p>{item.requestedDateLabel} · {item.requestedTimeLabel}</p>
                                   {item.conflictingDateLabel && item.conflictingTimeLabel && (
-                                    <p className="text-[#7b859d]">
+                                    <p className="text-p-text-muted">
                                       Conflicta con {item.conflictingDateLabel} · {item.conflictingTimeLabel}
                                     </p>
                                   )}
@@ -9555,7 +9555,7 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
                         )}
                         {Boolean(seriesEditPreviewSummary?.failureMessages.length) && (
-                          <div className="rounded-xl border border-[#f3ccd5] bg-[#fff4f6] px-3 py-2 text-[12px] text-[#b13a55]">
+                          <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">
                             {seriesEditPreviewSummary.failureMessages.join(' · ')}
                           </div>
                         )}
@@ -9567,7 +9567,7 @@ export default function AdminAgendaPlaygroundPage() {
                               setSeriesEditPreviewSummary(null);
                             }}
                             disabled={isSubmittingBooking}
-                            className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                            className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2"
                           >
                             Cambiar alcance
                           </button>
@@ -9575,7 +9575,7 @@ export default function AdminAgendaPlaygroundPage() {
                             type="button"
                             onClick={() => void handleCreateBooking(false, seriesEditPreviewSummary?.scope || seriesEditPreviewScope)}
                             disabled={isSubmittingBooking || pendingSeriesScopeSave !== null || !seriesEditPreviewSummary}
-                            className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc] disabled:opacity-50"
+                            className="h-10 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900 disabled:opacity-50"
                           >
                             Guardar cambios de serie
                           </button>
@@ -9583,9 +9583,9 @@ export default function AdminAgendaPlaygroundPage() {
                       </>
                     )}
                     {pendingSeriesScopeSave && (
-                      <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-4 py-3">
+                      <div className="rounded-xl border border-p-accent bg-p-positive-bg px-4 py-3">
                         <div className="flex items-center justify-center">
-                          <span className="h-4 w-4 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
+                          <span className="h-4 w-4 rounded-full border-2 border-p-accent border-t-p-accent animate-spin" />
                         </div>
                       </div>
                     )}
@@ -9596,7 +9596,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteSeriesScopeModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/40 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -9608,11 +9608,11 @@ export default function AdminAgendaPlaygroundPage() {
                 }
               >
                 <div
-                  className="w-full max-w-[640px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[640px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">Cancelar serie</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-text">Cancelar serie</h3>
                     <button
                       type="button"
                       onClick={() => {
@@ -9621,7 +9621,7 @@ export default function AdminAgendaPlaygroundPage() {
                         setSeriesDeletePreviewSummary(null);
                       }}
                       disabled={isDeletingBooking}
-                      className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc] disabled:opacity-50"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2 disabled:opacity-50"
                     >
                       <X size={15} />
                     </button>
@@ -9629,7 +9629,7 @@ export default function AdminAgendaPlaygroundPage() {
                   <div className="px-5 py-5 space-y-4">
                     {!seriesDeletePreviewScope ? (
                       <>
-                        <p className="text-[13px] text-[#5e6880]">
+                        <p className="text-[13px] text-p-text-secondary">
                           Elegí el alcance para previsualizar cuántas ocurrencias se cancelarán.
                         </p>
                         <div className="space-y-2">
@@ -9637,34 +9637,34 @@ export default function AdminAgendaPlaygroundPage() {
                             type="button"
                             onClick={() => void previewSeriesDeleteScope('THIS_OCCURRENCE')}
                             disabled={isDeletingBooking || seriesDeletePreviewLoading}
-                            className="w-full rounded-xl border border-[#dce2ee] bg-white px-4 py-3 text-left hover:bg-[#f8faff] disabled:opacity-50"
+                            className="w-full rounded-xl border border-p-border bg-p-surface px-4 py-3 text-left hover:bg-p-surface-2 disabled:opacity-50"
                           >
-                            <p className="text-[14px] font-semibold text-[#27314b]">Cancelar solo esta ocurrencia</p>
-                            <p className="mt-1 text-[12px] text-[#6f7890]">Solo cancela este turno puntual.</p>
+                            <p className="text-[14px] font-semibold text-p-text">Cancelar solo esta ocurrencia</p>
+                            <p className="mt-1 text-[12px] text-p-text-muted">Solo cancela este turno puntual.</p>
                           </button>
                           <button
                             type="button"
                             onClick={() => void previewSeriesDeleteScope('NEXT_OCCURRENCES')}
                             disabled={isDeletingBooking || seriesDeletePreviewLoading}
-                            className="w-full rounded-xl border border-[#dce2ee] bg-white px-4 py-3 text-left hover:bg-[#f8faff] disabled:opacity-50"
+                            className="w-full rounded-xl border border-p-border bg-p-surface px-4 py-3 text-left hover:bg-p-surface-2 disabled:opacity-50"
                           >
-                            <p className="text-[14px] font-semibold text-[#27314b]">Cancelar esta y las siguientes</p>
-                            <p className="mt-1 text-[12px] text-[#6f7890]">Aplica desde este turno en adelante dentro de la serie.</p>
+                            <p className="text-[14px] font-semibold text-p-text">Cancelar esta y las siguientes</p>
+                            <p className="mt-1 text-[12px] text-p-text-muted">Aplica desde este turno en adelante dentro de la serie.</p>
                           </button>
                           <button
                             type="button"
                             onClick={() => void previewSeriesDeleteScope('ALL_OCCURRENCES')}
                             disabled={isDeletingBooking || seriesDeletePreviewLoading}
-                            className="w-full rounded-xl border border-[#dce2ee] bg-white px-4 py-3 text-left hover:bg-[#f8faff] disabled:opacity-50"
+                            className="w-full rounded-xl border border-p-border bg-p-surface px-4 py-3 text-left hover:bg-p-surface-2 disabled:opacity-50"
                           >
-                            <p className="text-[14px] font-semibold text-[#27314b]">Cancelar toda la serie futura</p>
-                            <p className="mt-1 text-[12px] text-[#6f7890]">Cancela todas las ocurrencias pendientes de la serie.</p>
+                            <p className="text-[14px] font-semibold text-p-text">Cancelar toda la serie futura</p>
+                            <p className="mt-1 text-[12px] text-p-text-muted">Cancela todas las ocurrencias pendientes de la serie.</p>
                           </button>
                         </div>
                       </>
                     ) : (
                       <>
-                        <p className="text-[13px] text-[#5e6880]">
+                        <p className="text-[13px] text-p-text-secondary">
                           Previsualización: {
                             seriesDeletePreviewScope === 'THIS_OCCURRENCE'
                               ? 'solo esta ocurrencia'
@@ -9674,14 +9674,14 @@ export default function AdminAgendaPlaygroundPage() {
                           }.
                         </p>
                         {seriesDeletePreviewLoading && !seriesDeletePreviewSummary && (
-                          <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-4 py-5">
+                          <div className="rounded-xl border border-p-accent bg-p-positive-bg px-4 py-5">
                             <div className="flex items-center justify-center">
-                              <span className="h-4 w-4 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
+                              <span className="h-4 w-4 rounded-full border-2 border-p-accent border-t-p-accent animate-spin" />
                             </div>
                           </div>
                         )}
                         {seriesDeletePreviewSummary && (
-                          <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[13px] text-[#2f4fd8]">
+                          <div className="rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[13px] text-p-accent">
                             <p>Se cancelarán <strong>{seriesDeletePreviewSummary.applicableCount}</strong> ocurrencias.</p>
                             <p>Se omitirán <strong>{seriesDeletePreviewSummary.skippedCount}</strong> ocurrencias.</p>
                           </div>
@@ -9689,8 +9689,8 @@ export default function AdminAgendaPlaygroundPage() {
                         {seriesDeleteHasPaidItems && (
                           <div className={`rounded-xl border px-3 py-2 text-[12px] font-semibold ${
                             seriesDeleteBlocksMassCancel
-                              ? 'border-[#f3c8d2] bg-[#fff4f7] text-[#b42346]'
-                              : 'border-[#f2d7a6] bg-[#fff9ee] text-[#8a5a14]'
+                              ? 'border-p-error bg-p-error-bg text-p-error'
+                              : 'border-p-warning bg-p-warning-bg text-p-warning'
                           }`}>
                             {seriesDeleteBlocksMassCancel ? (
                               <>
@@ -9709,14 +9709,14 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
                         )}
                         {Boolean(seriesDeletePreviewSummary?.applicableItems.length) && (
-                          <div className="rounded-xl border border-[#dce2ee] bg-white">
-                            <div className="border-b border-[#e8edf7] px-3 py-2 text-[12px] font-semibold text-[#465474]">
+                          <div className="rounded-xl border border-p-border bg-p-surface">
+                            <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                               Ocurrencias a cancelar ({seriesDeletePreviewSummary.applicableItems.length})
                             </div>
-                            <div className="max-h-44 overflow-y-auto divide-y divide-[#eef2f8]">
+                            <div className="max-h-44 overflow-y-auto divide-y divide-p-border">
                               {seriesDeletePreviewSummary.applicableItems.map((item, index) => (
-                                <div key={`delete-series-applicable-${index}`} className="px-3 py-2 text-[12px] text-[#4f5a72]">
-                                  <p className="font-semibold text-[#2a3245]">{item.courtName}</p>
+                                <div key={`delete-series-applicable-${index}`} className="px-3 py-2 text-[12px] text-p-text-secondary">
+                                  <p className="font-semibold text-p-text">{item.courtName}</p>
                                   <p>{item.requestedDateLabel} · {item.requestedTimeLabel}</p>
                                   {item.activityName && <p>{item.activityName}</p>}
                                 </div>
@@ -9725,14 +9725,14 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
                         )}
                         {Boolean(seriesDeletePreviewSummary?.overlapItems.length) && (
-                          <div className="rounded-xl border border-[#dce2ee] bg-[#fbfcff]">
-                            <div className="border-b border-[#e8edf7] px-3 py-2 text-[12px] font-semibold text-[#5b6681]">
+                          <div className="rounded-xl border border-p-border bg-p-surface-2">
+                            <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                               Ocurrencias omitidas ({seriesDeletePreviewSummary.overlapItems.length})
                             </div>
-                            <div className="max-h-44 overflow-y-auto divide-y divide-[#eef2f8]">
+                            <div className="max-h-44 overflow-y-auto divide-y divide-p-border">
                               {seriesDeletePreviewSummary.overlapItems.map((item, index) => (
-                                <div key={`delete-series-skip-${index}`} className="px-3 py-2 text-[12px] text-[#4f5a72]">
-                                  <p className="font-semibold text-[#2a3245]">{item.courtName}</p>
+                                <div key={`delete-series-skip-${index}`} className="px-3 py-2 text-[12px] text-p-text-secondary">
+                                  <p className="font-semibold text-p-text">{item.courtName}</p>
                                   <p>{item.requestedDateLabel} · {item.requestedTimeLabel}</p>
                                   {item.activityName && <p>{item.activityName}</p>}
                                 </div>
@@ -9748,7 +9748,7 @@ export default function AdminAgendaPlaygroundPage() {
                               setSeriesDeletePreviewSummary(null);
                             }}
                             disabled={isDeletingBooking}
-                            className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                            className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2"
                           >
                             Cambiar alcance
                           </button>
@@ -9786,7 +9786,7 @@ export default function AdminAgendaPlaygroundPage() {
                               void handleDeleteBooking(scope);
                             }}
                             disabled={isDeletingBooking || !seriesDeletePreviewSummary || seriesDeleteBlocksMassCancel}
-                            className="h-10 rounded-xl bg-[#cf3f57] px-5 text-white text-sm font-bold hover:bg-[#b8354b] disabled:opacity-50"
+                            className="h-10 rounded-xl bg-p-error px-5 text-ink-50 text-sm font-bold hover:bg-p-error disabled:opacity-50"
                           >
                             {seriesDeleteUsesIndividualRefund ? 'Continuar devolución' : 'Confirmar cancelación'}
                           </button>
@@ -9800,21 +9800,21 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteBookingConfirmOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex justify-end p-3"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex justify-end p-3"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, closeDeleteBookingFlow)
                 }
               >
                 <div
-                  className="flex h-full w-full max-w-[560px] flex-col rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+                  className="flex h-full w-full max-w-[560px] flex-col rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-start justify-between gap-3 border-b border-[#edf1f6] px-5 py-4">
+                  <div className="flex items-start justify-between gap-3 border-b border-p-border px-5 py-4">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#98a1b3]">Agenda</p>
-                      <h3 className="mt-1 text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">Cancelar reserva</h3>
-                      <p className="mt-1 text-[12px] text-[#6f7890]">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-p-text-muted">Agenda</p>
+                      <h3 className="mt-1 text-[22px] font-bold tracking-[-0.01em] text-p-text">Cancelar reserva</h3>
+                      <p className="mt-1 text-[12px] text-p-text-muted">
                         Revisá el impacto financiero antes de confirmar.
                       </p>
                     </div>
@@ -9822,63 +9822,63 @@ export default function AdminAgendaPlaygroundPage() {
                       type="button"
                       onClick={closeDeleteBookingFlow}
                       disabled={isDeletingBooking}
-                      className="grid h-8 w-8 place-items-center rounded-full border border-[#e2e6ef] text-[#7a8398] transition hover:bg-[#f7f9fc] disabled:opacity-50"
+                      className="grid h-8 w-8 place-items-center rounded-full border border-p-border text-p-text-muted transition hover:bg-p-surface-2 disabled:opacity-50"
                     >
                       <X size={15} />
                     </button>
                   </div>
 
                   <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
-                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
+                    <div className="rounded-xl border border-p-border bg-p-surface-2 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#98a1b3]">Reserva</p>
-                          <p className="mt-1 text-[15px] font-bold text-[#27314b]">{editingBooking?.title || 'Reserva seleccionada'}</p>
-                          <p className="mt-0.5 text-[12px] text-[#6f7890]">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-p-text-muted">Reserva</p>
+                          <p className="mt-1 text-[15px] font-bold text-p-text">{editingBooking?.title || 'Reserva seleccionada'}</p>
+                          <p className="mt-0.5 text-[12px] text-p-text-muted">
                             {selectedDate.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {slotToTime(selectedStartSlot)} - {slotToTime(selectedEndSlot)}
                           </p>
                         </div>
-                        <div className="rounded-lg border border-[#dce2ee] bg-white px-3 py-2 text-right">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#98a1b3]">Cancha</p>
-                          <p className="mt-1 text-[13px] font-bold text-[#27314b]">{selectedCourt?.name || 'Sin cancha'}</p>
+                        <div className="rounded-lg border border-p-border bg-p-surface px-3 py-2 text-right">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-p-text-muted">Cancha</p>
+                          <p className="mt-1 text-[13px] font-bold text-p-text">{selectedCourt?.name || 'Sin cancha'}</p>
                         </div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Total</p>
-                        <p className="mt-1 text-[17px] font-bold text-[#1f2638]">{Number(bookingFinancial?.total || totalPrice || 0).toFixed(2)} $</p>
+                      <div className="rounded-xl border border-p-border bg-p-surface px-3 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-p-text-muted">Total</p>
+                        <p className="mt-1 text-[17px] font-bold text-p-text">{Number(bookingFinancial?.total || totalPrice || 0).toFixed(2)} $</p>
                       </div>
-                      <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Pagado</p>
-                        <p className="mt-1 text-[17px] font-bold text-[#16733f]">{cancelBookingPaidAmount.toFixed(2)} $</p>
+                      <div className="rounded-xl border border-p-border bg-p-surface px-3 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-p-text-muted">Pagado</p>
+                        <p className="mt-1 text-[17px] font-bold text-p-positive">{cancelBookingPaidAmount.toFixed(2)} $</p>
                       </div>
-                      <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Saldo</p>
-                        <p className="mt-1 text-[17px] font-bold text-[#6f7890]">{Number(bookingFinancial?.remaining || 0).toFixed(2)} $</p>
+                      <div className="rounded-xl border border-p-border bg-p-surface px-3 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-p-text-muted">Saldo</p>
+                        <p className="mt-1 text-[17px] font-bold text-p-text-muted">{Number(bookingFinancial?.remaining || 0).toFixed(2)} $</p>
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-[#dce2ee] bg-white p-4">
+                    <div className="rounded-xl border border-p-border bg-p-surface p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Devolución</p>
-                          <p className="mt-1 text-[13px] text-[#6f7890]">
+                          <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-p-text-muted">Devolución</p>
+                          <p className="mt-1 text-[13px] text-p-text-muted">
                             {cancelBookingHasPayments
                               ? 'Se generará una devolución asociada a la cancelación.'
                               : 'Esta reserva no tiene pagos registrados.'}
                           </p>
                         </div>
                         {cancelBookingHasPayments && (
-                          <span className="rounded-full bg-[#eef2ff] px-2.5 py-1 text-[11px] font-bold text-[#3053e2]">
+                          <span className="rounded-full bg-p-positive-bg px-2.5 py-1 text-[11px] font-bold text-p-accent">
                             Disponible {cancelBookingPaidAmount.toFixed(2)} $
                           </span>
                         )}
                       </div>
 
                       {isBookingFinancialLoading && (
-                        <div className="mt-3 rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[12px] font-semibold text-[#3053e2]">
+                        <div className="mt-3 rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[12px] font-semibold text-p-accent">
                           Cargando impacto financiero...
                         </div>
                       )}
@@ -9886,7 +9886,7 @@ export default function AdminAgendaPlaygroundPage() {
                       {cancelBookingHasPayments && (
                         <div className="mt-4 space-y-3">
                           <div>
-                            <label className="text-[11px] font-semibold text-[#6f7890]">Monto a devolver</label>
+                            <label className="text-[11px] font-semibold text-p-text-muted">Monto a devolver</label>
                             <input
                               type="number"
                               min={0}
@@ -9896,16 +9896,16 @@ export default function AdminAgendaPlaygroundPage() {
                                 setCancelRefundAmountInput(event.target.value);
                                 setCancelBookingFlowError('');
                               }}
-                              className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#27314b] outline-none focus:border-[#3053e2]"
+                              className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] font-semibold text-p-text outline-none focus:border-p-accent"
                             />
                           </div>
 
                           <div>
-                            <label className="text-[11px] font-semibold text-[#6f7890]">Motivo</label>
+                            <label className="text-[11px] font-semibold text-p-text-muted">Motivo</label>
                             <select
                               value={cancelRefundReasonType}
                               onChange={(event) => setCancelRefundReasonType(event.target.value as CancelRefundReasonType)}
-                              className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#27314b] outline-none focus:border-[#3053e2]"
+                              className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] font-semibold text-p-text outline-none focus:border-p-accent"
                             >
                               {cancelRefundReasonOptions.map((option) => (
                                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -9914,18 +9914,18 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
 
                           <div>
-                            <label className="text-[11px] font-semibold text-[#6f7890]">Nota interna</label>
+                            <label className="text-[11px] font-semibold text-p-text-muted">Nota interna</label>
                             <textarea
                               value={cancelRefundExecutionNotes}
                               onChange={(event) => setCancelRefundExecutionNotes(event.target.value)}
                               rows={3}
                               maxLength={500}
                               placeholder="Detalle operativo de la devolución"
-                              className="mt-1 w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[13px] font-semibold text-[#27314b] outline-none focus:border-[#3053e2]"
+                              className="mt-1 w-full resize-none rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[13px] font-semibold text-p-text outline-none focus:border-p-accent"
                             />
                           </div>
 
-                          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
                             <input
                               type="checkbox"
                               checked={cancelRefundExecuteNow}
@@ -9933,28 +9933,28 @@ export default function AdminAgendaPlaygroundPage() {
                                 setCancelRefundExecuteNow(event.target.checked);
                                 setCancelBookingFlowError('');
                               }}
-                              className="h-4 w-4 accent-[#3053e2]"
+                              className="h-4 w-4 accent-p-brand"
                             />
-                            <span className="text-[12px] font-semibold text-[#27314b]">Ejecutar devolución ahora</span>
+                            <span className="text-[12px] font-semibold text-p-text">Ejecutar devolución ahora</span>
                           </label>
                         </div>
                       )}
                     </div>
 
                     {cancelBookingFlowError && (
-                      <div className="rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-3 py-2 text-[12px] font-semibold text-[#b42318]">
+                      <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error">
                         {cancelBookingFlowError}
                       </div>
                     )}
                   </div>
 
-                  <div className="border-t border-[#edf1f6] px-5 py-4">
+                  <div className="border-t border-p-border px-5 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
                         onClick={closeDeleteBookingFlow}
                         disabled={isDeletingBooking}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc] disabled:opacity-50"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2 disabled:opacity-50"
                       >
                         <ChevronLeft size={14} />
                         Volver
@@ -9971,7 +9971,7 @@ export default function AdminAgendaPlaygroundPage() {
                           setDeleteBookingFinalConfirmOpen(true);
                         }}
                         disabled={isDeletingBooking || isBookingFinancialLoading}
-                        className="h-10 rounded-xl bg-[#cf3f57] px-5 text-sm font-bold text-white hover:bg-[#b8354b] disabled:opacity-50"
+                        className="h-10 rounded-xl bg-p-error px-5 text-sm font-bold text-ink-50 hover:bg-p-error disabled:opacity-50"
                       >
                         Cancelar reserva
                       </button>
@@ -9983,7 +9983,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteBookingFinalConfirmOpen && (
               <div
-                className="fixed inset-0 z-[2147483300] flex items-center justify-center bg-[#11162a]/45 p-4"
+                className="fixed inset-0 z-[2147483300] flex items-center justify-center bg-[var(--overlay)] p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -9992,14 +9992,14 @@ export default function AdminAgendaPlaygroundPage() {
                 }
               >
                 <div
-                  className="w-full max-w-[460px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[460px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="border-b border-[#edf1f6] px-5 py-4">
-                    <h3 className="text-[21px] font-bold tracking-[-0.01em] text-[#222a3d]">Confirmar cancelación</h3>
+                  <div className="border-b border-p-border px-5 py-4">
+                    <h3 className="text-[21px] font-bold tracking-[-0.01em] text-p-text">Confirmar cancelación</h3>
                   </div>
                   <div className="space-y-4 px-5 py-5">
-                    <p className="text-[14px] text-[#4b556d]">
+                    <p className="text-[14px] text-p-text-secondary">
                       {cancelBookingHasPayments
                         ? `Vas a cancelar esta reserva y devolver ${normalizedCancelRefundAmount.toFixed(2)} $.`
                         : 'Vas a cancelar esta reserva sin generar devolución.'}
@@ -10009,7 +10009,7 @@ export default function AdminAgendaPlaygroundPage() {
                         type="button"
                         onClick={() => setDeleteBookingFinalConfirmOpen(false)}
                         disabled={isDeletingBooking}
-                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc] disabled:opacity-50"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2 disabled:opacity-50"
                       >
                         <ChevronLeft size={14} />
                         Volver
@@ -10018,7 +10018,7 @@ export default function AdminAgendaPlaygroundPage() {
                         type="button"
                         onClick={() => void confirmCancelBookingFromDrawer()}
                         disabled={isDeletingBooking}
-                        className="h-10 rounded-xl bg-[#cf3f57] px-5 text-sm font-bold text-white hover:bg-[#b8354b] disabled:opacity-50"
+                        className="h-10 rounded-xl bg-p-error px-5 text-sm font-bold text-ink-50 hover:bg-p-error disabled:opacity-50"
                       >
                         {isDeletingBooking ? 'Cancelando...' : 'Confirmar'}
                       </button>
@@ -10030,43 +10030,43 @@ export default function AdminAgendaPlaygroundPage() {
 
             {seriesOperationResultOpen && seriesOperationResult && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, closeSeriesOperationResult)
                 }
               >
                 <div
-                  className="w-full max-w-[620px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[620px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">{seriesOperationResult.title}</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-text">{seriesOperationResult.title}</h3>
                     <button
                       type="button"
                       onClick={closeSeriesOperationResult}
-                      className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
                     >
                       <X size={15} />
                     </button>
                   </div>
                   <div className="px-5 py-5 space-y-4">
-                    <p className="text-[14px] text-[#4b556d]">{seriesOperationResult.detail}</p>
-                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8fafd] px-3 py-2 text-[13px] text-[#2a3245]">
+                    <p className="text-[14px] text-p-text-secondary">{seriesOperationResult.detail}</p>
+                    <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2 text-[13px] text-p-text">
                       <p>Aplicadas: <strong>{seriesOperationResult.appliedCount}</strong></p>
                       <p>Omitidas: <strong>{seriesOperationResult.skippedCount}</strong></p>
                     </div>
                     {seriesOperationResult.appliedItems.length > 0 && (
-                      <div className="rounded-xl border border-[#dce2ee] bg-white">
-                        <div className="border-b border-[#e8edf7] px-3 py-2 text-[12px] font-semibold text-[#5b6681]">
+                      <div className="rounded-xl border border-p-border bg-p-surface">
+                        <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                           {seriesOperationResult.mode === 'delete'
                             ? `Canceladas (${seriesOperationResult.appliedItems.length})`
                             : `Actualizadas (${seriesOperationResult.appliedItems.length})`}
                         </div>
-                        <div className="max-h-44 overflow-y-auto divide-y divide-[#eef2f8]">
+                        <div className="max-h-44 overflow-y-auto divide-y divide-p-border">
                           {seriesOperationResult.appliedItems.map((item, index) => (
-                            <div key={`series-operation-applied-${index}`} className="px-3 py-2 text-[12px] text-[#4f5a72]">
-                              <p className="font-semibold text-[#2a3245]">{item.courtName}</p>
+                            <div key={`series-operation-applied-${index}`} className="px-3 py-2 text-[12px] text-p-text-secondary">
+                              <p className="font-semibold text-p-text">{item.courtName}</p>
                               <p>{item.requestedDateLabel} · {item.requestedTimeLabel}</p>
                               {item.activityName && <p>{item.activityName}</p>}
                             </div>
@@ -10075,14 +10075,14 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                     )}
                     {seriesOperationResult.overlapItems.length > 0 && (
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#fbfcff]">
-                        <div className="border-b border-[#e8edf7] px-3 py-2 text-[12px] font-semibold text-[#5b6681]">
+                      <div className="rounded-xl border border-p-border bg-p-surface-2">
+                        <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                           Detalle ({seriesOperationResult.overlapItems.length})
                         </div>
-                        <div className="max-h-44 overflow-y-auto divide-y divide-[#eef2f8]">
+                        <div className="max-h-44 overflow-y-auto divide-y divide-p-border">
                           {seriesOperationResult.overlapItems.map((item, index) => (
-                            <div key={`series-operation-result-${index}`} className="px-3 py-2 text-[12px] text-[#4f5a72]">
-                              <p className="font-semibold text-[#2a3245]">{item.courtName}</p>
+                            <div key={`series-operation-result-${index}`} className="px-3 py-2 text-[12px] text-p-text-secondary">
+                              <p className="font-semibold text-p-text">{item.courtName}</p>
                               <p>{item.requestedDateLabel} · {item.requestedTimeLabel}</p>
                               {item.activityName && <p>{item.activityName}</p>}
                             </div>
@@ -10094,7 +10094,7 @@ export default function AdminAgendaPlaygroundPage() {
                       <button
                         type="button"
                         onClick={closeSeriesOperationResult}
-                        className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="h-10 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900"
                       >
                         Entendido
                       </button>
@@ -10106,7 +10106,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteParticipantConfirm.open && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () =>
@@ -10115,25 +10115,25 @@ export default function AdminAgendaPlaygroundPage() {
                 }
               >
                 <div
-                  className="w-full max-w-[500px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+                  className="w-full max-w-[500px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#222a3d]">Eliminar participante</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-text">Eliminar participante</h3>
                     <button
                       type="button"
                       onClick={() => setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' })}
-                      className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
                     >
                       <X size={15} />
                     </button>
                   </div>
                   <div className="px-5 py-5 space-y-4">
-                    <p className="text-[14px] text-[#4b556d]">
+                    <p className="text-[14px] text-p-text-secondary">
                       ¿Querés eliminar a <strong>{deleteParticipantConfirm.participantName}</strong> de esta reserva?
                     </p>
                     {deleteParticipantContext.isChargeResponsible && (
-                      <p className="rounded-lg border border-[#ffe5b5] bg-[#fff8ea] px-3 py-2 text-[12px] text-[#8a5a14]">
+                      <p className="rounded-lg border border-p-warning bg-p-warning-bg px-3 py-2 text-[12px] text-p-warning">
                         Este participante es el responsable de pago actual. Al eliminarlo, el responsable pasará a{' '}
                         <strong>{deleteParticipantContext.nextResponsibleLabel || 'otro participante disponible'}</strong>.
                       </p>
@@ -10142,7 +10142,7 @@ export default function AdminAgendaPlaygroundPage() {
                       <button
                         type="button"
                         onClick={() => setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' })}
-                        className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+                        className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2"
                       >
                         Volver
                       </button>
@@ -10155,7 +10155,7 @@ export default function AdminAgendaPlaygroundPage() {
                           }
                           setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' });
                         }}
-                        className="h-10 rounded-xl bg-[#cf3f57] px-5 text-white text-sm font-bold hover:bg-[#b8354b]"
+                        className="h-10 rounded-xl bg-p-error px-5 text-ink-50 text-sm font-bold hover:bg-p-error"
                       >
                         Sí, eliminar
                       </button>
@@ -10167,38 +10167,38 @@ export default function AdminAgendaPlaygroundPage() {
 
             {blockingErrorModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => setBlockingErrorModalOpen(false))
                 }
               >
                 <div
-                  className="w-full max-w-[560px] rounded-2xl border border-[#efc8d2] bg-white shadow-2xl"
+                  className="w-full max-w-[560px] rounded-2xl border border-p-error bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#f4dce3]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#b42346]">No se puede continuar</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-error">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-error">No se puede continuar</h3>
                     <button
                       type="button"
                       onClick={() => setBlockingErrorModalOpen(false)}
-                      className="h-8 w-8 rounded-full border border-[#eac7d0] grid place-items-center text-[#b65a70] hover:bg-[#fff6f8]"
+                      className="h-8 w-8 rounded-full border border-p-error grid place-items-center text-p-error hover:bg-p-error-bg"
                     >
                       <X size={15} />
                     </button>
                   </div>
                   <div className="px-5 py-5 space-y-4">
-                    <p className="text-[14px] text-[#5b4550]">
+                    <p className="text-[14px] text-p-text-secondary">
                       Corregí primero la fecha/cancha/horario para poder seguir con pagos y participantes.
                     </p>
-                    <div className="rounded-lg border border-[#f1c5d0] bg-[#fff4f7] px-3 py-2">
-                      <p className="text-[13px] font-semibold text-[#b42346]">{blockingActionMessage}</p>
+                    <div className="rounded-lg border border-p-error bg-p-error-bg px-3 py-2">
+                      <p className="text-[13px] font-semibold text-p-error">{blockingActionMessage}</p>
                     </div>
                     <div className="flex items-center justify-end">
                       <button
                         type="button"
                         onClick={() => setBlockingErrorModalOpen(false)}
-                        className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="h-10 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900"
                       >
                         Entendido
                       </button>
@@ -10210,35 +10210,35 @@ export default function AdminAgendaPlaygroundPage() {
 
             {bookingCreatedModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[#11162a]/35 flex items-center justify-center p-4"
+                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => setBookingCreatedModalOpen(false))
                 }
               >
                 <div
-                  className="w-full max-w-[520px] rounded-2xl border border-[#d8e5ff] bg-white shadow-2xl"
+                  className="w-full max-w-[520px] rounded-2xl border border-p-accent bg-p-surface shadow-2xl"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-[#e8efff]">
-                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-[#22408f]">Reserva creada</h3>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
+                    <h3 className="text-[23px] font-bold tracking-[-0.01em] text-p-accent">Reserva creada</h3>
                     <button
                       type="button"
                       onClick={() => setBookingCreatedModalOpen(false)}
-                      className="h-8 w-8 rounded-full border border-[#dbe2ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+                      className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
                     >
                       <X size={15} />
                     </button>
                   </div>
                   <div className="px-5 py-5 space-y-4">
-                    <p className="text-[14px] text-[#4a5674]">
+                    <p className="text-[14px] text-p-text-secondary">
                       La reserva se creó correctamente y quedó abierta para edición.
                     </p>
                     <div className="flex items-center justify-end">
                       <button
                         type="button"
                         onClick={() => setBookingCreatedModalOpen(false)}
-                        className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                        className="h-10 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900"
                       >
                         Entendido
                       </button>
@@ -10252,33 +10252,33 @@ export default function AdminAgendaPlaygroundPage() {
               <button
                 type="button"
                 aria-label="Cerrar panel"
-                className="absolute inset-0 z-50 bg-[#101326]/20"
+                className="absolute inset-0 z-50 bg-[var(--overlay)]"
                 onClick={() => setDrawerOpen(false)}
               />
             )}
 
             <aside
-              className={`absolute inset-y-0 right-0 z-[60] w-full md:max-w-[670px] border-l border-[#e6e8ee] bg-white shadow-2xl transition-transform duration-300 ${
+              className={`absolute inset-y-0 right-0 z-[60] w-full md:max-w-[670px] border-l border-p-border bg-p-surface shadow-2xl transition-transform duration-300 ${
                 drawerOpen ? 'translate-x-0' : 'translate-x-full'
               }`}
             >
               <div className="relative h-full w-full flex flex-col">
                 {isWaitingQueuedPaymentConfirmation && (
-                  <div className="absolute inset-0 z-50 bg-white/65 backdrop-blur-[1px] flex items-center justify-center">
-                    <div className="rounded-2xl border border-[#dbe2ef] bg-white px-5 py-4 shadow-xl text-center">
-                      <div className="mx-auto h-8 w-8 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
-                      <p className="mt-3 text-[14px] font-semibold text-[#2a3245]">
+                  <div className="absolute inset-0 z-50 bg-p-surface/65 backdrop-blur-[1px] flex items-center justify-center">
+                    <div className="rounded-2xl border border-p-border bg-p-surface px-5 py-4 shadow-xl text-center">
+                      <div className="mx-auto h-8 w-8 rounded-full border-2 border-p-accent border-t-p-accent animate-spin" />
+                      <p className="mt-3 text-[14px] font-semibold text-p-text">
                         Confirmando pago...
                       </p>
-                      <p className="mt-1 text-[12px] text-[#6f7890]">
+                      <p className="mt-1 text-[12px] text-p-text-muted">
                         Esperando confirmación del sistema.
                       </p>
                     </div>
                   </div>
                 )}
-                <header className="border-b border-[#eef0f5] px-6 py-5 flex items-start justify-between gap-4">
+                <header className="border-b border-p-border px-6 py-5 flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-[#1a2035]">
+                    <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-p-text">
                       {sidebarTitle}
                     </h2>
                     {!useSimplifiedBookingSidebar && (
@@ -10286,14 +10286,14 @@ export default function AdminAgendaPlaygroundPage() {
                       <button
                         type="button"
                         onClick={() => setBookingKindMenuOpen((previous) => !previous)}
-                        className="h-8 rounded-full border border-[#dbe2ff] bg-[#eef2ff] px-3 text-[13px] font-medium text-[#3155df] inline-flex items-center gap-1.5"
+                        className="h-8 rounded-full border border-p-accent bg-p-positive-bg px-3 text-[13px] font-medium text-p-accent inline-flex items-center gap-1.5"
                       >
                         <selectedBookingKind.icon size={13} />
                         {selectedBookingKind.label}
                         <ChevronDown size={14} />
                       </button>
                       {bookingKindMenuOpen && (
-                        <div className="absolute top-10 left-0 z-40 w-[420px] rounded-2xl border border-[#dfe4f1] bg-white p-2 shadow-xl">
+                        <div className="absolute top-10 left-0 z-40 w-[420px] rounded-2xl border border-p-border bg-p-surface p-2 shadow-xl">
                           <div className="space-y-1">
                             {bookingKindOptions.map((option) => (
                               <button
@@ -10304,14 +10304,14 @@ export default function AdminAgendaPlaygroundPage() {
                                   setBookingKindMenuOpen(false);
                                 }}
                                 className={`w-full text-left rounded-xl px-3 py-3 transition ${
-                                  option.value === bookingKind ? 'bg-[#eef0ff]' : 'hover:bg-[#f6f7fb]'
+                                  option.value === bookingKind ? 'bg-p-positive-bg' : 'hover:bg-p-surface-2'
                                 }`}
                               >
                                 <span className="flex items-start gap-2">
-                                  <option.icon size={17} className="mt-[1px] text-[#44527b]" />
+                                  <option.icon size={17} className="mt-[1px] text-p-text-secondary" />
                                   <span>
-                                    <span className="block text-[19px] font-bold leading-none text-[#2a3245]">{option.label}</span>
-                                    <span className="block mt-1 text-[12px] leading-snug text-[#7d879d]">{option.description}</span>
+                                    <span className="block text-[19px] font-bold leading-none text-p-text">{option.label}</span>
+                                    <span className="block mt-1 text-[12px] leading-snug text-p-text-muted">{option.description}</span>
                                   </span>
                                 </span>
                               </button>
@@ -10319,7 +10319,7 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
                         </div>
                       )}
-                      <label className="h-8 min-w-[124px] rounded-full border border-[#e2e6ef] bg-[#f8f9fc] px-3 text-[13px] font-medium text-[#3e4555] inline-flex items-center gap-1.5">
+                      <label className="h-8 min-w-[124px] rounded-full border border-p-border bg-p-surface-2 px-3 text-[13px] font-medium text-p-text-secondary inline-flex items-center gap-1.5">
                         <input
                           type="date"
                           value={formatLocalDate(selectedDate)}
@@ -10388,14 +10388,14 @@ export default function AdminAgendaPlaygroundPage() {
                       setEditingBookingId(null);
                       setEditingBaseline(null);
                     }}
-                    className="h-9 w-9 rounded-full border border-[#e4e7ee] text-[#798194] grid place-items-center hover:bg-[#f7f8fb] shrink-0"
+                    className="h-9 w-9 rounded-full border border-p-border text-p-text-muted grid place-items-center hover:bg-p-surface-2 shrink-0"
                   >
                     <X size={16} />
                   </button>
                 </header>
 
                 {useSimplifiedBookingSidebar && simplifiedIsEditingReservation && (
-                  <div className="border-b border-[#eef0f5] px-6">
+                  <div className="border-b border-p-border px-6">
                     <nav className="flex items-center gap-6 overflow-x-auto">
                       {simplifiedSectionTabs.map((tab) => {
                         const isActive = simplifiedSidebarSection === tab.id;
@@ -10406,8 +10406,8 @@ export default function AdminAgendaPlaygroundPage() {
                             onClick={() => setSimplifiedSidebarSection(tab.id)}
                             className={`h-12 border-b-2 text-[13px] font-semibold uppercase tracking-[0.02em] whitespace-nowrap transition ${
                               isActive
-                                ? 'border-[#3155df] text-[#3155df]'
-                                : 'border-transparent text-[#6f7890] hover:text-[#3f4760]'
+                                ? 'border-p-accent text-p-accent'
+                                : 'border-transparent text-p-text-muted hover:text-p-text'
                             }`}
                           >
                             {tab.label}
@@ -10420,52 +10420,52 @@ export default function AdminAgendaPlaygroundPage() {
 
                 <div ref={drawerScrollContainerRef} className="flex-1 overflow-y-auto px-6 py-6">
                   {useSimplifiedBookingSidebar ? (
-                    <section className="rounded-2xl border border-[#dce2ee] bg-white px-4 py-4">
+                    <section className="rounded-2xl border border-p-border bg-p-surface px-4 py-4">
                       {showSimplifiedDetailsSection && (simplifiedIsEditingReservation ? (
                         <>
-                          <div className="rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4">
+                          <div className="rounded-xl border border-p-border bg-p-surface-2 p-4">
                             <div className="flex items-center">
-                              <p className="text-[18px] font-semibold text-[#1f2638]">Reserva del usuario</p>
+                              <p className="text-[18px] font-semibold text-p-text">Reserva del usuario</p>
                             </div>
                             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-3">
                               <div>
-                                <p className="text-[12px] text-[#7d869b]">Titular</p>
-                                <p className="mt-0.5 text-[15px] font-medium text-[#273149]">{simplifiedSummaryOwnerLabel}</p>
+                                <p className="text-[12px] text-p-text-muted">Titular</p>
+                                <p className="mt-0.5 text-[15px] font-medium text-p-text">{simplifiedSummaryOwnerLabel}</p>
                               </div>
                               <div>
-                                <p className="text-[12px] text-[#7d869b]">Fecha</p>
-                                <p className="mt-0.5 text-[15px] font-medium text-[#273149]">{simplifiedSummaryDateLabel}</p>
+                                <p className="text-[12px] text-p-text-muted">Fecha</p>
+                                <p className="mt-0.5 text-[15px] font-medium text-p-text">{simplifiedSummaryDateLabel}</p>
                               </div>
                               <div>
-                                <p className="text-[12px] text-[#7d869b]">Origen</p>
-                                <p className="mt-0.5 text-[15px] font-medium text-[#273149]">Administrador</p>
+                                <p className="text-[12px] text-p-text-muted">Origen</p>
+                                <p className="mt-0.5 text-[15px] font-medium text-p-text">Administrador</p>
                               </div>
                               <div>
-                                <p className="text-[12px] text-[#7d869b]">Horario</p>
-                                <p className="mt-0.5 text-[15px] font-medium text-[#273149]">{simplifiedSummaryTimeLabel}</p>
+                                <p className="text-[12px] text-p-text-muted">Horario</p>
+                                <p className="mt-0.5 text-[15px] font-medium text-p-text">{simplifiedSummaryTimeLabel}</p>
                               </div>
                               <div>
-                                <p className="text-[12px] text-[#7d869b]">Cancha</p>
-                                <p className="mt-0.5 text-[15px] font-medium text-[#273149]">{simplifiedSummaryCourtLabel}</p>
+                                <p className="text-[12px] text-p-text-muted">Cancha</p>
+                                <p className="mt-0.5 text-[15px] font-medium text-p-text">{simplifiedSummaryCourtLabel}</p>
                               </div>
                             </div>
                           </div>
 
                           <div className="mt-4 max-w-[260px]">
-                            <p className="text-[12px] font-medium text-[#7a8398]">Precio</p>
-                            <div className="mt-1 h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+                            <p className="text-[12px] font-medium text-p-text-muted">Precio</p>
+                            <div className="mt-1 h-12 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
                               <input
                                 type="number"
                                 readOnly
                                 value={isFinancialDisplayPending ? '' : Number(totalPrice.toFixed(2))}
-                                className="w-full bg-transparent text-[18px] font-semibold text-[#2a3245] outline-none"
+                                className="w-full bg-transparent text-[18px] font-semibold text-p-text outline-none"
                               />
-                              <span className="ml-2 text-[18px] font-semibold text-[#8a92a5]">$</span>
+                              <span className="ml-2 text-[18px] font-semibold text-p-text-muted">$</span>
                             </div>
                           </div>
                           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
                             <div className="block">
-                              <span className="text-[12px] font-medium text-[#7a8398]">Hora de inicio</span>
+                              <span className="text-[12px] font-medium text-p-text-muted">Hora de inicio</span>
                               <PlaygroundCombo
                                 value={slotToTime(selectedStartSlot)}
                                 onChange={(nextValue) => {
@@ -10486,7 +10486,7 @@ export default function AdminAgendaPlaygroundPage() {
                               />
                             </div>
                             <div className="block">
-                              <span className="text-[12px] font-medium text-[#7a8398]">Hora de fin</span>
+                              <span className="text-[12px] font-medium text-p-text-muted">Hora de fin</span>
                               <PlaygroundCombo
                                 value={slotToTime(selectedEndSlot)}
                                 onChange={(nextValue) => {
@@ -10505,11 +10505,11 @@ export default function AdminAgendaPlaygroundPage() {
                             </div>
                             {timeFieldError && (
                               <div className="md:col-span-2">
-                                <p className="text-[12px] font-medium text-[#b42346]">{timeFieldError}</p>
+                                <p className="text-[12px] font-medium text-p-error">{timeFieldError}</p>
                               </div>
                             )}
                             <div className="block md:col-span-2">
-                              <span className="text-[12px] font-medium text-[#7a8398]">Cancha</span>
+                              <span className="text-[12px] font-medium text-p-text-muted">Cancha</span>
                               <PlaygroundCombo
                                 value={selectedCourtId}
                                 onChange={(next) => {
@@ -10522,7 +10522,7 @@ export default function AdminAgendaPlaygroundPage() {
                                 className="mt-1"
                               />
                               {courtFieldError && (
-                                <p className="mt-1 text-[12px] font-medium text-[#b42346]">{courtFieldError}</p>
+                                <p className="mt-1 text-[12px] font-medium text-p-error">{courtFieldError}</p>
                               )}
                             </div>
                           </div>
@@ -10531,21 +10531,21 @@ export default function AdminAgendaPlaygroundPage() {
                         <>
                           <div
                             data-booking-kind-menu-root="true"
-                            className="relative rounded-xl border border-[#dce2ee] bg-[#f3f5ff] px-3 py-2.5 flex items-center justify-between"
+                            className="relative rounded-xl border border-p-border bg-p-positive-bg px-3 py-2.5 flex items-center justify-between"
                           >
-                            <div className="inline-flex items-center gap-2 text-[15px] font-medium text-[#4b5fa8]">
+                            <div className="inline-flex items-center gap-2 text-[15px] font-medium text-p-accent">
                               <Clock3 size={16} />
                               <span>{bookingKind === 'recurringV2' ? 'Serie recurrente' : 'Reserva regular'}</span>
                             </div>
                             <button
                               type="button"
                               onClick={() => setBookingKindMenuOpen((previous) => !previous)}
-                              className="text-[14px] font-semibold text-[#4b5fa8] underline underline-offset-2 hover:text-[#3d4f91]"
+                              className="text-[14px] font-semibold text-p-accent underline underline-offset-2 hover:text-p-accent"
                             >
                               Cambiar tipo
                             </button>
                             {bookingKindMenuOpen && (
-                              <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl border border-[#dfe4f1] bg-white p-2 shadow-xl">
+                              <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl border border-p-border bg-p-surface p-2 shadow-xl">
                                 <div className="space-y-1">
                                   {bookingKindOptions.map((option) => {
                                     const isLockedForChange = lockedBookingKindChangeValues.has(option.value);
@@ -10564,17 +10564,17 @@ export default function AdminAgendaPlaygroundPage() {
                                         title={isLockedForChange ? 'No disponible desde Cambiar tipo' : undefined}
                                         className={`w-full rounded-xl px-3 py-3 text-left transition ${
                                           option.value === bookingKind
-                                            ? 'bg-[#eef0ff]'
+                                            ? 'bg-p-positive-bg'
                                             : isLockedForChange
                                               ? 'cursor-not-allowed opacity-45'
-                                              : 'hover:bg-[#f6f7fb]'
+                                              : 'hover:bg-p-surface-2'
                                         }`}
                                       >
                                         <span className="flex items-start gap-2">
-                                          <option.icon size={17} className="mt-[1px] text-[#44527b]" />
+                                          <option.icon size={17} className="mt-[1px] text-p-text-secondary" />
                                           <span>
-                                            <span className="block text-[16px] font-bold leading-none text-[#2a3245]">{option.label}</span>
-                                            <span className="block mt-1 text-[12px] leading-snug text-[#7d879d]">{option.description}</span>
+                                            <span className="block text-[16px] font-bold leading-none text-p-text">{option.label}</span>
+                                            <span className="block mt-1 text-[12px] leading-snug text-p-text-muted">{option.description}</span>
                                           </span>
                                         </span>
                                       </button>
@@ -10585,14 +10585,14 @@ export default function AdminAgendaPlaygroundPage() {
                             )}
                           </div>
                           {dateFieldError && (
-                            <p className="mt-2 text-[12px] font-medium text-[#b42346]">{dateFieldError}</p>
+                            <p className="mt-2 text-[12px] font-medium text-p-error">{dateFieldError}</p>
                           )}
 
                           {bookingKind === 'recurringV2' ? (
                             <>
                               <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <div className="block">
-                                  <span className="text-[12px] font-medium text-[#7a8398]">Día de repetición</span>
+                                  <span className="text-[12px] font-medium text-p-text-muted">Día de repetición</span>
                                   <PlaygroundCombo
                                     value={String(recurringDayOfWeek)}
                                     onChange={(nextValue) => {
@@ -10605,7 +10605,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   />
                                 </div>
                                 <div className="block">
-                                  <span className="text-[12px] font-medium text-[#7a8398]">Frecuencia</span>
+                                  <span className="text-[12px] font-medium text-p-text-muted">Frecuencia</span>
                                   <PlaygroundCombo
                                     value={recurringFrequencyPreset}
                                     onChange={(nextValue) => {
@@ -10634,7 +10634,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   />
                                 </div>
                                 <div className="block">
-                                  <span className="text-[12px] font-medium text-[#7a8398]">Hora de inicio</span>
+                                  <span className="text-[12px] font-medium text-p-text-muted">Hora de inicio</span>
                                   <PlaygroundCombo
                                     value={slotToTime(selectedStartSlot)}
                                     onChange={(nextValue) => {
@@ -10654,7 +10654,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   />
                                 </div>
                                 <div className="block">
-                                  <span className="text-[12px] font-medium text-[#7a8398]">Hora de fin</span>
+                                  <span className="text-[12px] font-medium text-p-text-muted">Hora de fin</span>
                                   <PlaygroundCombo
                                     value={slotToTime(selectedEndSlot)}
                                     onChange={(nextValue) => {
@@ -10672,13 +10672,13 @@ export default function AdminAgendaPlaygroundPage() {
                                 </div>
                                 {timeFieldError && (
                                   <div className="md:col-span-2">
-                                    <p className="text-[12px] font-medium text-[#b42346]">{timeFieldError}</p>
+                                    <p className="text-[12px] font-medium text-p-error">{timeFieldError}</p>
                                   </div>
                                 )}
                               </div>
 
                               <div className="mt-4">
-                                <p className="text-[12px] font-medium text-[#7a8398]">Canchas para la serie</p>
+                                <p className="text-[12px] font-medium text-p-text-muted">Canchas para la serie</p>
                                 <div ref={recurringCourtsMenuRef} className="relative mt-1">
                                   <button
                                     type="button"
@@ -10691,21 +10691,21 @@ export default function AdminAgendaPlaygroundPage() {
                                     }}
                                     aria-haspopup="listbox"
                                     aria-expanded={recurringCourtsMenuOpen}
-                                    className={`h-11 w-full rounded-xl border px-3 text-left text-[15px] inline-flex items-center justify-between gap-2 bg-white transition outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#dce6ff] focus-visible:ring-offset-0 ${
+                                    className={`h-11 w-full rounded-xl border px-3 text-left text-[15px] inline-flex items-center justify-between gap-2 bg-p-surface transition outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/30 focus-visible:ring-offset-0 ${
                                       recurringCourtsMenuOpen
-                                        ? 'border-[#c8ceda] ring-2 ring-[#eef2ff] text-[#1f2a44]'
-                                        : 'border-[#d9dee8] text-[#2a3348] hover:border-[#c9d1de]'
+                                        ? 'border-p-border ring-2 ring-lima-300/30 text-p-text'
+                                        : 'border-p-border text-p-text hover:border-p-border-strong'
                                     }`}
                                   >
                                     <span className="truncate">{recurringCourtSelectionLabel || 'Seleccionar canchas'}</span>
                                     <ChevronDown
                                       size={15}
-                                      className={`text-[#7a8398] transition-transform ${recurringCourtsMenuOpen ? 'rotate-180' : ''}`}
+                                      className={`text-p-text-muted transition-transform ${recurringCourtsMenuOpen ? 'rotate-180' : ''}`}
                                     />
                                   </button>
                                   {recurringCourtsMenuOpen && (
-                                    <div className="absolute left-0 right-0 mt-2 rounded-xl border border-[#dbe2ef] bg-white shadow-xl z-40 overflow-hidden">
-                                      <label className={`flex cursor-pointer items-center gap-2 px-3 py-2.5 text-[15px] text-[#2e3650] transition ${recurringAllCourtsSelected ? 'bg-[#edf1ff]' : 'hover:bg-[#f5f7fb]'}`}>
+                                    <div className="absolute left-0 right-0 mt-2 rounded-xl border border-p-border bg-p-surface shadow-xl z-40 overflow-hidden">
+                                      <label className={`flex cursor-pointer items-center gap-2 px-3 py-2.5 text-[15px] text-p-text transition ${recurringAllCourtsSelected ? 'bg-p-positive-bg' : 'hover:bg-p-surface-2'}`}>
                                         <input
                                           type="checkbox"
                                           className="peer sr-only"
@@ -10716,19 +10716,19 @@ export default function AdminAgendaPlaygroundPage() {
                                             setFormError('');
                                           }}
                                         />
-                                        <span className="grid h-7 w-7 place-items-center rounded-[10px] border border-[#c9d0de] bg-white text-[16px] leading-none text-[#2f53df] peer-checked:border-[#8ca2ff] peer-checked:bg-[#eef2ff]">
+                                        <span className="grid h-7 w-7 place-items-center rounded-[10px] border border-p-border bg-p-surface text-[16px] leading-none text-p-accent peer-checked:border-p-accent peer-checked:bg-p-positive-bg">
                                           {recurringAllCourtsSelected ? <Check size={14} strokeWidth={3} /> : null}
                                         </span>
                                         <span className="font-medium">Todas las canchas</span>
                                       </label>
-                                      <div className="h-px bg-[#edf1f7]" />
+                                      <div className="h-px bg-p-surface-3" />
                                       <div className="max-h-56 overflow-y-auto">
                                         {effectiveCourts.map((court) => {
                                           const checked = recurringCourtIds.includes(court.id);
                                           return (
                                             <label
                                               key={`recurring-court-${court.id}`}
-                                              className={`flex cursor-pointer items-center gap-2 px-3 py-2.5 text-[15px] text-[#2e3650] transition ${checked ? 'bg-[#edf1ff]' : 'hover:bg-[#f5f7fb]'}`}
+                                              className={`flex cursor-pointer items-center gap-2 px-3 py-2.5 text-[15px] text-p-text transition ${checked ? 'bg-p-positive-bg' : 'hover:bg-p-surface-2'}`}
                                             >
                                               <input
                                                 type="checkbox"
@@ -10746,7 +10746,7 @@ export default function AdminAgendaPlaygroundPage() {
                                                   setFormError('');
                                                 }}
                                               />
-                                              <span className="grid h-7 w-7 place-items-center rounded-[10px] border border-[#c9d0de] bg-white text-[16px] leading-none text-[#2f53df] peer-checked:border-[#8ca2ff] peer-checked:bg-[#eef2ff]">
+                                              <span className="grid h-7 w-7 place-items-center rounded-[10px] border border-p-border bg-p-surface text-[16px] leading-none text-p-accent peer-checked:border-p-accent peer-checked:bg-p-positive-bg">
                                                 {checked ? <Check size={14} strokeWidth={3} /> : null}
                                               </span>
                                               <span className="truncate font-medium">{court.name}</span>
@@ -10759,25 +10759,25 @@ export default function AdminAgendaPlaygroundPage() {
                                 </div>
                               </div>
 
-                              <div className="mt-4 rounded-xl border border-[#e2e7f1] bg-white px-4 py-3">
+                              <div className="mt-4 rounded-xl border border-p-border bg-p-surface px-4 py-3">
                                 {recurringFrequencyPreset === 'custom' && (
                                   <>
                                     <div className="flex items-center justify-between gap-3">
-                                      <p className="text-[12px] font-medium text-[#6f7890]">Repetición personalizada</p>
+                                      <p className="text-[12px] font-medium text-p-text-muted">Repetición personalizada</p>
                                       <button
                                         type="button"
                                         onClick={() => setCustomRecurrenceModalOpen(true)}
-                                        className="h-9 rounded-lg border border-[#d3daf0] bg-white px-3 text-[12px] font-semibold text-[#2f4fd8] hover:bg-[#f4f7ff]"
+                                        className="h-9 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-accent hover:bg-p-positive-bg"
                                       >
                                         Editar repetición
                                       </button>
                                     </div>
-                                    <div className="my-2 h-px bg-[#e9edf5]" />
+                                    <div className="my-2 h-px bg-p-surface-3" />
                                   </>
                                 )}
-                                <p className="text-[12px] text-[#6f7890]">
+                                <p className="text-[12px] text-p-text-muted">
                                   Primera ocurrencia:{' '}
-                                  <strong className="ml-1 text-[14px] font-semibold text-[#2a3245]">
+                                  <strong className="ml-1 text-[14px] font-semibold text-p-text">
                                     {recurringFirstOccurrence.toLocaleDateString('es-AR', {
                                       weekday: 'long',
                                       day: '2-digit',
@@ -10786,7 +10786,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     · {slotToTime(selectedStartSlot)} - {slotToTime(selectedEndSlot)}
                                   </strong>
                                 </p>
-                                <p className="mt-1 text-[12px] text-[#6f7890]">
+                                <p className="mt-1 text-[12px] text-p-text-muted">
                                   {recurringCadenceShortSummary} · {recurringCreationCountSummary}
                                 </p>
                               </div>
@@ -10794,7 +10794,7 @@ export default function AdminAgendaPlaygroundPage() {
                           ) : (
                             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
                               <div className="block">
-                                <span className="text-[12px] font-medium text-[#7a8398]">Hora de inicio</span>
+                                <span className="text-[12px] font-medium text-p-text-muted">Hora de inicio</span>
                                 <PlaygroundCombo
                                   value={slotToTime(selectedStartSlot)}
                                   onChange={(nextValue) => {
@@ -10814,7 +10814,7 @@ export default function AdminAgendaPlaygroundPage() {
                                 />
                               </div>
                               <div className="block">
-                                <span className="text-[12px] font-medium text-[#7a8398]">Hora de fin</span>
+                                <span className="text-[12px] font-medium text-p-text-muted">Hora de fin</span>
                                 <PlaygroundCombo
                                   value={slotToTime(selectedEndSlot)}
                                   onChange={(nextValue) => {
@@ -10832,11 +10832,11 @@ export default function AdminAgendaPlaygroundPage() {
                               </div>
                               {timeFieldError && (
                                 <div className="md:col-span-2">
-                                  <p className="text-[12px] font-medium text-[#b42346]">{timeFieldError}</p>
+                                  <p className="text-[12px] font-medium text-p-error">{timeFieldError}</p>
                                 </div>
                               )}
                               <div className="block">
-                                <span className="text-[12px] font-medium text-[#7a8398]">Cancha</span>
+                                <span className="text-[12px] font-medium text-p-text-muted">Cancha</span>
                                 <PlaygroundCombo
                                   value={selectedCourtId}
                                   onChange={(next) => {
@@ -10848,7 +10848,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   className="mt-1"
                                 />
                                 {courtFieldError && (
-                                  <p className="mt-1 text-[12px] font-medium text-[#b42346]">{courtFieldError}</p>
+                                  <p className="mt-1 text-[12px] font-medium text-p-error">{courtFieldError}</p>
                                 )}
                               </div>
                             </div>
@@ -10857,16 +10857,16 @@ export default function AdminAgendaPlaygroundPage() {
                           {simplifiedIsEditingReservation && (
                             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px]">
                               <div>
-                                <p className="text-[12px] font-medium text-[#7a8398]">Tipo de pago</p>
-                                <div className="mt-1 grid grid-cols-2 rounded-xl border border-[#dce2ee] bg-[#f7f8fc] p-1">
+                                <p className="text-[12px] font-medium text-p-text-muted">Tipo de pago</p>
+                                <div className="mt-1 grid grid-cols-2 rounded-xl border border-p-border bg-p-surface-2 p-1">
                                   <button
                                     type="button"
                                     onClick={() => handleBillingModeChange('INDIVIDUAL')}
                                     disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
                                     className={`h-11 rounded-lg text-[15px] font-semibold transition ${
                                       paymentMode === 'Único'
-                                        ? 'bg-[#3053e2] text-white'
-                                        : 'text-[#7f879a] hover:bg-[#eceff8]'
+                                        ? 'bg-ink-900 text-ink-50'
+                                        : 'text-p-text-muted hover:bg-p-surface-2'
                                     } disabled:opacity-55`}
                                   >
                                     Pago único
@@ -10877,8 +10877,8 @@ export default function AdminAgendaPlaygroundPage() {
                                     disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
                                     className={`h-11 rounded-lg text-[15px] font-semibold transition ${
                                       paymentMode === 'Dividido'
-                                        ? 'bg-[#3053e2] text-white'
-                                        : 'text-[#7f879a] hover:bg-[#eceff8]'
+                                        ? 'bg-ink-900 text-ink-50'
+                                        : 'text-p-text-muted hover:bg-p-surface-2'
                                     } disabled:opacity-55`}
                                   >
                                     Pago dividido
@@ -10886,10 +10886,10 @@ export default function AdminAgendaPlaygroundPage() {
                                 </div>
                               </div>
                               <div>
-                                <p className="text-[12px] font-medium text-[#7a8398]">
+                                <p className="text-[12px] font-medium text-p-text-muted">
                                   {paymentMode === 'Único' ? 'Precio' : 'Precio por persona'}
                                 </p>
-                                <div className="mt-1 h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+                                <div className="mt-1 h-12 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
                                   <input
                                     type="number"
                                     readOnly
@@ -10898,12 +10898,12 @@ export default function AdminAgendaPlaygroundPage() {
                                       : paymentMode === 'Único'
                                         ? Number(totalPrice.toFixed(2))
                                         : Number((totalPrice / Math.max(chargedParticipantsCount, 1)).toFixed(2))}
-                                    className="w-full bg-transparent text-[18px] font-semibold text-[#2a3245] outline-none"
+                                    className="w-full bg-transparent text-[18px] font-semibold text-p-text outline-none"
                                   />
-                                  <span className="ml-2 text-[18px] font-semibold text-[#8a92a5]">$</span>
+                                  <span className="ml-2 text-[18px] font-semibold text-p-text-muted">$</span>
                                 </div>
                                 {paymentFieldError && (
-                                  <p className="mt-1 text-[12px] font-medium text-[#b42346]">{paymentFieldError}</p>
+                                  <p className="mt-1 text-[12px] font-medium text-p-error">{paymentFieldError}</p>
                                 )}
                               </div>
                             </div>
@@ -10912,45 +10912,45 @@ export default function AdminAgendaPlaygroundPage() {
                       ))}
 
                       {showSimplifiedConsumptionsSection && (
-                        <section className="rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4">
+                        <section className="rounded-xl border border-p-border bg-p-surface-2 p-4">
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="text-[18px] font-semibold text-[#1f2638]">Consumos</p>
+                              <p className="text-[18px] font-semibold text-p-text">Consumos</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-[11px] text-[#6f7890]">Total consumos</p>
-                              <p className="text-[18px] font-semibold text-[#27314a]">
+                              <p className="text-[11px] text-p-text-muted">Total consumos</p>
+                              <p className="text-[18px] font-semibold text-p-text">
                                 {bookingItemsAmount.toFixed(2)} $
                               </p>
                             </div>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
-                            <div className="rounded-lg border border-[#e2e7f1] bg-white px-2 py-1.5">
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-[12px] text-p-text-muted">
+                            <div className="rounded-lg border border-p-border bg-p-surface px-2 py-1.5">
                               <p>Items</p>
-                              <p className="text-[15px] font-semibold text-[#273149]">
+                              <p className="text-[15px] font-semibold text-p-text">
                                 {bookingConsumptionItems.length}
                               </p>
                             </div>
-                            <div className="rounded-lg border border-[#e2e7f1] bg-white px-2 py-1.5">
+                            <div className="rounded-lg border border-p-border bg-p-surface px-2 py-1.5">
                               <p>Pagado</p>
-                              <p className="text-[15px] font-semibold text-[#16733f]">
+                              <p className="text-[15px] font-semibold text-p-positive">
                                 {bookingConsumptionsPaid.toFixed(2)} $
                               </p>
                             </div>
-                            <div className="rounded-lg border border-[#e2e7f1] bg-white px-2 py-1.5">
+                            <div className="rounded-lg border border-p-border bg-p-surface px-2 py-1.5">
                               <p>Pendiente</p>
-                              <p className="text-[15px] font-semibold text-[#9a5a00]">
+                              <p className="text-[15px] font-semibold text-p-warning">
                                 {bookingConsumptionsRemaining.toFixed(2)} $
                               </p>
                             </div>
                           </div>
 
-                          <div className="mt-4 rounded-xl border border-[#dce2ee] bg-white p-3">
-                            <p className="text-[13px] font-semibold text-[#2a3245]">Agregar consumo</p>
+                          <div className="mt-4 rounded-xl border border-p-border bg-p-surface p-3">
+                            <p className="text-[13px] font-semibold text-p-text">Agregar consumo</p>
                             <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-[minmax(220px,1fr)_112px_auto]">
                               <div>
-                                <span className="text-[12px] font-medium text-[#79829a]">Producto</span>
+                                <span className="text-[12px] font-medium text-p-text-muted">Producto</span>
                                 <PlaygroundCombo
                                   value={consumptionProductDraft}
                                   onChange={(value) => {
@@ -10963,7 +10963,7 @@ export default function AdminAgendaPlaygroundPage() {
                                 />
                               </div>
                               <label className="block">
-                                <span className="text-[12px] font-medium text-[#79829a]">Cantidad</span>
+                                <span className="text-[12px] font-medium text-p-text-muted">Cantidad</span>
                                 <input
                                   type="number"
                                   min={1}
@@ -10973,7 +10973,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     setConsumptionQuantityDraft(event.target.value);
                                     setBookingConsumptionError('');
                                   }}
-                                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[14px] text-[#2a3245] outline-none"
+                                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[14px] text-p-text outline-none"
                                 />
                               </label>
                               <div className="flex items-end">
@@ -10981,7 +10981,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   type="button"
                                   onClick={() => void handleAddConsumption()}
                                   disabled={!canAddConsumption}
-                                  className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#3053e2] px-3 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                                  className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[13px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                                 >
                                   <Plus size={13} />
                                   {consumptionAddInFlight ? 'Agregando...' : 'Agregar'}
@@ -10989,34 +10989,34 @@ export default function AdminAgendaPlaygroundPage() {
                               </div>
                             </div>
 
-                            <label className="mt-2 inline-flex items-center gap-2 text-[12px] text-[#5f6880]">
+                            <label className="mt-2 inline-flex items-center gap-2 text-[12px] text-p-text-secondary">
                               <input
                                 type="checkbox"
                                 checked={consumptionApplyDiscountDraft}
                                 onChange={(event) => setConsumptionApplyDiscountDraft(event.target.checked)}
-                                className="h-4 w-4 accent-[#3053e2]"
+                                className="h-4 w-4 accent-p-brand"
                               />
                               Aplicar descuentos automáticos del cliente
                             </label>
 
                             <div className="mt-2 min-h-[20px]">
                               {consumptionProductsLoading ? (
-                                <p className="text-[12px] text-[#6f7890]">Cargando productos...</p>
+                                <p className="text-[12px] text-p-text-muted">Cargando productos...</p>
                               ) : consumptionProductsError ? (
-                                <p className="text-[12px] text-[#b42346]">{consumptionProductsError}</p>
+                                <p className="text-[12px] text-p-error">{consumptionProductsError}</p>
                               ) : consumptionQuoteLoading ? (
-                                <p className="text-[12px] text-[#6f7890]">Cotizando...</p>
+                                <p className="text-[12px] text-p-text-muted">Cotizando...</p>
                               ) : consumptionQuoteError ? (
-                                <p className="text-[12px] text-[#b42346]">{consumptionQuoteError}</p>
+                                <p className="text-[12px] text-p-error">{consumptionQuoteError}</p>
                               ) : consumptionQuote ? (
-                                <p className="text-[12px] text-[#5f6880]">
+                                <p className="text-[12px] text-p-text-secondary">
                                   Lista {consumptionQuote.listTotal.toFixed(2)} $ · Final {consumptionQuote.finalTotal.toFixed(2)} $
                                   {consumptionQuote.hasDiscount && consumptionQuote.discountAmount > 0.009
                                     ? ` · Descuento ${consumptionQuote.discountAmount.toFixed(2)} $`
                                     : ''}
                                 </p>
                               ) : selectedConsumptionProduct ? (
-                                <p className="text-[12px] text-[#5f6880]">
+                                <p className="text-[12px] text-p-text-secondary">
                                   Subtotal estimado:{' '}
                                   {roundMoney(selectedConsumptionProduct.price * selectedConsumptionQuantity).toFixed(2)} $
                                 </p>
@@ -11025,39 +11025,39 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
 
                           {bookingConsumptionError && (
-                            <p className="mt-3 text-[12px] font-medium text-[#b42346]">{bookingConsumptionError}</p>
+                            <p className="mt-3 text-[12px] font-medium text-p-error">{bookingConsumptionError}</p>
                           )}
 
-                          <div className="mt-4 rounded-xl border border-[#dce2ee] bg-white">
-                            <div className="border-b border-[#edf0f6] px-3 py-2">
-                              <p className="text-[13px] font-semibold text-[#2a3245]">Consumos cargados</p>
+                          <div className="mt-4 rounded-xl border border-p-border bg-p-surface">
+                            <div className="border-b border-p-border px-3 py-2">
+                              <p className="text-[13px] font-semibold text-p-text">Consumos cargados</p>
                             </div>
                             {bookingConsumptionLoading ? (
                               <div className="flex items-center justify-center py-6">
-                                <div className="h-5 w-5 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
+                                <div className="h-5 w-5 rounded-full border-2 border-p-accent border-t-p-accent animate-spin" />
                               </div>
                             ) : bookingConsumptionItems.length === 0 ? (
-                              <p className="px-3 py-4 text-[12px] text-[#6f7890]">Todavía no hay consumos cargados.</p>
+                              <p className="px-3 py-4 text-[12px] text-p-text-muted">Todavía no hay consumos cargados.</p>
                             ) : (
-                              <div className="divide-y divide-[#edf0f6]">
+                              <div className="divide-y divide-p-border">
                                 {bookingConsumptionItems.map((item) => (
                                   <div
                                     key={`booking-consumption-${item.id}`}
                                     className="grid grid-cols-[1fr_auto_auto] items-center gap-2 px-3 py-2.5"
                                   >
                                     <div className="min-w-0">
-                                      <p className="truncate text-[14px] font-semibold text-[#1f2638]">{item.description}</p>
-                                      <p className="text-[12px] text-[#6f7890]">
+                                      <p className="truncate text-[14px] font-semibold text-p-text">{item.description}</p>
+                                      <p className="text-[12px] text-p-text-muted">
                                         {item.quantity} x {item.unitPrice.toFixed(2)} $ · Total {item.totalPrice.toFixed(2)} $
                                       </p>
                                     </div>
                                     <span
                                       className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                                         item.remainingAmount <= 0.009
-                                          ? 'bg-[#e8f8ec] text-[#16733f]'
+                                          ? 'bg-p-positive-bg text-p-positive'
                                           : item.paidAmount > 0.009
-                                            ? 'bg-[#fff4e5] text-[#9a5a00]'
-                                            : 'bg-[#eef1f7] text-[#5c667f]'
+                                            ? 'bg-p-warning-bg text-p-warning'
+                                            : 'bg-p-surface-3 text-p-text-secondary'
                                       }`}
                                     >
                                       {item.remainingAmount <= 0.009
@@ -11070,7 +11070,7 @@ export default function AdminAgendaPlaygroundPage() {
                                       type="button"
                                       onClick={() => void handleRemoveConsumption(item.id)}
                                       disabled={consumptionRemovingId === item.id || item.paidAmount > 0.009}
-                                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#f0d6dd] px-2 text-[12px] font-semibold text-[#b42346] hover:bg-[#fff5f8] disabled:opacity-45"
+                                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-p-error px-2 text-[12px] font-semibold text-p-error hover:bg-p-error-bg disabled:opacity-45"
                                     >
                                       <X size={12} />
                                       {consumptionRemovingId === item.id ? '...' : 'Quitar'}
@@ -11085,52 +11085,52 @@ export default function AdminAgendaPlaygroundPage() {
 
                       {showSimplifiedHistorySection && (
                       <section
-                        className={`rounded-xl border border-[#e3e7f2] bg-[#f7f9fd] p-4 ${
+                        className={`rounded-xl border border-p-border bg-p-surface-2 p-4 ${
                           showSimplifiedDetailsSection ? 'mt-2' : 'mt-0'
                         }`}
                       >
-                          <p className="text-[18px] font-semibold text-[#1f2638]">Historial de la reserva</p>
+                          <p className="text-[18px] font-semibold text-p-text">Historial de la reserva</p>
 
                           {bookingTimelineLoading && simplifiedReservationHistoryTimeline.length > 0 && (
-                            <p className="mt-3 text-[12px] text-[#6f7890]">Actualizando historial...</p>
+                            <p className="mt-3 text-[12px] text-p-text-muted">Actualizando historial...</p>
                           )}
                           {bookingTimelineError && (
-                            <p className="mt-3 text-[13px] text-[#a04747]">{bookingTimelineError}</p>
+                            <p className="mt-3 text-[13px] text-p-error">{bookingTimelineError}</p>
                           )}
 
                           {bookingTimelineLoading && simplifiedReservationHistoryTimeline.length === 0 ? (
-                            <div className="mt-4 flex items-center justify-center gap-3 rounded-xl border border-[#dde4f3] bg-white px-4 py-5">
-                              <div className="h-5 w-5 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
-                              <p className="text-[13px] text-[#5f6880]">Cargando historial de la reserva...</p>
+                            <div className="mt-4 flex items-center justify-center gap-3 rounded-xl border border-p-border bg-p-surface px-4 py-5">
+                              <div className="h-5 w-5 rounded-full border-2 border-p-accent border-t-p-accent animate-spin" />
+                              <p className="text-[13px] text-p-text-secondary">Cargando historial de la reserva...</p>
                             </div>
                           ) : simplifiedReservationHistoryTimeline.length === 0 ? (
-                            <p className="mt-3 text-[13px] text-[#6f7890]">Todavía no hay eventos en el historial.</p>
+                            <p className="mt-3 text-[13px] text-p-text-muted">Todavía no hay eventos en el historial.</p>
                           ) : (
                             <div className="mt-3 space-y-4">
                               {simplifiedReservationHistoryTimeline.map((group) => (
                                 <div key={`history-group-${group.dateKey}`}>
-                                  <div className="inline-flex rounded-full border border-[#dde4f3] bg-white px-3 py-1 text-[11px] font-semibold text-[#3c4660]">
+                                  <div className="inline-flex rounded-full border border-p-border bg-p-surface px-3 py-1 text-[11px] font-semibold text-p-text-secondary">
                                     {group.dateLabel}
                                   </div>
-                                  <div className="mt-2 rounded-xl border border-[#e4e9f4] bg-white px-3 py-2 space-y-0">
+                                  <div className="mt-2 rounded-xl border border-p-border bg-p-surface px-3 py-2 space-y-0">
                                     {group.events.map((event, index) => (
                                       <div
                                         key={`history-event-${event.id}`}
                                         className="grid grid-cols-[18px_1fr_auto] gap-2"
                                       >
                                         <div className="relative pt-1">
-                                          <span className="absolute left-[4px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#4c68e6]" />
+                                          <span className="absolute left-[4px] top-1.5 h-2.5 w-2.5 rounded-full bg-p-accent" />
                                           {index < group.events.length - 1 && (
-                                            <span className="absolute left-[8px] top-4 bottom-[-12px] w-px bg-[#d5dff8]" />
+                                            <span className="absolute left-[8px] top-4 bottom-[-12px] w-px bg-p-positive-bg" />
                                           )}
                                         </div>
                                         <div className="pb-3">
-                                          <p className="text-[14px] font-semibold leading-[1.3] text-[#1f2638]">
+                                          <p className="text-[14px] font-semibold leading-[1.3] text-p-text">
                                             {event.title}
                                           </p>
-                                          <p className="mt-0.5 text-[12px] text-[#6d7690]">{event.detail}</p>
+                                          <p className="mt-0.5 text-[12px] text-p-text-muted">{event.detail}</p>
                                         </div>
-                                        <p className="pt-0.5 text-[12px] font-semibold text-[#5c6580]">
+                                        <p className="pt-0.5 text-[12px] font-semibold text-p-text-secondary">
                                           {event.timeLabel}
                                         </p>
                                       </div>
@@ -11146,42 +11146,42 @@ export default function AdminAgendaPlaygroundPage() {
                       {showSimplifiedBillingSection && (
                       <>
                       {simplifiedIsEditingReservation && (
-                        <section className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                        <section className="rounded-xl border border-p-border bg-p-surface-2 p-4">
                           <div className="flex items-center justify-between">
-                            <p className="text-[18px] font-semibold text-[#27314a]">Cobro</p>
+                            <p className="text-[18px] font-semibold text-p-text">Cobro</p>
                             <span
                               className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                                 simplifiedPaymentStatusLabel === 'Pagado'
-                                  ? 'bg-[#e8f8ec] text-[#16733f]'
+                                  ? 'bg-p-positive-bg text-p-positive'
                                   : simplifiedPaymentStatusLabel === 'Parcial'
-                                    ? 'bg-[#fff4e5] text-[#9a5a00]'
-                                    : 'bg-[#eef1f7] text-[#5c667f]'
+                                    ? 'bg-p-warning-bg text-p-warning'
+                                    : 'bg-p-surface-3 text-p-text-secondary'
                               }`}
                             >
                               {simplifiedPaymentStatusLabel}
                             </span>
                           </div>
-                          <div className="mt-2 grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
-                            <div className="rounded-lg bg-white px-2 py-1.5">
+                          <div className="mt-2 grid grid-cols-3 gap-2 text-[12px] text-p-text-muted">
+                            <div className="rounded-lg bg-p-surface px-2 py-1.5">
                               <p>Total</p>
-                              <p className="text-[15px] font-semibold text-[#2a3245]">
+                              <p className="text-[15px] font-semibold text-p-text">
                                 {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
                               </p>
                             </div>
-                            <div className="rounded-lg bg-white px-2 py-1.5">
+                            <div className="rounded-lg bg-p-surface px-2 py-1.5">
                               <p>Pagado</p>
-                              <p className="text-[15px] font-semibold text-[#16733f]">
+                              <p className="text-[15px] font-semibold text-p-positive">
                                 {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
                               </p>
                             </div>
-                            <div className="rounded-lg bg-white px-2 py-1.5">
+                            <div className="rounded-lg bg-p-surface px-2 py-1.5">
                               <p>Deuda</p>
-                              <p className="text-[15px] font-semibold text-[#9a5a00]">
+                              <p className="text-[15px] font-semibold text-p-warning">
                                 {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
                               </p>
                             </div>
                           </div>
-                          <p className="mt-2 text-[12px] text-[#6f7890]">
+                          <p className="mt-2 text-[12px] text-p-text-muted">
                             Cancha: {bookingCourtAmount.toFixed(2)} $ · Consumos: {bookingItemsAmount.toFixed(2)} $
                           </p>
                           <div className="mt-3 flex items-center gap-2">
@@ -11189,26 +11189,26 @@ export default function AdminAgendaPlaygroundPage() {
                               type="button"
                               onClick={openSimplifiedPaymentModal}
                               disabled={!simplifiedCanRegisterPayment}
-                              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-4 text-[14px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                             >
                               <CreditCard size={14} />
                               Registrar pago
                             </button>
                             {!persistedEditingBookingId ? (
-                              <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
+                              <p className="text-[12px] text-p-text-muted">Primero creá la reserva.</p>
                             ) : billingConfigLoadError ? (
-                              <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
+                              <p className="text-[12px] text-p-error">{billingConfigLoadError}</p>
                             ) : isPaymentLockedByManualPending ? (
-                              <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
+                              <p className="text-[12px] text-p-text-muted">Confirmá la reserva para habilitar pagos.</p>
                             ) : null}
                           </div>
                         </section>
                       )}
 
                       <section className="mt-4">
-                        <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
+                        <div className="rounded-xl border border-p-border bg-p-surface-2 p-4">
                           <div className="flex items-center justify-between gap-3">
-                            <p className="text-[18px] font-semibold text-[#1f2638]">Participantes</p>
+                            <p className="text-[18px] font-semibold text-p-text">Participantes</p>
                             {simplifiedOwnerAdded && !simplifiedNewParticipantOpen && (
                               <button
                                 type="button"
@@ -11223,14 +11223,14 @@ export default function AdminAgendaPlaygroundPage() {
                                   setSimplifiedNewParticipantSuggestions([]);
                                   setFormError('');
                                 }}
-                                className="text-[14px] font-semibold text-[#3f57b0] hover:text-[#2f4fd8]"
+                                className="text-[14px] font-semibold text-p-accent hover:text-p-accent"
                               >
                                 + Nuevo participante
                               </button>
                             )}
                           </div>
                           {participantsFieldError && (
-                            <p className="mt-2 mb-3 text-[12px] font-medium text-[#b42346]">{participantsFieldError}</p>
+                            <p className="mt-2 mb-3 text-[12px] font-medium text-p-error">{participantsFieldError}</p>
                           )}
                           {simplifiedOwnerAdded && simplifiedNamedParticipants.length > 0 ? (
                             <div className="mt-3 space-y-3">
@@ -11256,10 +11256,10 @@ export default function AdminAgendaPlaygroundPage() {
                                       : 'Pendiente';
                                 const participantPaymentStatusTone =
                                   participantPaymentStatusLabel === 'Pagado'
-                                    ? 'bg-[#e8f8ec] text-[#16733f]'
+                                    ? 'bg-p-positive-bg text-p-positive'
                                     : participantPaymentStatusLabel === 'Parcial'
-                                      ? 'bg-[#fff4e5] text-[#9a5a00]'
-                                      : 'bg-[#eef1f7] text-[#5c667f]';
+                                      ? 'bg-p-warning-bg text-p-warning'
+                                      : 'bg-p-surface-3 text-p-text-secondary';
                                 const participantDisplayedPrice = Number(
                                   (participantHasPaymentControls ? participantAssignedAmount : participantPayerAmount).toFixed(2)
                                 );
@@ -11268,22 +11268,22 @@ export default function AdminAgendaPlaygroundPage() {
                                   <div
                                     key={`simplified-participant-${participant.id}`}
                                     data-participant-shell-id={participant.id}
-                                    className="rounded-xl border border-[#e2e7f1] bg-white px-3 py-3"
+                                    className="rounded-xl border border-p-border bg-p-surface px-3 py-3"
                                   >
                                     <div className={`grid ${shouldShowParticipantAmount ? 'grid-cols-[42px_minmax(0,1fr)_auto_32px]' : 'grid-cols-[42px_minmax(0,1fr)_32px]'} gap-2 items-start`}>
-                                      <div className="h-10 w-10 rounded-full bg-[#e9edf8] text-[#4a5674] text-[14px] font-semibold grid place-items-center">
+                                      <div className="h-10 w-10 rounded-full bg-p-surface-2 text-p-text-secondary text-[14px] font-semibold grid place-items-center">
                                         {participant.name.trim().charAt(0).toUpperCase() || 'P'}
                                       </div>
                                       <div>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="inline-flex items-center rounded-full bg-[#eef2ff] px-2.5 py-1 text-[11px] font-semibold text-[#3a57b8]">
+                                          <span className="inline-flex items-center rounded-full bg-p-positive-bg px-2.5 py-1 text-[11px] font-semibold text-p-accent">
                                             {participant.isOwner ? 'Titular' : `Participante ${index + 1}`}
                                           </span>
                                           <span
                                             className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                                               participant.sourceType === 'guest'
-                                                ? 'bg-[#f3f4f7] text-[#5f6880]'
-                                                : 'bg-[#e8f8ec] text-[#16733f]'
+                                                ? 'bg-p-surface-2 text-p-text-secondary'
+                                                : 'bg-p-positive-bg text-p-positive'
                                             }`}
                                           >
                                             {participant.sourceType === 'guest' ? 'Invitado' : 'Vinculado'}
@@ -11296,21 +11296,21 @@ export default function AdminAgendaPlaygroundPage() {
                                             </span>
                                           )}
                                           {participantHasPayerActivity && (
-                                            <span className="inline-flex items-center rounded-full bg-[#e8eeff] px-2.5 py-1 text-[11px] font-semibold text-[#3155df]">
+                                            <span className="inline-flex items-center rounded-full bg-p-positive-bg px-2.5 py-1 text-[11px] font-semibold text-p-accent">
                                               Pagador
                                             </span>
                                           )}
                                         </div>
-                                        <p className="text-[15px] font-semibold text-[#1f2638]">{participant.name}</p>
+                                        <p className="text-[15px] font-semibold text-p-text">{participant.name}</p>
                                         {participantHasPayerActivity && (
-                                          <p className="mt-0.5 text-[12px] text-[#5e6883]">
+                                          <p className="mt-0.5 text-[12px] text-p-text-secondary">
                                             Pagó {participantPayerAmount.toFixed(2)} $
                                           </p>
                                         )}
                                       </div>
                                       {shouldShowParticipantAmount && (
                                         <div className="pt-0.5 text-right">
-                                          <p className="text-[15px] font-semibold text-[#1f2638]">
+                                          <p className="text-[15px] font-semibold text-p-text">
                                             {participantDisplayedPrice} $
                                           </p>
                                         </div>
@@ -11327,7 +11327,7 @@ export default function AdminAgendaPlaygroundPage() {
                                             previous === participant.id ? null : participant.id
                                           );
                                         }}
-                                        className="h-8 w-8 justify-self-end rounded-full text-[#737c90] grid place-items-center hover:bg-[#f3f5fa]"
+                                        className="h-8 w-8 justify-self-end rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
                                         title="Acciones del participante"
                                       >
                                         <MoreVertical size={15} />
@@ -11336,16 +11336,16 @@ export default function AdminAgendaPlaygroundPage() {
                                     {expandedParticipantId === participant.id && (
                                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                                         {participantIsLinkedRecord ? (
-                                          <div className="md:col-span-2 rounded-xl border border-[#dbe2ef] bg-[#f8fafc] px-3 py-2">
-                                            <p className="text-[12px] text-[#5f6880]">
+                                          <div className="md:col-span-2 rounded-xl border border-p-border bg-p-surface-2 px-3 py-2">
+                                            <p className="text-[12px] text-p-text-secondary">
                                               Este participante está vinculado a un registro existente y no se puede editar manualmente.
                                             </p>
                                           </div>
                                         ) : (
                                           <>
                                             <label className="block">
-                                              <span className="text-[12px] font-medium text-[#7a8398]">Nombre</span>
-                                              <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
+                                              <span className="text-[12px] font-medium text-p-text-muted">Nombre</span>
+                                              <div className="mt-1 h-10 rounded-xl border border-p-border bg-p-surface px-3 flex items-center">
                                                 <input
                                                   value={participant.name}
                                                   onChange={(event) =>
@@ -11360,13 +11360,13 @@ export default function AdminAgendaPlaygroundPage() {
                                                     }
                                                   }}
                                                   placeholder="Nombre del participante"
-                                                  className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                                  className="w-full bg-transparent outline-none text-[13px] text-p-text"
                                                 />
                                               </div>
                                             </label>
                                             <label className="block">
-                                              <span className="text-[12px] font-medium text-[#7a8398]">Email y teléfono</span>
-                                              <div className="mt-1 h-10 rounded-xl border border-[#dbe2ef] bg-white px-3 flex items-center">
+                                              <span className="text-[12px] font-medium text-p-text-muted">Email y teléfono</span>
+                                              <div className="mt-1 h-10 rounded-xl border border-p-border bg-p-surface px-3 flex items-center">
                                                 <input
                                                   ref={participantContactInputRef}
                                                   value={participant.contact}
@@ -11382,7 +11382,7 @@ export default function AdminAgendaPlaygroundPage() {
                                                     }
                                                   }}
                                                   placeholder="cliente@email.com · 351..."
-                                                  className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                                  className="w-full bg-transparent outline-none text-[13px] text-p-text"
                                                 />
                                               </div>
                                             </label>
@@ -11392,14 +11392,14 @@ export default function AdminAgendaPlaygroundPage() {
                                           <button
                                             type="button"
                                             onClick={() => setExpandedParticipantId(null)}
-                                            className="h-8 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#5f6880] hover:bg-[#f6f8fc]"
+                                            className="h-8 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                                           >
                                             Cancelar
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => setExpandedParticipantId(null)}
-                                            className="h-8 rounded-lg bg-[#3155df] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc]"
+                                            className="h-8 rounded-lg bg-[var(--accent-fg)] px-3 text-[12px] font-semibold text-ink-50 hover:bg-ink-900"
                                           >
                                             Guardar
                                           </button>
@@ -11407,7 +11407,7 @@ export default function AdminAgendaPlaygroundPage() {
                                       </div>
                                     )}
                                     {participantMenuId === participant.id && (
-                                      <div className="mt-2 rounded-xl border border-[#dce2ef] bg-white shadow-sm p-2 text-[12px] text-[#30384d]">
+                                      <div className="mt-2 rounded-xl border border-p-border bg-p-surface shadow-sm p-2 text-[12px] text-p-text-secondary">
                                         <button
                                           type="button"
                                           onClick={() => {
@@ -11420,7 +11420,7 @@ export default function AdminAgendaPlaygroundPage() {
                                             );
                                             setParticipantMenuId(null);
                                           }}
-                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb] disabled:opacity-50 disabled:hover:bg-transparent"
+                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2 disabled:opacity-50 disabled:hover:bg-transparent"
                                           disabled={participantIsLinkedRecord}
                                         >
                                           {participantIsLinkedRecord
@@ -11429,7 +11429,7 @@ export default function AdminAgendaPlaygroundPage() {
                                             ? 'Finalizar edición'
                                             : 'Editar participante (nombre/contacto)'}
                                         </button>
-                                        <div className="mt-1 border-t border-[#edf0f6] pt-1">
+                                        <div className="mt-1 border-t border-p-border pt-1">
                                           <button
                                             type="button"
                                             onClick={() => {
@@ -11442,7 +11442,7 @@ export default function AdminAgendaPlaygroundPage() {
                                               setParticipantMenuId(null);
                                             }}
                                             disabled={participant.isOwner}
-                                            className="w-full text-left rounded-lg px-2 py-1.5 text-[#c0354f] hover:bg-[#fff2f4] disabled:opacity-40"
+                                            className="w-full text-left rounded-lg px-2 py-1.5 text-p-error hover:bg-p-error-bg disabled:opacity-40"
                                           >
                                             Eliminar participante
                                           </button>
@@ -11455,13 +11455,13 @@ export default function AdminAgendaPlaygroundPage() {
                             </div>
                           ) : (
                             <>
-                              <p className="mt-3 text-[15px] font-semibold text-[#2a3245]">Agregar titular</p>
-                              <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] font-medium text-[#79829a]">
+                              <p className="mt-3 text-[15px] font-semibold text-p-text">Agregar titular</p>
+                              <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] font-medium text-p-text-muted">
                                 <span>Nombre del cliente</span>
                               </div>
                               <div className="mt-2 grid grid-cols-1 gap-3">
                                 <div ref={simplifiedOwnerInputContainerRef} className="relative">
-                                <div className="h-12 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center gap-2">
+                                <div className="h-12 rounded-xl border border-p-border bg-p-surface px-3 flex items-center gap-2">
                                   <input
                                     value={ownerParticipant?.name || ''}
                                     onChange={(event) => {
@@ -11477,7 +11477,7 @@ export default function AdminAgendaPlaygroundPage() {
                                       window.setTimeout(() => setSimplifiedOwnerSuggestionsOpen(false), 120);
                                     }}
                                     placeholder="Ingresá un nombre"
-                                    className="w-full bg-transparent text-[15px] text-[#2a3245] outline-none"
+                                    className="w-full bg-transparent text-[15px] text-p-text outline-none"
                                   />
                                   {ownerHasTypedName ? (
                                     <button
@@ -11506,13 +11506,13 @@ export default function AdminAgendaPlaygroundPage() {
                                         setSimplifiedNewParticipantSearchLoading(false);
                                         setSimplifiedNewParticipantSuggestions([]);
                                       }}
-                                      className="h-7 w-7 rounded-full text-[#737c90] grid place-items-center hover:bg-[#f3f5fa]"
+                                      className="h-7 w-7 rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
                                       title="Limpiar titular"
                                     >
                                       <X size={14} />
                                     </button>
                                   ) : (
-                                    <Search size={18} className="text-[#8f96a8]" />
+                                    <Search size={18} className="text-p-text-muted" />
                                   )}
                                 </div>
                                 {simplifiedOwnerSuggestionsOpen &&
@@ -11523,14 +11523,14 @@ export default function AdminAgendaPlaygroundPage() {
                                       ...simplifiedOwnerSuggestionsFloatingStyle,
                                       maxHeight: undefined,
                                     }}
-                                    className="rounded-xl border border-[#dde3ef] bg-white shadow-lg overflow-hidden"
+                                    className="rounded-xl border border-p-border bg-p-surface shadow-lg overflow-hidden"
                                   >
                                     <div
                                       style={{ maxHeight: simplifiedOwnerSuggestionsFloatingStyle.maxHeight }}
                                       className="overflow-y-auto overscroll-contain p-1"
                                     >
                                       {simplifiedOwnerSearchLoading && (
-                                        <p className="px-2 py-1 text-[11px] text-[#7b8396]">Buscando...</p>
+                                        <p className="px-2 py-1 text-[11px] text-p-text-muted">Buscando...</p>
                                       )}
                                       {simplifiedOwnerSuggestions.slice(0, 8).map((suggestion) => (
                                         <button
@@ -11541,11 +11541,11 @@ export default function AdminAgendaPlaygroundPage() {
                                             if (!ownerParticipant) return;
                                             applySimplifiedOwnerSuggestion(ownerParticipant.id, suggestion);
                                           }}
-                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                          className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
                                         >
-                                          <span className="block text-[12px] font-semibold text-[#273048]">{suggestion.label}</span>
+                                          <span className="block text-[12px] font-semibold text-p-text">{suggestion.label}</span>
                                           {suggestion.secondary && (
-                                            <span className="block text-[11px] text-[#7b8396]">{suggestion.secondary}</span>
+                                            <span className="block text-[11px] text-p-text-muted">{suggestion.secondary}</span>
                                           )}
                                         </button>
                                       ))}
@@ -11556,13 +11556,13 @@ export default function AdminAgendaPlaygroundPage() {
                                 </div>
                               </div>
                               {ownerFieldError && (
-                                <p className="mt-2 text-[12px] font-medium text-[#b42346]">{ownerFieldError}</p>
+                                <p className="mt-2 text-[12px] font-medium text-p-error">{ownerFieldError}</p>
                               )}
 
-                              <div className="mt-4 rounded-xl border border-[#e2e7f1] bg-white px-4 py-3 flex items-center justify-between">
-                                <p className="text-[12px] text-[#6f7890]">
+                              <div className="mt-4 rounded-xl border border-p-border bg-p-surface px-4 py-3 flex items-center justify-between">
+                                <p className="text-[12px] text-p-text-muted">
                                   Precio total:{' '}
-                                  <strong className="ml-1 text-[15px] font-semibold text-[#2a3245]">
+                                  <strong className="ml-1 text-[15px] font-semibold text-p-text">
                                     {isFinancialDisplayPending ? '--' : `${Number(totalPrice.toFixed(2))} $`}
                                   </strong>
                                 </p>
@@ -11573,7 +11573,7 @@ export default function AdminAgendaPlaygroundPage() {
                                       'Este total es estimado para crear la reserva. El registro de pagos se habilita al editar la reserva creada.'
                                     )
                                   }
-                                  className="grid h-7 w-7 place-items-center rounded-full text-[#747d93] transition hover:bg-[#e8ebf2]"
+                                  className="grid h-7 w-7 place-items-center rounded-full text-p-text-muted transition hover:bg-p-surface-2"
                                   aria-label="Información del precio total"
                                   title="Cómo se usa el precio total"
                                 >
@@ -11604,8 +11604,8 @@ export default function AdminAgendaPlaygroundPage() {
                                 disabled={!ownerHasName}
                                 className={`mt-5 h-11 w-full rounded-xl text-[14px] leading-none font-semibold transition ${
                                   ownerHasName
-                                    ? 'bg-[#3053e2] text-white hover:bg-[#2748cc]'
-                                    : 'border border-[#e2e6ef] bg-[#eef0f5] text-[#a0a7b9]'
+                                    ? 'bg-ink-900 text-ink-50 hover:bg-ink-900'
+                                    : 'border border-p-border bg-p-surface-3 text-p-text-muted'
                                 }`}
                               >
                                 Agregar titular
@@ -11615,13 +11615,13 @@ export default function AdminAgendaPlaygroundPage() {
 
                           {simplifiedOwnerAdded && (
                             <div
-                              className={`border-t border-[#edf1f7] ${
+                              className={`border-t border-p-border ${
                                 simplifiedNewParticipantOpen ? 'mt-2 pt-2' : 'mt-3 pt-3'
                               }`}
                             >
                               {simplifiedNewParticipantOpen && (
-                                <div className="mt-1 rounded-xl border border-[#e2e7f1] bg-white p-4">
-                                  <p className="text-[15px] font-semibold text-[#1f2638]">Nuevo participante</p>
+                                <div className="mt-1 rounded-xl border border-p-border bg-p-surface p-4">
+                                  <p className="text-[15px] font-semibold text-p-text">Nuevo participante</p>
                                   <div className="mt-3 space-y-2">
                                     <div ref={simplifiedNewParticipantInputContainerRef} className="relative">
                                       <input
@@ -11643,8 +11643,8 @@ export default function AdminAgendaPlaygroundPage() {
                                         placeholder="Nombre del participante"
                                         className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${
                                           simplifiedNewParticipantHasLinkedSelection
-                                            ? 'border-[#e1e6f0] bg-[#f8fafc] text-[#5f6880] cursor-not-allowed'
-                                            : 'border-[#dce2ee] bg-white'
+                                            ? 'border-p-border bg-p-surface-2 text-p-text-secondary cursor-not-allowed'
+                                            : 'border-p-border bg-p-surface'
                                         }`}
                                       />
                                       {simplifiedNewParticipantSuggestionsOpen &&
@@ -11655,14 +11655,14 @@ export default function AdminAgendaPlaygroundPage() {
                                             ...simplifiedNewParticipantSuggestionsFloatingStyle,
                                             maxHeight: undefined,
                                           }}
-                                          className="rounded-xl border border-[#dde3ef] bg-white shadow-lg overflow-hidden"
+                                          className="rounded-xl border border-p-border bg-p-surface shadow-lg overflow-hidden"
                                         >
                                           <div
                                             style={{ maxHeight: simplifiedNewParticipantSuggestionsFloatingStyle.maxHeight }}
                                             className="overflow-y-auto overscroll-contain p-1"
                                           >
                                             {simplifiedNewParticipantSearchLoading && (
-                                              <p className="px-2 py-1 text-[11px] text-[#7b8396]">Buscando...</p>
+                                              <p className="px-2 py-1 text-[11px] text-p-text-muted">Buscando...</p>
                                             )}
                                             {simplifiedNewParticipantSuggestions.slice(0, 8).map((suggestion) => (
                                               <button
@@ -11670,11 +11670,11 @@ export default function AdminAgendaPlaygroundPage() {
                                                 type="button"
                                                 onMouseDown={(event) => event.preventDefault()}
                                                 onClick={() => applySimplifiedNewParticipantSuggestion(suggestion)}
-                                                className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                                className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
                                               >
-                                                <span className="block text-[12px] font-semibold text-[#273048]">{suggestion.label}</span>
+                                                <span className="block text-[12px] font-semibold text-p-text">{suggestion.label}</span>
                                                 {suggestion.secondary && (
-                                                  <span className="block text-[11px] text-[#7b8396]">{suggestion.secondary}</span>
+                                                  <span className="block text-[11px] text-p-text-muted">{suggestion.secondary}</span>
                                                 )}
                                               </button>
                                             ))}
@@ -11693,14 +11693,14 @@ export default function AdminAgendaPlaygroundPage() {
                                       placeholder="Contacto (correo o teléfono)"
                                       className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${
                                         simplifiedNewParticipantHasLinkedSelection
-                                          ? 'border-[#e1e6f0] bg-[#f8fafc] text-[#5f6880] cursor-not-allowed'
-                                          : 'border-[#dce2ee] bg-white'
+                                          ? 'border-p-border bg-p-surface-2 text-p-text-secondary cursor-not-allowed'
+                                          : 'border-p-border bg-p-surface'
                                       }`}
                                     />
                                   </div>
                                   {simplifiedNewParticipantHasLinkedSelection && (
                                     <div className="mt-2 flex items-center justify-between gap-2">
-                                      <p className="text-[12px] text-[#6f7890]">
+                                      <p className="text-[12px] text-p-text-muted">
                                         Registro asociado seleccionado. No se puede editar manualmente.
                                       </p>
                                       <button
@@ -11714,14 +11714,14 @@ export default function AdminAgendaPlaygroundPage() {
                                           setSimplifiedNewParticipantSearchLoading(false);
                                           setSimplifiedNewParticipantSuggestions([]);
                                         }}
-                                        className="shrink-0 text-[12px] font-semibold text-[#3155df] hover:text-[#2748cc]"
+                                        className="shrink-0 text-[12px] font-semibold text-p-accent hover:text-[var(--accent-hover)]"
                                       >
                                         Cambiar selección
                                       </button>
                                     </div>
                                   )}
                                   {simplifiedNewParticipantName.trim().length > 0 && !hasValidSimplifiedNewParticipantName && (
-                                    <p className="mt-2 text-[12px] text-[#7a8398]">
+                                    <p className="mt-2 text-[12px] text-p-text-muted">
                                       Seleccioná un registro de la lista (o Invitado) antes de agregar.
                                     </p>
                                   )}
@@ -11766,8 +11766,8 @@ export default function AdminAgendaPlaygroundPage() {
                                       disabled={!hasValidSimplifiedNewParticipantName}
                                       className={`h-10 min-w-[100px] rounded-xl px-4 text-[14px] font-semibold ${
                                         hasValidSimplifiedNewParticipantName
-                                          ? 'bg-[#3053e2] text-white hover:bg-[#2748cc]'
-                                          : 'bg-[#eef0f5] text-[#a0a7b9]'
+                                          ? 'bg-ink-900 text-ink-50 hover:bg-ink-900'
+                                          : 'bg-p-surface-3 text-p-text-muted'
                                       }`}
                                     >
                                       Agregar
@@ -11784,7 +11784,7 @@ export default function AdminAgendaPlaygroundPage() {
                                         setSimplifiedNewParticipantSearchLoading(false);
                                         setSimplifiedNewParticipantSuggestions([]);
                                       }}
-                                      className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[14px] font-semibold text-[#5f6880] hover:bg-[#f6f8fc]"
+                                      className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[14px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                                     >
                                       Cancelar
                                     </button>
@@ -11802,73 +11802,73 @@ export default function AdminAgendaPlaygroundPage() {
                     </section>
                   ) : (
                     <>
-                  <section className="mb-6 rounded-xl border border-[#dce2ee] bg-[#f8fafd] px-4 py-3">
+                  <section className="mb-6 rounded-xl border border-p-border bg-p-surface-2 px-4 py-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-[14px] font-semibold text-[#1f2a44]">Checklist operativo</p>
-                      <span className="text-[11px] text-[#6d7690]">
+                      <p className="text-[14px] font-semibold text-p-text">Checklist operativo</p>
+                      <span className="text-[11px] text-p-text-muted">
                         {operationalChecklist.filter((row) => row.ok).length}/{operationalChecklist.length}
                       </span>
                     </div>
                     <div className="mt-2 space-y-1.5">
                       {operationalChecklist.map((row) => (
-                        <div key={row.key} className="rounded-lg border border-[#e4e9f4] bg-white px-2.5 py-2">
+                        <div key={row.key} className="rounded-lg border border-p-border bg-p-surface px-2.5 py-2">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-[12px] text-[#2a3245]">{row.label}</p>
+                            <p className="text-[12px] text-p-text">{row.label}</p>
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                row.ok ? 'bg-[#e9f8ec] text-[#16733f]' : 'bg-[#fff2f5] text-[#b42346]'
+                                row.ok ? 'bg-p-positive-bg text-p-positive' : 'bg-p-error-bg text-p-error'
                               }`}
                             >
                               {row.ok ? 'OK' : 'Revisar'}
                             </span>
                           </div>
                           {!row.ok && row.detail && (
-                            <p className="mt-1 text-[11px] text-[#8b4b58]">{row.detail}</p>
+                            <p className="mt-1 text-[11px] text-p-error">{row.detail}</p>
                           )}
                         </div>
                       ))}
                     </div>
                   </section>
-                  <section className="mb-6 rounded-xl border border-[#dce2ee] bg-white px-4 py-3">
-                    <p className="text-[14px] font-semibold text-[#1f2a44]">Resumen rápido</p>
+                  <section className="mb-6 rounded-xl border border-p-border bg-p-surface px-4 py-3">
+                    <p className="text-[14px] font-semibold text-p-text">Resumen rápido</p>
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg bg-[#f7f9fd] px-2.5 py-2">
-                        <p className="text-[11px] text-[#79829a]">Tipo</p>
-                        <p className="text-[12px] font-semibold text-[#2a3245]">{selectedBookingKindLabel}</p>
+                      <div className="rounded-lg bg-p-surface-2 px-2.5 py-2">
+                        <p className="text-[11px] text-p-text-muted">Tipo</p>
+                        <p className="text-[12px] font-semibold text-p-text">{selectedBookingKindLabel}</p>
                       </div>
-                      <div className="rounded-lg bg-[#f7f9fd] px-2.5 py-2">
-                        <p className="text-[11px] text-[#79829a]">Fecha</p>
-                        <p className="text-[12px] font-semibold text-[#2a3245]">{quickSummaryDateLabel}</p>
+                      <div className="rounded-lg bg-p-surface-2 px-2.5 py-2">
+                        <p className="text-[11px] text-p-text-muted">Fecha</p>
+                        <p className="text-[12px] font-semibold text-p-text">{quickSummaryDateLabel}</p>
                       </div>
-                      <div className="rounded-lg bg-[#f7f9fd] px-2.5 py-2">
-                        <p className="text-[11px] text-[#79829a]">Horario</p>
-                        <p className="text-[12px] font-semibold text-[#2a3245]">
+                      <div className="rounded-lg bg-p-surface-2 px-2.5 py-2">
+                        <p className="text-[11px] text-p-text-muted">Horario</p>
+                        <p className="text-[12px] font-semibold text-p-text">
                           {slotToTime(selectedStartSlot)} - {slotToTime(selectedEndSlot)} ({selectionMinutes} min)
                         </p>
                       </div>
-                      <div className="rounded-lg bg-[#f7f9fd] px-2.5 py-2">
-                        <p className="text-[11px] text-[#79829a]">
+                      <div className="rounded-lg bg-p-surface-2 px-2.5 py-2">
+                        <p className="text-[11px] text-p-text-muted">
                           {isRecurringKind ? 'Canchas' : 'Cancha'}
                         </p>
-                        <p className="text-[12px] font-semibold text-[#2a3245] truncate">{quickSummaryCourtsLabel}</p>
+                        <p className="text-[12px] font-semibold text-p-text truncate">{quickSummaryCourtsLabel}</p>
                       </div>
                     </div>
                   </section>
                   {bookingKind === 'block' ? (
                     <>
-                      <section className="pb-6 border-b border-[#edf0f5]">
+                      <section className="pb-6 border-b border-p-border">
                         <div className="grid grid-cols-2 gap-3">
                           <label className="block">
-                            <span className="text-[13px] text-[#727b90]">Título (opcional)</span>
+                            <span className="text-[13px] text-p-text-muted">Título (opcional)</span>
                             <input
                               value={blockingTitle}
                               onChange={(event) => setBlockingTitle(event.target.value)}
                               placeholder="Mantenimiento"
-                              className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245] outline-none"
+                              className="mt-2 h-11 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[15px] text-p-text outline-none"
                             />
                           </label>
                           <div className="block">
-                            <span className="text-[13px] text-[#727b90]">Cancha</span>
+                            <span className="text-[13px] text-p-text-muted">Cancha</span>
                             <PlaygroundCombo
                               value={selectedCourtId}
                               onChange={(next) => {
@@ -11882,7 +11882,7 @@ export default function AdminAgendaPlaygroundPage() {
                         </div>
                         <div className="mt-4 grid grid-cols-3 gap-3">
                           <label className="block">
-                            <span className="text-[13px] text-[#727b90]">Fecha</span>
+                            <span className="text-[13px] text-p-text-muted">Fecha</span>
                             <input
                               type="date"
                               value={formatLocalDate(selectedDate)}
@@ -11892,11 +11892,11 @@ export default function AdminAgendaPlaygroundPage() {
                                   setSelectedDate(next);
                                 }
                               }}
-                              className="mt-2 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[15px] text-[#2a3245]"
+                              className="mt-2 h-11 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[15px] text-p-text"
                             />
                           </label>
                           <div className="block">
-                            <span className="text-[13px] text-[#727b90]">Hora de inicio</span>
+                            <span className="text-[13px] text-p-text-muted">Hora de inicio</span>
                             <PlaygroundCombo
                               value={slotToTime(selectedStartSlot)}
                               onChange={(nextValue) => {
@@ -11912,7 +11912,7 @@ export default function AdminAgendaPlaygroundPage() {
                             />
                           </div>
                           <div className="block">
-                            <span className="text-[13px] text-[#727b90]">Hora de fin</span>
+                            <span className="text-[13px] text-p-text-muted">Hora de fin</span>
                             <PlaygroundCombo
                               value={slotToTime(selectedEndSlot)}
                               onChange={(nextValue) => {
@@ -11934,9 +11934,9 @@ export default function AdminAgendaPlaygroundPage() {
                     disabled={lockBookingDetails}
                     className={lockBookingDetails ? 'pointer-events-none opacity-60 select-none' : ''}
                   >
-                  <section className="pb-6 border-b border-[#edf0f5]">
+                  <section className="pb-6 border-b border-p-border">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-[19px] font-semibold tracking-[-0.01em] text-[#1f2638]">Cobro</p>
+                      <p className="text-[19px] font-semibold tracking-[-0.01em] text-p-text">Cobro</p>
                       <div className="flex items-center gap-1.5">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${reservationStatusTone}`}>
                           {reservationStatusLabel}
@@ -11946,22 +11946,22 @@ export default function AdminAgendaPlaygroundPage() {
                         </span>
                       </div>
                     </div>
-                    <p className="mt-1 text-[12px] text-[#6f7890]">
+                    <p className="mt-1 text-[12px] text-p-text-muted">
                       Registrá cobros de deuda común de la reserva desde este bloque.
                     </p>
                     {isCompletedReservation && (
-                      <p className="mt-1 text-[12px] font-medium text-[#8b5c1a]">
+                      <p className="mt-1 text-[12px] font-medium text-p-warning">
                         Reserva completada: podés gestionar consumos, participantes y cobros; no reprogramar.
                       </p>
                     )}
                     {shouldHideBillingUntilConfirmed ? (
-                      <div className="mt-3 rounded-xl border border-[#f2d6a8] bg-[#fff9ee] px-3 py-3">
-                        <p className="text-[12px] font-semibold text-[#8b5c1a]">
+                      <div className="mt-3 rounded-xl border border-p-warning bg-p-warning-bg px-3 py-3">
+                        <p className="text-[12px] font-semibold text-p-warning">
                           {shouldHideBillingUntilCreated
                             ? 'Cobro disponible después de crear la reserva.'
                             : 'Cobro oculto hasta confirmar la reserva.'}
                         </p>
-                        <p className="mt-1 text-[12px] text-[#926a2a]">
+                        <p className="mt-1 text-[12px] text-p-warning">
                           {shouldHideBillingUntilCreated
                             ? 'Primero creá la reserva. Después podés registrar pagos.'
                             : 'Confirmá esta reserva para habilitar registro de pagos y saldo.'}
@@ -11972,7 +11972,7 @@ export default function AdminAgendaPlaygroundPage() {
                               type="button"
                               onClick={() => void handleConfirmPendingBooking()}
                               disabled={confirmingBooking}
-                              className="h-8 rounded-lg bg-[#3053e2] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-60"
+                              className="h-8 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-60"
                             >
                               {confirmingBooking ? 'Confirmando...' : 'Confirmar reserva'}
                             </button>
@@ -11980,28 +11980,28 @@ export default function AdminAgendaPlaygroundPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="mt-3 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-4">
-                        <div className="grid grid-cols-3 gap-2 text-[12px] text-[#6f7890]">
-                          <div className="rounded-lg bg-white px-2 py-1.5">
+                      <div className="mt-3 rounded-xl border border-p-border bg-p-surface-2 p-4">
+                        <div className="grid grid-cols-3 gap-2 text-[12px] text-p-text-muted">
+                          <div className="rounded-lg bg-p-surface px-2 py-1.5">
                             <p>Total</p>
-                            <p className="text-[15px] font-semibold text-[#2a3245]">
+                            <p className="text-[15px] font-semibold text-p-text">
                               {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
                             </p>
                           </div>
-                          <div className="rounded-lg bg-white px-2 py-1.5">
+                          <div className="rounded-lg bg-p-surface px-2 py-1.5">
                             <p>Pagado</p>
-                            <p className="text-[15px] font-semibold text-[#16733f]">
+                            <p className="text-[15px] font-semibold text-p-positive">
                               {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
                             </p>
                           </div>
-                          <div className="rounded-lg bg-white px-2 py-1.5">
+                          <div className="rounded-lg bg-p-surface px-2 py-1.5">
                             <p>Deuda</p>
-                            <p className="text-[15px] font-semibold text-[#9a5a00]">
+                            <p className="text-[15px] font-semibold text-p-warning">
                               {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
                             </p>
                           </div>
                         </div>
-                        <p className="mt-2 text-[12px] text-[#6f7890]">
+                        <p className="mt-2 text-[12px] text-p-text-muted">
                           Cancha: {bookingCourtAmount.toFixed(2)} $ · Consumos: {bookingItemsAmount.toFixed(2)} $
                         </p>
                         <div className="mt-3 flex items-center gap-2">
@@ -12009,16 +12009,16 @@ export default function AdminAgendaPlaygroundPage() {
                             type="button"
                             onClick={openSimplifiedPaymentModal}
                             disabled={!simplifiedCanRegisterPayment}
-                            className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                            className="h-10 rounded-xl bg-ink-900 px-4 text-[14px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                           >
                             Registrar pago
                           </button>
                           {!persistedEditingBookingId ? (
-                            <p className="text-[12px] text-[#7c8598]">Primero creá la reserva.</p>
+                            <p className="text-[12px] text-p-text-muted">Primero creá la reserva.</p>
                           ) : billingConfigLoadError ? (
-                            <p className="text-[12px] text-[#b42346]">{billingConfigLoadError}</p>
+                            <p className="text-[12px] text-p-error">{billingConfigLoadError}</p>
                           ) : isPaymentLockedByManualPending ? (
-                            <p className="text-[12px] text-[#7c8598]">Confirmá la reserva para habilitar pagos.</p>
+                            <p className="text-[12px] text-p-text-muted">Confirmá la reserva para habilitar pagos.</p>
                           ) : null}
                         </div>
                       </div>
@@ -12026,8 +12026,8 @@ export default function AdminAgendaPlaygroundPage() {
                     {!isModernBillingEnabled && (
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <div className={isBookingFullyPaid ? 'col-span-2' : ''}>
-                        <p className="text-[13px] text-[#727b90]">{priceFieldLabel}</p>
-                        <div className="mt-2 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between text-[16px] text-[#2c3448]">
+                        <p className="text-[13px] text-p-text-muted">{priceFieldLabel}</p>
+                        <div className="mt-2 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between text-[16px] text-p-text">
                           <input
                             type="number"
                             min={0}
@@ -12035,30 +12035,30 @@ export default function AdminAgendaPlaygroundPage() {
                             step="0.01"
                             value={isFinancialDisplayPending ? '' : Number(totalPrice.toFixed(2))}
                             readOnly
-                            className="w-full bg-transparent outline-none text-[#2c3448]"
+                            className="w-full bg-transparent outline-none text-p-text"
                           />
-                          <span className="text-[#8b93a5]">$</span>
+                          <span className="text-p-text-muted">$</span>
                         </div>
-                        <p className="mt-1 text-[11px] text-[#6f7890]">
+                        <p className="mt-1 text-[11px] text-p-text-muted">
                           Precio turno ({selectionMinutes} min):{' '}
                           <strong>{isFinancialDisplayPending ? '--' : `${totalPrice.toFixed(2)} $`}</strong>
                         </p>
-                        <p className="mt-1 text-[11px] text-[#6f7890]">{priceFieldHint}</p>
+                        <p className="mt-1 text-[11px] text-p-text-muted">{priceFieldHint}</p>
                         {isFinancialDisplayPending && (
-                          <p className="mt-1 text-[11px] text-[#7b8396]">Cargando precio...</p>
+                          <p className="mt-1 text-[11px] text-p-text-muted">Cargando precio...</p>
                         )}
-                        {quoteLoading && <p className="mt-1 text-[11px] text-[#7b8396]">Cotizando...</p>}
+                        {quoteLoading && <p className="mt-1 text-[11px] text-p-text-muted">Cotizando...</p>}
                         {quoteError && !isBlockingQuoteError(quoteError) && (
-                          <p className="mt-1 text-[11px] text-[#d13d57]">{quoteError}</p>
+                          <p className="mt-1 text-[11px] text-p-error">{quoteError}</p>
                         )}
                         {bookingFinancial && (
-                          <p className="mt-1 text-[11px] text-[#6f7890]">
+                          <p className="mt-1 text-[11px] text-p-text-muted">
                             Pagado: <strong>{bookingFinancial.paid.toFixed(2)} $</strong> · Restante:{' '}
                             <strong>{bookingFinancial.remaining.toFixed(2)} $</strong>
                           </p>
                         )}
                         {exceedsRemainingWarning && (
-                          <p className="mt-1 text-[11px] text-[#d13d57]">
+                          <p className="mt-1 text-[11px] text-p-error">
                             El precio configurado supera el saldo pendiente. Al cobrar se ajustará al restante.
                           </p>
                         )}
@@ -12067,11 +12067,11 @@ export default function AdminAgendaPlaygroundPage() {
                     )}
                   </section>
 
-                  <section className="py-6 border-b border-[#edf0f5]">
+                  <section className="py-6 border-b border-p-border">
                     <div className="flex items-end justify-between">
-                      <p className="text-[19px] font-semibold tracking-[-0.01em] text-[#1f2638]">Participantes</p>
+                      <p className="text-[19px] font-semibold tracking-[-0.01em] text-p-text">Participantes</p>
                       {!isModernBillingEnabled && (
-                        <div className="grid grid-cols-[1fr_86px_132px_20px] gap-2 text-[12px] text-[#7b8396]">
+                        <div className="grid grid-cols-[1fr_86px_132px_20px] gap-2 text-[12px] text-p-text-muted">
                           <span />
                           <span>Precio</span>
                           <span>Pago</span>
@@ -12080,7 +12080,7 @@ export default function AdminAgendaPlaygroundPage() {
                       )}
                     </div>
                     {isModernBillingEnabled && (
-                      <p className="mt-2 text-[12px] text-[#6f7890]">
+                      <p className="mt-2 text-[12px] text-p-text-muted">
                         Acá gestionás personas de la reserva. La lógica de cobro está en la sección <strong>Cobro</strong>.
                       </p>
                     )}
@@ -12095,16 +12095,16 @@ export default function AdminAgendaPlaygroundPage() {
                           <div
                             key={participant.id}
                             data-participant-shell-id={participant.id}
-                            className={`rounded-xl border bg-white p-2 ${
-                              isDuplicateParticipant ? 'border-[#f2b7c3] bg-[#fff8fa]' : 'border-[#e3e8f2]'
+                            className={`rounded-xl border bg-p-surface p-2 ${
+                              isDuplicateParticipant ? 'border-p-error bg-p-error-bg' : 'border-p-border'
                             }`}
                           >
-                            <p className="text-[13px] text-[#7c8598] mb-2">
+                            <p className="text-[13px] text-p-text-muted mb-2">
                               {participant.isOwner ? 'Responsable de la reserva' : 'Participante'}
                             </p>
                             <div className={`grid ${isModernBillingEnabled ? 'grid-cols-[1fr_20px]' : 'grid-cols-[1fr_86px_132px_20px]'} gap-2 items-center`}>
                               <div className="relative">
-                                <div className="h-11 rounded-xl border border-[#dbe2ef] px-3 flex items-center gap-2 text-[#8b93a5]">
+                                <div className="h-11 rounded-xl border border-p-border px-3 flex items-center gap-2 text-p-text-muted">
                                   <Search size={14} />
                                   <input
                                     value={participant.name}
@@ -12116,24 +12116,24 @@ export default function AdminAgendaPlaygroundPage() {
                                       }
                                     }}
                                     placeholder="Buscar nombre, correo o teléfono"
-                                    className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                    className="w-full bg-transparent outline-none text-[13px] text-p-text"
                                   />
                                 </div>
                                 {participantSearchOpenId === participant.id && (
-                                  <div className="absolute left-0 right-0 top-12 z-30 rounded-xl border border-[#dde3ef] bg-white shadow-lg p-1">
+                                  <div className="absolute left-0 right-0 top-12 z-30 rounded-xl border border-p-border bg-p-surface shadow-lg p-1">
                                     {participantSearchLoadingId === participant.id && (
-                                      <p className="px-2 py-1 text-[11px] text-[#7b8396]">Buscando...</p>
+                                      <p className="px-2 py-1 text-[11px] text-p-text-muted">Buscando...</p>
                                     )}
                                     {(participantSuggestionsById[participant.id] || []).slice(0, 8).map((suggestion) => (
                                       <button
                                         key={suggestion.id}
                                         type="button"
                                         onClick={() => applyParticipantSuggestion(participant.id, suggestion)}
-                                        className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                        className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
                                       >
-                                        <span className="block text-[12px] font-semibold text-[#273048]">{suggestion.label}</span>
+                                        <span className="block text-[12px] font-semibold text-p-text">{suggestion.label}</span>
                                         {suggestion.secondary && (
-                                          <span className="block text-[11px] text-[#7b8396]">{suggestion.secondary}</span>
+                                          <span className="block text-[11px] text-p-text-muted">{suggestion.secondary}</span>
                                         )}
                                       </button>
                                     ))}
@@ -12141,7 +12141,7 @@ export default function AdminAgendaPlaygroundPage() {
                                 )}
                               </div>
                               {!isModernBillingEnabled && (
-                              <div className="h-11 rounded-xl border border-[#dbe2ef] px-3 flex items-center justify-between text-[15px]">
+                              <div className="h-11 rounded-xl border border-p-border px-3 flex items-center justify-between text-[15px]">
                                 {!participantIsCharged ? (
                                   <span>-</span>
                                 ) : (
@@ -12206,7 +12206,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     className="w-full bg-transparent outline-none"
                                   />
                                 )}
-                                <span className="text-[#8b93a5]">$</span>
+                                <span className="text-p-text-muted">$</span>
                               </div>
                               )}
                               {!isModernBillingEnabled && (
@@ -12219,8 +12219,8 @@ export default function AdminAgendaPlaygroundPage() {
                                 disabled={!isPaymentsTabActive || isBookingFullyPaid || !participantIsCharged || isPaymentLockedByManualPending || paymentInFlightId === participant.id}
                                 className={`h-11 rounded-xl border text-[15px] font-semibold ${
                                   isBookingFullyPaid || participantPaidComputed || !participantIsCharged
-                                    ? 'border-[#cbe6d0] bg-[#e9f8ec] text-[#16733f]'
-                                    : 'border-[#dfe5f8] bg-[#edf1ff] text-[#3155df]'
+                                    ? 'border-p-positive bg-p-positive-bg text-p-positive'
+                                    : 'border-p-accent bg-p-positive-bg text-p-accent'
                                 } disabled:opacity-60`}
                               >
                                 {!participantIsCharged
@@ -12248,14 +12248,14 @@ export default function AdminAgendaPlaygroundPage() {
                                     previous === participant.id ? null : participant.id
                                   );
                                 }}
-                                className="h-11 w-5 text-[#727b90] grid place-items-center"
+                                className="h-11 w-5 text-p-text-muted grid place-items-center"
                               >
                                 <MoreVertical size={16} />
                               </button>
                             </div>
                             {expandedParticipantId === participant.id ? (
                               <div className="mt-2">
-                                <div className="h-10 rounded-xl border border-[#dbe2ef] px-3 flex items-center gap-2 text-[#8b93a5]">
+                                <div className="h-10 rounded-xl border border-p-border px-3 flex items-center gap-2 text-p-text-muted">
                                   <input
                                     ref={participantContactInputRef}
                                     value={participant.contact}
@@ -12274,38 +12274,38 @@ export default function AdminAgendaPlaygroundPage() {
                                       }
                                     }}
                                     placeholder="Email y teléfono"
-                                    className="w-full bg-transparent outline-none text-[13px] text-[#273048]"
+                                    className="w-full bg-transparent outline-none text-[13px] text-p-text"
                                   />
                                 </div>
                                 <div className="mt-2 flex justify-end gap-2">
                                   <button
                                     type="button"
                                     onClick={() => setExpandedParticipantId(null)}
-                                    className="h-8 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#5f6880] hover:bg-[#f6f8fc]"
+                                    className="h-8 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                                   >
                                     Cancelar
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setExpandedParticipantId(null)}
-                                    className="h-8 rounded-lg bg-[#3155df] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc]"
+                                    className="h-8 rounded-lg bg-[var(--accent-fg)] px-3 text-[12px] font-semibold text-ink-50 hover:bg-ink-900"
                                   >
                                     Guardar
                                   </button>
                                 </div>
                               </div>
                             ) : participant.contact.trim().length > 0 ? (
-                              <p className="mt-2 text-[12px] text-[#6f7890]">
+                              <p className="mt-2 text-[12px] text-p-text-muted">
                                 Contacto: {participant.contact}
                               </p>
                             ) : null}
                             {isDuplicateParticipant && (
-                              <p className="mt-2 text-[11px] font-semibold text-[#c0354f]">
+                              <p className="mt-2 text-[11px] font-semibold text-p-error">
                                 Participante duplicado en esta reserva.
                               </p>
                             )}
                             {participantMenuId === participant.id && (
-                              <div className="mt-2 rounded-xl border border-[#dce2ef] bg-white shadow-sm p-2 text-[12px] text-[#30384d]">
+                              <div className="mt-2 rounded-xl border border-p-border bg-p-surface shadow-sm p-2 text-[12px] text-p-text-secondary">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -12314,7 +12314,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     );
                                     setParticipantMenuId(null);
                                   }}
-                                  className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                  className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
                                 >
                                   {expandedParticipantId === participant.id
                                     ? 'Finalizar edición'
@@ -12333,13 +12333,13 @@ export default function AdminAgendaPlaygroundPage() {
                                         }
                                         setParticipantMenuId(null);
                                       }}
-                                      className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-[#f4f6fb]"
+                                      className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
                                     >
                                       {participantPaidComputed ? 'Marcar como pendiente' : 'Pagar su parte'}
                                     </button>
                                   </>
                                 )}
-                                <div className="mt-1 border-t border-[#edf0f6] pt-1">
+                                <div className="mt-1 border-t border-p-border pt-1">
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -12352,7 +12352,7 @@ export default function AdminAgendaPlaygroundPage() {
                                       setParticipantMenuId(null);
                                     }}
                                     disabled={participant.isOwner}
-                                    className="w-full text-left rounded-lg px-2 py-1.5 text-[#c0354f] hover:bg-[#fff2f4] disabled:opacity-40"
+                                    className="w-full text-left rounded-lg px-2 py-1.5 text-p-error hover:bg-p-error-bg disabled:opacity-40"
                                   >
                                     Eliminar participante
                                   </button>
@@ -12375,7 +12375,7 @@ export default function AdminAgendaPlaygroundPage() {
                               previous.map((participant) => ({ ...participant, customPrice: null }))
                             );
                           }}
-                          className="h-7 rounded-full px-3 border border-[#dbe2ef] text-[#4e5870] text-[12px] font-semibold"
+                          className="h-7 rounded-full px-3 border border-p-border text-p-text-secondary text-[12px] font-semibold"
                         >
                           Recalcular precios
                         </button>
@@ -12383,7 +12383,7 @@ export default function AdminAgendaPlaygroundPage() {
                       <button
                         type="button"
                         onClick={addParticipantRow}
-                        className="h-7 rounded-full px-3 border border-[#dbe2ef] text-[#4e5870] text-[12px] font-semibold inline-flex items-center gap-1"
+                        className="h-7 rounded-full px-3 border border-p-border text-p-text-secondary text-[12px] font-semibold inline-flex items-center gap-1"
                       >
                         <Plus size={12} />
                         Agregar participante
@@ -12398,20 +12398,20 @@ export default function AdminAgendaPlaygroundPage() {
                   )}
                 </div>
 
-                <footer ref={simplifiedSidebarFooterRef} className="border-t border-[#eef0f5] bg-white px-6 py-4">
+                <footer ref={simplifiedSidebarFooterRef} className="border-t border-p-border bg-p-surface px-6 py-4">
                   {useSimplifiedBookingSidebar ? (
                     <div className="space-y-3">
                       {shouldShowSeriesScopeHint && (
-                        <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[12px] text-[#2f4fd8]">
+                        <div className="rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[12px] text-p-accent">
                           Esta reserva pertenece a una serie. Al guardar, vas a elegir si editar solo esta ocurrencia, desde esta en adelante o toda la serie.
                         </div>
                       )}
                       {hasBlockingActionError && (
-                        <div className="rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2.5">
-                          <p className="text-[12px] font-semibold text-[#b42346]">
+                        <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2.5">
+                          <p className="text-[12px] font-semibold text-p-error">
                             No podes continuar hasta corregir este error.
                           </p>
-                          <p className="mt-0.5 text-[12px] text-[#b42346]">{blockingActionMessage}</p>
+                          <p className="mt-0.5 text-[12px] text-p-error">{blockingActionMessage}</p>
                         </div>
                       )}
                       <div className="flex items-center justify-end gap-2">
@@ -12422,7 +12422,7 @@ export default function AdminAgendaPlaygroundPage() {
                             aria-label="Eliminar reserva"
                             title="Eliminar reserva"
                             disabled={isSubmittingBooking || isDeletingBooking}
-                            className="h-10 w-10 rounded-xl border border-[#f1c7d2] bg-white text-[#b42346] grid place-items-center hover:bg-[#fff4f7] disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="h-10 w-10 rounded-xl border border-p-error bg-p-surface text-p-error grid place-items-center hover:bg-p-error-bg disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -12433,7 +12433,7 @@ export default function AdminAgendaPlaygroundPage() {
                               type="button"
                               onClick={() => void handleConfirmPendingBooking()}
                               disabled={confirmingBooking || isSubmittingBooking || isDeletingBooking}
-                              className="h-10 rounded-xl border border-[#d8e0ff] bg-white px-4 text-[13px] font-semibold text-[#3155df] hover:bg-[#f5f7ff] disabled:opacity-50"
+                              className="h-10 rounded-xl border border-p-accent bg-p-surface px-4 text-[13px] font-semibold text-p-accent hover:bg-p-surface-2 disabled:opacity-50"
                             >
                               {confirmingBooking ? 'Confirmando...' : 'Confirmar reserva'}
                             </button>
@@ -12442,7 +12442,7 @@ export default function AdminAgendaPlaygroundPage() {
                             <button
                               type="button"
                               onClick={() => setBlockingErrorModalOpen(true)}
-                              className="h-10 rounded-xl border border-[#efc5cf] bg-white px-4 text-[13px] font-semibold text-[#b42346] hover:bg-[#fff8fa]"
+                              className="h-10 rounded-xl border border-p-error bg-p-surface px-4 text-[13px] font-semibold text-p-error hover:bg-p-error-bg"
                             >
                               Ver detalle
                             </button>
@@ -12451,7 +12451,7 @@ export default function AdminAgendaPlaygroundPage() {
                             type="button"
                             onClick={() => void handleCreateBooking()}
                             disabled={primaryActionDisabled}
-                            className="h-10 min-w-[170px] rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                            className="h-10 min-w-[170px] rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                           >
                             {editingBookingId ? 'Guardar cambios' : 'Crear reserva'}
                           </button>
@@ -12461,34 +12461,34 @@ export default function AdminAgendaPlaygroundPage() {
                   ) : (
                   <div className="space-y-3">
                     {shouldShowSeriesScopeHint && (
-                      <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[12px] text-[#2f4fd8]">
+                      <div className="rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[12px] text-p-accent">
                         Esta reserva pertenece a una serie. Al guardar, vas a elegir si editar solo esta ocurrencia, desde esta en adelante o toda la serie.
                       </div>
                     )}
                     {bookingKind !== 'block' && !shouldHideBillingUntilConfirmed && (
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8fafd] px-3 py-2.5">
-                        <p className="text-[12px] font-semibold text-[#2a3245]">Resumen de cobro</p>
+                      <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
+                        <p className="text-[12px] font-semibold text-p-text">Resumen de cobro</p>
                         <div className="mt-2 grid grid-cols-3 gap-2">
-                          <div className="rounded-lg bg-white px-2 py-1.5 text-[11px] text-[#6f7890]">
+                          <div className="rounded-lg bg-p-surface px-2 py-1.5 text-[11px] text-p-text-muted">
                             <p>Total</p>
-                            <p className="text-[13px] font-semibold text-[#2a3245]">
+                            <p className="text-[13px] font-semibold text-p-text">
                               {Number(billingSummary.totalAmount || 0).toFixed(2)} $
                             </p>
                           </div>
-                          <div className="rounded-lg bg-white px-2 py-1.5 text-[11px] text-[#6f7890]">
+                          <div className="rounded-lg bg-p-surface px-2 py-1.5 text-[11px] text-p-text-muted">
                             <p>Pagado</p>
-                            <p className="text-[13px] font-semibold text-[#16733f]">
+                            <p className="text-[13px] font-semibold text-p-positive">
                               {Number(billingSummary.paidAmount || 0).toFixed(2)} $
                             </p>
                           </div>
-                          <div className="rounded-lg bg-white px-2 py-1.5 text-[11px] text-[#6f7890]">
+                          <div className="rounded-lg bg-p-surface px-2 py-1.5 text-[11px] text-p-text-muted">
                             <p>Restante</p>
-                            <p className="text-[13px] font-semibold text-[#9a5a00]">
+                            <p className="text-[13px] font-semibold text-p-warning">
                               {Number(billingSummary.remainingAmount || 0).toFixed(2)} $
                             </p>
                           </div>
                         </div>
-                        <div className="mt-2 flex items-center justify-between text-[11px] text-[#6f7890]">
+                        <div className="mt-2 flex items-center justify-between text-[11px] text-p-text-muted">
                           <span>
                             Lista: {quotedListPrice != null ? `${quotedListPrice.toFixed(2)} $` : '-'}
                           </span>
@@ -12499,20 +12499,20 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                     )}
                     {bookingKind !== 'block' && shouldHideBillingUntilConfirmed && (
-                      <div className="rounded-xl border border-[#f2d6a8] bg-[#fff9ee] px-3 py-2.5">
-                        <p className="text-[12px] font-semibold text-[#8b5c1a]">Cobro pendiente de confirmación</p>
-                        <p className="mt-1 text-[12px] text-[#926a2a]">
+                      <div className="rounded-xl border border-p-warning bg-p-warning-bg px-3 py-2.5">
+                        <p className="text-[12px] font-semibold text-p-warning">Cobro pendiente de confirmación</p>
+                        <p className="mt-1 text-[12px] text-p-warning">
                           Confirmá la reserva para habilitar pagos y saldo.
                         </p>
                       </div>
                     )}
 
                     {hasBlockingActionError && (
-                      <div className="rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2.5">
-                        <p className="text-[12px] font-semibold text-[#b42346]">
+                      <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2.5">
+                        <p className="text-[12px] font-semibold text-p-error">
                           No podés continuar hasta corregir este error.
                         </p>
-                        <p className="mt-0.5 text-[12px] text-[#b42346]">{blockingActionMessage}</p>
+                        <p className="mt-0.5 text-[12px] text-p-error">{blockingActionMessage}</p>
                       </div>
                     )}
 
@@ -12525,7 +12525,7 @@ export default function AdminAgendaPlaygroundPage() {
                             aria-label="Eliminar reserva"
                             title="Eliminar reserva"
                             disabled={isSubmittingBooking || isDeletingBooking}
-                            className="h-10 w-10 rounded-xl border border-[#f1c7d2] bg-white text-[#b42346] grid place-items-center hover:bg-[#fff4f7] disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="h-10 w-10 rounded-xl border border-p-error bg-p-surface text-p-error grid place-items-center hover:bg-p-error-bg disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -12534,7 +12534,7 @@ export default function AdminAgendaPlaygroundPage() {
                           <button
                             type="button"
                             onClick={() => setBlockingErrorModalOpen(true)}
-                            className="h-10 rounded-xl border border-[#efc5cf] bg-white px-4 text-[13px] font-semibold text-[#b42346] hover:bg-[#fff8fa]"
+                            className="h-10 rounded-xl border border-p-error bg-p-surface px-4 text-[13px] font-semibold text-p-error hover:bg-p-error-bg"
                           >
                             Ver detalle
                           </button>
@@ -12543,7 +12543,7 @@ export default function AdminAgendaPlaygroundPage() {
                           type="button"
                           onClick={() => void handleCreateBooking()}
                           disabled={primaryActionDisabled}
-                          className="h-10 min-w-[232px] rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                          className="h-10 min-w-[232px] rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                         >
                           {isSubmittingBooking ? primaryActionLabel : `${primaryActionLabel} • ${primaryActionMeta}`}
                         </button>
@@ -12571,7 +12571,7 @@ export default function AdminAgendaPlaygroundPage() {
               <button
                 type="button"
                 onClick={closeSimplifiedPaymentModal}
-                className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
               >
                 Cancelar
               </button>
@@ -12585,7 +12585,7 @@ export default function AdminAgendaPlaygroundPage() {
                   simplifiedRemainingAfterQueue <= 0.009
                 }
                 onClick={() => queueSimplifiedPaymentFromModal()}
-                className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900 disabled:opacity-40"
               >
                 Continuar
               </button>
@@ -12688,21 +12688,21 @@ export default function AdminAgendaPlaygroundPage() {
         activePaymentModal.step === 'form' &&
         !isPlaytomicPaymentModal && (
         <div
-          className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[#0d1326]/45 p-4"
+          className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[var(--overlay)] p-4"
           role="presentation"
           onPointerDown={handleModalBackdropPointerDown}
           onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
         >
           <div
-            className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-p-border bg-p-surface shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-              <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
+              <div className="flex items-center justify-between border-b border-p-border px-4 py-3">
                 <div>
-                  <p className="text-[18px] font-semibold text-[#1f2638]">
+                  <p className="text-[18px] font-semibold text-p-text">
                     {isPlaytomicPaymentModal ? 'Registrar cobro' : 'Registrar pago'}
                   </p>
-                  <p className="text-[12px] text-[#707a92]">
+                  <p className="text-[12px] text-p-text-secondary">
                     {isPlaytomicPaymentModal
                       ? 'Elegi metodo y monto. Si hace falta, ajusta conceptos.'
                       : paymentMode === 'Único'
@@ -12713,7 +12713,7 @@ export default function AdminAgendaPlaygroundPage() {
                 <button
                   type="button"
                   onClick={closeSimplifiedPaymentModal}
-                  className="h-8 w-8 rounded-full text-[#7e879c] grid place-items-center hover:bg-[#f3f5fa]"
+                  className="h-8 w-8 rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
                   aria-label="Cerrar"
                 >
                   <X size={16} />
@@ -12722,22 +12722,22 @@ export default function AdminAgendaPlaygroundPage() {
 
               <div className="space-y-3 overflow-hidden px-4 py-3">
                 {!isPlaytomicPaymentModal && (
-                  <div className="grid grid-cols-3 gap-2 text-[11px] text-[#6f7890]">
-                    <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                  <div className="grid grid-cols-3 gap-2 text-[11px] text-p-text-muted">
+                    <div className="rounded-lg border border-p-border bg-p-surface-2 px-2 py-1.5">
                       <p>Total</p>
-                      <p className="text-[13px] font-semibold text-[#273149]">
+                      <p className="text-[13px] font-semibold text-p-text">
                         {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
                       </p>
                     </div>
-                    <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                    <div className="rounded-lg border border-p-border bg-p-surface-2 px-2 py-1.5">
                       <p>Pagado</p>
-                      <p className="text-[13px] font-semibold text-[#16733f]">
+                      <p className="text-[13px] font-semibold text-p-positive">
                         {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
                       </p>
                     </div>
-                    <div className="rounded-lg border border-[#e2e7f1] bg-[#f8f9fd] px-2 py-1.5">
+                    <div className="rounded-lg border border-p-border bg-p-surface-2 px-2 py-1.5">
                       <p>Deuda</p>
-                      <p className="text-[13px] font-semibold text-[#9a5a00]">
+                      <p className="text-[13px] font-semibold text-p-warning">
                         {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
                       </p>
                     </div>
@@ -12748,11 +12748,11 @@ export default function AdminAgendaPlaygroundPage() {
                   <>
                     <div className="grid grid-cols-1 gap-3">
                       <div className="block">
-                        <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+                        <span className="text-[12px] font-medium text-p-text-muted">Método</span>
                         <select
                           value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
                           onChange={(event) => setSimplifiedPaymentMethodDraft(String(event.target.value || ''))}
-                          className="mt-1 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[14px] text-[#2a3245] outline-none focus:border-[#3053e2]"
+                          className="mt-1 h-11 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[14px] text-p-text outline-none focus:border-p-accent"
                         >
                           {ownerPaymentMethodOptions.map((option) => (
                             <option key={option.value} value={option.value}>
@@ -12763,8 +12763,8 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
-                      <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a cobrar</p>
+                    <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
+                      <p className="text-[12px] font-semibold text-p-text-secondary">Conceptos a cobrar</p>
                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
                         {[
                           { id: 'FULL', label: 'Todo pendiente' },
@@ -12779,8 +12779,8 @@ export default function AdminAgendaPlaygroundPage() {
                               onClick={() => applySimplifiedPaymentQuickPreset(option.id as PaymentQuickPreset)}
                               className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
                                 isActive
-                                  ? 'border-[#3155df] bg-[#eef2ff] text-[#3155df]'
-                                  : 'border-[#dce2ee] bg-white text-[#5f6880] hover:bg-[#f5f7fc]'
+                                  ? 'border-p-accent bg-p-positive-bg text-p-accent'
+                                  : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
                               }`}
                             >
                               {option.label}
@@ -12791,10 +12791,10 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
 
                     {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+                      <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[12px] font-semibold text-[#44506b]">Selección manual</p>
-                          <span className="text-[11px] font-semibold text-[#6f7890]">
+                          <p className="text-[12px] font-semibold text-p-text-secondary">Selección manual</p>
+                          <span className="text-[11px] font-semibold text-p-text-muted">
                             Total: {computeCustomSelectedAmount(
                               simplifiedPaymentSelectedItemIdsDraft,
                               simplifiedPaymentCustomItemAmountDraftById
@@ -12817,7 +12817,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   )
                                 );
                               }}
-                              className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                              className="h-7 rounded-md border border-p-border bg-p-surface px-2 text-[11px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                             >
                               Seleccionar todo
                             </button>
@@ -12828,15 +12828,15 @@ export default function AdminAgendaPlaygroundPage() {
                                 setSimplifiedPaymentCustomItemAmountDraftById({});
                                 setSimplifiedPaymentAmountDraft('');
                               }}
-                              className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                              className="h-7 rounded-md border border-p-border bg-p-surface px-2 text-[11px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                             >
                               Limpiar
                             </button>
                           </div>
                         </div>
-                        <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
+                        <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-p-border bg-p-surface p-2">
                           {pendingAccountItems.length === 0 ? (
-                            <p className="px-1 py-2 text-[12px] text-[#7a8398]">
+                            <p className="px-1 py-2 text-[12px] text-p-text-muted">
                               No hay conceptos con deuda pendiente.
                             </p>
                           ) : (
@@ -12876,9 +12876,9 @@ export default function AdminAgendaPlaygroundPage() {
                                         )
                                       );
                                     }}
-                                    className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
+                                    className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-p-surface-2"
                                   >
-                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
+                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-p-text">
                                       <input
                                         type="checkbox"
                                         checked={checked}
@@ -12926,14 +12926,14 @@ export default function AdminAgendaPlaygroundPage() {
                                             return;
                                           }
                                         }}
-                                        className="h-4 w-4 accent-[#3053e2]"
+                                        className="h-4 w-4 accent-p-brand"
                                       />
                                       <span className="truncate">
                                         {item.type === 'BOOKING' ? 'Cancha' : item.description}
                                       </span>
                                     </span>
                                     <div className="flex items-center gap-2">
-                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-[#dce2ee] bg-white px-2">
+                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-p-border bg-p-surface px-2">
                                         <input
                                           type="number"
                                           min={0}
@@ -12964,11 +12964,11 @@ export default function AdminAgendaPlaygroundPage() {
                                               )
                                             );
                                           }}
-                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-[#2a3245] outline-none disabled:text-[#9ca5ba]"
+                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-p-text outline-none disabled:text-p-text-muted"
                                         />
-                                        <span className="ml-1 text-[11px] font-semibold text-[#8a92a5]">$</span>
+                                        <span className="ml-1 text-[11px] font-semibold text-p-text-muted">$</span>
                                       </div>
-                                      <span className="w-[88px] text-right text-[11px] font-semibold text-[#62708f]">
+                                      <span className="w-[88px] text-right text-[11px] font-semibold text-p-text-secondary">
                                         {Number(item.remainingAmount || 0).toFixed(2)} $
                                       </span>
                                     </div>
@@ -12982,19 +12982,19 @@ export default function AdminAgendaPlaygroundPage() {
                     )}
 
                     <label className="block">
-                      <span className="text-[12px] font-medium text-[#79829a]">Monto final</span>
-                      <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+                      <span className="text-[12px] font-medium text-p-text-muted">Monto final</span>
+                      <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
                         <input
                           type="number"
                           min={0}
                           step="0.01"
                           value={simplifiedPaymentAmountDraft}
                           onChange={(event) => setSimplifiedPaymentAmountDraft(event.target.value)}
-                          className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
+                          className="w-full bg-transparent text-[16px] text-p-text outline-none"
                         />
-                        <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
+                        <span className="text-[15px] font-semibold text-p-text-muted">$</span>
                       </div>
-                      <p className="mt-1 text-[11px] text-[#6f7890]">
+                      <p className="mt-1 text-[11px] text-p-text-muted">
                         Maximo: {simplifiedPaymentMaxAmount.toFixed(2)} $
                       </p>
                     </label>
@@ -13004,7 +13004,7 @@ export default function AdminAgendaPlaygroundPage() {
                   <>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                       <div className="block">
-                        <span className="text-[12px] font-medium text-[#79829a]">Pagador</span>
+                        <span className="text-[12px] font-medium text-p-text-muted">Pagador</span>
                         <PlaygroundCombo
                           value={simplifiedResolvedPayerParticipantId || simplifiedPayerComboOptions[0]?.value || ''}
                           onChange={handleSimplifiedPayerChange}
@@ -13013,15 +13013,15 @@ export default function AdminAgendaPlaygroundPage() {
                           className="mt-1"
                         />
                         {simplifiedLockedSinglePayerId && (
-                          <p className="mt-1 text-[11px] text-[#7a8398]">
+                          <p className="mt-1 text-[11px] text-p-text-muted">
                             El pagador queda fijo después del primer pago confirmado.
                           </p>
                         )}
                       </div>
                       <div className="block">
-                        <span className="text-[12px] font-medium text-[#79829a]">Imputar pago a</span>
+                        <span className="text-[12px] font-medium text-p-text-muted">Imputar pago a</span>
                         {paymentMode === 'Único' ? (
-                          <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-[#f7f9fd] px-3 flex items-center text-[14px] font-medium text-[#4a546f]">
+                          <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface-2 px-3 flex items-center text-[14px] font-medium text-p-text-secondary">
                             {simplifiedResolvedCoveredParticipant?.name || simplifiedResolvedPayerParticipant?.name || 'Titular'}
                           </div>
                         ) : (
@@ -13047,7 +13047,7 @@ export default function AdminAgendaPlaygroundPage() {
                         )}
                       </div>
                       <div className="block">
-                        <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+                        <span className="text-[12px] font-medium text-p-text-muted">Método</span>
                         <PlaygroundCombo
                           value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
                           onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
@@ -13058,8 +13058,8 @@ export default function AdminAgendaPlaygroundPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
-                      <p className="text-[12px] font-semibold text-[#44506b]">Qué quiere pagar</p>
+                    <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
+                      <p className="text-[12px] font-semibold text-p-text-secondary">Qué quiere pagar</p>
                       <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
                         {[
                           { id: 'MY_SHARE', label: 'Mi parte' },
@@ -13075,8 +13075,8 @@ export default function AdminAgendaPlaygroundPage() {
                               onClick={() => applySimplifiedPaymentQuickPreset(option.id as PaymentQuickPreset)}
                               className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
                                 isActive
-                                  ? 'border-[#3155df] bg-[#eef2ff] text-[#3155df]'
-                                  : 'border-[#dce2ee] bg-white text-[#5f6880] hover:bg-[#f5f7fc]'
+                                  ? 'border-p-accent bg-p-positive-bg text-p-accent'
+                                  : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
                               }`}
                             >
                               {option.label}
@@ -13084,7 +13084,7 @@ export default function AdminAgendaPlaygroundPage() {
                           );
                         })}
                       </div>
-                      <p className="mt-2 text-[11px] text-[#6f7890]">
+                      <p className="mt-2 text-[11px] text-p-text-muted">
                         {simplifiedPaymentQuickPreset === 'MY_SHARE'
                           ? 'Cobra la deuda del participante imputado.'
                           : simplifiedPaymentQuickPreset === 'FULL'
@@ -13096,18 +13096,18 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
 
                     {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
-                      <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
-                        <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a pagar</p>
-                        <p className="mt-2 text-[11px] text-[#6f7890]">
+                      <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
+                        <p className="text-[12px] font-semibold text-p-text-secondary">Conceptos a pagar</p>
+                        <p className="mt-2 text-[11px] text-p-text-muted">
                           Total seleccionado: {computeCustomSelectedAmount(
                             simplifiedPaymentSelectedItemIdsDraft,
                             simplifiedPaymentCustomItemAmountDraftById
                           ).toFixed(2)} $
                         </p>
 
-                        <div className="mt-2 max-h-[160px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
+                        <div className="mt-2 max-h-[160px] overflow-auto rounded-lg border border-p-border bg-p-surface p-2">
                           {pendingAccountItems.length === 0 ? (
-                            <p className="px-1 py-2 text-[12px] text-[#7a8398]">No hay conceptos con deuda pendiente.</p>
+                            <p className="px-1 py-2 text-[12px] text-p-text-muted">No hay conceptos con deuda pendiente.</p>
                           ) : (
                             <div className="space-y-1">
                               {pendingAccountItems.map((item) => {
@@ -13145,9 +13145,9 @@ export default function AdminAgendaPlaygroundPage() {
                                         )
                                       );
                                     }}
-                                    className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
+                                    className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-p-surface-2"
                                   >
-                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
+                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-p-text">
                                       <input
                                         type="checkbox"
                                         checked={checked}
@@ -13195,14 +13195,14 @@ export default function AdminAgendaPlaygroundPage() {
                                             return;
                                           }
                                         }}
-                                        className="h-4 w-4 accent-[#3053e2]"
+                                        className="h-4 w-4 accent-p-brand"
                                       />
                                       <span className="truncate">
                                         {item.type === 'BOOKING' ? 'Cancha' : item.description}
                                       </span>
                                     </span>
                                     <div className="flex items-center gap-2">
-                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-[#dce2ee] bg-white px-2">
+                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-p-border bg-p-surface px-2">
                                         <input
                                           type="number"
                                           min={0}
@@ -13233,11 +13233,11 @@ export default function AdminAgendaPlaygroundPage() {
                                               )
                                             );
                                           }}
-                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-[#2a3245] outline-none disabled:text-[#9ca5ba]"
+                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-p-text outline-none disabled:text-p-text-muted"
                                         />
-                                        <span className="ml-1 text-[11px] font-semibold text-[#8a92a5]">$</span>
+                                        <span className="ml-1 text-[11px] font-semibold text-p-text-muted">$</span>
                                       </div>
-                                      <span className="w-[88px] text-right text-[11px] font-semibold text-[#62708f]">
+                                      <span className="w-[88px] text-right text-[11px] font-semibold text-p-text-secondary">
                                         {Number(item.remainingAmount || 0).toFixed(2)} $
                                       </span>
                                     </div>
@@ -13253,19 +13253,19 @@ export default function AdminAgendaPlaygroundPage() {
                 )}
 
                 <label className="block">
-                  <span className="text-[12px] font-medium text-[#79829a]">Monto</span>
-                  <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-p-text-muted">Monto</span>
+                  <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
                     <input
                       type="number"
                       min={0}
                       step="0.01"
                       value={simplifiedPaymentAmountDraft}
                       onChange={(event) => setSimplifiedPaymentAmountDraft(event.target.value)}
-                      className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
+                      className="w-full bg-transparent text-[16px] text-p-text outline-none"
                     />
-                    <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
+                    <span className="text-[15px] font-semibold text-p-text-muted">$</span>
                   </div>
-                  <p className="mt-1 text-[11px] text-[#6f7890]">
+                  <p className="mt-1 text-[11px] text-p-text-muted">
                     {isPlaytomicPaymentModal
                       ? `Máximo para este cobro: ${simplifiedPaymentMaxAmount.toFixed(2)} $`
                       : simplifiedPaymentImputationMode === 'BY_CONCEPT'
@@ -13277,7 +13277,7 @@ export default function AdminAgendaPlaygroundPage() {
                   {!isPlaytomicPaymentModal &&
                     paymentMode === 'Dividido' &&
                     simplifiedPaymentImputationMode === 'BY_PARTICIPANT' && (
-                      <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                      <p className="mt-0.5 text-[11px] text-p-text-muted">
                         Deuda seleccionada ({simplifiedResolvedCoveredParticipantIds.length}):{' '}
                         {simplifiedResolvedCoveredParticipantsDebt.toFixed(2)} $
                       </p>
@@ -13285,11 +13285,11 @@ export default function AdminAgendaPlaygroundPage() {
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-4 py-3">
+              <div className="flex items-center justify-end gap-2 border-t border-p-border px-4 py-3">
                 <button
                   type="button"
                   onClick={closeSimplifiedPaymentModal}
-                  className="h-10 rounded-xl border border-[#dce2ee] px-4 text-[14px] font-semibold text-[#5d667f] hover:bg-[#f7f9fc]"
+                  className="h-10 rounded-xl border border-p-border px-4 text-[14px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                 >
                   Cancelar
                 </button>
@@ -13305,7 +13305,7 @@ export default function AdminAgendaPlaygroundPage() {
                     !hasValidSimplifiedPaymentAmount ||
                     simplifiedRemainingAfterQueue <= 0.009
                   }
-                  className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+                  className="h-10 rounded-xl bg-ink-900 px-4 text-[14px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                 >
                   {isPlaytomicPaymentModal ? 'Continuar' : 'Registrar pago'}
                 </button>
@@ -13375,21 +13375,21 @@ export default function AdminAgendaPlaygroundPage() {
 
       <style jsx global>{`
         body {
-          background: #f5f6f8;
+          background: var(--bg);
         }
 
-        .playground-combo {
+        .p-admin-combo {
           position: relative;
         }
 
-        .playground-combo-trigger {
+        .p-admin-combo-trigger {
           position: relative;
           width: 100%;
           height: 44px;
-          border: 1px solid #dce2ee;
+          border: 1px solid var(--border);
           border-radius: 12px;
-          background: #ffffff;
-          color: #2a3348;
+          background: var(--surface-1);
+          color: var(--text-primary);
           font-size: 15px;
           font-weight: 500;
           padding: 0 30px 0 12px;
@@ -13400,7 +13400,7 @@ export default function AdminAgendaPlaygroundPage() {
           transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
         }
 
-        .playground-combo-chevron {
+        .p-admin-combo-chevron {
           position: absolute;
           right: 10px;
           top: 50%;
@@ -13408,99 +13408,99 @@ export default function AdminAgendaPlaygroundPage() {
           transition: transform 0.16s ease;
         }
 
-        .playground-combo-chevron.rotate-180 {
+        .p-admin-combo-chevron.rotate-180 {
           transform: translateY(-50%) rotate(180deg);
         }
 
-        .playground-combo-trigger:hover {
-          border-color: #c9d1de;
+        .p-admin-combo-trigger:hover {
+          border-color: var(--border-strong);
         }
 
-        .playground-combo-trigger:focus-visible {
+        .p-admin-combo-trigger:focus-visible {
           outline: none;
-          border-color: #bfc8da;
-          box-shadow: 0 0 0 2px #eef2ff;
+          border-color: var(--border-strong);
+          box-shadow: var(--shadow-focus);
         }
 
-        .playground-combo-trigger-compact {
+        .p-admin-combo-trigger-compact {
           height: 32px;
           border-radius: 9999px;
-          border-color: #e2e6ef;
-          background: #f8f9fc;
-          color: #3e4555;
+          border-color: var(--border);
+          background: var(--surface-2);
+          color: var(--text-secondary);
           font-size: 13px;
           font-weight: 500;
         }
 
-        .playground-combo-menu {
+        .p-admin-combo-menu {
           position: absolute;
           top: calc(100% + 6px);
           min-width: 100%;
           border-radius: 12px;
-          border: 1px solid #dbe2ef;
-          background: #fff;
-          box-shadow: 0 12px 30px rgba(28, 34, 52, 0.12);
+          border: 1px solid var(--border);
+          background: var(--surface-1);
+          box-shadow: var(--shadow-lg);
           z-index: 60;
           overflow: hidden;
         }
 
-        .playground-combo-option {
+        .p-admin-combo-option {
           width: 100%;
           border: 0;
           background: transparent;
           text-align: left;
-          color: #2e3650;
+          color: var(--text-primary);
           font-size: 15px;
           font-weight: 500;
           padding: 8px 12px;
           transition: background-color 0.14s ease, color 0.14s ease;
         }
 
-        .playground-combo-option:hover {
-          background: #f5f7fb;
+        .p-admin-combo-option:hover {
+          background: var(--surface-2);
         }
 
-        .playground-combo-option-active {
-          background: #2f63d0;
-          color: #fff;
+        .p-admin-combo-option-active {
+          background: var(--accent-fg);
+          color: var(--surface-1);
         }
 
-        .playground-combo-option-active:hover {
-          background: #2f63d0;
-          color: #fff;
+        .p-admin-combo-option-active:hover {
+          background: var(--accent-fg);
+          color: var(--surface-1);
         }
 
-        .playground-combo-menu-participant {
+        .p-admin-combo-menu-participant {
           border-radius: 14px;
-          border-color: #d7deeb;
-          box-shadow: 0 14px 28px rgba(23, 31, 53, 0.14);
+          border-color: var(--border);
+          box-shadow: var(--shadow-lg);
           overflow: hidden;
         }
 
-        .playground-combo-menu-participant > div {
+        .p-admin-combo-menu-participant > div {
           max-height: 236px;
           padding: 4px;
           scrollbar-width: thin;
-          scrollbar-color: #8e99b3 #edf1f7;
+          scrollbar-color: var(--border-strong) var(--surface-2);
         }
 
-        .playground-combo-menu-participant > div::-webkit-scrollbar {
+        .p-admin-combo-menu-participant > div::-webkit-scrollbar {
           width: 10px;
         }
 
-        .playground-combo-menu-participant > div::-webkit-scrollbar-track {
-          background: #edf1f7;
+        .p-admin-combo-menu-participant > div::-webkit-scrollbar-track {
+          background: var(--surface-2);
           border-radius: 9999px;
           margin: 6px 2px;
         }
 
-        .playground-combo-menu-participant > div::-webkit-scrollbar-thumb {
-          background: #8e99b3;
+        .p-admin-combo-menu-participant > div::-webkit-scrollbar-thumb {
+          background: var(--border-strong);
           border-radius: 9999px;
-          border: 2px solid #edf1f7;
+          border: 2px solid var(--surface-2);
         }
 
-        .playground-combo-option-participant {
+        .p-admin-combo-option-participant {
           border-radius: 10px;
           padding: 9px 10px;
           display: flex;
@@ -13512,11 +13512,11 @@ export default function AdminAgendaPlaygroundPage() {
           line-height: 1.25;
         }
 
-        .playground-combo-option-participant + .playground-combo-option-participant {
+        .p-admin-combo-option-participant + .p-admin-combo-option-participant {
           margin-top: 2px;
         }
 
-        .playground-combo-option-primary {
+        .p-admin-combo-option-primary {
           color: inherit;
           width: 100%;
           overflow: hidden;
@@ -13524,28 +13524,28 @@ export default function AdminAgendaPlaygroundPage() {
           white-space: nowrap;
         }
 
-        .playground-combo-option-secondary {
+        .p-admin-combo-option-secondary {
           width: 100%;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          color: #6f7b97;
+          color: var(--text-muted);
           font-size: 12px;
           font-weight: 500;
         }
 
-        .playground-combo-option-participant:hover {
-          background: #edf1f8;
+        .p-admin-combo-option-participant:hover {
+          background: var(--surface-2);
         }
 
-        .playground-combo-option-participant.playground-combo-option-active {
-          background: #e3e9f7;
-          color: #25355d;
+        .p-admin-combo-option-participant.p-admin-combo-option-active {
+          background: var(--positive-bg);
+          color: var(--accent-fg);
         }
 
-        .playground-combo-option-participant.playground-combo-option-active:hover {
-          background: #e3e9f7;
-          color: #25355d;
+        .p-admin-combo-option-participant.p-admin-combo-option-active:hover {
+          background: var(--positive-bg);
+          color: var(--accent-fg);
         }
       `}</style>
     </>

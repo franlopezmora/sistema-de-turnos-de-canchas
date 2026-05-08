@@ -84,8 +84,8 @@ const DataRow = ({
   valueClassName?: string;
 }) => (
   <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-    <span className="text-[13px] text-[#6f7890]">{label}</span>
-    <span className={`text-right text-[13px] font-medium text-[#1a2035] ${valueClassName}`}>
+    <span className="text-[13px] text-p-text-muted">{label}</span>
+    <span className={`text-right text-[13px] font-medium text-p-text ${valueClassName}`}>
       {value}
     </span>
   </div>
@@ -101,9 +101,9 @@ const SummaryCard = ({
   variant?: 'default' | 'debt' | 'paid';
 }) => {
   const colorMap = {
-    default: 'bg-[#f8f9fc] text-[#1a2035]',
-    debt: 'bg-[#fff3f0] text-[#b42318]',
-    paid: 'bg-[#f0faf4] text-[#1a7a4a]',
+    default: 'bg-p-surface-2 text-p-text',
+    debt: 'bg-p-error-bg text-[var(--error-fg)]',
+    paid: 'bg-p-positive-bg text-p-positive',
   };
   return (
     <div className={`flex-1 rounded-xl px-3 py-2.5 ${colorMap[variant]}`}>
@@ -120,8 +120,8 @@ const createDefaultItemForm = () => ({
   type: 'PRODUCT' as 'BOOKING' | 'PRODUCT' | 'SERVICE' | 'ADJUSTMENT',
 });
 
-const sectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
-const sectionListClass = 'divide-y divide-[#edf0f6] overflow-hidden rounded-xl border border-[#dce2ee] bg-white';
+const sectionCardClass = 'rounded-2xl border border-p-border bg-p-surface-2 p-4';
+const sectionListClass = 'divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface';
 
 // ─── AccountDrawer ────────────────────────────────────────────────────────────
 
@@ -735,10 +735,10 @@ export default function AccountDrawer({
 
   const statusChipClassName =
     detail?.status === 'CLOSED'
-      ? 'bg-[#f0f2f7] text-[#6f7890]'
+      ? 'bg-p-surface-3 text-p-text-muted'
       : hasPendingDebt
-      ? 'bg-[#fff3f0] text-[#b42318]'
-      : 'bg-[#f0faf4] text-[#1a7a4a]';
+      ? 'bg-p-error-bg text-[var(--error-fg)]'
+      : 'bg-p-positive-bg text-p-positive';
 
   // ── Footer ─────────────────────────────────────────────────────────────────
   const footer = (() => {
@@ -750,7 +750,7 @@ export default function AccountDrawer({
             <button
               type="button"
               onClick={() => { setActionError(''); setView('add_item'); }}
-              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#3053e2] transition hover:bg-[#f4f6fb]"
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-accent transition hover:bg-p-surface-2"
             >
               <Plus size={14} />
               Concepto
@@ -760,7 +760,7 @@ export default function AccountDrawer({
             <button
               type="button"
               onClick={openPaymentFlow}
-              className="flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+              className="flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-800"
             >
               <CreditCard size={14} />
               Cobrar
@@ -773,7 +773,7 @@ export default function AccountDrawer({
                 onClose();
                 onRefundRequest(detail.id);
               }}
-              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
             >
               <Minus size={14} />
               Devolución
@@ -783,7 +783,7 @@ export default function AccountDrawer({
             <button
               type="button"
               onClick={() => { setActionError(''); setView('close_confirm'); }}
-              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white"
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-p-error bg-p-error-bg px-4 text-[13px] font-semibold text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-ink-50"
             >
               Cerrar cuenta
             </button>
@@ -799,7 +799,7 @@ export default function AccountDrawer({
             type="button"
             onClick={goToOverview}
             disabled={submitting}
-            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2 disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Cancelar
@@ -809,7 +809,7 @@ export default function AccountDrawer({
             type="submit"
             form="add-item-form"
             disabled={submitting}
-            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+            className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-800 disabled:opacity-40"
           >
             {submitting ? 'Agregando...' : 'Agregar concepto'}
           </button>
@@ -824,7 +824,7 @@ export default function AccountDrawer({
             type="button"
             onClick={goToOverview}
             disabled={submitting}
-            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2 disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Cancelar
@@ -834,7 +834,7 @@ export default function AccountDrawer({
             type="button"
             disabled={!amountIsValid || submitting}
             onClick={() => setView('payment_preconfirm')}
-            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+            className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-800 disabled:opacity-40"
           >
             {submitting ? 'Cargando...' : 'Continuar'}
           </button>
@@ -849,7 +849,7 @@ export default function AccountDrawer({
             type="button"
             onClick={() => setView('payment_form')}
             disabled={submitting}
-            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2 disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Volver
@@ -859,7 +859,7 @@ export default function AccountDrawer({
             type="button"
             disabled={submitting}
             onClick={submitPayment}
-            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+            className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-800 disabled:opacity-40"
           >
             {submitting ? 'Registrando...' : 'Confirmar cobro'}
           </button>
@@ -874,7 +874,7 @@ export default function AccountDrawer({
             <button
               type="button"
               onClick={() => setView('payment_form')}
-              className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
             >
               <ArrowLeft size={14} />
               Reintentar
@@ -884,7 +884,7 @@ export default function AccountDrawer({
           <button
             type="button"
             onClick={goToOverview}
-            className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+            className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-800"
           >
             {payResult?.variant === 'success' ? 'Ver cuenta' : 'Cerrar'}
           </button>
@@ -899,7 +899,7 @@ export default function AccountDrawer({
             type="button"
             onClick={goToOverview}
             disabled={submitting}
-            className="flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:opacity-40"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2 disabled:opacity-40"
           >
             <ArrowLeft size={14} />
             Cancelar
@@ -909,7 +909,7 @@ export default function AccountDrawer({
             type="button"
             disabled={submitting}
             onClick={submitCloseAccount}
-            className="h-10 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-5 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white disabled:opacity-40"
+            className="h-10 rounded-xl border border-p-error bg-p-error-bg px-5 text-[13px] font-semibold text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-ink-50 disabled:opacity-40"
           >
             {submitting ? 'Cerrando...' : 'Cerrar cuenta'}
           </button>
@@ -928,8 +928,8 @@ export default function AccountDrawer({
     // ── Loading / error states ───────────────────────────────────────────────
     if (loading) {
       return (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-[#98a1b3]">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#dce2ee] border-t-[#3053e2]" />
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-p-text-muted">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-p-border border-p-accent-t" />
           <p className="text-[13px]">Cargando cuenta...</p>
         </div>
       );
@@ -937,9 +937,9 @@ export default function AccountDrawer({
 
     if (loadError) {
       return (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] p-6 text-center">
-          <AlertTriangle size={20} className="text-[#b42318]" />
-          <p className="text-[13px] text-[#b42318]">{loadError}</p>
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-p-error bg-p-error-bg p-6 text-center">
+          <AlertTriangle size={20} className="text-[var(--error-fg)]" />
+          <p className="text-[13px] text-[var(--error-fg)]">{loadError}</p>
           <button
             type="button"
             onClick={() => {
@@ -951,7 +951,7 @@ export default function AccountDrawer({
                 .catch((err) => setLoadError(extractErrorMessage(err, 'Error al cargar la cuenta.')))
                 .finally(() => setLoading(false));
             }}
-            className="text-[12px] font-medium text-[#3053e2] underline underline-offset-2"
+            className="text-[12px] font-medium text-p-accent underline underline-offset-2"
           >
             Reintentar
           </button>
@@ -967,9 +967,9 @@ export default function AccountDrawer({
         <>
           {/* Error banner */}
           {actionError && (
-            <div className="flex items-start gap-2 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 py-3">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[#b42318]" />
-              <p className="text-[13px] text-[#b42318]">{actionError}</p>
+            <div className="flex items-start gap-2 rounded-xl border border-p-error bg-p-error-bg px-4 py-3">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[var(--error-fg)]" />
+              <p className="text-[13px] text-[var(--error-fg)]">{actionError}</p>
             </div>
           )}
 
@@ -1011,31 +1011,31 @@ export default function AccountDrawer({
                     <div
                       key={item.id}
                       className={`flex flex-col gap-2 px-4 py-3 ${
-                        itemIsPaid ? 'bg-[#f0faf4] opacity-75' : 'hover:bg-[#f8f9fc]'
+                        itemIsPaid ? 'bg-p-positive-bg opacity-75' : 'hover:bg-p-surface-2'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-medium text-[#1a2035]">
+                          <p className="truncate text-[13px] font-medium text-p-text">
                             {item.type === 'BOOKING' ? 'Cancha' : item.description}
                             {itemIsPaid && (
-                              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#1a7a4a] px-2 py-0.5 text-[10px] font-bold text-white">
+                              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-p-positive px-2 py-0.5 text-[10px] font-bold text-ink-50">
                                 ✓ Pagado
                               </span>
                             )}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-[#98a1b3]">
+                          <p className="mt-0.5 text-[11px] text-p-text-muted">
                             {itemTypeLabel(item.type)}
                             {item.quantity > 1 && ` · ×${item.quantity}`}
                           </p>
                         </div>
-                        <span className="shrink-0 text-[13px] font-semibold text-[#1a2035]">
+                        <span className="shrink-0 text-[13px] font-semibold text-p-text">
                           {formatMoney(item.total)}
                         </span>
                       </div>
                       {!itemIsPaid && paidForItem > ACCOUNT_PAYMENT_EPSILON && (
-                        <div className="flex items-center justify-between gap-2 border-t border-[#edf0f6] pt-2 text-[11px]">
-                          <span className="text-[#6f7890]">
+                        <div className="flex items-center justify-between gap-2 border-t border-p-border pt-2 text-[11px]">
+                          <span className="text-p-text-muted">
                             Pagado: {formatMoney(paidForItem)} | Pendiente: {formatMoney(remainingForItem)}
                           </span>
                         </div>
@@ -1054,20 +1054,20 @@ export default function AccountDrawer({
                 {detail.payments.map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-[#1a2035]">
+                      <p className="text-[13px] font-medium text-p-text">
                         {paymentMethodLabel(payment.method)}
                         {payment.channel &&
                           payment.method === 'TRANSFER' && (
-                            <span className="ml-1 text-[11px] font-normal text-[#98a1b3]">
+                            <span className="ml-1 text-[11px] font-normal text-p-text-muted">
                               · {paymentChannelLabel(payment.channel)}
                             </span>
                           )}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-[#98a1b3]">
+                      <p className="mt-0.5 text-[11px] text-p-text-muted">
                         {formatRelativeDate(payment.createdAt)}
                       </p>
                     </div>
-                    <span className="shrink-0 text-[13px] font-semibold text-[#1a7a4a]">
+                    <span className="shrink-0 text-[13px] font-semibold text-p-positive">
                       {formatMoney(payment.amount)}
                     </span>
                   </div>
@@ -1077,7 +1077,7 @@ export default function AccountDrawer({
           )}
 
           {detail.items.length === 0 && detail.payments.length === 0 && (
-            <p className="text-center text-[13px] text-[#98a1b3]">
+            <p className="text-center text-[13px] text-p-text-muted">
               Esta cuenta no tiene conceptos ni pagos todavía.
             </p>
           )}
@@ -1092,11 +1092,11 @@ export default function AccountDrawer({
           <AdminDrawerSection title="Concepto" className={sectionCardClass}>
             <div className="space-y-3">
               {actionError && (
-                <p className="text-[13px] text-[#b42318]">{actionError}</p>
+                <p className="text-[13px] text-[var(--error-fg)]">{actionError}</p>
               )}
 
               <div>
-                <label className="mb-1 block text-[12px] font-medium text-[#6f7890]">
+                <label className="mb-1 block text-[12px] font-medium text-p-text-muted">
                   Tipo
                 </label>
                 <select
@@ -1107,7 +1107,7 @@ export default function AccountDrawer({
                       type: e.target.value as typeof itemForm.type,
                     }))
                   }
-                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#1a2035] focus:border-[#3053e2] focus:outline-none"
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text focus:border-p-accent focus:outline-none"
                 >
                   <option value="PRODUCT">Producto</option>
                   <option value="SERVICE">Servicio</option>
@@ -1116,7 +1116,7 @@ export default function AccountDrawer({
               </div>
 
               <div>
-                <label className="mb-1 block text-[12px] font-medium text-[#6f7890]">
+                <label className="mb-1 block text-[12px] font-medium text-p-text-muted">
                   Descripción
                 </label>
                 <input
@@ -1126,13 +1126,13 @@ export default function AccountDrawer({
                     setItemForm((prev) => ({ ...prev, description: e.target.value }))
                   }
                   placeholder="Ej: Empanadas ×3"
-                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#1a2035] placeholder-[#c0c7d4] focus:border-[#3053e2] focus:outline-none"
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text placeholder:text-p-text-muted focus:border-p-accent focus:outline-none"
                 />
               </div>
 
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="mb-1 block text-[12px] font-medium text-[#6f7890]">
+                  <label className="mb-1 block text-[12px] font-medium text-p-text-muted">
                     Cantidad
                   </label>
                   <input
@@ -1143,11 +1143,11 @@ export default function AccountDrawer({
                     onChange={(e) =>
                       setItemForm((prev) => ({ ...prev, quantity: e.target.value }))
                     }
-                    className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#1a2035] focus:border-[#3053e2] focus:outline-none"
+                    className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text focus:border-p-accent focus:outline-none"
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="mb-1 block text-[12px] font-medium text-[#6f7890]">
+                  <label className="mb-1 block text-[12px] font-medium text-p-text-muted">
                     Precio unitario
                   </label>
                   <input
@@ -1159,13 +1159,13 @@ export default function AccountDrawer({
                       setItemForm((prev) => ({ ...prev, unitPrice: e.target.value }))
                     }
                     placeholder="0.00"
-                    className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#1a2035] placeholder-[#c0c7d4] focus:border-[#3053e2] focus:outline-none"
+                    className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text placeholder:text-p-text-muted focus:border-p-accent focus:outline-none"
                   />
                 </div>
               </div>
 
               {itemForm.description && itemForm.unitPrice && (
-                <div className="rounded-xl border border-[#dce2ee] bg-white">
+                <div className="rounded-xl border border-p-border bg-p-surface">
                   <DataRow
                     label="Total"
                     value={formatMoney(
@@ -1215,7 +1215,7 @@ export default function AccountDrawer({
               <DataRow
                 label="Monto"
                 value={formatMoney(amountNumeric)}
-                valueClassName="font-bold text-[#1a2035]"
+                valueClassName="font-bold text-p-text"
               />
               <DataRow label="Método" value={paymentMethodLabel(payMethod)} />
               {payMethod === 'TRANSFER' && (
@@ -1229,8 +1229,8 @@ export default function AccountDrawer({
               <div className={sectionListClass}>
                 {previewRows.map((row) => (
                   <div key={row.id} className="flex items-center justify-between px-4 py-3">
-                    <span className="text-[13px] text-[#1a2035]">{row.label}</span>
-                    <span className="text-[13px] font-semibold text-[#1a2035]">
+                    <span className="text-[13px] text-p-text">{row.label}</span>
+                    <span className="text-[13px] font-semibold text-p-text">
                       {formatMoney(row.amount)}
                     </span>
                   </div>
@@ -1239,8 +1239,8 @@ export default function AccountDrawer({
             </AdminDrawerSection>
           )}
 
-          <div className="rounded-xl border border-[#fff1c4] bg-[#fffbeb] px-4 py-3">
-            <p className="text-[13px] text-[#7a5a00]">
+          <div className="rounded-xl border border-p-warning bg-p-warning-bg px-4 py-3">
+            <p className="text-[13px] text-p-warning">
               Revisá los datos antes de confirmar. Esta acción no se puede deshacer
               directamente.
             </p>
@@ -1258,20 +1258,20 @@ export default function AccountDrawer({
             className={[
               'flex flex-col items-center gap-3 rounded-2xl border p-6 text-center',
               isSuccess
-                ? 'bg-[#f0faf4] text-[#1a7a4a]'
-                : 'bg-[#fff5f5] text-[#b42318]',
+                ? 'bg-p-positive-bg text-p-positive'
+                : 'bg-p-error-bg text-[var(--error-fg)]',
             ].join(' ')}
           >
             <div
               className={[
                 'grid h-12 w-12 place-items-center rounded-full',
-                isSuccess ? 'bg-[#1a7a4a]' : 'bg-[#b42318]',
+                isSuccess ? 'bg-p-positive' : 'bg-[var(--error-fg)]',
               ].join(' ')}
             >
               {isSuccess ? (
-                <Check size={24} className="text-white" />
+                <Check size={24} className="text-ink-50" />
               ) : (
-                <X size={24} className="text-white" />
+                <X size={24} className="text-ink-50" />
               )}
             </div>
             <p className="text-[18px] font-bold">{payResult.title}</p>
@@ -1293,8 +1293,8 @@ export default function AccountDrawer({
               <div className={sectionListClass}>
                 {payResult.appliedItems.map((item) => (
                   <div key={item.id} className="flex items-center justify-between px-4 py-3">
-                    <span className="text-[13px] text-[#1a2035]">{item.label}</span>
-                    <span className="text-[13px] font-semibold text-[#1a7a4a]">
+                    <span className="text-[13px] text-p-text">{item.label}</span>
+                    <span className="text-[13px] font-semibold text-p-positive">
                       {formatMoney(item.amount)}
                     </span>
                   </div>
@@ -1311,14 +1311,14 @@ export default function AccountDrawer({
       return (
         <>
           {actionError ? (
-            <div className="flex items-start gap-2 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 py-3">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[#b42318]" />
-              <p className="text-[13px] text-[#b42318]">{actionError}</p>
+            <div className="flex items-start gap-2 rounded-xl border border-p-error bg-p-error-bg px-4 py-3">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[var(--error-fg)]" />
+              <p className="text-[13px] text-[var(--error-fg)]">{actionError}</p>
             </div>
           ) : (
-            <div className="flex items-start gap-3 rounded-xl border border-[#fff1c4] bg-[#fffbeb] px-4 py-3">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[#9a5a00]" />
-              <p className="text-[13px] text-[#7a5a00]">
+            <div className="flex items-start gap-3 rounded-xl border border-p-warning bg-p-warning-bg px-4 py-3">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-p-warning" />
+              <p className="text-[13px] text-p-warning">
                 Al cerrar la cuenta ya no se podrán agregar conceptos ni registrar cobros.
                 Esta acción es definitiva.
               </p>

@@ -110,7 +110,7 @@ export function AdminDrawerSection({
         .join(' ')}
     >
       {title && (
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-[#98a1b3]">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-p-text-muted">
           {title}
         </p>
       )}
@@ -187,7 +187,7 @@ export default function AdminDrawer({
       <button
         type="button"
         aria-label="Cerrar panel"
-        className="fixed inset-0 bg-[#101326]/20 md:top-16"
+        className="fixed inset-0 bg-[var(--overlay)] md:top-16"
         onClick={onClose}
       />
 
@@ -201,20 +201,20 @@ export default function AdminDrawer({
           // Desktop: slide-in desde la derecha
           `md:inset-y-0 md:left-auto md:right-0 md:top-16 md:w-full`,
           sizeWidthClass[size],
-          'border-l border-[#e6e8ee] bg-[#ffffff] shadow-none',
+          'border-l border-p-border bg-p-surface shadow-p-lg',
         ].join(' ')}
       >
         <div className="relative flex h-full flex-col">
 
           {/* ── Header ── */}
-          <header className="shrink-0 border-b border-[#eef0f5] bg-[#ffffff] px-6 py-5">
+          <header className="shrink-0 border-b border-p-border bg-p-surface px-6 py-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-[#1a2035]">
+                <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-p-text">
                   {title}
                 </h2>
                 {subtitle && (
-                  <p className="mt-2 text-[13px] leading-snug text-[#6f7890]">
+                  <p className="mt-2 text-[13px] leading-snug text-p-text-muted">
                     {subtitle}
                   </p>
                 )}
@@ -231,7 +231,7 @@ export default function AdminDrawer({
                 type="button"
                 onClick={onClose}
                 aria-label="Cerrar"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#e4e7ee] text-[#6f7890] transition hover:bg-[#f5f6f8]"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-p-border text-p-text-muted transition hover:bg-p-surface-2"
               >
                 <X size={16} />
               </button>
@@ -240,7 +240,7 @@ export default function AdminDrawer({
 
           {/* ── Tabs opcionales ── */}
           {tabs.length > 0 && (
-            <div className="shrink-0 border-b border-[#eef0f5] bg-[#ffffff] px-6">
+            <div className="shrink-0 border-b border-p-border bg-p-surface px-6">
               <nav className="flex items-center gap-6 overflow-x-auto">
                 {tabs.map((tab) => (
                   <button
@@ -250,8 +250,8 @@ export default function AdminDrawer({
                     className={[
                       'h-12 whitespace-nowrap border-b-2 text-[13px] font-semibold transition',
                       activeTabId === tab.id
-                        ? 'border-[#3053e2] text-[#3053e2]'
-                        : 'border-transparent text-[#6f7890] hover:text-[#2a3245]',
+                        ? 'border-p-accent text-p-accent'
+                        : 'border-transparent text-p-text-muted hover:text-p-text',
                     ].join(' ')}
                   >
                     {tab.label}
@@ -262,7 +262,7 @@ export default function AdminDrawer({
           )}
 
           {/* ── Body (scrolleable) ── */}
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#ffffff] px-6 py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-p-surface px-6 py-6">
             <div className="space-y-5">
               {children}
             </div>
@@ -270,7 +270,7 @@ export default function AdminDrawer({
 
           {/* ── Footer fijo ── */}
           {footer && (
-            <footer className="shrink-0 border-t border-[#eef0f5] bg-[#ffffff] px-6 py-4">
+            <footer className="shrink-0 border-t border-p-border bg-p-surface px-6 py-4">
               {footer}
             </footer>
           )}

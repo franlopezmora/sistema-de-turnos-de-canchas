@@ -19,22 +19,22 @@ import {
 const PAGE_CSS = `
   .pf-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .pf-full { grid-column:1 / -1; }
-  .pf-save { display:inline-flex; align-items:center; gap:8px; padding:12px 28px; background:#22c55e; color:#052010; border:none; border-radius:999px; font-size:13px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; font-family:'Sora',system-ui,sans-serif; transition:background .15s,transform .15s; }
-  .pf-save:hover:not(:disabled) { background:#4ade80; transform:translateY(-1px); }
+  .pf-save { display:inline-flex; align-items:center; gap:8px; padding:12px 28px; background:var(--brand); color:var(--brand-on); border:none; border-radius:999px; font-size:13px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; font-family:var(--font-sans); transition:background .15s,transform .15s; }
+  .pf-save:hover:not(:disabled) { background:var(--brand-hover); transform:translateY(-1px); }
   .pf-save:disabled { opacity:.5; cursor:not-allowed; }
   .pf-notice { display:flex; align-items:flex-start; gap:10px; padding:13px 16px; border-radius:14px; font-size:13px; font-weight:600; line-height:1.5; animation:pf-notice-in .18s ease-out; }
-  .pf-notice-err { background:rgba(248,113,113,.08); border:1px solid rgba(248,113,113,.2); color:#fca5a5; }
-  .pf-notice-ok { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.24); color:#8df3b1; }
-  .pf-zone-link:hover { background:rgba(34,197,94,.16)!important; }
+  .pf-notice-err { background:var(--error-bg); border:1px solid var(--error-bg); color:var(--error-fg); }
+  .pf-notice-ok { background:var(--positive-bg); border:1px solid var(--accent-border-subtle); color:var(--positive-fg); }
+  .pf-zone-link:hover { background:var(--accent-bg-muted)!important; }
   @keyframes pf-notice-in { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
-  .tc-root.tc-theme-light .pf-save { box-shadow:0 8px 18px rgba(34,197,94,.24); }
-  .tc-root.tc-theme-light .pf-notice-err { background:rgba(248,113,113,.12); color:#b91c1c; }
-  .tc-root.tc-theme-light .pf-notice-ok { background:rgba(34,197,94,.12); color:#166534; }
-  .tc-root.tc-theme-light .pf-head { border-bottom-color:rgba(15,23,42,.12)!important; }
-  .tc-root.tc-theme-light .pf-zone-title { color:#64748b!important; }
-  .tc-root.tc-theme-light .pf-zone-copy-title { color:#0f172a!important; }
-  .tc-root.tc-theme-light .pf-zone-copy-sub { color:#475569!important; }
-  .tc-root.tc-theme-light .pf-zone-link { background:rgba(34,197,94,.12)!important; border-color:rgba(34,197,94,.24)!important; color:#15803d!important; }
+  .p-public-root.p-public-theme-light .pf-save { box-shadow:0 8px 18px var(--accent-border-subtle); }
+  .p-public-root.p-public-theme-light .pf-notice-err { background:var(--error-bg); color:var(--error-fg); }
+  .p-public-root.p-public-theme-light .pf-notice-ok { background:var(--positive-bg); color:var(--positive-fg); }
+  .p-public-root.p-public-theme-light .pf-head { border-bottom-color:var(--border)!important; }
+  .p-public-root.p-public-theme-light .pf-zone-title { color:var(--text-muted)!important; }
+  .p-public-root.p-public-theme-light .pf-zone-copy-title { color:var(--text-primary)!important; }
+  .p-public-root.p-public-theme-light .pf-zone-copy-sub { color:var(--text-secondary)!important; }
+  .p-public-root.p-public-theme-light .pf-zone-link { background:var(--positive-bg)!important; border-color:var(--accent-border-subtle)!important; color:var(--accent-fg)!important; }
   @media(max-width:600px){ .pf-grid { grid-template-columns:1fr; } }
 `;
 
@@ -134,24 +134,24 @@ export default function PerfilPage() {
 
   return (
     <DarkPageLayout
-      title="Mi Perfil | TuCancha"
+      title="Mi Perfil | Punto"
       extraCss={PAGE_CSS}
       breadcrumbs={[
         { label: 'Inicio', href: '/' },
         { label: 'Mi perfil' },
       ]}
     >
-      <div className="tc-page-sm">
+      <div className="p-public-page-sm">
 
         {/* ── PAGE HEADER ── */}
-        <div className="pf-head" style={{ marginBottom: 40, paddingBottom: 32, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
-          <span className="tc-page-eyebrow">Cuenta</span>
-          <h1 className="tc-page-h">Mi <i>perfil</i></h1>
-          <p className="tc-page-sub">Editá los datos de tu cuenta, {displayName}.</p>
+        <div className="pf-head" style={{ marginBottom: 40, paddingBottom: 32, borderBottom: '1px solid var(--border-subtle)' }}>
+          <span className="p-public-page-eyebrow">Cuenta</span>
+          <h1 className="p-public-page-h">Mi <i>perfil</i></h1>
+          <p className="p-public-page-sub">Editá los datos de tu cuenta, {displayName}.</p>
         </div>
 
         {/* ── FORM CARD ── */}
-        <div className="tc-card" style={{ padding: 32 }}>
+        <div className="p-public-card" style={{ padding: 32 }}>
           <form onSubmit={handleSubmit}>
 
             {/* Notices */}
@@ -169,12 +169,12 @@ export default function PerfilPage() {
             <div className="pf-grid">
 
               {/* Nombre */}
-              <div className="tc-field">
-                <div className="tc-field-label">
+              <div className="p-public-field">
+                <div className="p-public-field-label">
                   <User size={12} /> Nombre
                 </div>
                 <input
-                  className="tc-input"
+                  className="p-public-input"
                   value={form.firstName}
                   onChange={(e) => setForm(p => ({ ...p, firstName: e.target.value }))}
                   placeholder="Tu nombre"
@@ -182,12 +182,12 @@ export default function PerfilPage() {
               </div>
 
               {/* Apellido */}
-              <div className="tc-field">
-                <div className="tc-field-label">
+              <div className="p-public-field">
+                <div className="p-public-field-label">
                   <User size={12} /> Apellido
                 </div>
                 <input
-                  className="tc-input"
+                  className="p-public-input"
                   value={form.lastName}
                   onChange={(e) => setForm(p => ({ ...p, lastName: e.target.value }))}
                   placeholder="Tu apellido"
@@ -195,25 +195,25 @@ export default function PerfilPage() {
               </div>
 
               {/* Email */}
-              <div className="tc-field pf-full">
-                <div className="tc-field-label">
+              <div className="p-public-field pf-full">
+                <div className="p-public-field-label">
                   <Mail size={12} /> Email (no editable)
                 </div>
                 <input
-                  className="tc-input"
+                  className="p-public-input"
                   value={form.email}
                   disabled
                 />
               </div>
 
               {/* Teléfono */}
-              <div className="tc-field pf-full">
-                <div className="tc-field-label">
+              <div className="p-public-field pf-full">
+                <div className="p-public-field-label">
                   <Phone size={12} /> Teléfono
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <select
-                    className="tc-select"
+                    className="p-public-select"
                     value={form.phoneCountryIso2}
                     onChange={(e) => setForm(p => ({ ...p, phoneCountryIso2: normalizePhoneCountryIso2(e.target.value) }))}
                   >
@@ -222,7 +222,7 @@ export default function PerfilPage() {
                     ))}
                   </select>
                   <input
-                    className="tc-input"
+                    className="p-public-input"
                     value={form.phoneLocal}
                     onChange={(e) => setForm(p => ({ ...p, phoneLocal: e.target.value.replace(/[^\d]/g, '') }))}
                     placeholder="Número local"
@@ -231,12 +231,12 @@ export default function PerfilPage() {
               </div>
 
               {/* DNI */}
-              <div className="tc-field pf-full">
-                <div className="tc-field-label">
+              <div className="p-public-field pf-full">
+                <div className="p-public-field-label">
                   <IdCard size={12} /> DNI (opcional)
                 </div>
                 <input
-                  className="tc-input"
+                  className="p-public-input"
                   value={form.dni}
                   onChange={(e) => setForm(p => ({ ...p, dni: e.target.value.replace(/[^\d]/g, '') }))}
                   placeholder="Sin puntos ni espacios"
@@ -258,17 +258,17 @@ export default function PerfilPage() {
 
         {/* ── DANGER ZONE ── */}
         <div style={{ marginTop: 40 }}>
-          <div className="pf-zone-title" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: '#444', marginBottom: 16 }}>Zona de cuenta</div>
-          <div className="tc-card" style={{ padding: 24 }}>
+          <div className="pf-zone-title" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16 }}>Zona de cuenta</div>
+          <div className="p-public-card" style={{ padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
               <div>
-                <div className="pf-zone-copy-title" style={{ fontSize: 14, fontWeight: 700, color: '#f2f2f2', marginBottom: 4 }}>Tus reservas activas</div>
-                <div className="pf-zone-copy-sub" style={{ fontSize: 13, color: '#666', lineHeight: 1.5 }}>Revisá el estado de todas tus reservas en un solo lugar.</div>
+                <div className="pf-zone-copy-title" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Tus reservas activas</div>
+                <div className="pf-zone-copy-sub" style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>Revisá el estado de todas tus reservas en un solo lugar.</div>
               </div>
               <Link
                 href="/bookings"
                 className="pf-zone-link"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 999, color: '#22c55e', fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'background .15s' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--positive-bg)', border: '1px solid var(--accent-border-subtle)', borderRadius: 999, color: 'var(--brand)', fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'background .15s' }}
               >
                 Ver reservas →
               </Link>

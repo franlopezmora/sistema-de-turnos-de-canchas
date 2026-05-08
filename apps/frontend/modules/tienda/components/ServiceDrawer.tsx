@@ -28,9 +28,9 @@ type ServiceDrawerProps = {
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  'h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition-all focus:border-[#3053e2]';
-const labelClass = 'mb-1.5 block text-[12px] font-medium text-[#4e5870]';
-const sectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
+  'h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text placeholder:text-p-text-muted outline-none transition-all focus:border-p-accent';
+const labelClass = 'mb-1.5 block text-[12px] font-medium text-p-text-secondary';
+const sectionCardClass = 'rounded-2xl border border-p-border bg-p-surface-2 p-4';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -58,14 +58,14 @@ export default function ServiceDrawer({
       <button
         type="button"
         onClick={onClose}
-        className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fc]"
+        className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
       >
         Cancelar
       </button>
       <button
         form="service-drawer-form"
         type="submit"
-        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+        className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-800"
       >
         {isEditing ? <Pencil size={14} /> : <Plus size={14} />}
         {isEditing ? 'Guardar cambios' : 'Crear servicio'}
@@ -98,7 +98,7 @@ export default function ServiceDrawer({
                 placeholder="Ej: CLASE_PARTICULAR"
               />
               <Tag
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted"
                 size={15}
                 strokeWidth={2.5}
               />
@@ -134,7 +134,7 @@ export default function ServiceDrawer({
                 onWheel={(e) => e.currentTarget.blur()}
               />
               <DollarSign
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted"
                 size={15}
                 strokeWidth={2.5}
               />
@@ -149,7 +149,7 @@ export default function ServiceDrawer({
             <textarea
               value={formData.description}
               onChange={(e) => onFormChange({ ...formData, description: e.target.value })}
-              className="min-h-[80px] w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition focus:border-[#3053e2]"
+              className="min-h-[80px] w-full resize-none rounded-xl border border-p-border bg-p-surface px-3 py-2.5 text-[13px] text-p-text placeholder:text-p-text-muted outline-none transition focus:border-p-accent"
               placeholder="Información adicional para el equipo"
             />
           </div>
@@ -157,7 +157,7 @@ export default function ServiceDrawer({
 
         {/* ── Error ── */}
         {formError && (
-          <p className="mt-4 rounded-lg border border-[#ffd6d6] bg-[#fff5f5] px-3 py-2 text-[12px] font-semibold text-[#b42318]">
+          <p className="mt-4 rounded-lg border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-[var(--error-fg)]">
             {formError}
           </p>
         )}

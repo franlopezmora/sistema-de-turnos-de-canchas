@@ -112,26 +112,26 @@ export default function AdminDuplicateIncidents() {
   };
 
   if (!clubSlug) {
-    return <div className="text-sm text-[#EBE1D8]/80">No se pudo resolver el club activo para mostrar la bandeja.</div>;
+    return <div className="text-sm text-ink-50/80">No se pudo resolver el club activo para mostrar la bandeja.</div>;
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-white/20 bg-[#0f3f2e]/60 p-5">
+      <div className="rounded-2xl border border-white/20 bg-p-surface p-5">
         <h1 className="text-xl font-black tracking-wide uppercase">Posibles clientes duplicados</h1>
-        <p className="mt-1 text-sm text-[#EBE1D8]/80">
+        <p className="mt-1 text-sm text-ink-50/80">
           Incidentes abiertos: <span className="font-bold">{openCount}</span>
         </p>
       </div>
 
-      {error ? <div className="rounded-xl border border-red-300/50 bg-red-900/30 p-3 text-sm">{error}</div> : null}
-      {feedback ? <div className="rounded-xl border border-lime-300/50 bg-lime-900/30 p-3 text-sm">{feedback}</div> : null}
+      {error ? <div className="rounded-xl border border-p-error bg-p-error-bg p-3 text-sm">{error}</div> : null}
+      {feedback ? <div className="rounded-xl border border-p-accent bg-p-positive-bg p-3 text-sm text-p-positive">{feedback}</div> : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-white/20 bg-[#174f3a]/60 p-4 lg:col-span-1">
+        <div className="rounded-2xl border border-white/20 bg-p-surface p-4 lg:col-span-1">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Bandeja</h2>
-          {loading ? <p className="text-sm text-[#EBE1D8]/80">Cargando...</p> : null}
-          {!loading && incidents.length === 0 ? <p className="text-sm text-[#EBE1D8]/80">No hay incidentes abiertos.</p> : null}
+          {loading ? <p className="text-sm text-ink-50/80">Cargando...</p> : null}
+          {!loading && incidents.length === 0 ? <p className="text-sm text-ink-50/80">No hay incidentes abiertos.</p> : null}
           <div className="space-y-2">
             {incidents.map((incident) => (
               <button
@@ -139,7 +139,7 @@ export default function AdminDuplicateIncidents() {
                 type="button"
                 onClick={() => setSelectedId(incident.id)}
                 className={`w-full rounded-lg border p-3 text-left transition ${
-                  selectedId === incident.id ? 'border-lime-300 bg-[#1f6b4f]' : 'border-white/20 bg-[#1b5a42]/70 hover:bg-[#1f6b4f]'
+                  selectedId === incident.id ? 'border-p-accent bg-p-positive-bg' : 'border-p-border bg-p-surface-2 hover:bg-p-positive-bg'
                 }`}
               >
                 <div className="text-xs font-bold uppercase tracking-wide opacity-80">
@@ -156,10 +156,10 @@ export default function AdminDuplicateIncidents() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/20 bg-[#174f3a]/60 p-4 lg:col-span-2">
+        <div className="rounded-2xl border border-white/20 bg-p-surface p-4 lg:col-span-2">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Detalle</h2>
-          {!selectedId ? <p className="text-sm text-[#EBE1D8]/80">Seleccioná un incidente.</p> : null}
-          {selectedId && busy && !detail ? <p className="text-sm text-[#EBE1D8]/80">Cargando detalle...</p> : null}
+          {!selectedId ? <p className="text-sm text-ink-50/80">Seleccioná un incidente.</p> : null}
+          {selectedId && busy && !detail ? <p className="text-sm text-ink-50/80">Cargando detalle...</p> : null}
           {detail ? (
             <div className="space-y-4">
               <div className="rounded-lg border border-white/20 bg-black/10 p-3 text-sm">
@@ -181,7 +181,7 @@ export default function AdminDuplicateIncidents() {
                         type="button"
                         disabled={busy}
                         onClick={() => handleResolve(client.id)}
-                        className="mt-2 rounded bg-lime-500 px-3 py-1 text-xs font-black text-[#143b2d] disabled:opacity-50"
+                        className="mt-2 rounded bg-p-brand px-3 py-1 text-xs font-black text-p-brand-on disabled:opacity-50"
                       >
                         Vincular usuario a este cliente
                       </button>

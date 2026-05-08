@@ -9,7 +9,7 @@ const cx = (...classes: Array<string | false | null | undefined>) => classes.fil
 
 export default function AdminFilterToolbar({ children, className }: AdminFilterToolbarProps) {
   return (
-    <div className={cx('flex flex-wrap items-center gap-2 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-2', className)}>
+    <div className={cx('flex flex-wrap items-center gap-2 rounded-xl border border-p-border bg-p-surface-2 p-2', className)}>
       {children}
     </div>
   );

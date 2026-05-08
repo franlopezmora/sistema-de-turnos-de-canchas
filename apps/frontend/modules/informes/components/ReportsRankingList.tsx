@@ -21,18 +21,18 @@ export default function ReportsRankingList({
   tone = 'primary',
   showRevenue = true,
 }: ReportsRankingListProps) {
-  const accentClass = tone === 'primary' ? 'bg-[#edf1ff] text-[#3053e2]' : 'bg-[#f0f2f7] text-[#6f7890]';
+  const accentClass = tone === 'primary' ? 'bg-p-positive-bg text-p-accent' : 'bg-p-surface-3 text-p-text-muted';
 
   return (
-    <article className="rounded-xl border border-[#e7ebf3] bg-[#fbfcff] p-4">
+    <article className="rounded-xl border border-p-border bg-p-surface-2 p-4">
       <header>
-        <h3 className="text-[13px] font-semibold text-[#1f2638]">{title}</h3>
-        {description && <p className="mt-1 text-[12px] text-[#6f7890]">{description}</p>}
+        <h3 className="text-[13px] font-semibold text-p-text">{title}</h3>
+        {description && <p className="mt-1 text-[12px] text-p-text-muted">{description}</p>}
       </header>
 
       <div className="mt-4 space-y-3">
         {rows.length === 0 && (
-          <p className="rounded-lg border border-dashed border-[#dce2ee] bg-white px-3 py-4 text-center text-[12px] font-semibold text-[#8b95aa]">
+          <p className="rounded-lg border border-dashed border-p-border bg-p-surface px-3 py-4 text-center text-[12px] font-semibold text-p-text-muted">
             {emptyLabel}
           </p>
         )}
@@ -42,10 +42,10 @@ export default function ReportsRankingList({
               {index + 1}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-[#30384c]">
+              <p className="truncate text-[13px] font-semibold text-p-text">
                 {row.name || 'Producto'}
               </p>
-              <p className="text-[11px] text-[#98a1b3]">
+              <p className="text-[11px] text-p-text-muted">
                 {formatReportsNumber(Number(row.quantity || 0))} u.
                 {showRevenue && row.revenue != null ? ` - ${formatReportsMoney(Number(row.revenue || 0))}` : ''}
               </p>

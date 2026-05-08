@@ -32,9 +32,9 @@ const methodLabel = (method: CashMovement['method']): string => {
 };
 
 const methodBadgeClasses: Record<CashMovement['method'], string> = {
-  CASH: 'border-[#d1fae5] bg-[#ecfdf5] text-[#065f46]',
-  TRANSFER: 'border-[#bfdbfe] bg-[#eff6ff] text-[#1e40af]',
-  CARD: 'border-[#e9d5ff] bg-[#f5f3ff] text-[#5b21b6]',
+  CASH: 'border-p-positive bg-p-positive-bg text-p-positive',
+  TRANSFER: 'border-p-accent bg-p-surface-2 text-p-accent',
+  CARD: 'border-p-accent bg-p-positive-bg text-p-accent',
 };
 
 const toTimelineItems = (movements: CashMovement[]): MovementsTimelineItem[] =>

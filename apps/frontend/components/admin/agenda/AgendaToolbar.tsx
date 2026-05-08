@@ -54,7 +54,7 @@ export default function AgendaToolbar({
   };
 
   return (
-    <div className="rounded-2xl border border-[#e5e7eb] bg-white px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center">
+    <div className="rounded-2xl border border-p-border bg-p-surface px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center">
       <div className="min-w-0 flex-1 overflow-x-auto">
         <div className="flex w-max items-center gap-2 pr-1">
           {availableSports.map((sport) => (
@@ -64,8 +64,8 @@ export default function AgendaToolbar({
               onClick={() => onSportFilterChange(sport)}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 sportFilter === sport
-                  ? 'bg-[#1d2248] text-white shadow-sm'
-                  : 'bg-[#f5f6f8] text-[#6b7280] hover:bg-[#edf0f4]'
+                  ? 'bg-ink-900 text-ink-50 shadow-sm'
+                  : 'bg-p-surface-2 text-p-text-muted hover:bg-p-surface-2'
               }`}
             >
               {sport}
@@ -79,7 +79,7 @@ export default function AgendaToolbar({
           <button
             type="button"
             onClick={() => onMoveDate(-1)}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-[#e5e7eb] text-[#727b8d] hover:bg-[#f7f8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cfd9ff]"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-p-border text-p-text-muted hover:bg-p-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
             aria-label="Dia anterior"
           >
             <ChevronLeft size={16} />
@@ -88,10 +88,10 @@ export default function AgendaToolbar({
             <button
               type="button"
               onClick={openNativeDatePicker}
-              className="inline-flex h-9 w-full items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-3 text-sm font-medium text-[#232a3a] hover:bg-[#f8f9fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cfd9ff]"
+              className="inline-flex h-9 w-full items-center gap-2 rounded-lg border border-p-border bg-p-surface px-3 text-sm font-medium text-p-text hover:bg-p-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
               aria-label="Seleccionar fecha"
             >
-              <CalendarDays size={14} className="text-[#7a8398]" />
+              <CalendarDays size={14} className="text-p-text-muted" />
               <span className="truncate tabular-nums">
                 {selectedDate.toLocaleDateString('es-AR', {
                   weekday: 'short',
@@ -120,7 +120,7 @@ export default function AgendaToolbar({
           <button
             type="button"
             onClick={() => onMoveDate(1)}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-[#e5e7eb] text-[#727b8d] hover:bg-[#f7f8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cfd9ff]"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-p-border text-p-text-muted hover:bg-p-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
             aria-label="Dia siguiente"
           >
             <ChevronRight size={16} />
@@ -128,7 +128,7 @@ export default function AgendaToolbar({
           <button
             type="button"
             onClick={onCreateBooking}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2f4fd8] px-3 text-sm font-semibold text-white hover:bg-[#2746c1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cfd9ff]"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--accent-fg)] px-3 text-sm font-semibold text-ink-50 hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
           >
             <Plus size={14} />
             Crear reserva

@@ -8,13 +8,17 @@ import { UserThemeProvider, useUserTheme } from '../contexts/UserThemeContext';
 import { AUTH_LOGOUT_EVENT, clearPendingLogoutRedirect, type AuthLogoutEventDetail } from '../services/AuthService';
 import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 
-// IMPORTANTE: Aqui buscamos el archivo en la carpeta styles
-import '../styles/globals.css'; 
+import '../styles/globals.css';
 import '../styles/playground.css';
+import '../styles/punto.css';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || '';
-const LOGO_PATH = '/logo1.svg';
+const LOGO_PATH = '/brand/punto-logo-horizontal.svg';
+const MARK_PATH = '/brand/punto-isotipo.svg';
+const APPLE_ICON_PATH = '/favicon-192.png';
 const LOGO_URL = SITE_URL ? `${SITE_URL.replace(/\/+$/,'')}${LOGO_PATH}` : LOGO_PATH;
+const OG_IMAGE_PATH = '/og-1200x630.png';
+const OG_IMAGE_URL = SITE_URL ? `${SITE_URL.replace(/\/+$/,'')}${OG_IMAGE_PATH}` : OG_IMAGE_PATH;
 export const APP_NOTICE_EVENT = 'app:notice';
 const PENDING_APP_NOTICE_STORAGE_KEY = 'app:notice:pending';
 const LOGOUT_NOTICE_COOLDOWN_MS = 6000;
@@ -33,28 +37,28 @@ type NoticeWithPhase = {
 
 const NOTICE_TONES: Record<NoticeTone, { border: string; text: string; dot: string; glow: string }> = {
   success: {
-    border: 'rgba(34,197,94,.42)',
-    text: '#d8ffe6',
-    dot: '#22c55e',
-    glow: 'rgba(34,197,94,.22)'
+    border: 'var(--accent-border-strong)',
+    text: 'var(--positive-fg)',
+    dot: 'var(--brand)',
+    glow: 'var(--accent-bg-muted)'
   },
   error: {
-    border: 'rgba(248,113,113,.4)',
-    text: '#ffe1e1',
-    dot: '#f87171',
-    glow: 'rgba(248,113,113,.2)'
+    border: 'var(--danger-border)',
+    text: 'var(--error-fg)',
+    dot: 'var(--error-fg)',
+    glow: 'var(--error-bg)'
   },
   warning: {
-    border: 'rgba(250,204,21,.38)',
-    text: '#fff3c4',
-    dot: '#facc15',
-    glow: 'rgba(250,204,21,.18)'
+    border: 'var(--warn-fg)',
+    text: 'var(--warn-fg)',
+    dot: 'var(--warn-fg)',
+    glow: 'var(--warn-bg)'
   },
   info: {
-    border: 'rgba(148,163,184,.34)',
-    text: '#e2e8f0',
-    dot: '#94a3b8',
-    glow: 'rgba(148,163,184,.14)'
+    border: 'var(--border-strong)',
+    text: 'var(--info-fg)',
+    dot: 'var(--info-fg)',
+    glow: 'var(--info-bg)'
   }
 };
 
@@ -80,14 +84,10 @@ function AppNoticeViewport({ notices }: { notices: NoticeWithPhase[] }) {
               zIndex: 100 - depth,
               opacity,
               transform: `translate(-50%, ${baseOffsetY + phaseOffsetY}px) scale(${scale})`,
-              background: isLight
-                ? 'linear-gradient(145deg, rgba(255,255,255,.98), rgba(245,248,251,.94))'
-                : 'linear-gradient(145deg, rgba(7,10,9,.95), rgba(5,7,6,.9))',
+              background: 'linear-gradient(145deg, var(--surface-1), var(--surface-2))',
               borderColor: toneStyle.border,
-              color: isLight ? '#0f172a' : toneStyle.text,
-              boxShadow: isLight
-                ? `0 14px 32px rgba(15,23,42,.16), 0 0 0 1px ${toneStyle.glow} inset`
-                : `0 16px 34px rgba(0,0,0,.45), 0 0 0 1px ${toneStyle.glow} inset`
+              color: isLight ? 'var(--text-primary)' : toneStyle.text,
+              boxShadow: `var(--shadow-lg), 0 0 0 1px ${toneStyle.glow} inset`
             }}
           >
             <div className="flex items-center gap-2">
@@ -245,7 +245,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "name": "TuCancha",
+    "name": "Punto",
     "url": SITE_URL || undefined,
     "logo": LOGO_URL
   };
@@ -253,20 +253,21 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   return (
     <>
       <Head>
-        <title>TuCancha</title>
-        <link rel="icon" href="/Vector.svg" type="image/svg+xml" />
+        <title>Punto</title>
+        <link rel="icon" href={MARK_PATH} type="image/svg+xml" />
+        <link rel="shortcut icon" href="/favicon.ico" />
         <link rel="manifest" href="/site.webmanifest" />
-        <link rel="apple-touch-icon" href={LOGO_PATH} />
+        <link rel="apple-touch-icon" href={APPLE_ICON_PATH} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="TuCancha" />
-        <meta property="og:title" content="TuCancha" />
+        <meta property="og:site_name" content="Punto" />
+        <meta property="og:title" content="Punto" />
         <meta property="og:description" content="Reserva canchas y gestiona turnos facilmente." />
-        <meta property="og:image" content={LOGO_URL} />
-        <meta property="og:image:width" content="512" />
-        <meta property="og:image:height" content="512" />
-        <meta name="twitter:image" content={LOGO_URL} />
-        <meta name="theme-color" content="#ffffff" />
+        <meta property="og:image" content={OG_IMAGE_URL} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:image" content={OG_IMAGE_URL} />
+        <meta name="theme-color" content="#B6F36A" />
         <script
           type="application/ld+json"
           // JSON-LD must be a string

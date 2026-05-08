@@ -1201,12 +1201,12 @@ export default function AdminTabClub({
               Vas a aplicar <span className="font-black">{configChanges.length}</span> cambios de configuración.
             </p>
             {criticalChanges.length > 0 ? (
-              <p className="text-xs font-black text-red-600 uppercase tracking-widest">
+              <p className="text-xs font-black text-p-error uppercase tracking-widest">
                 Cambios críticos detectados: {criticalChanges.length}
               </p>
             ) : null}
-            <div className="max-h-56 overflow-auto rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
-              <ul className="space-y-1 text-[12px] text-[#4e5870]">
+            <div className="max-h-56 overflow-auto rounded-xl border border-p-border bg-p-surface-2 p-3">
+              <ul className="space-y-1 text-[12px] text-p-text-secondary">
                 {topChanges.map((change) => (
                   <li key={`${change.label}-${change.after}`}>
                     {change.critical ? '• [CRÍTICO] ' : '• '}
@@ -1215,7 +1215,7 @@ export default function AdminTabClub({
                 ))}
               </ul>
             </div>
-            <p className="text-[12px] text-[#6f7890]">
+            <p className="text-[12px] text-p-text-muted">
               Confirmá solo si verificaste el impacto operativo de estos cambios.
             </p>
           </div>
@@ -1968,11 +1968,11 @@ export default function AdminTabClub({
     return `+54 9${parts.length ? ' ' : ''}${parts.join(' ')}`.trim();
   };
 
-  const inputCls = "h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#1f2638] outline-none focus:border-[#3053e2] transition placeholder:text-[#b0b8c9]";
-  const labelCls = "mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]";
-  const cardCls = "rounded-xl border border-[#dce2ee] bg-white p-4";
-  const cardTitleCls = "mb-4 text-[13px] font-semibold text-[#1f2638]";
-  const checkboxCls = (active: boolean) => `flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition cursor-pointer ${active ? 'border-[#3053e2] bg-[#3053e2]' : 'border-[#dce2ee] bg-white'}`;
+  const inputCls = "h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent transition placeholder:text-p-text-muted";
+  const labelCls = "mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-p-text-muted";
+  const cardCls = "rounded-xl border border-p-border bg-p-surface p-4";
+  const cardTitleCls = "mb-4 text-[13px] font-semibold text-p-text";
+  const checkboxCls = (active: boolean) => `flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition cursor-pointer ${active ? 'border-p-accent bg-ink-900' : 'border-p-border bg-p-surface'}`;
 
   // Format "2026-05-01" → "Vie 1 de mayo" (no timezone shift)
   const formatExceptionDate = (dateStr: string): string => {
@@ -1992,28 +1992,28 @@ export default function AdminTabClub({
     <>
       {/* ── Fixed unsaved-changes bar ── Oculta mientras el drawer de excepciones está abierto para evitar confusión con el footer del drawer */}
       <div
-        className={`fixed bottom-0 left-0 right-0 z-[2000] transition-transform duration-200 ease-out lg:left-[var(--admin-playground-sidebar-left,168px)] ${
+        className={`fixed bottom-0 left-0 right-0 z-[2000] transition-transform duration-200 ease-out lg:left-[var(--admin-shell-sidebar-left,168px)] ${
           hasUnsavedChanges && !Boolean(exceptionModalActivity) ? 'translate-y-0' : 'translate-y-full'
         }`}
         aria-hidden={!hasUnsavedChanges || Boolean(exceptionModalActivity)}
       >
-        <div className="flex items-center gap-3 border-t border-[#dce2ee] bg-[#ffffff] px-5 py-3 shadow-[0_-4px_16px_rgba(31,38,56,0.08)]">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-[#f59e0b]" />
-          <span className="text-[12px] font-medium text-[#1f2638]">
+        <div className="flex items-center gap-3 border-t border-p-border bg-p-surface px-5 py-3 shadow-p-lg">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-p-warning" />
+          <span className="text-[12px] font-medium text-p-text">
             {configChanges.length} cambio{configChanges.length !== 1 ? 's' : ''} sin guardar
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
               onClick={handleDiscardChanges}
-              className="h-8 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              className="h-8 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
             >
               Descartar
             </button>
             <button
               type="button"
               onClick={() => void handleUpdateClub()}
-              className="h-8 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+              className="h-8 rounded-lg bg-ink-900 px-4 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-900"
             >
               Guardar cambios
             </button>
@@ -2025,14 +2025,14 @@ export default function AdminTabClub({
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-[15px] font-semibold text-[#1f2638]">{title}</h1>
-            {subtitle && <p className="text-[12px] text-[#6f7890] mt-0.5">{subtitle}</p>}
+            <h1 className="text-[15px] font-semibold text-p-text">{title}</h1>
+            {subtitle && <p className="text-[12px] text-p-text-muted mt-0.5">{subtitle}</p>}
           </div>
           {effectiveTab === 'operation' && (
             <button
               type="button"
               onClick={restoreBookingPolicyDefaults}
-              className="shrink-0 h-8 rounded-xl border border-[#dce2ee] bg-white px-3 text-[11px] font-medium text-[#6f7890] hover:bg-[#f4f6fb] transition"
+              className="shrink-0 h-8 rounded-xl border border-p-border bg-p-surface px-3 text-[11px] font-medium text-p-text-muted hover:bg-p-surface-2 transition"
             >
               Restaurar recomendados
             </button>
@@ -2057,12 +2057,12 @@ export default function AdminTabClub({
         {loadingClub ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 animate-pulse rounded-xl bg-[#f4f6fb]" />
+              <div key={i} className="h-14 animate-pulse rounded-xl bg-p-surface-2" />
             ))}
           </div>
         ) : !club ? (
           <div className={cardCls}>
-            <p className="text-[13px] text-[#6f7890]">No se pudo cargar la información del club.</p>
+            <p className="text-[13px] text-p-text-muted">No se pudo cargar la información del club.</p>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
@@ -2082,7 +2082,7 @@ export default function AdminTabClub({
                         className={inputCls}
                         placeholder="ej: las-tejas-padel"
                       />
-                      <p className="mt-1 text-[11px] text-[#6f7890]">tucancha.com/club/<span className="text-[#3053e2]">{clubForm.slug || '...'}</span></p>
+                      <p className="mt-1 text-[11px] text-p-text-muted">punto.com.ar/club/<span className="text-p-accent">{clubForm.slug || '...'}</span></p>
                     </div>
                     <div>
                       <label className={labelCls}>Nombre comercial</label>
@@ -2136,7 +2136,7 @@ export default function AdminTabClub({
                     <div>
                       <label className={labelCls}>Email administrativo</label>
                       <div className="relative">
-                        <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f7890]" />
+                        <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="email"
                           value={clubForm.contactInfo}
@@ -2148,7 +2148,7 @@ export default function AdminTabClub({
                     <div>
                       <label className={labelCls}>Teléfono público</label>
                       <div className="relative">
-                        <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f7890]" />
+                        <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="text"
                           value={clubForm.phone}
@@ -2169,7 +2169,7 @@ export default function AdminTabClub({
                     <div>
                       <label className={labelCls}>Instagram</label>
                       <div className="relative">
-                        <Instagram size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f7890]" />
+                        <Instagram size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="url"
                           value={clubForm.instagramUrl || ''}
@@ -2182,7 +2182,7 @@ export default function AdminTabClub({
                     <div>
                       <label className={labelCls}>Facebook</label>
                       <div className="relative">
-                        <Facebook size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f7890]" />
+                        <Facebook size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="url"
                           value={clubForm.facebookUrl || ''}
@@ -2195,7 +2195,7 @@ export default function AdminTabClub({
                     <div>
                       <label className={labelCls}>Sitio web</label>
                       <div className="relative">
-                        <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f7890]" />
+                        <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="url"
                           value={clubForm.websiteUrl || ''}
@@ -2212,11 +2212,11 @@ export default function AdminTabClub({
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Logo del club</p>
                   <div className="flex items-center gap-4">
-                    <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#dce2ee] bg-[#f8f9fd]">
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-p-border bg-p-surface-2">
                       {logoPreview
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={logoPreview} alt="Logo" className="h-full w-full object-contain p-1" />
-                        : <ImageIcon size={24} className="text-[#b0b8c9]" />
+                        : <ImageIcon size={24} className="text-p-text-muted" />
                       }
                     </div>
                     <div className="space-y-2">
@@ -2224,7 +2224,7 @@ export default function AdminTabClub({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="h-9 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#1f2638] hover:bg-[#f4f6fb] transition"
+                          className="h-9 rounded-xl border border-p-border bg-p-surface px-3 text-[12px] font-medium text-p-text hover:bg-p-surface-2 transition"
                         >
                           Subir imagen
                         </button>
@@ -2232,15 +2232,15 @@ export default function AdminTabClub({
                           <button
                             type="button"
                             onClick={handleRemoveLogo}
-                            className="h-9 rounded-xl border border-red-100 bg-red-50 px-3 text-[12px] font-medium text-red-600 hover:bg-red-100 transition"
+                            className="h-9 rounded-xl border border-p-error bg-p-error-bg px-3 text-[12px] font-medium text-p-error hover:bg-p-error-bg transition"
                           >
                             Eliminar
                           </button>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#6f7890]">Recomendado: 512×512px, máx 2MB (PNG/JPG)</p>
+                      <p className="text-[11px] text-p-text-muted">Recomendado: 512×512px, máx 2MB (PNG/JPG)</p>
                       {logoError && (
-                        <p className="flex items-center gap-1 text-[11px] text-red-500">
+                        <p className="flex items-center gap-1 text-[11px] text-p-error">
                           <AlertTriangle size={11} /> {logoError}
                         </p>
                       )}
@@ -2253,12 +2253,12 @@ export default function AdminTabClub({
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Imagen de portada</p>
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-                    <div className="flex h-36 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#dce2ee] bg-[#f8f9fd] lg:w-64">
+                    <div className="flex h-36 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl border border-p-border bg-p-surface-2 lg:w-64">
                       {clubImagePreview
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={clubImagePreview} alt="Portada" className="h-full w-full object-cover" />
                         : (
-                          <div className="flex flex-col items-center gap-1 text-[#b0b8c9]">
+                          <div className="flex flex-col items-center gap-1 text-p-text-muted">
                             <ImageIcon size={28} />
                             <span className="text-[11px]">Sin imagen</span>
                           </div>
@@ -2270,7 +2270,7 @@ export default function AdminTabClub({
                         <button
                           type="button"
                           onClick={() => clubImageInputRef.current?.click()}
-                          className="h-9 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-medium text-[#1f2638] hover:bg-[#f4f6fb] transition"
+                          className="h-9 rounded-xl border border-p-border bg-p-surface px-3 text-[12px] font-medium text-p-text hover:bg-p-surface-2 transition"
                         >
                           Subir imagen
                         </button>
@@ -2278,15 +2278,15 @@ export default function AdminTabClub({
                           <button
                             type="button"
                             onClick={handleRemoveClubImage}
-                            className="h-9 rounded-xl border border-red-100 bg-red-50 px-3 text-[12px] font-medium text-red-600 hover:bg-red-100 transition"
+                            className="h-9 rounded-xl border border-p-error bg-p-error-bg px-3 text-[12px] font-medium text-p-error hover:bg-p-error-bg transition"
                           >
                             Eliminar
                           </button>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#6f7890]">Recomendado: 1600×900px, máx 4MB (PNG/JPG)</p>
+                      <p className="text-[11px] text-p-text-muted">Recomendado: 1600×900px, máx 4MB (PNG/JPG)</p>
                       {clubImageError && (
-                        <p className="flex items-center gap-1 text-[11px] text-red-500">
+                        <p className="flex items-center gap-1 text-[11px] text-p-error">
                           <AlertTriangle size={11} /> {clubImageError}
                         </p>
                       )}
@@ -2323,7 +2323,7 @@ export default function AdminTabClub({
                           <option key={mode.value} value={mode.value}>{mode.label}</option>
                         ))}
                       </select>
-                      <p className="mt-1.5 text-[11px] text-[#6f7890]">
+                      <p className="mt-1.5 text-[11px] text-p-text-muted">
                         {BOOKING_CONFIRMATION_MODES.find((m) => m.value === clubForm.bookingConfirmationMode)?.helper}
                       </p>
                     </div>
@@ -2348,9 +2348,9 @@ export default function AdminTabClub({
                               className={checkboxCls(clubForm.allowManualConfirmationOverride)}
                               onClick={() => setClubForm({ ...clubForm, allowManualConfirmationOverride: !clubForm.allowManualConfirmationOverride })}
                             >
-                              {clubForm.allowManualConfirmationOverride && <Check size={12} strokeWidth={3} className="text-white" />}
+                              {clubForm.allowManualConfirmationOverride && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                             </div>
-                            <span className="text-[12px] text-[#1f2638]">Permitir confirmación manual sin seña</span>
+                            <span className="text-[12px] text-p-text">Permitir confirmación manual sin seña</span>
                           </label>
                         </div>
                       </div>
@@ -2384,9 +2384,9 @@ export default function AdminTabClub({
                         className={checkboxCls(clubForm.allowAdminSkipSimpleAdvanceLimit)}
                         onClick={() => setClubForm({ ...clubForm, allowAdminSkipSimpleAdvanceLimit: !clubForm.allowAdminSkipSimpleAdvanceLimit })}
                       >
-                        {clubForm.allowAdminSkipSimpleAdvanceLimit && <Check size={12} strokeWidth={3} className="text-white" />}
+                        {clubForm.allowAdminSkipSimpleAdvanceLimit && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                       </div>
-                      <span className="text-[12px] text-[#1f2638]">Permitir que admin omita límite de anticipación</span>
+                      <span className="text-[12px] text-p-text">Permitir que admin omita límite de anticipación</span>
                     </label>
                   </div>
                 </div>
@@ -2400,9 +2400,9 @@ export default function AdminTabClub({
                         className={checkboxCls(clubForm.autoCancelPendingBookingsEnabled)}
                         onClick={() => setClubForm({ ...clubForm, autoCancelPendingBookingsEnabled: !clubForm.autoCancelPendingBookingsEnabled })}
                       >
-                        {clubForm.autoCancelPendingBookingsEnabled && <Check size={12} strokeWidth={3} className="text-white" />}
+                        {clubForm.autoCancelPendingBookingsEnabled && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                       </div>
-                      <span className="text-[12px] text-[#1f2638]">Cancelar reservas pendientes automáticamente</span>
+                      <span className="text-[12px] text-p-text">Cancelar reservas pendientes automáticamente</span>
                     </label>
                     {clubForm.autoCancelPendingBookingsEnabled && (
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 pl-7">
@@ -2423,9 +2423,9 @@ export default function AdminTabClub({
                               className={checkboxCls(clubForm.autoCancelPendingBookingsOnlyIfUnpaid)}
                               onClick={() => setClubForm({ ...clubForm, autoCancelPendingBookingsOnlyIfUnpaid: !clubForm.autoCancelPendingBookingsOnlyIfUnpaid })}
                             >
-                              {clubForm.autoCancelPendingBookingsOnlyIfUnpaid && <Check size={12} strokeWidth={3} className="text-white" />}
+                              {clubForm.autoCancelPendingBookingsOnlyIfUnpaid && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                             </div>
-                            <span className="text-[12px] text-[#1f2638]">Solo si no tiene pago registrado</span>
+                            <span className="text-[12px] text-p-text">Solo si no tiene pago registrado</span>
                           </label>
                         </div>
                       </div>
@@ -2435,9 +2435,9 @@ export default function AdminTabClub({
                         className={checkboxCls(clubForm.autoCancelPendingWarningEnabled)}
                         onClick={() => setClubForm({ ...clubForm, autoCancelPendingWarningEnabled: !clubForm.autoCancelPendingWarningEnabled })}
                       >
-                        {clubForm.autoCancelPendingWarningEnabled && <Check size={12} strokeWidth={3} className="text-white" />}
+                        {clubForm.autoCancelPendingWarningEnabled && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                       </div>
-                      <span className="text-[12px] text-[#1f2638]">Enviar aviso previo a la cancelación</span>
+                      <span className="text-[12px] text-p-text">Enviar aviso previo a la cancelación</span>
                     </label>
                     {clubForm.autoCancelPendingWarningEnabled && (
                       <div className="pl-7">
@@ -2464,9 +2464,9 @@ export default function AdminTabClub({
                         className={checkboxCls(clubForm.lightsEnabled)}
                         onClick={() => setClubForm({ ...clubForm, lightsEnabled: !clubForm.lightsEnabled })}
                       >
-                        {clubForm.lightsEnabled && <Check size={12} strokeWidth={3} className="text-white" />}
+                        {clubForm.lightsEnabled && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                       </div>
-                      <span className="text-[12px] text-[#1f2638]">Activar recargo nocturno</span>
+                      <span className="text-[12px] text-p-text">Activar recargo nocturno</span>
                     </label>
                     {clubForm.lightsEnabled && (
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 pl-7">
@@ -2501,16 +2501,16 @@ export default function AdminTabClub({
                 {/* Profesor */}
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Profesor (operativo)</p>
-                  <p className="mb-4 text-[12px] text-[#6f7890]">Los descuentos económicos se configuran en la pestaña Descuentos. Esta sección solo define el ajuste operativo.</p>
+                  <p className="mb-4 text-[12px] text-p-text-muted">Los descuentos económicos se configuran en la pestaña Descuentos. Esta sección solo define el ajuste operativo.</p>
                   <div className="space-y-4">
                     <label className="flex cursor-pointer items-center gap-2.5">
                       <div
                         className={checkboxCls(clubForm.professorDurationOverrideEnabled)}
                         onClick={() => setClubForm({ ...clubForm, professorDurationOverrideEnabled: !clubForm.professorDurationOverrideEnabled })}
                       >
-                        {clubForm.professorDurationOverrideEnabled && <Check size={12} strokeWidth={3} className="text-white" />}
+                        {clubForm.professorDurationOverrideEnabled && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                       </div>
-                      <span className="text-[12px] text-[#1f2638]">Permitir ajuste de duración para profesor</span>
+                      <span className="text-[12px] text-p-text">Permitir ajuste de duración para profesor</span>
                     </label>
                     {clubForm.professorDurationOverrideEnabled && (
                       <div className="pl-7">
@@ -2536,7 +2536,7 @@ export default function AdminTabClub({
                 {/* Días de apertura */}
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Días de apertura</p>
-                  <p className="mb-3 text-[12px] text-[#6f7890]">Seleccioná los días en los que el club está abierto. Sin selección = abre todos los días.</p>
+                  <p className="mb-3 text-[12px] text-p-text-muted">Seleccioná los días en los que el club está abierto. Sin selección = abre todos los días.</p>
                   <div className="flex flex-wrap gap-2">
                     {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((label, idx) => {
                       const day = idx % 7;
@@ -2546,7 +2546,7 @@ export default function AdminTabClub({
                           key={label}
                           type="button"
                           onClick={() => toggleOpeningDay(day)}
-                          className={`h-9 w-12 rounded-xl text-[12px] font-medium transition ${active ? 'bg-[#edf1ff] text-[#3053e2] border border-[#c7d3f9]' : 'border border-[#dce2ee] bg-white text-[#6f7890] hover:bg-[#f4f6fb]'}`}
+                          className={`h-9 w-12 rounded-xl text-[12px] font-medium transition ${active ? 'bg-p-positive-bg text-p-accent border border-p-accent' : 'border border-p-border bg-p-surface text-p-text-muted hover:bg-p-surface-2'}`}
                         >
                           {label}
                         </button>
@@ -2570,10 +2570,10 @@ export default function AdminTabClub({
                             clubOperationalStatus: option.value,
                             ...(option.value !== 'TEMPORARY_CLOSED' ? { temporaryClosureStartDate: '', temporaryClosureEndDate: '' } : {})
                           }))}
-                          className={`rounded-xl border px-4 py-3 text-left transition ${active ? 'border-[#3053e2] bg-[#edf1ff]' : 'border-[#dce2ee] bg-white hover:bg-[#f4f6fb]'}`}
+                          className={`rounded-xl border px-4 py-3 text-left transition ${active ? 'border-p-accent bg-p-positive-bg' : 'border-p-border bg-p-surface hover:bg-p-surface-2'}`}
                         >
-                          <p className={`text-[12px] font-semibold ${active ? 'text-[#3053e2]' : 'text-[#1f2638]'}`}>{option.label}</p>
-                          <p className="mt-1 text-[11px] text-[#6f7890] leading-relaxed">{option.helper}</p>
+                          <p className={`text-[12px] font-semibold ${active ? 'text-p-accent' : 'text-p-text'}`}>{option.label}</p>
+                          <p className="mt-1 text-[11px] text-p-text-muted leading-relaxed">{option.helper}</p>
                         </button>
                       );
                     })}
@@ -2604,9 +2604,9 @@ export default function AdminTabClub({
                 {/* Fechas de cierre */}
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Fechas de cierre puntual</p>
-                  <p className="mb-3 text-[12px] text-[#6f7890]">Bloqueá días específicos (feriados, mantenimiento). Formato: YYYY-MM-DD.</p>
+                  <p className="mb-3 text-[12px] text-p-text-muted">Bloqueá días específicos (feriados, mantenimiento). Formato: YYYY-MM-DD.</p>
                   {clubForm.clubOperationalStatus === 'PERMANENTLY_CLOSED' && (
-                    <p className="mb-3 text-[12px] text-red-500">En cierre permanente no se permiten fechas de cierre puntual.</p>
+                    <p className="mb-3 text-[12px] text-p-error">En cierre permanente no se permiten fechas de cierre puntual.</p>
                   )}
                   <div className="flex flex-col gap-3 md:flex-row md:items-center">
                     <div className="w-full md:w-64">
@@ -2620,7 +2620,7 @@ export default function AdminTabClub({
                       type="button"
                       onClick={addClosureDate}
                       disabled={clubForm.clubOperationalStatus === 'PERMANENTLY_CLOSED' || !closureDateInput}
-                      className="h-9 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white hover:bg-[#2748cc] transition disabled:opacity-40"
+                      className="h-9 rounded-xl bg-ink-900 px-4 text-[12px] font-semibold text-ink-50 hover:bg-ink-900 transition disabled:opacity-40"
                     >
                       Agregar cierre
                     </button>
@@ -2628,12 +2628,12 @@ export default function AdminTabClub({
                   {closureDatesSet.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {closureDatesSet.map((date) => (
-                        <span key={date} className="inline-flex items-center gap-1.5 rounded-lg border border-[#dce2ee] bg-[#f4f6fb] px-2.5 py-1.5 text-[12px] text-[#1f2638]">
+                        <span key={date} className="inline-flex items-center gap-1.5 rounded-lg border border-p-border bg-p-surface-2 px-2.5 py-1.5 text-[12px] text-p-text">
                           {date}
                           <button
                             type="button"
                             onClick={() => removeClosureDate(date)}
-                            className="text-[#6f7890] hover:text-red-500 transition"
+                            className="text-p-text-muted hover:text-p-error transition"
                           >
                             <X size={12} />
                           </button>
@@ -2647,28 +2647,28 @@ export default function AdminTabClub({
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Horarios por actividad</p>
                   {activityTypes.length === 0 ? (
-                    <p className="text-[12px] text-[#6f7890]">No hay actividades configuradas.</p>
+                    <p className="text-[12px] text-p-text-muted">No hay actividades configuradas.</p>
                   ) : (
                     <div className="space-y-4">
                       {activityTypes.map((activity) => {
                         const cfg = activityScheduleForm[activity.id];
                         if (!cfg) return null;
                         return (
-                          <div key={activity.id} className="rounded-xl border border-[#dce2ee] p-4">
+                          <div key={activity.id} className="rounded-xl border border-p-border p-4">
                             <div className="mb-3 flex items-center justify-between">
-                              <p className="text-[13px] font-semibold text-[#1f2638]">{activity.name}</p>
+                              <p className="text-[13px] font-semibold text-p-text">{activity.name}</p>
                               <div className="flex items-center gap-2">
                                 {pendingScheduleExceptionMutations.some((item) => item.activityId === activity.id) && (
-                                  <span className="rounded-full bg-[#edf1ff] px-2 py-0.5 text-[10px] font-semibold text-[#3053e2]">Cambios pendientes</span>
+                                  <span className="rounded-full bg-p-positive-bg px-2 py-0.5 text-[10px] font-semibold text-p-accent">Cambios pendientes</span>
                                 )}
                                 <button
                                   type="button"
                                   onClick={() => openExceptionModalForActivity(activity)}
-                                  className="h-8 rounded-xl border border-[#dce2ee] bg-white px-3 text-[11px] text-[#6f7890] hover:bg-[#f4f6fb] transition"
+                                  className="h-8 rounded-xl border border-p-border bg-p-surface px-3 text-[11px] text-p-text-muted hover:bg-p-surface-2 transition"
                                 >
                                   Excepciones
                                   {Number(activityExceptionSummary[activity.id]?.count || 0) > 0 && (
-                                    <span className="ml-1.5 rounded-full bg-[#edf1ff] px-1.5 py-0.5 text-[10px] text-[#3053e2]">
+                                    <span className="ml-1.5 rounded-full bg-p-positive-bg px-1.5 py-0.5 text-[10px] text-p-accent">
                                       {activityExceptionSummary[activity.id].count}
                                     </span>
                                   )}
@@ -2785,14 +2785,14 @@ export default function AdminTabClub({
                     <p className={cardTitleCls}>Configuración de turnos fijos por actividad</p>
                     <div className="space-y-3">
                       {activitySettings.map((activity) => (
-                        <div key={activity.key} className="grid grid-cols-1 gap-3 md:grid-cols-3 rounded-xl border border-[#dce2ee] p-3">
+                        <div key={activity.key} className="grid grid-cols-1 gap-3 md:grid-cols-3 rounded-xl border border-p-border p-3">
                           <div>
                             <label className={labelCls}>Actividad</label>
                             <input
                               type="text"
                               value={activity.label}
                               readOnly
-                              className={`${inputCls} bg-[#f8f9fd]`}
+                              className={`${inputCls} bg-p-surface-2`}
                             />
                           </div>
                           <div>
@@ -2852,7 +2852,7 @@ export default function AdminTabClub({
               <div className="space-y-4">
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Política de cierre de caja</p>
-                  <p className="mb-3 text-[12px] text-[#6f7890]">
+                  <p className="mb-3 text-[12px] text-p-text-muted">
                     Define si el sistema permite cerrar caja cuando todavía hay cuentas corrientes abiertas.
                   </p>
                   <label className="flex cursor-pointer items-center gap-2.5">
@@ -2860,9 +2860,9 @@ export default function AdminTabClub({
                       className={checkboxCls(clubForm.enforceCashShiftCloseWithOpenAccounts)}
                       onClick={() => setClubForm({ ...clubForm, enforceCashShiftCloseWithOpenAccounts: !clubForm.enforceCashShiftCloseWithOpenAccounts })}
                     >
-                      {clubForm.enforceCashShiftCloseWithOpenAccounts && <Check size={12} strokeWidth={3} className="text-white" />}
+                      {clubForm.enforceCashShiftCloseWithOpenAccounts && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                     </div>
-                    <span className="text-[12px] text-[#1f2638]">Bloquear cierre de caja con cuentas corrientes abiertas</span>
+                    <span className="text-[12px] text-p-text">Bloquear cierre de caja con cuentas corrientes abiertas</span>
                   </label>
                 </div>
 
@@ -2877,27 +2877,27 @@ export default function AdminTabClub({
                         setDiscountDrawerMode('create');
                         setDiscountDrawerOpen(true);
                       }}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#3053e2] px-3 text-[11px] font-semibold text-white transition hover:bg-[#2748cc]"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-900 px-3 text-[11px] font-semibold text-ink-50 transition hover:bg-ink-900"
                     >
                       + Nueva política
                     </button>
                   </div>
                   {loadingDiscountPolicies ? (
-                    <p className="text-[12px] text-[#6f7890]">Cargando...</p>
+                    <p className="text-[12px] text-p-text-muted">Cargando...</p>
                   ) : discountPolicies.length === 0 ? (
-                    <p className="text-[12px] text-[#6f7890]">No hay políticas configuradas. Creá la primera con el botón de arriba.</p>
+                    <p className="text-[12px] text-p-text-muted">No hay políticas configuradas. Creá la primera con el botón de arriba.</p>
                   ) : (
                     <div className="space-y-2">
                       {discountPolicies.map((policy) => (
-                        <div key={policy.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#dce2ee] p-3">
+                        <div key={policy.id} className="flex items-center justify-between gap-3 rounded-xl border border-p-border p-3">
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="text-[13px] font-medium text-[#1f2638]">{policy.name}</p>
+                              <p className="text-[13px] font-medium text-p-text">{policy.name}</p>
                               {!policy.isActive && (
-                                <span className="rounded-full bg-[#f4f6fb] px-2 py-0.5 text-[10px] text-[#6f7890]">Inactiva</span>
+                                <span className="rounded-full bg-p-surface-2 px-2 py-0.5 text-[10px] text-p-text-muted">Inactiva</span>
                               )}
                             </div>
-                            <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                            <p className="mt-0.5 text-[11px] text-p-text-muted">
                               {policy.scope} · {policy.amountType === 'PERCENT' ? `${policy.amountValue}%` : `$${policy.amountValue}`} · prio {policy.priority}
                               {policy.isStackable ? ' · acumulable' : ''}
                             </p>
@@ -2905,7 +2905,7 @@ export default function AdminTabClub({
                           <button
                             type="button"
                             onClick={() => handleStartEditDiscountPolicy(policy)}
-                            className="h-8 shrink-0 rounded-xl border border-[#dce2ee] bg-white px-3 text-[11px] text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                            className="h-8 shrink-0 rounded-xl border border-p-border bg-p-surface px-3 text-[11px] text-p-text-muted transition hover:bg-p-surface-2"
                           >
                             Editar
                           </button>
@@ -2922,7 +2922,7 @@ export default function AdminTabClub({
                     <div className="md:col-span-2">
                       <label className={labelCls}>Buscar cliente</label>
                       <div className="relative z-30" ref={clientSearchWrapperRef}>
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6f7890]" />
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="text"
                           value={clientSearch}
@@ -2932,7 +2932,7 @@ export default function AdminTabClub({
                           placeholder="Nombre o email..."
                         />
                         {showClientSearchDropdown && clientSearchResults.length > 0 && (
-                          <div className="absolute left-0 right-0 top-full z-[120] mt-1 max-h-56 overflow-y-auto rounded-xl border border-[#dce2ee] bg-white shadow-lg">
+                          <div className="absolute left-0 right-0 top-full z-[120] mt-1 max-h-56 overflow-y-auto rounded-xl border border-p-border bg-p-surface shadow-lg">
                             {clientSearchResults.map((client) => (
                               <button
                                 key={client.id}
@@ -2940,10 +2940,10 @@ export default function AdminTabClub({
                                 onClick={() => {
                                   void handleSelectDiscountClient(client);
                                 }}
-                                className="flex w-full flex-col px-3 py-2.5 text-left hover:bg-[#f4f6fb] transition first:rounded-t-xl last:rounded-b-xl"
+                                className="flex w-full flex-col px-3 py-2.5 text-left hover:bg-p-surface-2 transition first:rounded-t-xl last:rounded-b-xl"
                               >
-                                <span className="text-[12px] font-medium text-[#1f2638]">{client.name}</span>
-                                <span className="text-[11px] text-[#6f7890]">{client.email}</span>
+                                <span className="text-[12px] font-medium text-p-text">{client.name}</span>
+                                <span className="text-[11px] text-p-text-muted">{client.email}</span>
                               </button>
                             ))}
                           </div>
@@ -2978,7 +2978,7 @@ export default function AdminTabClub({
                         type="button"
                         disabled={!selectedDiscountClient || !selectedPolicyIdForAssignment}
                         onClick={() => void handleAssignPolicyToClient()}
-                        className="h-9 rounded-xl bg-[#3053e2] px-4 text-[12px] font-semibold text-white hover:bg-[#2748cc] transition disabled:opacity-40"
+                        className="h-9 rounded-xl bg-ink-900 px-4 text-[12px] font-semibold text-ink-50 hover:bg-ink-900 transition disabled:opacity-40"
                       >
                         Asignar
                       </button>
@@ -2988,31 +2988,31 @@ export default function AdminTabClub({
                   {/* Asignaciones existentes */}
                   {selectedDiscountClient && (
                     <div className="mt-4">
-                      <p className="mb-2 text-[12px] font-medium text-[#1f2638]">Asignaciones de {selectedDiscountClient.name}</p>
+                      <p className="mb-2 text-[12px] font-medium text-p-text">Asignaciones de {selectedDiscountClient.name}</p>
                       {loadingClientAssignments ? (
-                        <p className="text-[12px] text-[#6f7890]">Cargando...</p>
+                        <p className="text-[12px] text-p-text-muted">Cargando...</p>
                       ) : clientAssignments.length === 0 ? (
-                        <p className="text-[12px] text-[#6f7890]">Sin asignaciones.</p>
+                        <p className="text-[12px] text-p-text-muted">Sin asignaciones.</p>
                       ) : (
                         <div className="space-y-2">
                           {clientAssignments.map((assignment: { id: string; isActive?: boolean; policy?: { name: string }; notes?: string }) => (
-                            <div key={assignment.id} className="flex items-center justify-between rounded-xl border border-[#dce2ee] p-3">
+                            <div key={assignment.id} className="flex items-center justify-between rounded-xl border border-p-border p-3">
                               <div>
-                                <p className="text-[12px] font-medium text-[#1f2638]">{assignment.policy?.name || assignment.id}</p>
-                                {assignment.notes && <p className="text-[11px] text-[#6f7890]">{assignment.notes}</p>}
+                                <p className="text-[12px] font-medium text-p-text">{assignment.policy?.name || assignment.id}</p>
+                                {assignment.notes && <p className="text-[11px] text-p-text-muted">{assignment.notes}</p>}
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => void handleToggleAssignment(assignment.id, !Boolean(assignment.isActive))}
-                                  className="h-8 rounded-xl border border-[#dce2ee] bg-white px-3 text-[11px] text-[#4f5a74] hover:bg-[#f4f6fb] transition"
+                                  className="h-8 rounded-xl border border-p-border bg-p-surface px-3 text-[11px] text-p-text-secondary hover:bg-p-surface-2 transition"
                                 >
                                   {assignment.isActive ? 'Desactivar' : 'Activar'}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => void handleDeleteAssignment(assignment.id)}
-                                  className="h-8 rounded-xl border border-red-100 bg-red-50 px-3 text-[11px] text-red-600 hover:bg-red-100 transition"
+                                  className="h-8 rounded-xl border border-p-error bg-p-error-bg px-3 text-[11px] text-p-error hover:bg-p-error-bg transition"
                                 >
                                   Eliminar
                                 </button>
@@ -3034,15 +3034,15 @@ export default function AdminTabClub({
                 <div className={cardCls}>
                   <p className={cardTitleCls}>Historial de cambios</p>
                   {changeHistory.length === 0 ? (
-                    <p className="text-[12px] text-[#6f7890]">Aún no hay cambios auditados para este club.</p>
+                    <p className="text-[12px] text-p-text-muted">Aún no hay cambios auditados para este club.</p>
                   ) : (
                     <div className="space-y-2 max-h-80 overflow-auto pr-1">
                       {changeHistory.map((entry) => (
-                        <div key={entry.id} className="rounded-xl border border-[#dce2ee] p-3">
-                          <p className="text-[12px] font-medium text-[#1f2638]">
+                        <div key={entry.id} className="rounded-xl border border-p-border p-3">
+                          <p className="text-[12px] font-medium text-p-text">
                             {entry.actor} · {new Date(entry.changedAt).toLocaleString('es-AR')}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-[#6f7890]">{entry.changes.length} cambio(s) aplicado(s)</p>
+                          <p className="mt-0.5 text-[11px] text-p-text-muted">{entry.changes.length} cambio(s) aplicado(s)</p>
                         </div>
                       ))}
                     </div>
@@ -3057,7 +3057,7 @@ export default function AdminTabClub({
                       <select
                         value={reviewStatusFilter}
                         onChange={(e) => setReviewStatusFilter(e.target.value as 'ALL' | ClubReviewAdminStatus)}
-                        className="h-9 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] text-[#1f2638] outline-none focus:border-[#3053e2] transition"
+                        className="h-9 rounded-xl border border-p-border bg-p-surface px-3 text-[12px] text-p-text outline-none focus:border-p-accent transition"
                       >
                         <option value="ALL">Todas</option>
                         <option value="PUBLISHED">Publicadas</option>
@@ -3067,32 +3067,32 @@ export default function AdminTabClub({
                       <button
                         type="button"
                         onClick={() => { if (club?.slug) void loadClubReviews(club.slug, reviewStatusFilter); }}
-                        className="h-9 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] text-[#6f7890] hover:bg-[#f4f6fb] transition"
+                        className="h-9 rounded-xl border border-p-border bg-p-surface px-3 text-[12px] text-p-text-muted hover:bg-p-surface-2 transition"
                       >
                         Recargar
                       </button>
                     </div>
                   </div>
                   {loadingClubReviews ? (
-                    <p className="text-[12px] text-[#6f7890]">Cargando reseñas...</p>
+                    <p className="text-[12px] text-p-text-muted">Cargando reseñas...</p>
                   ) : clubReviews.length === 0 ? (
-                    <p className="text-[12px] text-[#6f7890]">No hay reseñas para el filtro seleccionado.</p>
+                    <p className="text-[12px] text-p-text-muted">No hay reseñas para el filtro seleccionado.</p>
                   ) : (
                     <div className="space-y-2 max-h-96 overflow-auto pr-1">
                       {clubReviews.map((review) => (
-                        <div key={review.id} className="rounded-xl border border-[#dce2ee] p-3">
+                        <div key={review.id} className="rounded-xl border border-p-border p-3">
                           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                             <div>
-                              <p className="text-[13px] font-medium text-[#1f2638]">
+                              <p className="text-[13px] font-medium text-p-text">
                                 {review.user?.name || 'Usuario'} · {Number(review.rating).toFixed(1)} / 5
                               </p>
-                              <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                              <p className="mt-0.5 text-[11px] text-p-text-muted">
                                 Reserva #{review.bookingId} · {new Date(review.createdAt).toLocaleDateString('es-AR')} · <span className="font-medium">{review.status}</span>
                               </p>
                               {review.comment ? (
-                                <p className="mt-2 text-[12px] text-[#1f2638] leading-relaxed">{review.comment}</p>
+                                <p className="mt-2 text-[12px] text-p-text leading-relaxed">{review.comment}</p>
                               ) : (
-                                <p className="mt-2 text-[11px] italic text-[#6f7890]">Sin comentario.</p>
+                                <p className="mt-2 text-[11px] italic text-p-text-muted">Sin comentario.</p>
                               )}
                             </div>
                             <div className="flex flex-wrap gap-2 shrink-0">
@@ -3100,7 +3100,7 @@ export default function AdminTabClub({
                                 type="button"
                                 disabled={reviewStatusUpdatingId === review.id || review.status === 'PUBLISHED'}
                                 onClick={() => void handleUpdateReviewStatus(review.id, 'PUBLISHED')}
-                                className="h-8 rounded-xl bg-[#3053e2] px-3 text-[11px] font-semibold text-white hover:bg-[#2748cc] transition disabled:opacity-40"
+                                className="h-8 rounded-xl bg-ink-900 px-3 text-[11px] font-semibold text-ink-50 hover:bg-ink-900 transition disabled:opacity-40"
                               >
                                 Publicar
                               </button>
@@ -3108,7 +3108,7 @@ export default function AdminTabClub({
                                 type="button"
                                 disabled={reviewStatusUpdatingId === review.id || review.status === 'HIDDEN'}
                                 onClick={() => void handleUpdateReviewStatus(review.id, 'HIDDEN')}
-                                className="h-8 rounded-xl border border-red-100 bg-red-50 px-3 text-[11px] font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-40"
+                                className="h-8 rounded-xl border border-p-error bg-p-error-bg px-3 text-[11px] font-semibold text-p-error hover:bg-p-error-bg transition disabled:opacity-40"
                               >
                                 Ocultar
                               </button>
@@ -3137,14 +3137,14 @@ export default function AdminTabClub({
             <button
               type="button"
               onClick={handleCancelEditDiscountPolicy}
-              className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#6f7890] transition hover:bg-[#f4f6fb]"
+              className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-muted transition hover:bg-p-surface-2"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={() => discountDrawerMode === 'create' ? void handleCreateDiscountPolicy() : void handleSaveDiscountPolicy()}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900"
             >
               <Check size={14} />
               {discountDrawerMode === 'create' ? 'Crear política' : 'Guardar cambios'}
@@ -3229,9 +3229,9 @@ export default function AdminTabClub({
                   className={checkboxCls(discountPolicyForm.isStackable)}
                   onClick={() => setDiscountPolicyForm((prev) => ({ ...prev, isStackable: !prev.isStackable }))}
                 >
-                  {discountPolicyForm.isStackable && <Check size={12} strokeWidth={3} className="text-white" />}
+                  {discountPolicyForm.isStackable && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                 </div>
-                <span className="text-[12px] text-[#1f2638]">Acumulable con otras políticas</span>
+                <span className="text-[12px] text-p-text">Acumulable con otras políticas</span>
               </label>
             </div>
           </AdminDrawerSection>
@@ -3311,18 +3311,18 @@ export default function AdminTabClub({
                   className={checkboxCls(discountPolicyEditForm.isStackable)}
                   onClick={() => setDiscountPolicyEditForm((prev) => ({ ...prev, isStackable: !prev.isStackable }))}
                 >
-                  {discountPolicyEditForm.isStackable && <Check size={12} strokeWidth={3} className="text-white" />}
+                  {discountPolicyEditForm.isStackable && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                 </div>
-                <span className="text-[12px] text-[#1f2638]">Acumulable con otras políticas</span>
+                <span className="text-[12px] text-p-text">Acumulable con otras políticas</span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5">
                 <div
                   className={checkboxCls(discountPolicyEditForm.isActive)}
                   onClick={() => setDiscountPolicyEditForm((prev) => ({ ...prev, isActive: !prev.isActive }))}
                 >
-                  {discountPolicyEditForm.isActive && <Check size={12} strokeWidth={3} className="text-white" />}
+                  {discountPolicyEditForm.isActive && <Check size={12} strokeWidth={3} className="text-ink-50" />}
                 </div>
-                <span className="text-[12px] text-[#1f2638]">Política activa</span>
+                <span className="text-[12px] text-p-text">Política activa</span>
               </label>
             </div>
             </div>
@@ -3346,7 +3346,7 @@ export default function AdminTabClub({
                   setExceptionModalSelectedDate('');
                   setExceptionModalSelectedId(null);
                 }}
-                className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
               >
                 ← Volver
               </button>
@@ -3356,7 +3356,7 @@ export default function AdminTabClub({
                   type="button"
                   onClick={handleDeleteExceptionWithConfirmation}
                   disabled={activityExceptionBusy[exceptionModalActivityId ?? -1]}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-4 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#b42318] hover:text-white disabled:opacity-40"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-error bg-p-error-bg px-4 text-[13px] font-semibold text-p-error transition hover:bg-[var(--error-fg)] hover:text-ink-50 disabled:opacity-40"
                 >
                   <Trash2 size={14} />
                   {exceptionModalSelectedIsPendingDraft ? 'Descartar' : 'Eliminar'}
@@ -3366,7 +3366,7 @@ export default function AdminTabClub({
                 type="button"
                 onClick={() => void handleSaveExceptionFromModal()}
                 disabled={activityExceptionBusy[exceptionModalActivityId ?? -1]}
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-40"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900 disabled:opacity-40"
               >
                 <Check size={14} />
                 Guardar borrador
@@ -3379,7 +3379,7 @@ export default function AdminTabClub({
         {!exceptionModalSelectedDate && (
           <div className="space-y-5">
             <AdminDrawerSection title="Nueva excepción">
-              <p className="text-[12px] text-[#6f7890]">Seleccioná una fecha para crear o editar una excepción de horario.</p>
+              <p className="text-[12px] text-p-text-muted">Seleccioná una fecha para crear o editar una excepción de horario.</p>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <div className="flex-1">
                   <AdminDateInput
@@ -3392,7 +3392,7 @@ export default function AdminTabClub({
                 <button
                   type="button"
                   onClick={handleCreateExceptionInModal}
-                  className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+                  className="h-10 rounded-xl bg-ink-900 px-4 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900"
                 >
                   Crear borrador
                 </button>
@@ -3401,16 +3401,16 @@ export default function AdminTabClub({
 
             <AdminDrawerSection title="Excepciones cargadas">
               {exceptionModalLoading ? (
-                <div className="flex items-center gap-2 py-4 text-[12px] text-[#6f7890]">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
+                <div className="flex items-center gap-2 py-4 text-[12px] text-p-text-muted">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-p-border border-t-p-accent" />
                   Cargando excepciones...
                 </div>
               ) : exceptionModalItems.length === 0 ? (
-                <p className="rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 py-4 text-center text-[12px] text-[#98a1b3]">
+                <p className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-4 text-center text-[12px] text-p-text-muted">
                   No hay excepciones para esta actividad.
                 </p>
               ) : (
-                <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3">
+                <div className="divide-y divide-p-border rounded-xl border border-p-border bg-p-surface-2 px-3">
                   {exceptionModalItems.map((item) => {
                     const hasPending = pendingScheduleExceptionMutations.some(
                       (m) => m.activityId === exceptionModalActivityId && m.localDate === item.localDate
@@ -3423,19 +3423,19 @@ export default function AdminTabClub({
                           setExceptionModalSelectedDate(item.localDate);
                           setExceptionModalSelectedId(Number(item.id) > 0 ? Number(item.id) : null);
                         }}
-                        className="w-full py-2.5 text-left transition hover:bg-white/70"
+                        className="w-full py-2.5 text-left transition hover:bg-p-surface/70"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[13px] font-semibold text-[#1f2638]">
+                          <p className="text-[13px] font-semibold text-p-text">
                             {formatExceptionDate(item.localDate)}
                           </p>
                           {hasPending && (
-                            <span className="shrink-0 rounded-full bg-[#fef3c7] px-2 py-0.5 text-[10px] font-semibold text-[#b45309]">
+                            <span className="shrink-0 rounded-full bg-p-warning-bg px-2 py-0.5 text-[10px] font-semibold text-p-warning">
                               Pendiente
                             </span>
                           )}
                         </div>
-                        <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                        <p className="mt-0.5 text-[11px] text-p-text-muted">
                           {item.isClosed
                             ? 'Cerrado todo el día'
                             : item.scheduleMode === 'RANGE'
@@ -3458,8 +3458,8 @@ export default function AdminTabClub({
               <div className="space-y-5">
                 {/* Fecha seleccionada */}
                 <AdminDrawerSection title="Fecha">
-                  <div className="rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 py-2.5">
-                    <p className="text-[13px] font-semibold text-[#1f2638]">
+                  <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
+                    <p className="text-[13px] font-semibold text-p-text">
                       {formatExceptionDate(exceptionModalDraft.localDate)}
                     </p>
                   </div>
@@ -3467,7 +3467,7 @@ export default function AdminTabClub({
 
                 {/* Cierre total */}
                 <AdminDrawerSection title="Disponibilidad">
-                  <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5">
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-p-border bg-p-surface px-3 py-2.5">
                     <div
                       className={checkboxCls(exceptionModalDraft.isClosed)}
                       onClick={() =>
@@ -3477,10 +3477,10 @@ export default function AdminTabClub({
                       }
                     >
                       {exceptionModalDraft.isClosed && (
-                        <Check size={12} strokeWidth={3} className="text-white" />
+                        <Check size={12} strokeWidth={3} className="text-ink-50" />
                       )}
                     </div>
-                    <span className="text-[12px] text-[#1f2638]">
+                    <span className="text-[12px] text-p-text">
                       Cerrar toda la actividad en esta fecha
                     </span>
                   </label>
@@ -3490,7 +3490,7 @@ export default function AdminTabClub({
                 {!exceptionModalDraft.isClosed && (
                   <AdminDrawerSection
                     title="Horario especial"
-                    className="rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4"
+                    className="rounded-2xl border border-p-border bg-p-surface-2 p-4"
                   >
                     <div className="space-y-3">
                       <div>
@@ -3613,7 +3613,7 @@ export default function AdminTabClub({
               </div>
             ) : (
               <div className="py-8 text-center">
-                <p className="text-[13px] font-semibold text-[#98a1b3]">Cargando excepción...</p>
+                <p className="text-[13px] font-semibold text-p-text-muted">Cargando excepción...</p>
               </div>
             )}
           </>

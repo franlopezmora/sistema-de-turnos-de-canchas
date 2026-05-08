@@ -25,7 +25,7 @@ export default function AdminSegmentedControl({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={cx('inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-[#dce2ee] bg-white p-1 whitespace-nowrap', className)}
+      className={cx('inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-p-border bg-p-surface p-1 whitespace-nowrap', className)}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -38,8 +38,8 @@ export default function AdminSegmentedControl({
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={cx(
-              'h-9 rounded-lg px-3 text-[12px] font-semibold transition outline-none focus-visible:ring-2 focus-visible:ring-[#cfd9ff]',
-              active ? 'bg-[#edf1ff] text-[#3053e2]' : 'text-[#6f7890] hover:bg-[#f8f9fd]',
+              'h-9 rounded-lg px-3 text-[12px] font-semibold transition outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40',
+              active ? 'bg-p-positive-bg text-p-accent' : 'text-p-text-muted hover:bg-p-surface-2',
               option.disabled && 'cursor-not-allowed opacity-45 hover:bg-transparent'
             )}
           >

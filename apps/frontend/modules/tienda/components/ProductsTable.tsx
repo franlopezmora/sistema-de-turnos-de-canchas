@@ -45,9 +45,9 @@ function buildColumns(
       label: 'Producto',
       render: (p) => (
         <div className="min-w-0">
-          <p className="truncate font-semibold text-[#2a3245]">{p.name}</p>
+          <p className="truncate font-semibold text-p-text">{p.name}</p>
           {p.category && (
-            <p className="mt-0.5 truncate text-[11px] text-[#98a1b3]">{p.category}</p>
+            <p className="mt-0.5 truncate text-[11px] text-p-text-muted">{p.category}</p>
           )}
         </div>
       ),
@@ -59,8 +59,8 @@ function buildColumns(
         <span
           className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
             p.isCombo
-              ? 'border-[#c7d2ff] bg-[#eef1ff] text-[#3053e2]'
-              : 'border-[#dce2ee] bg-[#f5f7fb] text-[#6f7890]'
+              ? 'border-p-accent bg-p-positive-bg text-p-accent'
+              : 'border-p-border bg-p-surface-2 text-p-text-muted'
           }`}
         >
           {p.isCombo ? 'Combo' : 'Simple'}
@@ -73,7 +73,7 @@ function buildColumns(
       render: (p) => {
         if (p.isCombo) {
           return (
-            <span className="text-[12px] text-[#98a1b3]">—</span>
+            <span className="text-[12px] text-p-text-muted">—</span>
           );
         }
         const qty = Number(p.stock ?? 0);
@@ -82,8 +82,8 @@ function buildColumns(
           <span
             className={`inline-flex rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
               isLow
-                ? 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318]'
-                : 'border-[#ccebd7] bg-[#f0fbf4] text-[#167647]'
+                ? 'border-p-error bg-p-error-bg text-[var(--error-fg)]'
+                : 'border-p-positive bg-p-positive-bg text-p-positive'
             }`}
           >
             {qty} u.
@@ -95,7 +95,7 @@ function buildColumns(
       key: 'price',
       label: 'Precio',
       render: (p) => (
-        <span className="font-semibold text-[#2a3245]">
+        <span className="font-semibold text-p-text">
           ${Number(p.price || 0).toLocaleString('es-AR')}
         </span>
       ),
@@ -110,7 +110,7 @@ function buildColumns(
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); onEdit(p); }}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#3053e2] hover:bg-[#eef1fd] hover:text-[#3053e2]"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-accent hover:bg-p-positive-bg hover:text-p-accent"
             title="Editar"
           >
             <Edit size={15} strokeWidth={2.5} />
@@ -118,7 +118,7 @@ function buildColumns(
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); onDelete(p); }}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] transition hover:bg-[#b42318] hover:text-white"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-p-error bg-p-error-bg text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-ink-50"
             title="Dar de baja"
           >
             <Trash2 size={15} strokeWidth={2.5} />
@@ -127,7 +127,7 @@ function buildColumns(
             <button
               type="button"
               onClick={(event) => { event.stopPropagation(); onRowClick(p); }}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#bfcffe] hover:bg-[#eef1fd] hover:text-[#3053e2]"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-accent hover:bg-p-positive-bg hover:text-p-accent"
               title="Ver detalle"
             >
               <ArrowRight size={15} strokeWidth={2.5} />
@@ -179,7 +179,7 @@ export default function ProductsTable({
         onRowClick={onRowClick}
         rowClassName={(p) =>
           String(p.id) === String(selectedId ?? '')
-            ? 'bg-[#eef1fd] [&>td:first-child]:shadow-[2px_0_0_0_#3053e2_inset]'
+            ? 'bg-p-positive-bg [&>td:first-child]:shadow-[2px_0_0_0_var(--accent-fg)_inset]'
             : ''
         }
         className={className}

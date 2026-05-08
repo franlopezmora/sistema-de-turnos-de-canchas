@@ -148,7 +148,7 @@ export default function AdminAppModal({
     <div
       role="dialog"
       aria-modal="true"
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-[#0f172a]/40 p-4`}
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-[var(--overlay)] p-4`}
       onMouseDown={(event) => {
         if (!closeOnBackdrop) return;
         backdropMouseDownRef.current = event.target === event.currentTarget;
@@ -169,12 +169,12 @@ export default function AdminAppModal({
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[92vh] w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+        className="flex max-h-[92vh] w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-p-border bg-p-surface shadow-p-lg"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[#eef2f8] px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-p-border px-5 py-4">
           <div className="min-w-0">
-            <h3 className="flex items-center gap-2 text-[15px] font-semibold text-[#1f2638]">
-              <span className={isWarning ? 'text-[#b42318]' : isSuccess ? 'text-[#16733f]' : 'text-[#3053e2]'}>{icon}</span>
+            <h3 className="flex items-center gap-2 text-[15px] font-semibold text-p-text">
+              <span className={isWarning ? 'text-p-error' : isSuccess ? 'text-p-positive' : 'text-p-accent'}>{icon}</span>
               <span className="truncate">{title}</span>
             </h3>
           </div>
@@ -182,7 +182,7 @@ export default function AdminAppModal({
             <button
               type="button"
               onClick={onClose}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#dce3ef] text-[#76819b] hover:bg-[#f6f8fc]"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-p-border text-p-text-muted hover:bg-p-surface-2"
               title="Cerrar"
             >
               <X size={14} />
@@ -191,7 +191,7 @@ export default function AdminAppModal({
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
-          <div className="text-[13px] text-[#4e5870] leading-5">
+          <div className="text-[13px] text-p-text-secondary leading-5">
             {typeof message === 'string' ? <p className="m-0">{message}</p> : message}
           </div>
 
@@ -205,17 +205,17 @@ export default function AdminAppModal({
                 if (event.key === 'Enter' && inputText.trim()) handleConfirm();
               }}
               autoFocus
-              className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition focus:border-[#3053e2]"
+              className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text placeholder:text-p-text-muted outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
             />
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[#eef2f8] px-5 py-4">
+        <div className="flex justify-end gap-2 border-t border-p-border px-5 py-4">
           {cancelText && (
             <button
               type="button"
               onClick={onCancel ?? onClose}
-              className="h-9 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
+              className="h-9 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
             >
               {cancelText}
             </button>
@@ -235,16 +235,16 @@ export default function AdminAppModal({
             disabled={disabled}
             className={`relative h-9 overflow-hidden rounded-lg px-4 text-[12px] font-semibold transition ${
               disabled
-                ? 'cursor-not-allowed bg-[#d7dce8] text-[#7f879b]'
+                ? 'cursor-not-allowed bg-p-surface-3 text-p-text-muted'
                 : isWarning
-                  ? 'bg-[#b42318] text-white hover:bg-[#9f1e14]'
-                  : 'bg-[#3053e2] text-white hover:bg-[#2748cc]'
+                  ? 'bg-p-error text-ink-50 hover:opacity-90'
+                  : 'bg-ink-900 text-ink-50 hover:bg-ink-800'
             }`}
           >
             {holdToConfirm && (
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 origin-left bg-white/30"
+                className="pointer-events-none absolute inset-0 origin-left bg-p-surface/30"
                 style={{
                   transform: `scaleX(${holding ? holdProgress : 0})`,
                   transition: holding ? 'none' : 'transform 0.2s ease'

@@ -35,7 +35,7 @@ export default function AdminModal({
 
   return (
     <div
-      className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[#0f172a]/40 p-4 backdrop-blur-[1px]"
+      className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-[1px]"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -45,25 +45,25 @@ export default function AdminModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`w-full ${maxWidthClassName} rounded-2xl border border-[#dbe2ef] bg-white shadow-2xl`}
+        className={`w-full ${maxWidthClassName} rounded-2xl border border-p-border bg-p-surface shadow-p-lg`}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[#eef1f6] px-5 py-4">
+        <header className="flex items-start justify-between gap-4 border-b border-p-border px-5 py-4">
           <div className="min-w-0">
-            <h2 className="text-[20px] font-bold tracking-[-0.01em] text-[#1f2a44]">{title}</h2>
-            {description && <p className="mt-1 text-[12px] text-[#6f7890]">{description}</p>}
+            <h2 className="text-[20px] font-bold tracking-[-0.01em] text-p-text">{title}</h2>
+            {description && <p className="mt-1 text-[12px] text-p-text-muted">{description}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[#dce3ef] text-[#76819b] hover:bg-[#f6f8fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cfd9ff]"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-p-border text-p-text-muted hover:bg-p-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
             aria-label={`Cerrar ${title}`}
           >
             <X size={14} />
           </button>
         </header>
         <div className="px-5 py-5">{children}</div>
-        {footer && <footer className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-5 py-4">{footer}</footer>}
+        {footer && <footer className="flex items-center justify-end gap-2 border-t border-p-border px-5 py-4">{footer}</footer>}
       </div>
     </div>
   );

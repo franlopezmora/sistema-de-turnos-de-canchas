@@ -50,10 +50,10 @@ const formatTimestamp = (ts: string): string => {
 };
 
 const amountColorClass: Record<MovementsTimelineItemType, string> = {
-  income: 'text-[#167647]',
-  expense: 'text-[#b42318]',
-  adjustment: 'text-[#92400e]',
-  neutral: 'text-[#4e5870]',
+  income: 'text-p-positive',
+  expense: 'text-p-error',
+  adjustment: 'text-p-warning',
+  neutral: 'text-p-text-secondary',
 };
 
 const amountPrefix: Record<MovementsTimelineItemType, string> = {
@@ -95,12 +95,12 @@ export default function MovementsTimeline({
       <div className={['space-y-3', className].filter(Boolean).join(' ')}>
         {[1, 2, 3].map((i) => (
           <div key={i} className="flex items-start gap-3">
-            <div className="mt-0.5 h-4 w-10 animate-pulse rounded bg-[#f0f2f7]" />
+            <div className="mt-0.5 h-4 w-10 animate-pulse rounded bg-p-surface-2" />
             <div className="flex-1 space-y-1.5">
-              <div className="h-3 w-1/2 animate-pulse rounded bg-[#f0f2f7]" />
-              <div className="h-2.5 w-1/3 animate-pulse rounded bg-[#f0f2f7]" />
+              <div className="h-3 w-1/2 animate-pulse rounded bg-p-surface-2" />
+              <div className="h-2.5 w-1/3 animate-pulse rounded bg-p-surface-2" />
             </div>
-            <div className="h-4 w-16 animate-pulse rounded bg-[#f0f2f7]" />
+            <div className="h-4 w-16 animate-pulse rounded bg-p-surface-2" />
           </div>
         ))}
       </div>
@@ -111,16 +111,16 @@ export default function MovementsTimeline({
     return (
       <div
         className={[
-          'grid min-h-[120px] place-items-center rounded-xl border border-dashed border-[#dce2ee] bg-[#f8f9fc] px-4 py-6 text-center',
+          'grid min-h-[120px] place-items-center rounded-xl border border-dashed border-p-border bg-p-surface-2 px-4 py-6 text-center',
           className,
         ]
           .filter(Boolean)
           .join(' ')}
       >
         <div>
-          <p className="text-[14px] font-semibold text-[#98a1b3]">{emptyTitle}</p>
+          <p className="text-[14px] font-semibold text-p-text-muted">{emptyTitle}</p>
           {emptyDescription && (
-            <p className="mt-1 text-[12px] text-[#b0b8c8]">{emptyDescription}</p>
+            <p className="mt-1 text-[12px] text-p-text-muted">{emptyDescription}</p>
           )}
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function MovementsTimeline({
   }
 
   return (
-    <div className={['divide-y divide-[#f0f2f7]', className].filter(Boolean).join(' ')}>
+    <div className={['divide-y divide-p-border', className].filter(Boolean).join(' ')}>
       {items.map((item) => {
         const timeStr =
           item.timeLabel ??
@@ -137,17 +137,17 @@ export default function MovementsTimeline({
         return (
           <div key={item.id} className="flex items-start gap-3 py-3">
             {/* Timestamp */}
-            <span className="w-10 shrink-0 pt-px font-mono text-[11px] text-[#98a1b3]">
+            <span className="w-10 shrink-0 pt-px font-mono text-[11px] text-p-text-muted">
               {timeStr ?? '—'}
             </span>
 
             {/* Labels */}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-medium text-[#2a3245]">
+              <p className="truncate text-[13px] font-medium text-p-text">
                 {item.label}
               </p>
               {item.sublabel && (
-                <p className="mt-0.5 truncate text-[11px] text-[#98a1b3]">
+                <p className="mt-0.5 truncate text-[11px] text-p-text-muted">
                   {item.sublabel}
                 </p>
               )}

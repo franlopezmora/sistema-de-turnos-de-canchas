@@ -18,11 +18,11 @@ export default function PageShell({ title, subtitle, children }: PageShellProps)
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div
           className="absolute top-[-10%] left-[-10%] w-96 h-96 rounded-full blur-[128px]"
-          style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+          style={{ backgroundColor: 'transparent' }}
         />
         <div
           className="absolute bottom-[-10%] right-[-10%] w-96 h-96 rounded-full blur-[128px]"
-          style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}
+          style={{ backgroundColor: 'transparent' }}
         />
       </div>
 

@@ -50,15 +50,15 @@ export default function ClientePerfilPage() {
       <div className="flex h-full w-full overflow-hidden">
 
         {/* ── Left panel (desktop only) ── */}
-        <div className="hidden w-[280px] shrink-0 flex-col overflow-hidden border-r border-[#dce2ee] bg-white md:flex">
+        <div className="hidden w-[280px] shrink-0 flex-col overflow-hidden border-r border-p-border bg-p-surface md:flex">
           {/* Search */}
-          <div className="shrink-0 border-b border-[#edf0f6] px-4 py-3">
+          <div className="shrink-0 border-b border-p-border px-4 py-3">
             <input
               type="search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar cliente…"
-              className="w-full rounded-lg border border-[#dce2ee] bg-[#f8f9fc] px-3 py-2 text-[13px] text-[#2a3245] placeholder-[#98a1b3] outline-none focus:border-[#3053e2] focus:bg-white"
+              className="w-full rounded-lg border border-p-border bg-p-surface-2 px-3 py-2 text-[13px] text-p-text placeholder-[var(--text-muted)] outline-none focus:border-p-accent focus:bg-p-surface"
             />
           </div>
 
@@ -79,8 +79,8 @@ export default function ClientePerfilPage() {
             // Loading skeleton while client list is being fetched
             <div className="flex h-full items-center justify-center">
               <div className="space-y-3 text-center">
-                <div className="mx-auto h-4 w-40 animate-pulse rounded bg-[#f0f2f7]" />
-                <div className="mx-auto h-3 w-24 animate-pulse rounded bg-[#f0f2f7]" />
+                <div className="mx-auto h-4 w-40 animate-pulse rounded bg-p-surface-3" />
+                <div className="mx-auto h-3 w-24 animate-pulse rounded bg-p-surface-3" />
               </div>
             </div>
           ) : selected ? (
@@ -95,16 +95,16 @@ export default function ClientePerfilPage() {
           ) : (
             // Client not found in list (wrong ID or not loaded yet)
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-              <p className="text-[15px] font-semibold text-[#2a3245]">
+              <p className="text-[15px] font-semibold text-p-text">
                 Cliente no encontrado
               </p>
-              <p className="text-[13px] text-[#98a1b3]">
+              <p className="text-[13px] text-p-text-muted">
                 El cliente que buscás no existe o no tenés acceso.
               </p>
               <button
                 type="button"
                 onClick={handleBack}
-                className="mt-2 rounded-lg border border-[#dce2ee] bg-white px-4 py-2 text-[13px] font-medium text-[#6f7890] transition hover:bg-[#f5f6f8]"
+                className="mt-2 rounded-lg border border-p-border bg-p-surface px-4 py-2 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
               >
                 ← Volver a Clientes
               </button>

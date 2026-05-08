@@ -8,7 +8,7 @@ export default function ClubAdmin404() {
   return (
     <>
       <Head>
-        <title>Ruta obsoleta | TuCancha</title>
+        <title>Ruta obsoleta | Punto</title>
       </Head>
       <NotFound message="Esta ruta ya no existe. Usa Inicio -> Gestion para ir al panel." />
     </>

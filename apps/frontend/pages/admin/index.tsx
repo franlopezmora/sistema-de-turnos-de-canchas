@@ -25,7 +25,7 @@ export default function AdminIndex() {
   return (
     <>
       <Head>
-        <title>Admin | TuCancha</title>
+        <title>Admin | Punto</title>
       </Head>
       {!authChecked || !user
         ? <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />

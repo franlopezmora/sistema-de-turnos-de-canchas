@@ -41,22 +41,22 @@ export default function ChargeAssignmentSection({
   const remainingToAssign = Number(totalAmount || 0) - Number(assignedTotal || 0);
 
   return (
-    <div className="mt-3 rounded-xl border border-[#dce2ee] bg-white p-3">
+    <div className="mt-3 rounded-xl border border-p-border bg-p-surface p-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-[13px] font-semibold text-[#2f364b]">Asignacion de cobro</p>
-          <p className="mt-0.5 text-[11px] text-[#6f7890]">
+          <p className="text-[13px] font-semibold text-p-text">Asignacion de cobro</p>
+          <p className="mt-0.5 text-[11px] text-p-text-muted">
             Defini quien asume el cobro de esta reserva.
           </p>
         </div>
-        <div className="grid grid-cols-2 rounded-lg border border-[#dce2ee] bg-[#f8f9fc] p-1">
+        <div className="grid grid-cols-2 rounded-lg border border-p-border bg-p-surface-2 p-1">
           <button
             type="button"
             onClick={() => onModeChange?.('INDIVIDUAL')}
             className={`h-7 rounded-md px-2 text-[11px] font-semibold ${
               mode === 'INDIVIDUAL'
-                ? 'bg-white text-[#2e58e5] border border-[#d8dff0]'
-                : 'text-[#5f6880]'
+                ? 'bg-p-surface text-p-accent border border-p-accent'
+                : 'text-p-text-secondary'
             }`}
           >
             Individual
@@ -66,8 +66,8 @@ export default function ChargeAssignmentSection({
             onClick={() => onModeChange?.('SHARED')}
             className={`h-7 rounded-md px-2 text-[11px] font-semibold ${
               mode === 'SHARED'
-                ? 'bg-white text-[#2e58e5] border border-[#d8dff0]'
-                : 'text-[#5f6880]'
+                ? 'bg-p-surface text-p-accent border border-p-accent'
+                : 'text-p-text-secondary'
             }`}
           >
             Compartida
@@ -86,22 +86,22 @@ export default function ChargeAssignmentSection({
                 onClick={() => onResponsibleChange?.(participant.id)}
                 className={`w-full rounded-lg border px-3 py-2 text-left ${
                   isResponsible
-                    ? 'border-[#cfd9f7] bg-[#eef2ff]'
-                    : 'border-[#e3e8f2] bg-white hover:bg-[#f8faff]'
+                    ? 'border-p-accent bg-p-positive-bg'
+                    : 'border-p-border bg-p-surface hover:bg-p-surface-2'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-[12px] font-semibold text-[#2f364b]">
+                  <span className="truncate text-[12px] font-semibold text-p-text">
                     {participantLabel(participant, index)}
                   </span>
                   {isResponsible && (
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[#2f53df]">
+                    <span className="rounded-full bg-p-surface px-2 py-0.5 text-[10px] font-semibold text-p-accent">
                       Responsable
                     </span>
                   )}
                 </div>
                 {isResponsible && (
-                  <p className="mt-1 text-[11px] text-[#4d5f98]">
+                  <p className="mt-1 text-[11px] text-p-accent">
                     Asume el total: {Number(totalAmount || 0).toFixed(2)} $
                   </p>
                 )}
@@ -111,14 +111,14 @@ export default function ChargeAssignmentSection({
         </div>
       ) : (
         <div className="mt-3">
-          <div className="mb-2 rounded-lg border border-[#e3e8f2] bg-[#f8f9fd] px-2.5 py-2 text-[11px] text-[#5f6880]">
+          <div className="mb-2 rounded-lg border border-p-border bg-p-surface-2 px-2.5 py-2 text-[11px] text-p-text-secondary">
             <div className="flex items-center justify-between">
               <span>Total asignado</span>
-              <strong className="text-[#2f364b]">{assignedTotal.toFixed(2)} $</strong>
+              <strong className="text-p-text">{assignedTotal.toFixed(2)} $</strong>
             </div>
             <div className="mt-1 flex items-center justify-between">
               <span>Saldo por asignar</span>
-              <strong className={remainingToAssign > 0.009 || remainingToAssign < -0.009 ? 'text-[#b42346]' : 'text-[#1c7a44]'}>
+              <strong className={remainingToAssign > 0.009 || remainingToAssign < -0.009 ? 'text-[var(--error-fg)]' : 'text-p-positive'}>
                 {remainingToAssign.toFixed(2)} $
               </strong>
             </div>
@@ -129,12 +129,12 @@ export default function ChargeAssignmentSection({
               const assignment = assignmentByParticipantId.get(participant.id);
               if (!assignment) return null;
               return (
-                <div key={assignment.id} className="rounded-lg border border-[#e3e8f2] px-2.5 py-2">
+                <div key={assignment.id} className="rounded-lg border border-p-border px-2.5 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] font-semibold text-[#2f364b]">
+                    <span className="truncate text-[12px] font-semibold text-p-text">
                       {participantLabel(participant, index)}
                     </span>
-                    <label className="inline-flex items-center gap-1 text-[11px] text-[#6f7890]">
+                    <label className="inline-flex items-center gap-1 text-[11px] text-p-text-muted">
                       <input
                         type="checkbox"
                         checked={assignment.isChargeable}
@@ -153,9 +153,9 @@ export default function ChargeAssignmentSection({
                       onChange={(event) =>
                         onAssignmentAmountChange?.(assignment.id, Number(event.target.value || 0))
                       }
-                      className="h-9 w-full rounded-lg border border-[#dbe2ef] px-2 text-[12px] disabled:bg-[#f4f6fb] disabled:text-[#8a92a5]"
+                      className="h-9 w-full rounded-lg border border-p-border px-2 text-[12px] disabled:bg-p-surface-2 disabled:text-p-text-muted"
                     />
-                    <span className="text-[12px] text-[#7b8396]">$</span>
+                    <span className="text-[12px] text-p-text-muted">$</span>
                   </div>
                 </div>
               );

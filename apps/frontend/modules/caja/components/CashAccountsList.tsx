@@ -86,26 +86,26 @@ function AccountCard({
         onSelect(account.id);
       }}
       className={[
-        'group relative flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#cbd7ff]',
+        'group relative flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-lima-300/40',
         isSelected
-          ? 'border-[#3053e2] bg-[#eef1fd]'
-          : 'border-[#dce2ee] bg-white hover:border-[#c0cadf] hover:bg-[#fafbff]',
+          ? 'border-p-accent bg-p-positive-bg'
+          : 'border-p-border bg-p-surface hover:border-p-border hover:bg-p-surface-2',
       ].join(' ')}
     >
       {/* ── Top row: name + status badge ── */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold leading-snug text-[#1a2035]">
+          <p className="truncate text-[13px] font-semibold leading-snug text-p-text">
             {clientName}
           </p>
-          <p className="mt-0.5 truncate text-[11px] text-[#6f7890]">{courtInfo}</p>
+          <p className="mt-0.5 truncate text-[11px] text-p-text-muted">{courtInfo}</p>
         </div>
 
         <span
           className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
             isOpen
-              ? 'border border-[#bfdbfe] bg-[#eff6ff] text-[#1e40af]'
-              : 'border border-[#bbf7d0] bg-[#f0fdf4] text-[#15803d]'
+              ? 'border border-p-accent bg-p-surface-2 text-p-accent'
+              : 'border border-p-positive bg-p-positive-bg text-[var(--positive-fg)]'
           }`}
         >
           {isOpen ? 'Abierta' : 'Cerrada'}
@@ -116,25 +116,25 @@ function AccountCard({
       <div className="flex items-center gap-4 text-[12px]">
         {detail ? (
           <>
-            <span className="text-[#6f7890]">
-              Total <span className="font-semibold text-[#2a3245]">{formatMoney(detail.total)}</span>
+            <span className="text-p-text-muted">
+              Total <span className="font-semibold text-p-text">{formatMoney(detail.total)}</span>
             </span>
             {detail.paid > EPSILON && (
-              <span className="text-[#6f7890]">
-                Pagado <span className="font-semibold text-[#15803d]">{formatMoney(detail.paid)}</span>
+              <span className="text-p-text-muted">
+                Pagado <span className="font-semibold text-[var(--positive-fg)]">{formatMoney(detail.paid)}</span>
               </span>
             )}
             {hasPending ? (
-              <span className="text-[#6f7890]">
+              <span className="text-p-text-muted">
                 Pendiente{' '}
-                <span className="font-semibold text-[#b45309]">{formatMoney(remaining!)}</span>
+                <span className="font-semibold text-[var(--warn-fg)]">{formatMoney(remaining!)}</span>
               </span>
             ) : (
-              <span className="font-semibold text-[#15803d]">Sin deuda</span>
+              <span className="font-semibold text-[var(--positive-fg)]">Sin deuda</span>
             )}
           </>
         ) : (
-          <span className="text-[#98a1b3]">Cargando detalle…</span>
+          <span className="text-p-text-muted">Cargando detalle…</span>
         )}
       </div>
     </div>
@@ -167,22 +167,22 @@ export default function CashAccountsList({
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="flex flex-col gap-2 rounded-xl border border-[#dce2ee] bg-white px-4 py-3"
+            className="flex flex-col gap-2 rounded-xl border border-p-border bg-p-surface px-4 py-3"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1.5">
-                <div className="h-3.5 w-32 animate-pulse rounded bg-[#f0f2f7]" />
-                <div className="h-2.5 w-20 animate-pulse rounded bg-[#f0f2f7]" />
+                <div className="h-3.5 w-32 animate-pulse rounded bg-p-surface-3" />
+                <div className="h-2.5 w-20 animate-pulse rounded bg-p-surface-3" />
               </div>
-              <div className="h-5 w-14 animate-pulse rounded-full bg-[#f0f2f7]" />
+              <div className="h-5 w-14 animate-pulse rounded-full bg-p-surface-3" />
             </div>
             <div className="flex gap-4">
-              <div className="h-3 w-20 animate-pulse rounded bg-[#f0f2f7]" />
-              <div className="h-3 w-20 animate-pulse rounded bg-[#f0f2f7]" />
+              <div className="h-3 w-20 animate-pulse rounded bg-p-surface-3" />
+              <div className="h-3 w-20 animate-pulse rounded bg-p-surface-3" />
             </div>
             <div className="flex gap-2">
-              <div className="h-8 w-16 animate-pulse rounded-lg bg-[#f0f2f7]" />
-              <div className="h-8 w-20 animate-pulse rounded-lg bg-[#f0f2f7]" />
+              <div className="h-8 w-16 animate-pulse rounded-lg bg-p-surface-3" />
+              <div className="h-8 w-20 animate-pulse rounded-lg bg-p-surface-3" />
             </div>
           </div>
         ))}
@@ -194,15 +194,15 @@ export default function CashAccountsList({
     return (
       <div
         className={[
-          'grid min-h-[140px] place-items-center rounded-xl border border-dashed border-[#dce2ee] bg-[#f8f9fc] px-4 py-8 text-center',
+          'grid min-h-[140px] place-items-center rounded-xl border border-dashed border-p-border bg-p-surface-2 px-4 py-8 text-center',
           className,
         ]
           .filter(Boolean)
           .join(' ')}
       >
         <div>
-          <p className="text-[14px] font-semibold text-[#98a1b3]">Sin cuentas</p>
-          <p className="mt-1 text-[12px] text-[#b0b8c8]">
+          <p className="text-[14px] font-semibold text-p-text-muted">Sin cuentas</p>
+          <p className="mt-1 text-[12px] text-p-text-muted">
             No hay cuentas para los filtros actuales.
           </p>
         </div>

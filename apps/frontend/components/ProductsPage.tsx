@@ -240,7 +240,7 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
           label="Bajo stock"
           value={summary.lowStock}
           format="number"
-          valueColor={summary.lowStock > 0 ? '#b42318' : undefined}
+          valueColor={summary.lowStock > 0 ? 'var(--error-fg)' : undefined}
           delta={
             summary.lowStock > 0
               ? { value: -summary.lowStock, label: 'productos con menos de 5 u.' }
@@ -267,14 +267,14 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
           <AdminFilterToolbar className="border-0 bg-transparent p-0 gap-1 sm:flex-nowrap sm:justify-end">
             <div className="relative w-full sm:w-[300px] sm:flex-none">
               <Search
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#98a1b3]"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-p-text-muted"
                 size={14}
                 strokeWidth={2.5}
               />
               <input
                 type="text"
                 placeholder="Buscar por nombre de producto..."
-                className="h-8 w-full rounded-xl border border-[#dce2ee] bg-white pl-9 pr-3 text-[12px] text-[#2a3245] placeholder:text-[#8b93a5] outline-none transition focus:border-[#3053e2]"
+                className="h-8 w-full rounded-xl border border-p-border bg-p-surface pl-9 pr-3 text-[12px] text-p-text placeholder:text-p-text-muted outline-none transition focus:border-p-accent"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -282,7 +282,7 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
             <button
               type="button"
               onClick={openNew}
-              className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#3053e2] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#2748cc] sm:w-auto"
+              className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 transition hover:bg-ink-800 sm:w-auto"
             >
               <Plus size={14} strokeWidth={2.5} />
               Nuevo producto

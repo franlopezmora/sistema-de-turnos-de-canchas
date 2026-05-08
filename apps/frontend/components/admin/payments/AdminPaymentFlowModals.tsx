@@ -58,9 +58,9 @@ type AdminPaymentFormModalProps = BackdropHandlers & {
 };
 
 const headerColorByVariant: Record<AdminPaymentResultModalProps['variant'], string> = {
-  success: 'text-[#22724a]',
-  partial: 'text-[#9a5a00]',
-  error: 'text-[#b42346]',
+  success: 'text-p-positive',
+  partial: 'text-p-warning',
+  error: 'text-p-error',
 };
 
 export function AdminPaymentFormModal({
@@ -75,24 +75,24 @@ export function AdminPaymentFormModal({
 }: AdminPaymentFormModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[2147483200] flex items-center justify-center p-4 bg-[#0d1326]/45"
+      className="fixed inset-0 z-[2147483200] flex items-center justify-center p-4 bg-[var(--overlay)]"
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}
     >
       <div
-        className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+        className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-p-border bg-p-surface shadow-2xl"
         onPointerDown={(event) => event.stopPropagation()}
         onPointerUp={(event) => event.stopPropagation()}
       >
-          <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
+          <div className="flex items-center justify-between border-b border-p-border px-4 py-3">
             <div>
-              <p className="text-[18px] font-semibold text-[#1f2638]">{title}</p>
-              <p className="text-[12px] text-[#707a92]">{subtitle}</p>
+              <p className="text-[18px] font-semibold text-p-text">{title}</p>
+              <p className="text-[12px] text-p-text-secondary">{subtitle}</p>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="h-8 w-8 rounded-full text-[#7e879c] grid place-items-center hover:bg-[#f3f5fa]"
+              className="h-8 w-8 rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
               aria-label="Cerrar"
             >
               <X size={16} />
@@ -100,7 +100,7 @@ export function AdminPaymentFormModal({
           </div>
           <div className={bodyClassName}>{children}</div>
           {footer ? (
-            <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-4 py-3">{footer}</div>
+            <div className="flex items-center justify-end gap-2 border-t border-p-border px-4 py-3">{footer}</div>
           ) : null}
         </div>
     </div>
@@ -128,58 +128,58 @@ export function AdminPaymentPreconfirmModal({
 }: AdminPaymentPreconfirmModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[2147483250] bg-[var(--overlay)] flex items-center justify-center p-4"
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}
     >
       <div
-        className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+        className="w-full max-w-[560px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
           <div>
-            <h3 className="text-[22px] font-bold tracking-[-0.01em] text-[#222a3d]">{title}</h3>
-            <p className="mt-1 text-[12px] text-[#6f7890]">{subtitle}</p>
+            <h3 className="text-[22px] font-bold tracking-[-0.01em] text-p-text">{title}</h3>
+            <p className="mt-1 text-[12px] text-p-text-muted">{subtitle}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+            className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
           >
             <X size={15} />
           </button>
         </div>
         <div className="px-5 py-5 space-y-4">
-          <div className="rounded-lg border border-[#e0e5f2] bg-white">
-            <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+          <div className="rounded-lg border border-p-border bg-p-surface">
+            <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
               {summaryTitle}
             </div>
-            <div className="divide-y divide-[#eef2f8] text-[13px]">
+            <div className="divide-y divide-p-border text-[13px]">
               {summaryRows.map((row) => (
                 <div key={`summary-row-${row.label}`} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-[#6f7890]">{row.label}</span>
-                  <strong className="text-[#1f2a44]">{row.value}</strong>
+                  <span className="text-p-text-muted">{row.label}</span>
+                  <strong className="text-p-text">{row.value}</strong>
                 </div>
               ))}
               <div className="flex items-center justify-between px-3 py-2">
-                <span className="text-[#6f7890]">{methodLabel}</span>
-                <strong className="text-[#1f2a44]">{methodValue}</strong>
+                <span className="text-p-text-muted">{methodLabel}</span>
+                <strong className="text-p-text">{methodValue}</strong>
               </div>
             </div>
           </div>
           {showConcepts && (
-            <div className="rounded-lg border border-[#e0e5f2] bg-white">
-              <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+            <div className="rounded-lg border border-p-border bg-p-surface">
+              <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                 {conceptTitle}
               </div>
               {conceptRows.length === 0 ? (
-                <p className="px-3 py-3 text-[12px] text-[#7a8398]">No hay conceptos seleccionados.</p>
+                <p className="px-3 py-3 text-[12px] text-p-text-muted">No hay conceptos seleccionados.</p>
               ) : (
-                <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
+                <div className="max-h-44 overflow-auto divide-y divide-p-border">
                   {conceptRows.map((row) => (
-                    <div key={row.id} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
+                    <div key={row.id} className="flex items-center justify-between px-3 py-2 text-[12px] text-p-text-secondary">
                       <span className="truncate pr-2">{row.label}</span>
-                      <strong className="text-[#2a3245]">{row.value}</strong>
+                      <strong className="text-p-text">{row.value}</strong>
                     </div>
                   ))}
                 </div>
@@ -190,7 +190,7 @@ export function AdminPaymentPreconfirmModal({
             <button
               type="button"
               onClick={onBack}
-              className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+              className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2"
             >
               {backLabel}
             </button>
@@ -198,7 +198,7 @@ export function AdminPaymentPreconfirmModal({
               type="button"
               onClick={onConfirm}
               disabled={confirmDisabled}
-              className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc] disabled:opacity-50"
+              className="h-10 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900 disabled:opacity-50"
             >
               {confirmLabel}
             </button>
@@ -225,33 +225,33 @@ export function AdminPaymentResultModal({
 }: AdminPaymentResultModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[2147483250] bg-[#11162a]/35 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[2147483250] bg-[var(--overlay)] flex items-center justify-center p-4"
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}
     >
       <div
-        className="w-full max-w-[560px] rounded-2xl border border-[#e0e5f2] bg-white shadow-2xl"
+        className="w-full max-w-[560px] rounded-2xl border border-p-border bg-p-surface shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#edf1f6]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-p-border">
           <h3 className={`text-[22px] font-bold tracking-[-0.01em] ${headerColorByVariant[variant]}`}>
             {title}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="h-8 w-8 rounded-full border border-[#e2e6ef] grid place-items-center text-[#7a8398] hover:bg-[#f7f9fc]"
+            className="h-8 w-8 rounded-full border border-p-border grid place-items-center text-p-text-muted hover:bg-p-surface-2"
           >
             <X size={15} />
           </button>
         </div>
         <div className="px-5 py-5 space-y-4">
-          <p className="text-[14px] text-[#4b556d]">{detail}</p>
+          <p className="text-[14px] text-p-text-secondary">{detail}</p>
           <div className="grid grid-cols-2 gap-3">
             {summaryRows.map((row) => (
               <div
                 key={`result-row-${row.label}`}
-                className="rounded-lg bg-[#f7f8fc] px-3 py-2 text-xs text-[#5c6478] flex justify-between"
+                className="rounded-lg bg-p-surface-2 px-3 py-2 text-xs text-p-text-secondary flex justify-between"
               >
                 <span>{row.label}</span>
                 <strong>{row.value}</strong>
@@ -259,15 +259,15 @@ export function AdminPaymentResultModal({
             ))}
           </div>
           {conceptRows.length > 0 && (
-            <div className="rounded-lg border border-[#e0e5f2] bg-white">
-              <div className="border-b border-[#edf1f6] px-3 py-2 text-[12px] font-semibold text-[#4b5672]">
+            <div className="rounded-lg border border-p-border bg-p-surface">
+              <div className="border-b border-p-border px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
                 {conceptTitle}
               </div>
-              <div className="max-h-44 overflow-auto divide-y divide-[#eef2f8]">
+              <div className="max-h-44 overflow-auto divide-y divide-p-border">
                 {conceptRows.map((row) => (
-                  <div key={row.id} className="flex items-center justify-between px-3 py-2 text-[12px] text-[#44506b]">
+                  <div key={row.id} className="flex items-center justify-between px-3 py-2 text-[12px] text-p-text-secondary">
                     <span className="truncate pr-2">{row.label}</span>
-                    <strong className="text-[#2a3245]">{row.value}</strong>
+                    <strong className="text-p-text">{row.value}</strong>
                   </div>
                 ))}
               </div>
@@ -277,7 +277,7 @@ export function AdminPaymentResultModal({
             <button
               type="button"
               onClick={onClose}
-              className="h-10 rounded-xl border border-[#dbe2ef] bg-white px-4 text-sm font-semibold text-[#4e5870] hover:bg-[#f7f9fc]"
+              className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-sm font-semibold text-p-text-secondary hover:bg-p-surface-2"
             >
               {closeLabel}
             </button>
@@ -285,7 +285,7 @@ export function AdminPaymentResultModal({
               <button
                 type="button"
                 onClick={onRetry}
-                className="h-10 rounded-xl bg-[#3053e2] px-5 text-white text-sm font-bold hover:bg-[#2748cc]"
+                className="h-10 rounded-xl bg-ink-900 px-5 text-ink-50 text-sm font-bold hover:bg-ink-900"
               >
                 {retryLabel}
               </button>

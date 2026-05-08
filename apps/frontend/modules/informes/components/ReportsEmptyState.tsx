@@ -22,7 +22,7 @@ export default function ReportsEmptyState({
           <button
             type="button"
             onClick={onAction}
-            className="h-10 rounded-lg border border-[#dce2ee] bg-white px-4 text-[12px] font-semibold text-[#46516a] transition hover:bg-[#f8f9fd]"
+            className="h-10 rounded-lg border border-p-border bg-p-surface px-4 text-[12px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
           >
             {actionLabel}
           </button>

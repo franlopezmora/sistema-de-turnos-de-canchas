@@ -61,9 +61,9 @@ export default function AgendaSelectionPreview({
       } ${
         isEditingMovedBookingPreview
           ? isConflict
-            ? 'border border-[#d13d57] bg-[#ffe8ee] text-[#8b1f3a]'
-            : 'border border-[#2f4fd8] bg-[#2f4fd81a] text-[#1d2a66]'
-          : 'border border-[#2f4fd8] bg-[#2f4fd81a]'
+            ? 'border border-p-error bg-p-error-bg text-p-error'
+            : 'border border-p-accent bg-p-positive-bg text-p-text'
+          : 'border border-p-accent bg-p-positive-bg'
       }`}
       style={{ top, height }}
     >
@@ -84,7 +84,7 @@ export default function AgendaSelectionPreview({
               </div>
             )}
             {visibility.showTitle && <p className="font-semibold truncate">{title}</p>}
-            {isConflict && visibility.showTimeRange && <p className="font-semibold text-[#b42346]">Superposición</p>}
+            {isConflict && visibility.showTimeRange && <p className="font-semibold text-p-error">Superposición</p>}
             {visibility.showTimeRange && (
               <p className="opacity-70">
                 {slotToTime(range.start)} - {slotToTime(range.end)}
@@ -94,9 +94,9 @@ export default function AgendaSelectionPreview({
         )
       ) : (
         <>
-          <p className="text-[10px] font-bold leading-none text-[#1d2a66]">{durationMinutes} min</p>
+          <p className="text-[10px] font-bold leading-none text-p-text">{durationMinutes} min</p>
           {!visibility.showDurationOnly && visibility.showTimeRange && (
-            <p className="text-[10px] text-[#1d2a66]/80">
+            <p className="text-[10px] text-p-text/80">
               {slotToTime(range.start)} - {slotToTime(range.end)}
             </p>
           )}

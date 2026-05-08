@@ -2129,7 +2129,7 @@ export class BookingService {
         const clientMessage = `
 🎾 *¡Reserva Registrada en ${params.clubName}!* 🎾
 
-Hola *${params.clientName}*, tu turno ha sido agendado a través de TuCancha.
+Hola *${params.clientName}*, tu turno ha sido agendado a través de Punto.
 
 📅 *Fecha:* ${date}
 ⏰ *Hora:* ${time}

@@ -31,23 +31,23 @@ type ActiveProduct = {
 
 function ProductTooltip({ row }: { row: ProductRankingDatum }) {
   return (
-    <div className="w-[236px] rounded-lg border border-[#dce2ee] bg-white px-3 py-2 text-[12px] shadow-[0_10px_28px_rgba(31,38,56,0.10)]">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#98a1b3]">
+    <div className="w-[236px] rounded-lg border border-p-border bg-p-surface px-3 py-2 text-[12px] shadow-p-lg">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-p-text-muted">
         Producto seleccionado
       </p>
-      <p className="mt-1 max-w-[240px] truncate font-semibold text-[#1f2638]">
+      <p className="mt-1 max-w-[240px] truncate font-semibold text-p-text">
         {row.name || 'Producto'}
       </p>
-      <div className="mt-2 space-y-1 border-t border-[#eef2f8] pt-2 text-[#6f7890]">
+      <div className="mt-2 space-y-1 border-t border-p-border pt-2 text-p-text-muted">
         <p className="flex min-w-[180px] justify-between gap-4">
           <span>Unidades</span>
-          <strong className="text-[#3053e2]">
+          <strong className="text-p-accent">
             {Number(row.quantity || 0).toLocaleString('es-AR')} u.
           </strong>
         </p>
         <p className="flex min-w-[180px] justify-between gap-4">
           <span>Facturacion</span>
-          <strong className="text-[#1f2638]">
+          <strong className="text-p-text">
             {formatReportsMoney(Number(row.revenue || 0))}
           </strong>
         </p>
@@ -107,13 +107,13 @@ export default function ProductsRankingChart({ data }: ProductsRankingChartProps
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 18, left: 4, bottom: 8 }}>
-          <CartesianGrid stroke="#e7ebf3" strokeDasharray="4 6" horizontal={false} />
+          <CartesianGrid stroke="var(--border)" strokeDasharray="4 6" horizontal={false} />
           <XAxis
             type="number"
             axisLine={false}
             tickLine={false}
             allowDecimals={false}
-            tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }}
+            tick={{ fill: 'var(--text-muted)', fontSize: 11, fontWeight: 600 }}
           />
           <YAxis
             type="category"
@@ -121,12 +121,12 @@ export default function ProductsRankingChart({ data }: ProductsRankingChartProps
             width={112}
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#46516a', fontSize: 11, fontWeight: 600 }}
+            tick={{ fill: 'var(--text-secondary)', fontSize: 11, fontWeight: 600 }}
           />
           <Bar
             dataKey="quantity"
             name="Unidades"
-            fill="#3053e2"
+            fill="var(--brand)"
             radius={[0, 6, 6, 0]}
             barSize={18}
             isAnimationActive={false}

@@ -36,16 +36,16 @@ export default function AgendaSlotLayer({
           tabIndex={-1}
           onMouseDown={(event) => onSlotMouseDown(event, courtId, slot)}
           onMouseEnter={() => onSlotMouseEnter(courtId, slot)}
-          className={`transition ${draggingBookingId || isDragging ? 'bg-white' : 'bg-white hover:bg-[#f8faff]'}`}
+          className={`transition ${draggingBookingId || isDragging ? 'bg-p-surface' : 'bg-p-surface hover:bg-p-surface-2'}`}
           style={{
             height: slotHeight,
-            borderBottom: (slot + 1) % slotsPerHour === 0 ? '1px solid #eef1f3' : 'none',
+            borderBottom: (slot + 1) % slotsPerHour === 0 ? '1px solid var(--border)' : 'none',
           }}
         />
       ))}
       {nowLineTop != null && (
         <div
-          className="pointer-events-none absolute left-0 right-0 border-t border-[#3a66e0]"
+          className="pointer-events-none absolute left-0 right-0 border-t border-p-accent"
           style={{ top: nowLineTop, zIndex: 24 }}
         />
       )}

@@ -31,58 +31,58 @@ const formatRatingLabel = (value: number) => {
 };
 
 const PAGE_CSS = `
-  .cl-hero { position:relative; border-radius:24px; overflow:hidden; border:1px solid rgba(255,255,255,.08); margin-bottom:32px; }
-  .cl-hero-bg { position:absolute; inset:0; background:linear-gradient(135deg,#0a1f0e 0%,#050505 50%,#0d1a0d 100%); }
+  .cl-hero { position:relative; border-radius:24px; overflow:hidden; border:1px solid var(--border); margin-bottom:32px; }
+  .cl-hero-bg { position:absolute; inset:0; background:linear-gradient(135deg,var(--brand-on) 0%,var(--ink-900) 50%,var(--positive-bg) 100%); }
   .cl-hero-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .cl-hero-overlay { position:absolute; inset:0; background:linear-gradient(135deg,rgba(5,5,5,.85) 0%,rgba(5,5,5,.6) 60%,rgba(5,5,5,.75) 100%); }
+  .cl-hero-overlay { position:absolute; inset:0; background:var(--hero-image-overlay); }
   .cl-hero-body { position:relative; z-index:2; padding:36px 40px 32px; display:flex; align-items:flex-end; gap:28px; flex-wrap:wrap; }
   .cl-logo-wrap { position:relative; flex-shrink:0; }
-  .cl-logo { position:relative; width:100px; height:100px; border-radius:20px; background:#111; border:2px solid rgba(255,255,255,.12); overflow:hidden; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .cl-logo { position:relative; width:100px; height:100px; border-radius:20px; background:var(--surface-1); border:2px solid var(--border); overflow:hidden; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .cl-hero-info { flex:1; min-width:0; }
-  .cl-hero-rating { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#c8c8c8; margin-bottom:10px; }
-  .cl-hero-h { font-size:clamp(28px,4vw,52px); font-weight:800; color:#fff; letter-spacing:-.04em; line-height:1; margin:0 0 12px; }
-  .cl-hero-h i { font-style:italic; color:#22c55e; }
+  .cl-hero-rating { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--text-secondary); margin-bottom:10px; }
+  .cl-hero-h { font-size:clamp(28px,4vw,52px); font-weight:800; color:var(--text-primary); letter-spacing:-.04em; line-height:1; margin:0 0 12px; }
+  .cl-hero-h i { font-style:italic; color:var(--accent-fg); }
   .cl-hero-meta { display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
-  .cl-hero-meta-item { display:flex; align-items:center; gap:6px; font-size:13px; color:#c8c8c8; font-weight:500; }
+  .cl-hero-meta-item { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-secondary); font-weight:500; }
   .cl-hero-actions { display:flex; gap:10px; flex-shrink:0; }
-  .cl-icon-btn { width:44px; height:44px; border-radius:14px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.06); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,border-color .15s,transform .15s; color:#c8c8c8; }
-  .cl-icon-btn:hover:not(:disabled) { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.2); transform:translateY(-1px); }
-  .cl-icon-btn.cl-fav-on { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.3); color:#22c55e; }
+  .cl-icon-btn { width:44px; height:44px; border-radius:14px; border:1px solid var(--border); background:var(--surface-2); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,border-color .15s,transform .15s; color:var(--text-secondary); }
+  .cl-icon-btn:hover:not(:disabled) { background:var(--surface-3); border-color:var(--border-strong); transform:translateY(-1px); }
+  .cl-icon-btn.cl-fav-on { background:var(--positive-bg); border-color:var(--accent-border); color:var(--accent-fg); }
   .cl-icon-btn:disabled { opacity:.5; cursor:not-allowed; }
   /* Grid */
   .cl-grid { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:24px; align-items:start; }
   /* Sidebar panels */
-  .cl-panel { background:#0f0f0f; border:1px solid rgba(255,255,255,.07); border-radius:18px; padding:22px 24px; }
-  .cl-panel-h { font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#9ca3af; margin-bottom:16px; }
-  .cl-panel-description { font-size:13px; color:#c8c8c8; line-height:1.6; margin:0 0 12px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,.08); }
-  .cl-panel-row { display:flex; align-items:flex-start; gap:10px; font-size:13px; color:#c8c8c8; font-weight:500; line-height:1.5; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.04); }
+  .cl-panel { background:var(--surface-1); border:1px solid var(--border); border-radius:18px; padding:22px 24px; }
+  .cl-panel-h { font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--text-muted); margin-bottom:16px; }
+  .cl-panel-description { font-size:13px; color:var(--text-secondary); line-height:1.6; margin:0 0 12px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+  .cl-panel-row { display:flex; align-items:flex-start; gap:10px; font-size:13px; color:var(--text-secondary); font-weight:500; line-height:1.5; padding:8px 0; border-bottom:1px solid var(--border-subtle); }
   .cl-panel-row:last-child { border-bottom:none; }
-  .cl-panel-row a { color:#c8c8c8; text-decoration:none; transition:color .15s; }
-  .cl-panel-row a:hover { color:#22c55e; }
-  .cl-panel-icon { color:#444; flex-shrink:0; margin-top:1px; }
-  .cl-day-chip { padding:3px 8px; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.2); border-radius:6px; font-size:10px; font-weight:800; color:#22c55e; }
+  .cl-panel-row a { color:var(--text-secondary); text-decoration:none; transition:color .15s; }
+  .cl-panel-row a:hover { color:var(--accent-fg); }
+  .cl-panel-icon { color:var(--text-muted); flex-shrink:0; margin-top:1px; }
+  .cl-day-chip { padding:3px 8px; background:var(--positive-bg); border:1px solid var(--accent-border-subtle); border-radius:6px; font-size:10px; font-weight:800; color:var(--accent-fg); }
   /* Reviews */
-  .cl-review-card { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); border-radius:14px; padding:14px 16px; }
+  .cl-review-card { background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:14px; padding:14px 16px; }
   .cl-review-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
-  .cl-review-name { font-size:12px; font-weight:800; color:#e8e8e8; letter-spacing:.04em; text-transform:uppercase; }
-  .cl-review-score { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:#22c55e; }
-  .cl-review-comment { font-size:13px; color:#888; line-height:1.55; }
-  .cl-review-overlay { position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(0,0,0,.78); }
-  .cl-review-panel { width:100%; max-width:480px; border-radius:24px; border:1px solid rgba(255,255,255,.1); background:#111; padding:30px; box-shadow:0 24px 64px rgba(0,0,0,.6); }
+  .cl-review-name { font-size:12px; font-weight:800; color:var(--text-primary); letter-spacing:.04em; text-transform:uppercase; }
+  .cl-review-score { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:var(--accent-fg); }
+  .cl-review-comment { font-size:13px; color:var(--text-muted); line-height:1.55; }
+  .cl-review-overlay { position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; background:var(--overlay); }
+  .cl-review-panel { width:100%; max-width:480px; border-radius:24px; border:1px solid var(--border); background:var(--surface-1); padding:30px; box-shadow:var(--shadow-lg); }
   .cl-review-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:8px; }
-  .cl-review-modal-title { font-size:20px; font-weight:800; color:#f2f2f2; letter-spacing:-.02em; }
-  .cl-review-modal-sub { font-size:13px; color:#555; margin-bottom:22px; line-height:1.45; }
+  .cl-review-modal-title { font-size:20px; font-weight:800; color:var(--text-primary); letter-spacing:-.02em; }
+  .cl-review-modal-sub { font-size:13px; color:var(--text-muted); margin-bottom:22px; line-height:1.45; }
   .cl-review-stars { display:flex; gap:8px; }
-  .cl-review-star { width:40px; height:40px; border-radius:12px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.04); color:#555; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
-  .cl-review-star.cl-star-on { background:rgba(34,197,94,.15); border-color:rgba(34,197,94,.3); color:#22c55e; }
-  .cl-review-textarea { width:100%; background:#0a0a0a; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:14px 16px; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; font-size:14px; outline:none; resize:none; transition:border-color .2s; }
-  .cl-review-textarea:focus { border-color:rgba(34,197,94,.3); }
+  .cl-review-star { width:40px; height:40px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,border-color .15s,color .15s; }
+  .cl-review-star.cl-star-on { background:var(--positive-bg); border-color:var(--accent-border); color:var(--accent-fg); }
+  .cl-review-textarea { width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:14px 16px; color:var(--text-primary); font-family:var(--font-sans); font-size:14px; outline:none; resize:none; transition:border-color .2s; }
+  .cl-review-textarea:focus { border-color:var(--accent-border); }
   .cl-review-action-row { display:flex; gap:10px; margin-top:24px; }
-  .cl-review-secondary { flex:1; height:46px; border-radius:12px; background:none; border:1px solid rgba(255,255,255,.1); color:#888; font-family:inherit; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; }
-  .cl-review-primary { flex:1; height:46px; border-radius:12px; background:#22c55e; border:none; color:#052010; font-family:inherit; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; }
+  .cl-review-secondary { flex:1; height:46px; border-radius:12px; background:none; border:1px solid var(--border); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; }
+  .cl-review-primary { flex:1; height:46px; border-radius:12px; background:var(--brand); border:none; color:var(--brand-on); font-family:inherit; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; }
   .cl-review-primary:disabled { opacity:.5; cursor:not-allowed; }
   /* Feedback toast */
-  .cl-feedback { padding:10px 16px; border-radius:12px; background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2); font-size:12px; font-weight:700; color:#4ade80; margin-top:12px; }
+  .cl-feedback { padding:10px 16px; border-radius:12px; background:var(--positive-bg); border:1px solid var(--accent-border-subtle); font-size:12px; font-weight:700; color:var(--brand-hover); margin-top:12px; }
   /* Loading/error */
   .cl-loading { min-height:60vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
   @media(max-width:900px){
@@ -94,36 +94,36 @@ const PAGE_CSS = `
     .cl-hero-body { flex-direction:column; align-items:flex-start; gap:16px; }
     .cl-hero-actions { align-self:flex-end; }
   }
-  .tc-root.tc-theme-light .cl-hero { border-color:rgba(15,23,42,.12); box-shadow:0 12px 28px rgba(15,23,42,.1); }
-  .tc-root.tc-theme-light .cl-hero-bg { background:linear-gradient(135deg,#f8fcff 0%,#eef5fc 52%,#e6eff8 100%); }
-  .tc-root.tc-theme-light .cl-hero-overlay { background:linear-gradient(135deg,rgba(248,252,255,.85) 0%,rgba(244,249,255,.58) 60%,rgba(242,248,254,.78) 100%); }
-  .tc-root.tc-theme-light .cl-logo { background:#ffffff; border-color:rgba(15,23,42,.16); }
-  .tc-root.tc-theme-light .cl-hero-rating,
-  .tc-root.tc-theme-light .cl-hero-meta-item { color:#334155; }
-  .tc-root.tc-theme-light .cl-hero-h { color:#0f172a; }
-  .tc-root.tc-theme-light .cl-icon-btn { background:#ffffff; border-color:rgba(15,23,42,.14); color:#334155; box-shadow:0 4px 12px rgba(15,23,42,.08); }
-  .tc-root.tc-theme-light .cl-icon-btn:hover:not(:disabled) { background:#f8fafc; border-color:rgba(15,23,42,.22); }
-  .tc-root.tc-theme-light .cl-panel { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.08); }
-  .tc-root.tc-theme-light .cl-panel-icon,
-  .tc-root.tc-theme-light .cl-review-modal-sub { color:#64748b; }
-  .tc-root.tc-theme-light .cl-panel-h { color:#64748b; }
-  .tc-root.tc-theme-light .cl-panel-description { color:#334155; border-bottom-color:rgba(15,23,42,.1); }
-  .tc-root.tc-theme-light .cl-panel-row { color:#334155; border-bottom-color:rgba(15,23,42,.08); }
-  .tc-root.tc-theme-light .cl-panel-row a { color:#1f2937; }
-  .tc-root.tc-theme-light .cl-review-card { background:rgba(15,23,42,.03); border-color:rgba(15,23,42,.08); }
-  .tc-root.tc-theme-light .cl-review-name { color:#0f172a; }
-  .tc-root.tc-theme-light .cl-review-comment { color:#475569; }
-  .tc-root.tc-theme-light .cl-feedback { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.24); color:#166534; }
-  .tc-root.tc-theme-light .cl-review-overlay { background:rgba(15,23,42,.56); }
-  .tc-root.tc-theme-light .cl-review-panel { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 22px 46px rgba(15,23,42,.22); }
-  .tc-root.tc-theme-light .cl-review-modal-title { color:#0f172a; }
-  .tc-root.tc-theme-light .cl-review-star { border-color:rgba(15,23,42,.14); background:rgba(15,23,42,.04); color:#94a3b8; }
-  .tc-root.tc-theme-light .cl-review-textarea { background:#ffffff; border-color:rgba(15,23,42,.14); color:#0f172a; }
-  .tc-root.tc-theme-light .cl-review-secondary { border-color:rgba(15,23,42,.14); color:#334155; }
-  .cl-login-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:14px; padding:11px 16px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); border-radius:12px; color:#c8c8c8; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:'Sora',system-ui,sans-serif; transition:background .15s,border-color .15s,color .15s; }
-  .cl-login-btn:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.22); color:#f2f2f2; }
-  .tc-root.tc-theme-light .cl-login-btn { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.16); color:#334155; }
-  .tc-root.tc-theme-light .cl-login-btn:hover { background:rgba(15,23,42,.09); border-color:rgba(15,23,42,.26); color:#0f172a; }
+  .p-public-root.p-public-theme-light .cl-hero { border-color:var(--border); box-shadow:0 12px 28px var(--border); }
+  .p-public-root.p-public-theme-light .cl-hero-bg { background:linear-gradient(135deg,var(--surface-1) 0%,var(--surface-2) 52%,var(--surface-3) 100%); }
+  .p-public-root.p-public-theme-light .cl-hero-overlay { background:var(--hero-image-overlay-soft); }
+  .p-public-root.p-public-theme-light .cl-logo { background:var(--surface-1); border-color:var(--border-strong); }
+  .p-public-root.p-public-theme-light .cl-hero-rating,
+  .p-public-root.p-public-theme-light .cl-hero-meta-item { color:var(--text-secondary); }
+  .p-public-root.p-public-theme-light .cl-hero-h { color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .cl-icon-btn { background:var(--surface-1); border-color:var(--border); color:var(--text-secondary); box-shadow:0 4px 12px var(--border-subtle); }
+  .p-public-root.p-public-theme-light .cl-icon-btn:hover:not(:disabled) { background:var(--surface-2); border-color:var(--border-strong); }
+  .p-public-root.p-public-theme-light .cl-panel { background:var(--surface-1); border-color:var(--border); box-shadow:0 10px 24px var(--border-subtle); }
+  .p-public-root.p-public-theme-light .cl-panel-icon,
+  .p-public-root.p-public-theme-light .cl-review-modal-sub { color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .cl-panel-h { color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .cl-panel-description { color:var(--text-secondary); border-bottom-color:var(--border); }
+  .p-public-root.p-public-theme-light .cl-panel-row { color:var(--text-secondary); border-bottom-color:var(--border-subtle); }
+  .p-public-root.p-public-theme-light .cl-panel-row a { color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .cl-review-card { background:var(--surface-2); border-color:var(--border-subtle); }
+  .p-public-root.p-public-theme-light .cl-review-name { color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .cl-review-comment { color:var(--text-secondary); }
+  .p-public-root.p-public-theme-light .cl-feedback { background:var(--positive-bg); border-color:var(--accent-border-subtle); color:var(--positive-fg); }
+  .p-public-root.p-public-theme-light .cl-review-overlay { background:var(--overlay-strong); }
+  .p-public-root.p-public-theme-light .cl-review-panel { background:var(--surface-1); border-color:var(--border); box-shadow:0 22px 46px var(--border-strong); }
+  .p-public-root.p-public-theme-light .cl-review-modal-title { color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .cl-review-star { border-color:var(--border); background:var(--surface-2); color:var(--text-muted); }
+  .p-public-root.p-public-theme-light .cl-review-textarea { background:var(--surface-1); border-color:var(--border); color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .cl-review-secondary { border-color:var(--border); color:var(--text-secondary); }
+  .cl-login-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:14px; padding:11px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; color:var(--text-secondary); font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:var(--font-sans); transition:background .15s,border-color .15s,color .15s; }
+  .cl-login-btn:hover { background:var(--surface-2); border-color:var(--border-strong); color:var(--text-primary); }
+  .p-public-root.p-public-theme-light .cl-login-btn { background:var(--surface-2); border-color:var(--border-strong); color:var(--text-secondary); }
+  .p-public-root.p-public-theme-light .cl-login-btn:hover { background:var(--surface-2); border-color:var(--border-strong); color:var(--text-primary); }
 `;
 
 export default function ClubPage() {
@@ -341,7 +341,7 @@ export default function ClubPage() {
 
   const slugReady = router.isReady && slug && typeof slug === 'string';
   const stillLoading = !slugReady || loadingClub;
-  const pageTitle = club?.name ? `${club.name} | TuCancha` : 'Club | TuCancha';
+  const pageTitle = club?.name ? `${club.name} | Punto` : 'Club | Punto';
   const clubBreadcrumbs = [
     { label: 'Inicio', href: '/' },
     { label: 'Complejos', href: '/complejos' },
@@ -364,13 +364,13 @@ export default function ClubPage() {
     return (
       <DarkPageLayout title={pageTitle} extraCss={PAGE_CSS} breadcrumbs={clubBreadcrumbs}>
         <div className="cl-loading" style={{ textAlign: 'center', gap: 20 }}>
-          <div style={{ fontSize: 48, color: '#222' }}>⚽</div>
+          <div style={{ fontSize: 48, color: 'var(--text-muted)' }}>⚽</div>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#f2f2f2', marginBottom: 8 }}>Club no encontrado</div>
-            <div style={{ fontSize: 14, color: '#555', marginBottom: 24 }}>{error || 'El club solicitado no existe'}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>Club no encontrado</div>
+            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 24 }}>{error || 'El club solicitado no existe'}</div>
             <button
               onClick={() => router.push('/')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 24px', background: '#22c55e', color: '#052010', border: 'none', borderRadius: 999, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 24px', background: 'var(--brand)', color: 'var(--brand-on)', border: 'none', borderRadius: 999, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               Volver al inicio
             </button>
@@ -384,7 +384,7 @@ export default function ClubPage() {
 
   return (
     <DarkPageLayout title={pageTitle} extraCss={PAGE_CSS} breadcrumbs={clubBreadcrumbs}>
-      <div className="tc-page" style={{ paddingTop: 32 }}>
+      <div className="p-public-page" style={{ paddingTop: 32 }}>
 
         {/* ── HERO ── */}
         <div className="cl-hero">
@@ -413,7 +413,7 @@ export default function ClubPage() {
                 {club.logoUrl ? (
                   <Image src={club.logoUrl} alt={club.name} fill sizes="100px" style={{ objectFit: 'contain' }} unoptimized />
                 ) : (
-                  <Trophy size={32} style={{ color: '#333' }} />
+                  <Trophy size={32} style={{ color: 'var(--text-muted)' }} />
                 )}
               </div>
             </div>
@@ -422,16 +422,16 @@ export default function ClubPage() {
             <div className="cl-hero-info">
               {reviewsSummary.count > 0 && (
                 <div className="cl-hero-rating">
-                  <Star size={13} style={{ color: '#22c55e', fill: '#22c55e' }} />
-                  <span style={{ color: '#22c55e', fontWeight: 800 }}>{formatRatingLabel(reviewsSummary.averageRating)}</span>
-                  <span style={{ color: '#555' }}>({reviewsSummary.count} reseñas)</span>
+                  <Star size={13} style={{ color: 'var(--brand)', fill: 'var(--brand)' }} />
+                  <span style={{ color: 'var(--brand)', fontWeight: 800 }}>{formatRatingLabel(reviewsSummary.averageRating)}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>({reviewsSummary.count} reseñas)</span>
                 </div>
               )}
               <h1 className="cl-hero-h">{club.name}</h1>
               <div className="cl-hero-meta">
                 {(club.addressLine || club.city) && (
                   <span className="cl-hero-meta-item">
-                    <MapPin size={14} style={{ color: '#22c55e', flexShrink: 0 }} />
+                    <MapPin size={14} style={{ color: 'var(--brand)', flexShrink: 0 }} />
                     {[club.addressLine, club.city].filter(Boolean).join(', ')}
                   </span>
                 )}
@@ -443,7 +443,7 @@ export default function ClubPage() {
                     className="cl-hero-meta-item"
                     style={{ textDecoration: 'none', transition: 'color .15s' }}
                   >
-                    <Instagram size={14} style={{ color: '#22c55e', flexShrink: 0 }} />
+                    <Instagram size={14} style={{ color: 'var(--brand)', flexShrink: 0 }} />
                     @{club.instagramUrl.replace(/\/$/, '').split('/').pop() || 'Instagram'}
                   </a>
                 )}
@@ -459,7 +459,7 @@ export default function ClubPage() {
                 title={isFavorite ? 'Quitar de favoritos' : 'Guardar en favoritos'}
                 aria-label={isFavorite ? 'Quitar de favoritos' : 'Guardar en favoritos'}
               >
-                <Heart size={20} style={{ fill: isFavorite ? '#22c55e' : 'none', transition: 'fill .2s' }} />
+                <Heart size={20} style={{ fill: isFavorite ? 'var(--brand)' : 'none', transition: 'fill .2s' }} />
               </button>
               <button className="cl-icon-btn" onClick={handleShare} title="Copiar enlace">
                 <Share2 size={20} />
@@ -541,18 +541,18 @@ export default function ClubPage() {
             {reviewsSummary.count > 0 && (
               <div className="cl-panel">
                 <div className="cl-panel-h">Reseñas</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: '#22c55e', letterSpacing: '-.03em', lineHeight: 1 }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--brand)', letterSpacing: '-.03em', lineHeight: 1 }}>
                       {formatRatingLabel(reviewsSummary.averageRating)}
                     </div>
-                    <div style={{ fontSize: 10, color: '#555', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', marginTop: 4 }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', marginTop: 4 }}>
                       de 5 · {reviewsSummary.count} reseñas
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 3 }}>
                     {[1, 2, 3, 4, 5].map(v => (
-                      <Star key={v} size={14} style={{ color: v <= Math.round(reviewsSummary.averageRating) ? '#22c55e' : '#222', fill: v <= Math.round(reviewsSummary.averageRating) ? '#22c55e' : 'none' }} />
+                      <Star key={v} size={14} style={{ color: v <= Math.round(reviewsSummary.averageRating) ? 'var(--brand)' : 'var(--border-strong)', fill: v <= Math.round(reviewsSummary.averageRating) ? 'var(--brand)' : 'none' }} />
                     ))}
                   </div>
                 </div>
@@ -562,13 +562,13 @@ export default function ClubPage() {
                       <div className="cl-review-head">
                         <span className="cl-review-name">{review.user.name}</span>
                         <span className="cl-review-score">
-                          <Star size={11} style={{ fill: '#22c55e' }} />
+                          <Star size={11} style={{ fill: 'var(--brand)' }} />
                           {formatRatingLabel(Number(review.rating || 0))}
                         </span>
                       </div>
                       {review.comment
                         ? <p className="cl-review-comment">{review.comment}</p>
-                        : <p className="cl-review-comment" style={{ fontStyle: 'italic', color: '#444' }}>Sin comentario</p>
+                        : <p className="cl-review-comment" style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>Sin comentario</p>
                       }
                     </div>
                   ))}
@@ -583,7 +583,7 @@ export default function ClubPage() {
                 <UserLoadingState mode="inline" message="Validando elegibilidad..." />
               ) : canReviewClub || hasExistingClubReview ? (
                 <div>
-                  <p style={{ fontSize: 13, color: '#777', marginBottom: 14, lineHeight: 1.5 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
                     {hasExistingClubReview
                       ? 'Ya dejaste una reseña en este club. Podés editarla.'
                       : 'Podés dejar tu reseña de este club.'}
@@ -592,7 +592,7 @@ export default function ClubPage() {
                     type="button"
                     onClick={handleOpenReviewModal}
                     disabled={reviewLoading || reviewSaving}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '11px 16px', background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 12, color: '#22c55e', fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: reviewLoading || reviewSaving ? 'not-allowed' : 'pointer', opacity: reviewLoading || reviewSaving ? .6 : 1, fontFamily: 'inherit', transition: 'background .15s' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '11px 16px', background: 'var(--positive-bg)', border: '1px solid var(--accent-border-subtle)', borderRadius: 12, color: 'var(--brand)', fontSize: 12, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', cursor: reviewLoading || reviewSaving ? 'not-allowed' : 'pointer', opacity: reviewLoading || reviewSaving ? .6 : 1, fontFamily: 'inherit', transition: 'background .15s' }}
                   >
                     <ChevronRight size={14} />
                     {hasExistingClubReview ? 'Editar mi reseña' : 'Dejar mi reseña'}
@@ -601,7 +601,7 @@ export default function ClubPage() {
                 </div>
               ) : (
                 <div>
-                  <p style={{ fontSize: 13, color: '#555', lineHeight: 1.6 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                     {user ? 'Completá una reserva en este club para poder reseñarlo.' : 'Iniciá sesión y completá una reserva para reseñar.'}
                   </p>
                   {!user && (
@@ -643,7 +643,7 @@ export default function ClubPage() {
               </div>
               <button
                 type="button"
-                className="tc-close-btn"
+                className="p-public-close-btn"
                 onClick={() => !reviewSaving && setReviewModalOpen(false)}
                 disabled={reviewSaving}
                 aria-label="Cerrar"
@@ -681,7 +681,7 @@ export default function ClubPage() {
                     placeholder="Contá cómo fue tu experiencia..."
                     disabled={reviewSaving}
                   />
-                  <div style={{ marginTop: 8, textAlign: 'right', fontSize: 11, color: '#444', fontWeight: 700 }}>
+                  <div style={{ marginTop: 8, textAlign: 'right', fontSize: 11, color: 'var(--text-muted)', fontWeight: 700 }}>
                     {reviewComment.length}/220
                   </div>
                 </div>

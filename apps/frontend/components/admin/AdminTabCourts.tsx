@@ -87,53 +87,53 @@ function CourtCard({
   const isMaintenance = Boolean(court.isUnderMaintenance);
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-[#dce2ee] bg-white">
+    <div className="relative overflow-hidden rounded-xl border border-p-border bg-p-surface">
       {/* Status indicator stripe */}
       <div
         className={`absolute inset-y-0 left-0 w-[3px] ${
-          isMaintenance ? 'bg-[#d92d20]' : 'bg-[#17b26a]'
+          isMaintenance ? 'bg-p-error' : 'bg-p-positive'
         }`}
       />
 
       <div className="p-5 pl-6">
         {/* Header */}
         <div className="mb-3 flex items-start justify-between gap-2">
-          <h3 className="text-[15px] font-semibold leading-snug text-[#1a2035]">
+          <h3 className="text-[15px] font-semibold leading-snug text-p-text">
             {court.name}
           </h3>
           {isMaintenance ? (
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#ffd6d6] bg-[#fff5f5] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#b42318]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#d92d20]" />
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-p-error bg-p-error-bg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-p-error">
+              <span className="h-1.5 w-1.5 rounded-full bg-p-error" />
               Mantenimiento
             </span>
           ) : (
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#ccebd7] bg-[#f0fbf4] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#167647]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#17b26a]" />
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-p-positive bg-p-positive-bg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-p-positive">
+              <span className="h-1.5 w-1.5 rounded-full bg-p-positive" />
               Operativo
             </span>
           )}
         </div>
 
         {/* Activity type badge */}
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dce2ee] bg-[#f8f9fc] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#6f7890]">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-p-border bg-p-surface-2 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-p-text-muted">
           <Activity size={11} strokeWidth={2.2} />
           {getCourtTypeLabel(court)}
         </span>
 
         {/* Price editor */}
-        <div className="mt-4 rounded-xl border border-[#edf0f6] bg-[#f8f9fc] p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#98a1b3]">
+        <div className="mt-4 rounded-xl border border-p-border bg-p-surface-2 p-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-p-text-muted">
             Precio base · {getPriceReferenceMinutes(court)} min
           </p>
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#98a1b3]">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-p-text-muted">
                 $
               </span>
               <input
                 type="number"
                 min={0}
-                className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white pl-7 pr-3 text-[13px] font-semibold text-[#2a3245] outline-none transition focus:border-[#3053e2]"
+                className="h-10 w-full rounded-xl border border-p-border bg-p-surface pl-7 pr-3 text-[13px] font-semibold text-p-text outline-none transition focus:border-p-accent"
                 value={priceEdit}
                 onChange={(e) => onPriceChange(e.target.value)}
               />
@@ -141,7 +141,7 @@ function CourtCard({
             <button
               type="button"
               onClick={onPriceSave}
-              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[#3053e2] px-4 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-ink-900 px-4 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-900"
             >
               <Save size={13} />
               Guardar
@@ -150,12 +150,12 @@ function CourtCard({
         </div>
 
         {/* Action */}
-        <div className="mt-3 border-t border-[#edf0f6] pt-3">
+        <div className="mt-3 border-t border-p-border pt-3">
           {isMaintenance ? (
             <button
               type="button"
               onClick={onReactivate}
-              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#17b26a] px-3 text-[12px] font-semibold text-white transition hover:bg-[#079455]"
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-p-positive px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-p-positive"
             >
               <Power size={13} strokeWidth={2.4} />
               Reactivar cancha
@@ -164,7 +164,7 @@ function CourtCard({
             <button
               type="button"
               onClick={onSuspend}
-              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#ffd6d6] bg-white px-3 text-[12px] font-semibold text-[#b42318] transition hover:bg-[#fff5f5]"
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-p-error bg-p-surface px-3 text-[12px] font-semibold text-p-error transition hover:bg-p-error-bg"
             >
               <Ban size={13} strokeWidth={2.4} />
               Poner en mantenimiento
@@ -328,19 +328,19 @@ export default function AdminTabCourts() {
           label="Total"
           value={courts.length}
           format="number"
-          valueColor="#3053e2"
+          valueColor="var(--accent-fg)"
         />
         <MetricCard
           label="Operativas"
           value={activeCourts}
           format="number"
-          valueColor="#167647"
+          valueColor="var(--positive-fg)"
         />
         <MetricCard
           label="Mantenimiento"
           value={maintenanceCourts}
           format="number"
-          valueColor={maintenanceCourts > 0 ? '#b45309' : undefined}
+          valueColor={maintenanceCourts > 0 ? 'var(--warn-fg)' : undefined}
         />
         <MetricCard
           label="Precio prom."
@@ -362,7 +362,7 @@ export default function AdminTabCourts() {
         description="Administrá precios, estado operativo y mantenimiento de cada cancha."
       >
         {courts.length === 0 ? (
-          <div className="flex items-center justify-center py-10 text-[13px] font-semibold text-[#98a1b3]">
+          <div className="flex items-center justify-center py-10 text-[13px] font-semibold text-p-text-muted">
             Sin canchas registradas.
           </div>
         ) : (

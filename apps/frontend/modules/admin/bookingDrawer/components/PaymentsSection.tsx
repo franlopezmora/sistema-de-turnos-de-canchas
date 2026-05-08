@@ -195,31 +195,31 @@ export default function PaymentsSection({
   );
 
   return (
-    <div className="mt-3 rounded-xl border border-[#dce2ee] bg-white p-3">
-      <p className="text-[13px] font-semibold text-[#2f364b]">Registrar pago</p>
-      <p className="mt-0.5 text-[11px] text-[#6f7890]">
+    <div className="mt-3 rounded-xl border border-p-border bg-p-surface p-3">
+      <p className="text-[13px] font-semibold text-p-text">Registrar pago</p>
+      <p className="mt-0.5 text-[11px] text-p-text-muted">
         Saldo pendiente actual: <strong>{Number(remainingAmount || 0).toFixed(2)} $</strong>
       </p>
-      <p className="mt-1 text-[11px] text-[#6f7890]">
+      <p className="mt-1 text-[11px] text-p-text-muted">
         {isIndividualMode
           ? 'En modo Individual solo se permite cobrar el saldo completo.'
           : 'En modo Compartida solo se permite cobrar la parte completa o el saldo total.'}
       </p>
 
       {paymentsLocked && (
-        <div className="mt-2 rounded-lg border border-[#f3cf9f] bg-[#fff7eb] px-2.5 py-2 text-[11px] text-[#8b5c1a]">
+        <div className="mt-2 rounded-lg border border-p-warning bg-p-warning-bg px-2.5 py-2 text-[11px] text-p-warning">
           {paymentsLockedReason || 'Los pagos estan bloqueados para esta reserva.'}
         </div>
       )}
 
       <div className="mt-3 grid grid-cols-[1fr_150px] gap-2">
         <label className="block">
-          <span className="text-[11px] text-[#727b90]">Imputacion</span>
+          <span className="text-[11px] text-p-text-muted">Imputacion</span>
           <select
             value={assignmentDraft}
             onChange={(event) => setAssignmentDraft(event.target.value)}
             disabled={paymentsLocked}
-            className="mt-1 h-9 w-full rounded-lg border border-[#dbe2ef] bg-white px-2 text-[12px]"
+            className="mt-1 h-9 w-full rounded-lg border border-p-border bg-p-surface px-2 text-[12px]"
           >
             <option value={UNASSIGNED_KEY}>Saldo total (sin imputar)</option>
             {assignmentOptions.map((assignment) => (
@@ -235,12 +235,12 @@ export default function PaymentsSection({
         </label>
 
         <label className="block">
-          <span className="text-[11px] text-[#727b90]">Metodo</span>
+          <span className="text-[11px] text-p-text-muted">Metodo</span>
           <select
             value={methodDraft}
             onChange={(event) => setMethodDraft(event.target.value as PaymentMethod)}
             disabled={paymentsLocked}
-            className="mt-1 h-9 w-full rounded-lg border border-[#dbe2ef] bg-white px-2 text-[12px]"
+            className="mt-1 h-9 w-full rounded-lg border border-p-border bg-p-surface px-2 text-[12px]"
           >
             {PAYMENT_METHOD_OPTIONS.map((option) => (
               <option key={`payment-method-${option.value}`} value={option.value}>
@@ -251,10 +251,10 @@ export default function PaymentsSection({
         </label>
       </div>
 
-      <div className="mt-2 rounded-lg border border-[#dce2ee] bg-[#f8fafd] px-2.5 py-2">
-        <p className="text-[11px] text-[#6f7890]">Monto a registrar</p>
-        <p className="text-[14px] font-semibold text-[#2f364b]">{payableAmount.toFixed(2)} $</p>
-        <p className="mt-0.5 text-[11px] text-[#6f7890]">
+      <div className="mt-2 rounded-lg border border-p-border bg-p-surface-2 px-2.5 py-2">
+        <p className="text-[11px] text-p-text-muted">Monto a registrar</p>
+        <p className="text-[14px] font-semibold text-p-text">{payableAmount.toFixed(2)} $</p>
+        <p className="mt-0.5 text-[11px] text-p-text-muted">
           {selectedAssignmentLabel
             ? `Se cobrara la parte completa de ${selectedAssignmentLabel}.`
             : 'Se cobrara el saldo total pendiente de la reserva.'}
@@ -262,24 +262,24 @@ export default function PaymentsSection({
       </div>
 
       <label className="mt-2 block">
-        <span className="text-[11px] text-[#727b90]">Nota (opcional)</span>
+        <span className="text-[11px] text-p-text-muted">Nota (opcional)</span>
         <input
           value={noteDraft}
           onChange={(event) => setNoteDraft(event.target.value)}
           placeholder="Opcional"
           disabled={paymentsLocked}
-          className="mt-1 h-9 w-full rounded-lg border border-[#dbe2ef] bg-white px-2 text-[12px]"
+          className="mt-1 h-9 w-full rounded-lg border border-p-border bg-p-surface px-2 text-[12px]"
         />
       </label>
 
       {chargeableAssignmentOptions.length > 0 && (
-        <p className="mt-1 text-[11px] text-[#6f7890]">
+        <p className="mt-1 text-[11px] text-p-text-muted">
           Si no elegis manualmente, se usa la imputacion sugerida.
         </p>
       )}
 
       {hasNonChargeableAssignments && (
-        <p className="mt-1 text-[11px] text-[#8a4f14]">
+        <p className="mt-1 text-[11px] text-p-warning">
           Los participantes marcados como "sin cobro" no se pueden imputar hasta activarlos en Asignacion.
         </p>
       )}
@@ -299,16 +299,16 @@ export default function PaymentsSection({
             setAssignmentDraft(getDefaultAssignmentKey(chargeableAssignmentOptions));
             setNoteDraft('');
           }}
-          className="h-8 rounded-lg bg-[#3053e2] px-3 text-[12px] font-semibold text-white disabled:opacity-45"
+          className="h-8 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 disabled:opacity-45"
         >
           {selectedAssignmentId ? 'Marcar como pagado' : 'Cobrar saldo total'}
         </button>
       </div>
 
       <div className="mt-3 space-y-2">
-        <p className="text-[12px] font-semibold text-[#2f364b]">Pagos pendientes de guardar</p>
+        <p className="text-[12px] font-semibold text-p-text">Pagos pendientes de guardar</p>
         {pendingQueue.length === 0 && (
-          <p className="rounded-lg border border-dashed border-[#dce2ee] bg-[#f8fafd] px-2.5 py-2 text-[11px] text-[#707992]">
+          <p className="rounded-lg border border-dashed border-p-border bg-p-surface-2 px-2.5 py-2 text-[11px] text-p-text-muted">
             No hay pagos en cola.
           </p>
         )}
@@ -320,19 +320,19 @@ export default function PaymentsSection({
           return (
             <div
               key={item.clientTempId}
-              className="rounded-lg border border-[#f0e2b6] bg-[#fff9ea] px-2.5 py-2 text-[12px]"
+              className="rounded-lg border border-p-warning bg-p-warning-bg px-2.5 py-2 text-[12px]"
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-[#7a5100]">{item.amount.toFixed(2)} $</p>
+                <p className="font-semibold text-p-warning">{item.amount.toFixed(2)} $</p>
                 <button
                   type="button"
                   onClick={() => onRemoveQueuedPayment?.(item.clientTempId)}
-                  className="text-[11px] font-semibold text-[#a45b00] hover:underline"
+                  className="text-[11px] font-semibold text-p-warning hover:underline"
                 >
                   Quitar
                 </button>
               </div>
-              <p className="mt-0.5 text-[11px] text-[#7e6440]">
+              <p className="mt-0.5 text-[11px] text-p-warning">
                 {formatPaymentMethod(item.method)} - {participant ? getParticipantPaymentLabel(participant) : 'Sin imputar'}
               </p>
             </div>
@@ -341,9 +341,9 @@ export default function PaymentsSection({
       </div>
 
       <div className="mt-3 space-y-2">
-        <p className="text-[12px] font-semibold text-[#2f364b]">Pagos registrados</p>
+        <p className="text-[12px] font-semibold text-p-text">Pagos registrados</p>
         {orderedPayments.length === 0 && (
-          <p className="rounded-lg border border-dashed border-[#dce2ee] bg-[#f8fafd] px-2.5 py-2 text-[11px] text-[#707992]">
+          <p className="rounded-lg border border-dashed border-p-border bg-p-surface-2 px-2.5 py-2 text-[11px] text-p-text-muted">
             Aun no hay pagos registrados.
           </p>
         )}
@@ -353,12 +353,12 @@ export default function PaymentsSection({
             ? participants.find((entry) => entry.id === assignment.participantId)
             : null;
           return (
-            <div key={payment.id} className="rounded-lg border border-[#e3e8f2] px-2.5 py-2 text-[12px]">
+            <div key={payment.id} className="rounded-lg border border-p-border px-2.5 py-2 text-[12px]">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-[#2f364b]">{payment.amount.toFixed(2)} $</span>
-                <span className="text-[#6f7890]">{formatPaymentMethod(payment.method)}</span>
+                <span className="font-semibold text-p-text">{payment.amount.toFixed(2)} $</span>
+                <span className="text-p-text-muted">{formatPaymentMethod(payment.method)}</span>
               </div>
-              <p className="mt-0.5 text-[11px] text-[#7a8398]">
+              <p className="mt-0.5 text-[11px] text-p-text-muted">
                 {participant ? getParticipantPaymentLabel(participant) : 'Sin imputar'} - {formatPaymentLifecycleStatus(payment.status)}
               </p>
             </div>

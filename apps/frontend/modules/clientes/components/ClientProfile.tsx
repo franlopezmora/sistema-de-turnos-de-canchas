@@ -95,11 +95,11 @@ const buildTimelineItems = (history: any[]): MovementsTimelineItem[] =>
         amount: hasPending ? pending : totalAmount,
         type: hasPending ? 'expense' : 'income',
         badge: hasPending ? (
-          <span className="inline-flex items-center rounded-full border border-[#ffd6d6] bg-[#fff5f5] px-2 py-0.5 text-[10px] font-semibold text-[#b42318]">
+          <span className="inline-flex items-center rounded-full border border-p-error bg-p-error-bg px-2 py-0.5 text-[10px] font-semibold text-[var(--error-fg)]">
             {paymentStatusLabel[String(entry?.paymentStatus || '')] || 'Pendiente'}
           </span>
         ) : (
-          <span className="inline-flex items-center rounded-full border border-[#ccebd7] bg-[#f0fbf4] px-2 py-0.5 text-[10px] font-semibold text-[#167647]">
+          <span className="inline-flex items-center rounded-full border border-p-positive bg-p-positive-bg px-2 py-0.5 text-[10px] font-semibold text-p-positive">
             {accountStatusLabel[String(entry?.accountStatus || entry?.status || '')] || 'Cerrada'}
           </span>
         ),
@@ -112,11 +112,11 @@ const buildTimelineItems = (history: any[]): MovementsTimelineItem[] =>
 
 function DataRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-[#f0f2f7] py-2.5 last:border-b-0">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-[#98a1b3]">
+    <div className="flex items-baseline justify-between gap-4 border-b border-p-border py-2.5 last:border-b-0">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">
         {label}
       </span>
-      <span className="text-right text-[13px] text-[#2a3245]">{value}</span>
+      <span className="text-right text-[13px] text-p-text">{value}</span>
     </div>
   );
 }
@@ -162,14 +162,14 @@ export default function ClientProfile({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* ── Header ── */}
-      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#edf0f6] bg-white px-6 py-5">
+      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-p-border bg-p-surface px-6 py-5">
         <div className="flex items-start gap-3">
           {/* Mobile back button */}
           {onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:bg-[#f5f6f8] md:hidden"
+              className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:bg-p-surface-2 md:hidden"
               aria-label="Volver"
             >
               <ChevronLeft size={16} />
@@ -177,29 +177,29 @@ export default function ClientProfile({
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-[16px] font-semibold leading-tight text-[#1a2035]">
+              <h2 className="text-[16px] font-semibold leading-tight text-p-text">
                 {client.name}
               </h2>
               {client.isProfessor && (
-                <span className="inline-flex rounded-full border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-[10px] font-semibold text-[#1d4ed8]">
+                <span className="inline-flex rounded-full border border-p-accent bg-p-surface-2 px-2 py-0.5 text-[10px] font-semibold text-p-accent">
                   Profesor
                 </span>
               )}
               {hasDebt && (
-                <span className="inline-flex rounded-full border border-[#ffd6d6] bg-[#fff5f5] px-2 py-0.5 text-[10px] font-semibold text-[#b42318]">
+                <span className="inline-flex rounded-full border border-p-error bg-p-error-bg px-2 py-0.5 text-[10px] font-semibold text-[var(--error-fg)]">
                   Debe {formatMoney(totalDebt)}
                 </span>
               )}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
               {client.phone && (
-                <span className="flex items-center gap-1 text-[12px] text-[#6f7890]">
+                <span className="flex items-center gap-1 text-[12px] text-p-text-muted">
                   <Phone size={11} className="shrink-0" />
                   {client.phone}
                 </span>
               )}
               {client.email && (
-                <span className="flex items-center gap-1 text-[12px] text-[#6f7890]">
+                <span className="flex items-center gap-1 text-[12px] text-p-text-muted">
                   <Mail size={11} className="shrink-0" />
                   {client.email}
                 </span>
@@ -214,7 +214,7 @@ export default function ClientProfile({
             <button
               type="button"
               onClick={() => onEdit(client)}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#c0c8d8] hover:text-[#2a3245]"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
               title="Editar cliente"
             >
               <Pencil size={13} />
@@ -224,7 +224,7 @@ export default function ClientProfile({
             <button
               type="button"
               onClick={() => onDelete(client)}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#ffd6d6] hover:bg-[#fff5f5] hover:text-[#b42318]"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-error hover:bg-p-error-bg hover:text-[var(--error-fg)]"
               title="Eliminar cliente"
             >
               <Trash2 size={13} />
@@ -234,7 +234,7 @@ export default function ClientProfile({
       </div>
 
       {/* ── Tabs ── */}
-      <div className="flex shrink-0 gap-0 border-b border-[#edf0f6] bg-white px-6">
+      <div className="flex shrink-0 gap-0 border-b border-p-border bg-p-surface px-6">
         {(
           [
             { id: 'info', label: 'Datos básicos' },
@@ -248,8 +248,8 @@ export default function ClientProfile({
             className={[
               'border-b-2 px-4 py-3 text-[13px] font-medium transition-colors',
               tab === t.id
-                ? 'border-[#3053e2] text-[#3053e2]'
-                : 'border-transparent text-[#6f7890] hover:text-[#2a3245]',
+                ? 'border-p-accent text-p-accent'
+                : 'border-transparent text-p-text-muted hover:text-p-text',
             ].join(' ')}
           >
             {t.label}
@@ -258,11 +258,11 @@ export default function ClientProfile({
       </div>
 
       {/* ── Body ── */}
-      <div className="flex-1 overflow-y-auto bg-[#f5f6f8] px-6 py-5">
+      <div className="flex-1 overflow-y-auto bg-p-surface-2 px-6 py-5">
         {tab === 'info' && (
           <div className="space-y-4">
             {/* Datos de contacto */}
-            <div className="rounded-xl border border-[#dce2ee] bg-white px-5 py-1">
+            <div className="rounded-xl border border-p-border bg-p-surface px-5 py-1">
               <DataRow label="DNI" value={client.dni && client.dni !== '-' ? client.dni : 'No informado'} />
               <DataRow label="Teléfono" value={client.phone || 'No informado'} />
               <DataRow label="Email" value={client.email || 'No informado'} />
@@ -270,7 +270,7 @@ export default function ClientProfile({
             </div>
 
             {/* Resumen de actividad */}
-            <div className="rounded-xl border border-[#dce2ee] bg-white px-5 py-1">
+            <div className="rounded-xl border border-p-border bg-p-surface px-5 py-1">
               <DataRow label="Total reservas" value={String(client.totalBookings || 0)} />
               <DataRow label="Última reserva" value={formatDateTime(client.lastBookingAt)} />
               <DataRow label="Próxima reserva" value={formatDateTime(client.nextBookingAt)} />
@@ -283,7 +283,7 @@ export default function ClientProfile({
         )}
 
         {tab === 'cuenta' && (
-          <div className="rounded-xl border border-[#dce2ee] bg-white px-4 py-2">
+          <div className="rounded-xl border border-p-border bg-p-surface px-4 py-2">
             <MovementsTimeline
               items={timelineItems}
               emptyTitle="Sin cuentas registradas"

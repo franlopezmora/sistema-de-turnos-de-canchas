@@ -1,17 +1,17 @@
-/* Hide number input spinners */
-.no-spinner::-webkit-outer-spin-button,
-.no-spinner::-webkit-inner-spin-button {
+﻿/* Punto compatibility utilities.
+   Tokens live in punto.css; this file only keeps legacy class names working
+   without redefining the design system or reinjecting Tailwind layers. */
+
+/* Hide number-input spinners consistently across browsers. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.no-spinner {
-  appearance: textfield;
+input[type='number'] {
   -moz-appearance: textfield;
 }
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 @property --neon-angle {
   syntax: '<angle>';
@@ -19,934 +19,257 @@
   inherits: false;
 }
 
-@layer base {
-  body {
-    @apply antialiased;
-    background-color: #347048; /* Forzamos el verde aquí también */
-    color: var(--text);
-  }
+.text-glow {
+  text-shadow: 0 0 24px var(--accent-bg-muted);
 }
 
-@layer utilities {
-  /* Clases para efectos de brillo (Glow) */
-  .text-glow {
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.08);
-  }
-  
-  .box-glow {
-    box-shadow: 0 0 16px rgba(255, 255, 255, 0.04);
-  }
-
-  .club-times-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(52, 112, 72, 0.35) transparent;
-  }
-
-  .club-times-scrollbar::-webkit-scrollbar {
-    height: 4px;
-  }
-
-  .club-times-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .club-times-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(52, 112, 72, 0.35);
-    border-radius: 999px;
-  }
-
-  .club-times-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(52, 112, 72, 0.35);
-  }
-
-  .bg-vibrant-brand {
-    background-color: #347048;
-    background-image:
-      radial-gradient(circle at 12% 18%, rgba(185, 207, 50, 0.18), transparent 42%),
-      radial-gradient(circle at 88% 22%, rgba(146, 102, 153, 0.16), transparent 44%),
-      radial-gradient(circle at 35% 82%, rgba(185, 207, 50, 0.1), transparent 38%),
-      linear-gradient(165deg, #2d6240 0%, #347048 48%, #2a5c3b 100%);
-    background-attachment: fixed;
-  }
-
-  .nav-pill-button {
-    @apply relative z-10 px-4 py-2 rounded-full text-white/80 transition-colors duration-200;
-  }
-
-  .nav-pill-button:hover {
-    color: #ffffff;
-  }
-
-  .tc-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    border-radius: 9999px;
-    padding: 0.45rem 0.95rem;
-    font-size: 0.8rem;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-    border: 1px solid transparent;
-    white-space: nowrap;
-  }
-
-  .tc-pill-on-dark {
-    border-color: rgba(255, 255, 255, 0.22);
-    background: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.92);
-  }
-
-  .tc-pill-soft-blue {
-    border-color: #d4dff5;
-    background: #dfe7f8;
-    color: #3964c3;
-  }
-
-  .tc-pill-accent {
-    border-color: rgba(201, 245, 95, 0.52);
-    background: rgba(201, 245, 95, 0.14);
-    color: #d9ffd0;
-  }
-
-  .btn-aurora {
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
-  }
-
-  .btn-aurora::before {
-    content: '';
-    position: absolute;
-    inset: -140% -35%;
-    background: linear-gradient(105deg, transparent 28%, rgba(255, 255, 255, 0.45) 50%, transparent 72%);
-    transform: translateX(-55%) rotate(14deg);
-    transition: transform 520ms ease, opacity 320ms ease;
-    opacity: 0;
-    z-index: 0;
-    pointer-events: none;
-  }
-
-  .btn-aurora:hover::before {
-    transform: translateX(50%) rotate(14deg);
-    opacity: 1;
-  }
-
-  .btn-aurora > span,
-  .btn-aurora > svg {
-    position: relative;
-    z-index: 1;
-  }
-
-  .btn-aurora.border-neon::before {
-    display: none;
-  }
-
-  .border-neon {
-    position: relative;
-    isolation: isolate;
-    overflow: visible;
-    --neon-angle: 0deg;
-    z-index: 0;
-  }
-
-  .border-neon::before {
-    content: '';
-    position: absolute;
-    inset: -14px;
-    border-radius: inherit;
-    background: radial-gradient(circle at center, rgba(201, 245, 95, 0.66), rgba(201, 245, 95, 0.34), transparent 76%);
-    filter: blur(20px);
-    opacity: 0.58;
-    transition: opacity 260ms ease;
-    pointer-events: none;
-    z-index: 1;
-    animation: borderPulse 4.8s ease-in-out infinite;
-  }
-
-  .border-neon::after {
-    content: '';
-    position: absolute;
-    inset: -2.5px;
-    border-radius: inherit;
-    padding: 1.2px;
-    background: conic-gradient(
-      from var(--neon-angle),
-      rgba(201, 245, 95, 0) 0deg 44deg,
-      rgba(201, 245, 95, 0.82) 52deg 100deg,
-      rgba(201, 245, 95, 0) 110deg 214deg,
-      rgba(201, 245, 95, 0.74) 224deg 272deg,
-      rgba(201, 245, 95, 0) 282deg 360deg
-    );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: borderNeonSpin 8.6s linear infinite;
-    opacity: 0.96;
-    transition: opacity 260ms ease, filter 260ms ease;
-    pointer-events: none;
-    z-index: 1;
-    filter: saturate(1.1) brightness(1.08) drop-shadow(0 0 10px rgba(201, 245, 95, 0.72)) drop-shadow(0 0 24px rgba(201, 245, 95, 0.48));
-  }
-
-  .border-neon:hover::after {
-    opacity: 0.95;
-    animation-duration: 6.2s;
-    filter: saturate(1.15) brightness(1.12) drop-shadow(0 0 14px rgba(201, 245, 95, 0.82)) drop-shadow(0 0 30px rgba(201, 245, 95, 0.54));
-  }
-
-  .border-neon:hover::before {
-    opacity: 0.78;
-  }
-
-  .border-neon-subtle::before {
-    opacity: 0.38;
-    filter: blur(12px);
-  }
-
-  .border-neon-subtle::after {
-    opacity: 0.72;
-    animation-duration: 9s;
-  }
-
-  .border-neon-fast::after {
-    animation-duration: 5.8s;
-  }
-
-  .border-neon-slow::after {
-    animation-duration: 11.5s;
-  }
-
-  .border-neon-strong::before {
-    inset: -18px;
-    opacity: 0.82;
-    filter: blur(24px);
-    background: radial-gradient(circle at center, rgba(201, 245, 95, 0.86), rgba(201, 245, 95, 0.42), transparent 78%);
-  }
-
-  .border-neon-strong::after {
-    inset: -3px;
-    padding: 1.45px;
-    opacity: 1;
-    filter: saturate(1.18) brightness(1.16) drop-shadow(0 0 14px rgba(201, 245, 95, 0.96)) drop-shadow(0 0 36px rgba(201, 245, 95, 0.66));
-  }
-
-  .border-neon-search::before {
-    background: radial-gradient(circle at center, rgba(25, 122, 84, 0.72), rgba(25, 122, 84, 0.36), transparent 80%);
-    opacity: 0.82;
-  }
-
-  .border-neon-search::after {
-    background: conic-gradient(
-      from var(--neon-angle),
-      rgba(25, 122, 84, 0) 0deg 44deg,
-      rgba(25, 122, 84, 0.95) 52deg 100deg,
-      rgba(25, 122, 84, 0) 110deg 214deg,
-      rgba(25, 122, 84, 0.88) 224deg 272deg,
-      rgba(25, 122, 84, 0) 282deg 360deg
-    );
-    filter: saturate(1.12) brightness(1.08) drop-shadow(0 0 14px rgba(25, 122, 84, 0.88)) drop-shadow(0 0 30px rgba(16, 78, 52, 0.56));
-  }
-
-  .card-gradient-edge {
-    position: relative;
-  }
-
-  .card-gradient-edge::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg, rgba(201, 245, 95, 0.5), rgba(146, 230, 255, 0.28), rgba(126, 168, 255, 0.42));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    opacity: 0;
-    transition: opacity 280ms ease;
-    pointer-events: none;
-  }
-
-  .card-gradient-edge:hover::after {
-    opacity: 1;
-  }
-
-  .float-slow {
-    animation: floatY 8s ease-in-out infinite;
-  }
-
-  .float-medium {
-    animation: floatY 5.5s ease-in-out infinite;
-  }
-
-  .float-delay {
-    animation-delay: 1.35s;
-  }
-
-  .ambient-drift {
-    animation: driftXY 13s ease-in-out infinite;
-  }
-
-  .soft-breathe {
-    animation: breatheGlow 4.5s ease-in-out infinite;
-  }
-
-  .hover-lift {
-    transition: transform 260ms ease, box-shadow 260ms ease;
-  }
-
-  .hover-lift:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 22px 40px -30px rgba(0, 0, 0, 0.45);
-  }
-
-  .gradient-pan {
-    background-size: 200% 200%;
-    animation: gradientPan 11s ease-in-out infinite;
-  }
-
-  .mouse-flyer {
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
-    --mx: 50%;
-    --my: 50%;
-  }
-
-  .mouse-flyer::before {
-    content: '';
-    position: absolute;
-    inset: -20%;
-    background:
-      radial-gradient(300px circle at var(--mx) var(--my), rgba(201, 245, 95, 0.2), transparent 45%),
-      radial-gradient(220px circle at calc(var(--mx) + 6%) calc(var(--my) - 4%), rgba(141, 231, 255, 0.14), transparent 42%);
-    opacity: 0;
-    transition: opacity 260ms ease;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .mouse-flyer:hover::before {
-    opacity: 1;
-  }
-
-  .mouse-flyer > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .pill-marquee-lane {
-    overflow: hidden;
-    border-radius: 9999px;
-  }
-
-  .pill-marquee-track {
-    width: max-content;
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    animation: marqueeX 26s linear infinite;
-  }
-
-  .pill-marquee-track.reverse {
-    animation-duration: 30s;
-    animation-direction: reverse;
-  }
-
-  .pill-marquee-chip {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 9999px;
-    background: #eef2ff;
-    color: #2f5fc4;
-    padding: 0.52rem 1.1rem;
-    font-size: 0.95rem;
-    font-weight: 700;
-    white-space: nowrap;
-    box-shadow: 0 8px 22px -16px rgba(8, 28, 76, 0.45);
-  }
-
-  .payment-carousel-track {
-    width: max-content;
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
-    animation: marqueeX 30s linear infinite;
-  }
-
-  .payment-card {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    border-radius: 16px;
-    background: #ffffff;
-    border: 1px solid #d8deed;
-    color: #2f4b78;
-    font-size: 0.95rem;
-    font-weight: 700;
-    padding: 0.75rem 1rem;
-    min-width: max-content;
-    box-shadow: 0 10px 22px -18px rgba(8, 28, 76, 0.4);
-  }
-
-  .payment-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.65rem;
-    height: 1.65rem;
-    border-radius: 999px;
-    background: #e6edff;
-    color: #365ec3;
-  }
-
-  .interactive-tilt {
-    --rx: 0deg;
-    --ry: 0deg;
-    transform: perspective(1100px) rotateX(var(--rx)) rotateY(var(--ry));
-    transform-style: preserve-3d;
-    transition: transform 260ms ease, box-shadow 260ms ease;
-    will-change: transform;
-  }
-
-  .interactive-tilt:hover {
-    box-shadow: 0 28px 60px -35px rgba(0, 0, 0, 0.55);
-  }
-
-  .icon-pop {
-    transition: transform 220ms ease;
-  }
-
-  .hover-lift:hover .icon-pop {
-    transform: translateY(-2px) scale(1.08);
-  }
-
-  .backtotop-progress {
-    transform-origin: 32px 32px;
-    transform: rotate(-90deg);
-    transition: stroke-dasharray 120ms linear, opacity 200ms ease;
-    filter: drop-shadow(0 0 3px rgba(47, 103, 207, 0.35));
-  }
+.box-glow {
+  box-shadow: 0 0 34px var(--accent-bg-muted);
 }
 
-@keyframes floatY {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-9px);
-  }
+.p-brand-ambient {
+  background:
+    radial-gradient(circle at 18% 18%, var(--accent-bg-muted), transparent 34%),
+    radial-gradient(circle at 82% 12%, var(--accent-bg-soft), transparent 32%),
+    linear-gradient(145deg, var(--ink-900) 0%, var(--brand-on) 48%, var(--ink-800) 100%);
 }
 
-@keyframes driftXY {
-  0%, 100% {
-    transform: translate3d(0, 0, 0);
-  }
-  33% {
-    transform: translate3d(7px, -10px, 0);
-  }
-  66% {
-    transform: translate3d(-6px, 6px, 0);
-  }
+.club-times-scrollbar::-webkit-scrollbar,
+.p-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-@keyframes breatheGlow {
-  0%, 100% {
-    filter: saturate(100%);
-    opacity: 0.92;
-  }
-  50% {
-    filter: saturate(115%);
-    opacity: 1;
-  }
+.club-times-scrollbar::-webkit-scrollbar-track,
+.p-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-@keyframes borderNeonSpin {
-  to {
-    --neon-angle: 360deg;
-  }
+.club-times-scrollbar::-webkit-scrollbar-thumb,
+.p-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent-border-strong);
+  border-radius: var(--r-pill);
 }
 
-@keyframes borderPulse {
-  0%, 100% {
-    opacity: 0.2;
-  }
-  50% {
-    opacity: 0.36;
-  }
+.nav-pill-button {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--ink-50);
+  border-radius: var(--r-pill);
+  padding: 0.55rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
-@keyframes gradientPan {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+.nav-pill-button:hover {
+  background: var(--surface-3);
+  border-color: var(--accent-border-strong);
+  transform: translateY(-1px);
 }
 
-@keyframes marqueeX {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
+/* Legacy class names kept as compatibility wrappers, now rendered with Punto tokens. */
+.p-legacy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  padding: 0.55rem 0.9rem;
+  font-weight: 800;
+  box-shadow: var(--shadow-card);
+}
+
+.p-legacy-pill-on-dark {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--ink-50);
+  box-shadow: none;
+}
+
+.p-legacy-pill-soft {
+  border-color: var(--accent-border);
+  background: var(--positive-bg);
+  color: var(--positive-fg);
+}
+
+.p-legacy-pill-accent {
+  border-color: var(--accent-border-subtle);
+  background: var(--brand);
+  color: var(--brand-on);
+}
+
+.btn-aurora {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.btn-aurora::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(120deg, transparent, var(--accent-bg-strong), transparent);
+  opacity: 0;
+  transform: translateX(-100%);
+  transition: opacity 0.2s ease, transform 0.55s ease;
+}
+
+.btn-aurora:hover::before {
+  opacity: 1;
+  transform: translateX(100%);
+}
+
+.btn-aurora > span,
+.btn-aurora > svg {
+  position: relative;
+  z-index: 1;
+}
+
+.border-neon {
+  position: relative;
+  isolation: isolate;
+}
+
+.border-neon::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -2;
+  border-radius: inherit;
+  background: conic-gradient(from var(--neon-angle), var(--accent-bg-faint), var(--brand), var(--brand-hover), var(--accent-bg-faint));
+  opacity: 0.55;
+  animation: neon-spin 7s linear infinite;
+}
+
+.border-neon::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: inherit;
+}
+
+.border-neon-subtle::before { opacity: 0.28; }
+.border-neon-fast::before { animation-duration: 4.2s; }
+.border-neon-slow::before { animation-duration: 10s; }
+.border-neon-strong::before { opacity: 0.85; }
+.border-neon-search::before { filter: drop-shadow(0 0 18px var(--accent-bg-muted)); }
+
+.card-gradient-edge {
+  position: relative;
+  isolation: isolate;
+}
+
+.card-gradient-edge::after {
+  content: '';
+  position: absolute;
+  inset: auto 18px 0 18px;
+  height: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+  opacity: 0.55;
+  transition: opacity 0.18s ease;
+}
+
+.card-gradient-edge:hover::after { opacity: 0.95; }
+
+.float-slow { animation: float-soft 8s ease-in-out infinite; }
+.float-medium { animation: float-soft 6.4s ease-in-out infinite; }
+.float-delay { animation-delay: -2.2s; }
+.icon-pop { filter: drop-shadow(0 0 10px var(--accent-bg-muted)); }
+.hover-lift { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.hover-lift:hover { transform: translateY(-2px); }
+.mouse-flyer { transform-style: preserve-3d; }
+.interactive-tilt { transition: transform 0.24s ease, box-shadow 0.24s ease; }
+.interactive-tilt:hover { transform: translateY(-3px) rotateX(0.6deg); }
+
+.pill-marquee-lane {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+
+.pill-marquee-track {
+  display: flex;
+  width: max-content;
+  gap: 0.65rem;
+  animation: pill-marquee 28s linear infinite;
+}
+
+.pill-marquee-track.reverse {
+  animation-direction: reverse;
+}
+
+.pill-marquee-chip {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--ink-50);
+  padding: 0.5rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.payment-carousel-track {
+  display: flex;
+  width: max-content;
+  gap: 0.85rem;
+  animation: payment-carousel 30s linear infinite;
+}
+
+.payment-card {
+  display: inline-flex;
+  min-width: 155px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--ink-50);
+  padding: 1rem;
+  font-weight: 800;
+}
+
+@keyframes neon-spin {
+  to { --neon-angle: 360deg; }
+}
+
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes pill-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes payment-carousel {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .float-slow,
   .float-medium,
-  .ambient-drift,
-  .soft-breathe {
-    animation: none !important;
-  }
-
-  .hover-lift,
-  .icon-pop {
-    transition: none !important;
-  }
-
-  .interactive-tilt {
-    transform: none !important;
-    transition: none !important;
-  }
-
   .pill-marquee-track,
-  .payment-carousel-track {
+  .payment-carousel-track,
+  .border-neon::before {
     animation: none !important;
   }
 
-  .gradient-pan {
-    animation: none !important;
-  }
-
-  .border-neon::after {
-    animation: none !important;
-  }
-
-  .backtotop-progress {
-    transition: none !important;
-  }
-}
-
-/* Paleta B/N global */
-:root {
-  --bg: #347048;        /* CAMBIO: Ahora el fondo base es el Verde */
-  --bg-base: #2a5c3b;   /* Un verde más profundo */
-  --surface: #EBE1D8;   /* CAMBIO: Surface ahora es el Beige */
-  --muted: #347048;     /* Texto verde sobre el beige */
-  --text: #EBE1D8;      /* Texto beige sobre el verde */
-  --muted-2: #d4c5b0;
-  --border: rgba(235, 225, 216, 0.1);
-  --accent: #B9CF32;    /* Lima */
-}
-
-/* Botones y utilidades globales B/N */
-.btn {
-  @apply inline-flex items-center justify-center font-bold rounded-xl px-4 py-2 transition-all;
-  background-color: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-.btn:hover {
-  background-color: rgba(255, 255, 255, 0.03);
-  filter: brightness(1.05);
-}
-.btn-primary {
-  background-color: transparent;
-  color: var(--text);
-  border: 1px solid var(--text);
-}
-.btn-danger {
-  background-color: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.6);
-}
-.btn-danger:hover {
-  background-color: rgba(239, 68, 68, 0.18);
-}
-.btn-selected {
-  background-color: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
-}
-.btn-primary:hover {
-  background-color: rgba(255, 255, 255, 0.03);
-}
-.btn-disabled {
-  background-color: transparent;
-  color: var(--muted-2);
-  border: 1px solid rgba(255,255,255,0.03);
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-.badge {
-  @apply inline-block px-3 py-1 rounded-full text-xs font-mono;
-  background-color: transparent;
-  color: var(--muted);
-  border: 1px solid rgba(255,255,255,0.03);
-}
-
-/* Si algún componente necesita fondo transparente, añadir la clase `no-bg` para excluirlo. */
-.no-bg {
-  background-color: transparent !important;
-}
-
-/* Utility classes mapped to CSS variables for easier usage */
-.bg-surface { background-color: var(--surface) !important; }
-.bg-surface-70 { background-color: rgba(11,11,11,0.7) !important; }
-.text-text { color: var(--text) !important; }
-.text-muted { color: var(--muted) !important; }
-.text-muted-2 { color: var(--muted-2) !important; }
-.border-border { border-color: var(--border) !important; }
-.border-soft { border: 1px solid rgba(255,255,255,0.03) !important; }
-.shadow-soft { box-shadow: 0 8px 30px rgba(0,0,0,0.6) !important; }
-
-/* Superposición de gradiente para secciones principales */
-.bg-surface-gradient {
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)), var(--surface);
-  /* sutil brillo radial centrado */
-  background-blend-mode: overlay;
-}
-
-/* Estilos personalizados para react-datepicker - Tema oscuro */
-.date-picker-custom {
-  box-sizing: border-box !important;
-  max-width: 100% !important;
-  width: 100% !important;
-  background-color: var(--surface) !important;
-  color: var(--text) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 0.75rem !important;
-  padding: 1rem !important;
-  padding-right: 3rem !important;
-  font-weight: 500 !important;
-  cursor: pointer !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%23fff' stroke-width='1.8' viewBox='0 0 24 24'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E") !important;
-  background-repeat: no-repeat !important;
-  background-position: right 0.75rem center !important;
-  background-size: 1rem 1rem !important;
-}
-
-.date-picker-custom:focus {
-  outline: none !important;
-  border-color: var(--border) !important;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Calendario popup */
-.date-picker-calendar {
-  background-color: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 0.75rem !important;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6) !important;
-  padding: 1rem !important;
-}
-
-.date-picker-calendar .react-datepicker__header {
-  background-color: var(--surface) !important;
-  border-bottom: 1px solid var(--border) !important;
-  padding-top: 0.75rem !important;
-}
-
-.date-picker-calendar .react-datepicker__current-month {
-  color: var(--text) !important;
-  font-weight: bold !important;
-  font-size: 0.875rem !important;
-}
-
-.date-picker-calendar .react-datepicker__day-name {
-  color: var(--muted) !important;
-  font-weight: 600 !important;
-  font-size: 0.75rem !important;
-}
-
-.date-picker-calendar .react-datepicker__day {
-  color: var(--text) !important;
-  border-radius: 0.5rem !important;
-  margin: 0.125rem !important;
-}
-
-.date-picker-calendar .react-datepicker__day:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  color: var(--text) !important;
-}
-
-.date-picker-calendar .react-datepicker__day--selected,
-.date-picker-calendar .react-datepicker__day--keyboard-selected {
-  background-color: rgba(255, 255, 255, 0.2) !important;
-  color: var(--text) !important;
-  font-weight: bold !important;
-}
-
-.date-picker-calendar .react-datepicker__day--disabled {
-  color: var(--muted-2) !important;
-  opacity: 0.4 !important;
-  cursor: not-allowed !important;
-}
-
-.date-picker-calendar .react-datepicker__day--disabled:hover {
-  background-color: transparent !important;
-}
-
-.date-picker-calendar .react-datepicker__day--outside-month {
-  color: var(--muted-2) !important;
-  opacity: 0.5 !important;
-}
-
-.date-picker-calendar .react-datepicker__navigation {
-  top: 0.75rem !important;
-}
-
-.date-picker-calendar .react-datepicker__navigation-icon::before {
-  border-color: var(--text) !important;
-}
-
-.date-picker-calendar .react-datepicker__navigation:hover *::before {
-  border-color: var(--text) !important;
-}
-
-/* Popper (contenedor del calendario) */
-.date-picker-popper {
-  z-index: 9000 !important;
-}
-
-/* Asegurar que el calendario se renderice fuera del contenedor */
-.react-datepicker-popper {
-  z-index: 9000 !important;
-}
-
-.react-datepicker {
-  z-index: 9000 !important;
-}
-
-.react-datepicker__triangle {
-  z-index: 9000 !important;
-}
-
-/* Asegurar que todos los elementos del calendario tengan z-index alto */
-.react-datepicker-popper[data-placement],
-.react-datepicker-popper[data-placement] > div {
-  z-index: 9000 !important;
-}
-
-/* Portal del datepicker - con portalId, react-datepicker maneja todo correctamente */
-#datepicker-portal {
-  z-index: 9000;
-}
-
-/* Asegurar que el calendario esté por encima de todos los contenedores */
-.react-datepicker-popper {
-  z-index: 9000 !important;
-}
-
-/* --- BOTONES DINÁMICOS (Color solo al pasar el mouse) --- */
-
-/* 1. Botón VERDE (Confirmar / Reactivar) */
-.btn-success {
-  background-color: transparent;      /* Fondo transparente por defecto */
-  color: var(--text);                 /* Texto blanco/gris */
-  border: 1px solid var(--border);    /* Borde gris sutil */
-  transition: all 0.3s ease;          /* Transición suave */
-  opacity: 0.8;
-}
-
-.btn-success:hover {
-  background-color: rgba(16, 185, 129, 0.2); /* Fondo verde al 20% */
-  color: #10b981;                            /* Texto Verde Emerald */
-  border-color: #10b981;                     /* Borde Verde */
-  opacity: 1;
-  transform: translateY(-1px);               /* Pequeño efecto de elevación */
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); /* Brillo (Glow) verde */
-}
-
-/* 2. Botón ROJO (Cancelar / Suspender) */
-.btn-danger {
-  background-color: transparent;      /* Fondo transparente */
-  color: var(--text);                 /* Texto blanco/gris */
-  border: 1px solid var(--border);    /* Borde gris */
-  transition: all 0.3s ease;
-  opacity: 0.8;
-}
-
-.btn-danger:hover {
-  background-color: rgba(239, 68, 68, 0.2);  /* Fondo rojo al 20% */
-  color: #ef4444;                            /* Texto Rojo */
-  border-color: #ef4444;                     /* Borde Rojo */
-  opacity: 1;
-  transform: translateY(-1px);
-  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); /* Brillo (Glow) rojo */
-}
-
-/* --- BADGES (Etiquetas de estado: Operativo/Mantenimiento) --- */
-/* Estos sí conviene dejarlos con color fijo para leer rápido el estado, 
-   pero los hacemos sutiles */
-
-.badge-success {
-  background-color: rgba(16, 185, 129, 0.05);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.badge-danger {
-  background-color: rgba(239, 68, 68, 0.05);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-}
-
-.badge-warning {
-  background-color: rgba(234, 179, 8, 0.05);
-  color: #eab308;
-  border: 1px solid rgba(234, 179, 8, 0.2);
-}
-
-/* Badge AZUL para Turnos Fijos */
-.badge-info {
-  background-color: rgba(59, 130, 246, 0.15); /* Azul Blue-500 transparente */
-  color: #60a5fa;                             /* Texto Azul claro */
-  border: 1px solid rgba(59, 130, 246, 0.4);  /* Borde Azul */
-  display: inline-flex;
-  align-items: center;
-  gap: 4px; /* Espacio entre icono y texto */
-}
-
-/* --- ESTILOS PARA EL CALENDARIO WIMBLEDON --- */
-
-/* Contenedor principal del calendario */
-.wimbledon-datepicker .react-datepicker {
-  background-color: #347048 !important; /* Fondo Verde */
-  border: 4px solid #EBE1D8 !important; /* Borde Beige */
-  border-radius: 1.5rem !important;
-  font-family: inherit !important;
-  overflow: hidden;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3) !important;
-}
-
-/* Encabezado (Mes y flechas) */
-.wimbledon-datepicker .react-datepicker__header {
-  background-color: #2a5c3b !important; /* Un verde un pelín más oscuro */
-  border-bottom: 1px solid rgba(235, 225, 216, 0.1) !important;
-  padding-top: 1rem !important;
-}
-
-/* Texto de mes y días de la semana */
-.wimbledon-datepicker .react-datepicker__current-month,
-.wimbledon-datepicker .react-datepicker__day-name {
-  color: #EBE1D8 !important; /* Texto Beige */
-  font-weight: 800 !important;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Los días del mes */
-.wimbledon-datepicker .react-datepicker__day {
-  color: #EBE1D8 !important;
-  font-weight: 600 !important;
-  border-radius: 0.5rem !important;
-  transition: all 0.2s ease;
-}
-
-/* Hover sobre los días */
-.wimbledon-datepicker .react-datepicker__day:hover {
-  background-color: #B9CF32 !important; /* Fondo Lima */
-  color: #347048 !important; /* Texto Verde */
-}
-
-/* Día seleccionado */
-.wimbledon-datepicker .react-datepicker__day--selected,
-.wimbledon-datepicker .react-datepicker__day--keyboard-selected {
-  background-color: #B9CF32 !important; /* Fondo Lima */
-  color: #347048 !important; /* Texto Verde */
-  font-weight: 900 !important;
-}
-
-/* Días de otros meses (fuera de foco) */
-.wimbledon-datepicker .react-datepicker__day--outside-month {
-  color: rgba(235, 225, 216, 0.2) !important;
-}
-
-/* Flechas de navegación */
-.wimbledon-datepicker .react-datepicker__navigation-icon::before {
-  border-color: #B9CF32 !important; /* Flechas Lima */
-}
-
-/* El input donde se ve la fecha elegida */
-.wimbledon-datepicker input {
-  background-color: white !important;
-  color: #347048 !important;
-  font-weight: 700 !important;
-  border-radius: 0.75rem !important;
-  padding: 0.75rem 1rem !important;
-  border: 2px solid transparent !important;
-  width: 100% !important;
-}
-
-.wimbledon-datepicker input:focus {
-  border-color: #B9CF32 !important; /* Borde Lima al hacer clic */
-  outline: none !important;
-}
-
-@layer utilities {
-  .scrollbar-padel {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(65, 82, 118, 0.28) transparent;
-  }
-
-  .scrollbar-padel::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
-  }
-
-  .scrollbar-padel::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-padel::-webkit-scrollbar-thumb {
-    background-color: rgba(65, 82, 118, 0.2);
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background-clip: padding-box;
-  }
-
-  .scrollbar-padel::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(65, 82, 118, 0.42);
-  }
-
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-}
-
-@layer base {
-  html {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(65, 82, 118, 0.24) transparent;
-  }
-
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background-color: rgba(65, 82, 118, 0.18);
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background-clip: padding-box;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(65, 82, 118, 0.36);
+  .hover-lift:hover,
+  .interactive-tilt:hover,
+  .nav-pill-button:hover {
+    transform: none;
   }
 }

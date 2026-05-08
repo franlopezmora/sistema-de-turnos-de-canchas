@@ -36,18 +36,18 @@ const formatDateTime = (value?: string | null) => {
 
 function DetailItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="rounded-xl border border-[#e1e6f0] bg-white px-3 py-2.5">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7a8499]">{label}</p>
-      <p className={`mt-1 text-sm font-bold text-[#1f2638] ${mono ? 'font-mono text-[12px] break-all' : ''}`}>{value || '-'}</p>
+    <div className="rounded-xl border border-p-border bg-p-surface px-3 py-2.5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-p-text-muted">{label}</p>
+      <p className={`mt-1 text-sm font-bold text-p-text ${mono ? 'font-mono text-[12px] break-all' : ''}`}>{value || '-'}</p>
     </div>
   );
 }
 
 function DetailBlock({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
   return (
-    <div className="rounded-xl border border-[#e1e6f0] bg-white px-3 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7a8499]">{label}</p>
-      <p className={`mt-1 text-sm font-semibold whitespace-pre-wrap break-words text-[#1f2638] ${mono ? 'font-mono text-[12px]' : ''}`}>
+    <div className="rounded-xl border border-p-border bg-p-surface px-3 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-p-text-muted">{label}</p>
+      <p className={`mt-1 text-sm font-semibold whitespace-pre-wrap break-words text-p-text ${mono ? 'font-mono text-[12px]' : ''}`}>
         {value && value.trim() ? value : '-'}
       </p>
     </div>
@@ -159,7 +159,7 @@ export default function AdminTabRefunds() {
           <button
             type="button"
             onClick={load}
-            className="h-10 rounded-lg border border-[#dce2ee] bg-white px-4 text-xs font-bold uppercase tracking-[0.14em] text-[#46516a] transition hover:bg-[#f8faff]"
+            className="h-10 rounded-lg border border-p-border bg-p-surface px-4 text-xs font-bold uppercase tracking-[0.14em] text-p-text-secondary transition hover:bg-p-surface-2"
           >
             Recargar
           </button>
@@ -171,7 +171,7 @@ export default function AdminTabRefunds() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'ALL' | RefundStatus)}
-            className="h-10 rounded-lg border border-[#d9dfeb] bg-white px-3 text-sm font-semibold text-[#1f2638] outline-none focus:border-[#6f7edb] focus:ring-3 focus:ring-[#6f7edb]/10"
+            className="h-10 rounded-lg border border-p-border bg-p-surface px-3 text-sm font-semibold text-p-text outline-none focus:border-p-accent focus:ring-3 focus:ring-lima-300/30"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -183,13 +183,13 @@ export default function AdminTabRefunds() {
             value={paymentIdFilter}
             onChange={(e) => setPaymentIdFilter(e.target.value)}
             placeholder="Filtrar por pago"
-            className="h-10 rounded-lg border border-[#d9dfeb] bg-white px-3 text-sm font-semibold text-[#1f2638] placeholder:text-[#98a1b3] outline-none focus:border-[#6f7edb] focus:ring-3 focus:ring-[#6f7edb]/10"
+            className="h-10 rounded-lg border border-p-border bg-p-surface px-3 text-sm font-semibold text-p-text placeholder:text-p-text-muted outline-none focus:border-p-accent focus:ring-3 focus:ring-lima-300/30"
           />
           <input
             value={accountIdFilter}
             onChange={(e) => setAccountIdFilter(e.target.value)}
             placeholder="Filtrar por cuenta"
-            className="h-10 rounded-lg border border-[#d9dfeb] bg-white px-3 text-sm font-semibold text-[#1f2638] placeholder:text-[#98a1b3] outline-none focus:border-[#6f7edb] focus:ring-3 focus:ring-[#6f7edb]/10"
+            className="h-10 rounded-lg border border-p-border bg-p-surface px-3 text-sm font-semibold text-p-text placeholder:text-p-text-muted outline-none focus:border-p-accent focus:ring-3 focus:ring-lima-300/30"
           />
           <button
             type="button"
@@ -199,14 +199,14 @@ export default function AdminTabRefunds() {
               setAccountIdFilter('');
             }}
             disabled={!hasActiveFilters}
-            className="h-10 rounded-lg border border-[#dce2ee] bg-[#f8faff] text-xs font-bold uppercase tracking-[0.14em] text-[#46516a] disabled:opacity-40"
+            className="h-10 rounded-lg border border-p-border bg-p-surface-2 text-xs font-bold uppercase tracking-[0.14em] text-p-text-secondary disabled:opacity-40"
           >
             Limpiar filtros
           </button>
         </div>
       </AdminPanel>
 
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-600">{error}</div> : null}
+      {error ? <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-sm font-bold text-p-error">{error}</div> : null}
 
       <AdminPanel title="Bandeja" description={`${refunds.length} devoluciones encontradas.`}>
         <RefundList
@@ -251,14 +251,14 @@ export default function AdminTabRefunds() {
           }}
         >
           <div
-            className="w-full max-w-2xl bg-[#EBE1D8] border-4 border-white/70 rounded-[2rem] shadow-2xl text-[#347048] max-h-[90vh] overflow-hidden"
+            className="w-full max-w-2xl bg-ink-50 border-4 border-white/70 rounded-[2rem] shadow-2xl text-ink-900 max-h-[90vh] overflow-hidden"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="px-6 py-5 border-b border-[#347048]/10 bg-white/60 flex items-start justify-between gap-3">
+            <div className="px-6 py-5 border-b border-lima-900/10 bg-p-surface/60 flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#347048]/50">Gestion de devoluciones</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink-900/50">Gestion de devoluciones</p>
                 <h3 className="text-2xl font-black uppercase italic tracking-tight">Detalle de devolución</h3>
-                <p className="text-[11px] font-black uppercase tracking-widest text-[#347048]/60 mt-1">
+                <p className="text-[11px] font-black uppercase tracking-widest text-ink-900/60 mt-1">
                   {formatRefundStatus(selectedRefund.status)} · {formatMoney(selectedRefund.amount)}
                 </p>
               </div>
@@ -266,7 +266,7 @@ export default function AdminTabRefunds() {
                 type="button"
                 onClick={() => setSelectedRefundId(null)}
                 title="Cerrar"
-                className="bg-red-50 p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-red-500 hover:text-white hover:bg-red-500 border border-red-100"
+                className="bg-p-error-bg p-2.5 rounded-full shadow-sm hover:scale-110 transition-transform text-p-error hover:text-ink-50 hover:bg-p-error border border-p-error"
               >
                 <X size={20} strokeWidth={3} />
               </button>
@@ -296,8 +296,8 @@ export default function AdminTabRefunds() {
                 <DetailItem label="Cancelada por" value={selectedRefund.cancelledByUserId != null ? String(selectedRefund.cancelledByUserId) : '-'} />
               </div>
 
-              <div className="rounded-xl border border-[#347048]/10 bg-[#f7f4ef] px-3 py-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#347048]/55">Datos técnicos</p>
+              <div className="rounded-xl border border-lima-900/10 bg-p-surface-2 px-3 py-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-ink-900/55">Datos técnicos</p>
                 <p className="mt-1 text-[12px] font-mono break-all">refundId: {selectedRefund.id}</p>
                 <p className="text-[12px] font-mono break-all">paymentId: {selectedRefund.paymentId || '-'}</p>
                 <p className="text-[12px] font-mono break-all">accountId: {selectedRefund.accountId || '-'}</p>

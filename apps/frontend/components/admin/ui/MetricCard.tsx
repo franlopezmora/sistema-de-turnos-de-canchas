@@ -20,7 +20,7 @@ export type MetricCardProps = {
   delta?: MetricCardDelta;
   icon?: ReactNode;
   loading?: boolean;
-  /** Override the value text color. E.g. '#15803d' for income, '#b91c1c' for expense. */
+  /** Override the value text color. Prefer semantic tokens, e.g. `var(--positive-fg)`. */
   valueColor?: string;
   /** Extra class for the root element, e.g. for custom widths. */
   className?: string;
@@ -71,7 +71,7 @@ export default function MetricCard({
   return (
     <div
       className={[
-        'flex flex-col gap-1 rounded-xl border border-[#dce2ee] bg-white px-5 py-4',
+        'flex flex-col gap-1 rounded-xl border border-p-border bg-p-surface px-5 py-4 shadow-p-card',
         className,
       ]
         .filter(Boolean)
@@ -79,18 +79,18 @@ export default function MetricCard({
     >
       {/* ── Top row: label + icon ── */}
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-[#98a1b3]">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-p-text-muted">
           {label}
         </p>
-        {icon && <span className="text-[#b0b8c8]">{icon}</span>}
+        {icon && <span className="text-p-text-muted">{icon}</span>}
       </div>
 
       {/* ── Value ── */}
       {loading ? (
-        <div className="mt-1 h-8 w-24 animate-pulse rounded-md bg-[#f0f2f7]" />
+        <div className="mt-1 h-8 w-24 animate-pulse rounded-md bg-p-surface-2" />
       ) : (
         <p
-          className="text-[28px] font-bold leading-none tracking-tight text-[#1a2035]"
+          className="text-[28px] font-bold leading-none tracking-tight text-p-text"
           style={valueColor ? { color: valueColor } : undefined}
         >
           {formatValue(value, format)}
@@ -103,14 +103,14 @@ export default function MetricCard({
           <span
             className={
               isPositive
-                ? 'font-semibold text-[#167647]'
-                : 'font-semibold text-[#b42318]'
+                ? 'font-semibold text-p-positive'
+                : 'font-semibold text-p-error'
             }
           >
             {isPositive ? '▲' : '▼'} {formatValue(Math.abs(delta.value), format)}
           </span>
           {delta.label && (
-            <span className="text-[#98a1b3]">{delta.label}</span>
+            <span className="text-p-text-muted">{delta.label}</span>
           )}
         </p>
       )}

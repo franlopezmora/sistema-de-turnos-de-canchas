@@ -63,9 +63,9 @@ export default function BookingDrawerShell({
       <BillingSubnav active={activeTab} onChange={onTabChange} />
 
       {activeTab === 'SUMMARY' && (
-        <div className="rounded-xl border border-[#dce2ee] bg-white p-3">
-          <p className="text-[13px] font-semibold text-[#2f364b]">Como usar este bloque</p>
-          <ul className="mt-2 space-y-1 text-[12px] text-[#68728a]">
+        <div className="rounded-xl border border-p-border bg-p-surface p-3">
+          <p className="text-[13px] font-semibold text-p-text">Como usar este bloque</p>
+          <ul className="mt-2 space-y-1 text-[12px] text-p-text-secondary">
             <li>1. Revisa el resumen para ver total, pagado y saldo.</li>
             <li>2. Define asignacion de cobro en la pestana Asignacion.</li>
             <li>3. Registra pagos en la pestana Pagos y guarda cambios.</li>

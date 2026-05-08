@@ -53,14 +53,14 @@ export default function CashSummaryCards({
         value={balance.income}
         format="money"
         loading={loading}
-        valueColor="#15803d"
+        valueColor="var(--positive-fg)"
       />
       <MetricCard
         label="Egresos"
         value={balance.expense}
         format="money"
         loading={loading}
-        valueColor="#b91c1c"
+        valueColor="var(--error-fg)"
       />
       <MetricCard
         label="Caja Efectivo"

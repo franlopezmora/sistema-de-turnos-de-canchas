@@ -70,12 +70,12 @@ export default function AdminDataTable<T>({
       <table className="w-full min-w-full border-collapse [border-spacing:0] text-left">
         {/* ── Header ── */}
         <thead className="sticky top-0 z-10">
-          <tr className="border-b border-[#edf0f6] bg-[#f8f9fc]">
+          <tr className="border-b border-p-border bg-p-surface-2">
             {columns.map((col) => (
               <th
                 key={col.key}
                 className={cx(
-                  'px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]',
+                  'px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-p-text-muted',
                   alignClass(col.align),
                   col.width
                 )}
@@ -87,11 +87,11 @@ export default function AdminDataTable<T>({
         </thead>
 
         {/* ── Body ── */}
-        <tbody className="divide-y divide-[#edf0f6] text-[13px]">
+        <tbody className="divide-y divide-p-border text-[13px] text-p-text-secondary">
           {loading ? (
             <tr>
               <td colSpan={colSpan} className="p-14 text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[#d9dfeb] border-t-[#3053e2]" />
+                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-p-border border-t-p-accent" />
               </td>
             </tr>
           ) : data.length === 0 ? (
@@ -99,14 +99,14 @@ export default function AdminDataTable<T>({
               <td colSpan={colSpan} className="p-14 text-center">
                 {empty ? (
                   <div className="flex flex-col items-center gap-2">
-                    <p className="text-[14px] font-semibold text-[#98a1b3]">{empty.title}</p>
+                    <p className="text-[14px] font-semibold text-p-text-muted">{empty.title}</p>
                     {empty.description && (
-                      <p className="text-[12px] text-[#b0b8c8]">{empty.description}</p>
+                      <p className="text-[12px] text-p-text-muted">{empty.description}</p>
                     )}
                     {empty.action && <div className="mt-2">{empty.action}</div>}
                   </div>
                 ) : (
-                  <p className="text-[14px] font-semibold text-[#98a1b3]">Sin resultados</p>
+                  <p className="text-[14px] font-semibold text-p-text-muted">Sin resultados</p>
                 )}
               </td>
             </tr>
@@ -120,7 +120,7 @@ export default function AdminDataTable<T>({
                 <tr
                   key={rowKey(row)}
                   className={cx(
-                    'group transition-colors hover:bg-[#f8f9fc]',
+                    'group transition-colors hover:bg-p-surface-2',
                     onRowClick && 'cursor-pointer',
                     extraRowClass
                   )}

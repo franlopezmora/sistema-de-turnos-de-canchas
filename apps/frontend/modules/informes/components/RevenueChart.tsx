@@ -32,8 +32,8 @@ type ActiveRevenuePoint = {
 };
 
 const revenueSeriesMeta: Record<RevenueSeriesKey, { label: string; color: string }> = {
-  turnos: { label: 'Reservas', color: '#1f2638' },
-  bar: { label: 'Consumos', color: '#3053e2' },
+  turnos: { label: 'Reservas', color: 'var(--ink-900)' },
+  bar: { label: 'Consumos', color: 'var(--brand)' },
 };
 
 function RevenueTooltip({
@@ -50,11 +50,11 @@ function RevenueTooltip({
   const activeMeta = revenueSeriesMeta[activeKey];
 
   return (
-    <div className="w-[236px] rounded-lg border border-[#dce2ee] bg-white px-3 py-2 text-[12px] shadow-[0_10px_28px_rgba(31,38,56,0.10)]">
-      <p className="font-semibold text-[#1f2638]">{point.day}</p>
-      <div className="mt-2 space-y-1 text-[#5a6478]">
-        <p className="flex min-w-[170px] justify-between gap-4 rounded-md bg-[#f8f9fd] px-2 py-1">
-          <span className="inline-flex items-center gap-1.5 font-semibold text-[#1f2638]">
+    <div className="w-[236px] rounded-lg border border-p-border bg-p-surface px-3 py-2 text-[12px] shadow-p-lg">
+      <p className="font-semibold text-p-text">{point.day}</p>
+      <div className="mt-2 space-y-1 text-p-text-secondary">
+        <p className="flex min-w-[170px] justify-between gap-4 rounded-md bg-p-surface-2 px-2 py-1">
+          <span className="inline-flex items-center gap-1.5 font-semibold text-p-text">
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: activeMeta.color }} />
             {activeMeta.label}
           </span>
@@ -62,13 +62,13 @@ function RevenueTooltip({
         </p>
         <p className="flex min-w-[170px] justify-between gap-4">
           <span>{activeKey === 'turnos' ? 'Consumos' : 'Reservas'}</span>
-          <strong className="text-[#5a6478]">
+          <strong className="text-p-text-secondary">
             {formatReportsMoney(activeKey === 'turnos' ? consumptions : bookings)}
           </strong>
         </p>
-        <p className="flex min-w-[170px] justify-between gap-4 border-t border-[#eef2f8] pt-1">
+        <p className="flex min-w-[170px] justify-between gap-4 border-t border-p-border pt-1">
           <span>Total</span>
-          <strong className="text-[#1f2638]">{formatReportsMoney(total)}</strong>
+          <strong className="text-p-text">{formatReportsMoney(total)}</strong>
         </p>
       </div>
     </div>
@@ -126,25 +126,25 @@ export default function RevenueChart({ data }: RevenueChartProps) {
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 12, right: 12, left: -12, bottom: 4 }}>
-          <CartesianGrid stroke="#e7ebf3" strokeDasharray="4 6" vertical={false} />
+          <CartesianGrid stroke="var(--border)" strokeDasharray="4 6" vertical={false} />
           <XAxis
             dataKey="day"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }}
+            tick={{ fill: 'var(--text-muted)', fontSize: 11, fontWeight: 600 }}
             dy={10}
           />
           <YAxis
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#8b95aa', fontSize: 11, fontWeight: 600 }}
+            tick={{ fill: 'var(--text-muted)', fontSize: 11, fontWeight: 600 }}
             tickFormatter={(value) => (Number(value) >= 1000 ? `$${Math.round(Number(value) / 1000)}k` : `$${value}`)}
           />
           <Bar
             dataKey="turnos"
             name="Reservas"
             stackId="revenue"
-            fill="#1f2638"
+            fill="var(--ink-900)"
             radius={[0, 0, 0, 0]}
             barSize={34}
             isAnimationActive={false}
@@ -155,7 +155,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
             dataKey="bar"
             name="Consumos"
             stackId="revenue"
-            fill="#3053e2"
+            fill="var(--brand)"
             radius={[7, 7, 0, 0]}
             barSize={34}
             isAnimationActive={false}

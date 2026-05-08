@@ -9,7 +9,7 @@ type UserThemeContextValue = {
   toggleTheme: () => void;
 };
 
-const STORAGE_KEY = 'tucancha:user-theme';
+const STORAGE_KEY = 'punto:user-theme';
 
 const UserThemeContext = createContext<UserThemeContextValue | null>(null);
 
@@ -35,7 +35,7 @@ export function UserThemeProvider({ children }: { children: ReactNode }) {
     if (!themeReady || typeof window === 'undefined') return;
     const root = document.documentElement;
     root.dataset.userTheme = theme;
-    root.classList.toggle('tc-global-light', theme === 'light');
+    root.dataset.theme = theme;
     if (typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(STORAGE_KEY, theme);

@@ -5,16 +5,15 @@ import { ClubService, Club } from '../services/ClubService';
 import { getApiUrl } from '../utils/apiUrl';
 import { LocationService, Location } from '../services/LocationService';
 import DatePickerDark from '../components/ui/DatePickerDark';
-import AppModal from '../components/AppModal';
-import { Search, MapPin, Calendar, TrendingUp, ShieldCheck, ArrowRight, Menu, X, Phone, Mail, Instagram, Activity, ChevronRight, ChevronLeft, MousePointerClick, CalendarCheck, PlayCircle, Coffee, Droplets, Lightbulb, Trophy, ChevronDown, LogOut, Check, MessageSquare, Calculator, Users, Heart } from 'lucide-react';
+import { Search, MapPin, Calendar, TrendingUp, ArrowRight, X, Phone, Mail, Instagram, Activity, ChevronRight, ChevronLeft, MousePointerClick, CalendarCheck, PlayCircle, Coffee, Droplets, Lightbulb, Trophy, ChevronDown, Check, MessageSquare, Calculator, Heart } from 'lucide-react';
 import Link from 'next/link';
-import { logout } from '../services/AuthService';
-import { getMyBookings } from '../services/BookingService';
-import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
+import { normalizeSessionUser } from '../utils/session';
 import { reportUiError } from '../utils/uiError';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserTheme } from '../contexts/UserThemeContext';
 import { isAuthSessionInvalidatedError } from '../utils/apiClient';
+import PuntoLogo from '../components/PuntoLogo';
+import NavBar from '../components/NavBar';
 // Importamos los iconos de la libreria
 import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Padel)
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de futbol limpia
@@ -152,16 +151,13 @@ const formatClubAddress = (club: Club) => {
 export default function Home() {
   const router = useRouter();
   const { user: authUser } = useAuth();
-  const { isLight, toggleTheme } = useUserTheme();
+  const { isLight } = useUserTheme();
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loadingClubs, setLoadingClubs] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [showContact, setShowContact] = useState(false);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [activeBookingsCount, setActiveBookingsCount] = useState(0);
   const [favoriteClubIds, setFavoriteClubIds] = useState<Set<number>>(new Set());
   const [favoriteClubs, setFavoriteClubs] = useState<Club[]>([]);
   const [favoriteBusyByClub, setFavoriteBusyByClub] = useState<Record<number, boolean>>({});
@@ -182,7 +178,6 @@ export default function Home() {
   const sportWords = ['fútbol', 'pádel', 'tenis', 'básquet'];
   const [heroSportIdx, setHeroSportIdx] = useState(0);
   const [heroWordVisible, setHeroWordVisible] = useState(true);
-  const [navHidden, setNavHidden] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const faqRefs = useRef<Array<HTMLDivElement | null>>([]);
 
@@ -200,33 +195,6 @@ export default function Home() {
   }, [openFaqIndex]);
 
   useEffect(() => {
-    let lastY = window.scrollY;
-    const movementThreshold = 4;
-    const handler = () => {
-      const y = window.scrollY;
-      const delta = Math.abs(y - lastY);
-      if (y < 80) {
-        if (delta >= movementThreshold) {
-          setShowUserMenu(false);
-        }
-        setNavHidden(false);
-        lastY = y;
-        return;
-      }
-      if (delta < movementThreshold) return; // ignorar micro-scrolls
-      const scrollingDown = y > lastY;
-      setShowUserMenu(false);
-      if (scrollingDown) {
-        setContactMenu(null);
-      }
-      setNavHidden(scrollingDown);
-      lastY = y;
-    };
-    window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
-  }, []);
-
-  useEffect(() => {
     const timer = setInterval(() => {
       setHeroWordVisible(false);
       setTimeout(() => {
@@ -238,10 +206,10 @@ export default function Home() {
   }, [sportWords.length]);
 
   useEffect(() => {
-    const els = document.querySelectorAll('.tc-sr,.tc-sr-up,.tc-sr-left,.tc-sr-right');
+    const els = document.querySelectorAll('.p-home-sr,.p-home-sr-up,.p-home-sr-left,.p-home-sr-right');
     if (!els.length) return;
     const obs = new IntersectionObserver((entries) => {
-      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('tc-in'); obs.unobserve(e.target); } });
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('p-home-in'); obs.unobserve(e.target); } });
     }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
     els.forEach(el => obs.observe(el));
     return () => obs.disconnect();
@@ -251,8 +219,7 @@ export default function Home() {
     const closeTransientPanels = () => {
       setShowContact(false);
       setContactMenu(null);
-      setShowUserMenu(false);
-    };
+      };
     router.events.on('routeChangeStart', closeTransientPanels);
     return () => {
       router.events.off('routeChangeStart', closeTransientPanels);
@@ -278,12 +245,12 @@ export default function Home() {
 
     const updateParallax = () => {
       if (reducedMotion.matches) {
-        if (closingSection) closingSection.style.setProperty('--tc-closing-parallax', '0px');
-        if (ownerSection) ownerSection.style.setProperty('--tc-owner-parallax', '0px');
+        if (closingSection) closingSection.style.setProperty('--p-home-closing-parallax', '0px');
+        if (ownerSection) ownerSection.style.setProperty('--p-home-owner-parallax', '0px');
         return;
       }
-      if (closingSection) applyParallax(closingSection, '--tc-closing-parallax', 28); // -14..14
-      if (ownerSection) applyParallax(ownerSection, '--tc-owner-parallax', 24); // -12..12
+      if (closingSection) applyParallax(closingSection, '--p-home-closing-parallax', 28); // -14..14
+      if (ownerSection) applyParallax(ownerSection, '--p-home-owner-parallax', 24); // -12..12
     };
 
     const scheduleParallax = () => {
@@ -382,11 +349,11 @@ export default function Home() {
       href = 'https://wa.me/5493513436163';
       copyText = '+5493513436163';
     } else if (type === 'email') {
-      href = 'mailto:soporte.tucancha@gmail.com';
-      copyText = 'soporte.tucancha@gmail.com';
+      href = 'mailto:soporte.punto@gmail.com';
+      copyText = 'soporte.punto@gmail.com';
     } else if (type === 'instagram') {
-      href = 'https://www.instagram.com/tucancha.app_/';
-      copyText = '@tucancha.app_';
+      href = 'https://www.instagram.com/punto.app_/';
+      copyText = '@punto.app_';
     }
     setContactMenu({ type, top: Math.max(top, 10), left: Math.max(left, 10), href, copyText });
   };
@@ -405,28 +372,6 @@ export default function Home() {
       reportUiError({ area: 'HomePage', action: 'copyContactData' }, err);
     }
   };
-
-  const userInitials = useMemo(() => {
-    if (!user) return 'TU';
-    const first = (user.firstName || user.name || '').trim();
-    const last = (user.lastName || '').trim();
-    const initials = `${first.charAt(0)}${last.charAt(0)}`.trim();
-    return initials || 'TU';
-  }, [user]);
-  const isAdmin = hasAdminAccess(user);
-  const adminClubSlug = useMemo(() => {
-    if (!user || !isAdmin) return null;
-
-    const normalizedUser = normalizeSessionUser(user);
-    const activeSlug = getActiveClubSlug(normalizedUser);
-    if (activeSlug) return activeSlug;
-
-    const fallbackClubId = Number(normalizedUser?.activeClubId || normalizedUser?.clubId || normalizedUser?.club?.id);
-    if (!Number.isFinite(fallbackClubId) || fallbackClubId <= 0) return null;
-
-    const club = clubs.find((item) => Number(item.id) === fallbackClubId);
-    return club?.slug || null;
-  }, [clubs, isAdmin, user]);
 
   const sportOptions = useMemo(() => ([
   {
@@ -494,30 +439,8 @@ export default function Home() {
   useEffect(() => {
     setUser(authUser ? normalizeSessionUser(authUser as any) : null);
     if (!authUser) {
-      setShowUserMenu(false);
-    }
+      }
   }, [authUser]);
-
-  useEffect(() => {
-    const loadActiveBookings = async () => {
-      if (!user?.id) {
-        setActiveBookingsCount(0);
-        return;
-      }
-      try {
-        const bookings = await getMyBookings(user.id);
-        const active = Array.isArray(bookings) ? countActiveBookings(bookings) : 0;
-        setActiveBookingsCount(active);
-      } catch (error) {
-        if (isAuthSessionInvalidatedError(error)) {
-          return;
-        }
-        reportUiError({ area: 'HomePage', action: 'loadActiveBookings' }, error);
-      }
-    };
-
-    loadActiveBookings();
-  }, [user]);
 
   useEffect(() => {
     const loadFavorites = async () => {
@@ -741,540 +664,458 @@ export default function Home() {
     setShowCityDropdown(false);
   };
 
-  const tcCss = `
-    .tc-root { min-height:100vh; background:#050505; color:#f2f2f2; font-family:'Sora',system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow-x:clip; --tc-bg-a:#050505; --tc-bg-b:#0a0a0a; --tc-bg-c:#08110d; }
-    .tc-root *,.tc-root *::before,.tc-root *::after { box-sizing:border-box; }
-    .tc-root a { color:inherit; text-decoration:none; }
-    .tc-root ::selection { background:#22c55e; color:#052010; }
-    /* Header */
-    .tc-header { position:fixed; top:0; left:0; right:0; z-index:50; background:rgba(5,5,5,.9); backdrop-filter:blur(16px); border-bottom:1px solid rgba(255,255,255,.06); transform:translateY(0); transition:transform .38s cubic-bezier(.4,0,.2,1); }
-    .tc-header-hidden { transform:translateY(-110%); }
-    .tc-header-inner { max-width:1360px; margin:0 auto; padding:0 24px; min-height:68px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
-    .tc-brand-text { font-size:13px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#22c55e; }
-    .tc-btn { display:inline-flex; align-items:center; gap:8px; padding:9px 18px; border-radius:999px; font-size:13px; font-weight:700; border:1px solid rgba(255,255,255,.14); background:#111; color:#e8e8e8; cursor:pointer; transition:transform .15s,box-shadow .15s; font-family:inherit; }
-    .tc-btn:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.3); }
-    .tc-btn-primary { background:#22c55e!important; color:#052010!important; border-color:#22c55e!important; }
-    .tc-btn-primary:hover { background:#16a34a!important; }
-    .tc-btn-ghost { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.12); }
-    .tc-btn-ghost:hover { background:rgba(255,255,255,.12); }
-    /* User button */
-    .tc-user-btn { display:flex; align-items:center; gap:10px; padding:5px 14px 5px 5px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:999px; cursor:pointer; transition:background .15s; }
-    .tc-user-btn:hover { background:rgba(255,255,255,.1); }
-    .tc-user-avatar { width:34px; height:34px; border-radius:50%; background:#22c55e; color:#052010; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; position:relative; flex-shrink:0; }
-    .tc-user-name { font-size:13px; font-weight:600; color:#e8e8e8; }
-    .tc-user-menu { position:absolute; right:0; top:calc(100% + 8px); width:260px; background:#111; border:1px solid rgba(255,255,255,.1); border-radius:16px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,.5); z-index:120; }
+  const homeCss = `
+    .p-home-root { min-height:100vh; background:var(--bg); color:var(--text-primary); font-family:var(--font-sans); -webkit-font-smoothing:antialiased; overflow-x:clip; --p-home-bg-a:var(--bg); --p-home-bg-b:var(--surface-1); --p-home-bg-c:var(--surface-2); }
+    .p-home-root *,.p-home-root *::before,.p-home-root *::after { box-sizing:border-box; }
+    .p-home-root a { color:inherit; text-decoration:none; }
+    .p-home-root ::selection { background:var(--brand); color:var(--brand-on); }
+    /* Header actions */
+    .p-home-btn { display:inline-flex; align-items:center; gap:8px; padding:9px 18px; border-radius:999px; font-size:13px; font-weight:700; border:1px solid var(--border); background:var(--surface-1); color:var(--text-secondary); cursor:pointer; transition:transform .15s,box-shadow .15s; font-family:inherit; }
+    .p-home-btn:hover { transform:translateY(-1px); box-shadow:var(--shadow-md); }
+    .p-home-btn-primary { background:var(--brand)!important; color:var(--brand-on)!important; border-color:var(--accent-fg)!important; }
+    .p-home-btn-primary:hover { background:var(--accent-fg)!important; }
+    .p-home-btn-ghost { background:var(--border-subtle); border-color:var(--border); }
+    .p-home-btn-ghost:hover { background:var(--border); }
     /* Hero */
-    .tc-hero { position:relative; z-index:10; min-height:92vh; display:flex; align-items:flex-end; padding:120px 40px 64px; overflow:visible; }
-    .tc-hero-visuals { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
-    .tc-hero-bg { position:absolute; inset:0; background:linear-gradient(135deg,#0a1f0e 0%,#050505 45%,#0d1a0d 100%); }
-    .tc-hero-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 60% 50% at 20% 100%,rgba(34,197,94,.14),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,rgba(34,197,94,.06),transparent 65%); }
-    .tc-hero-noise { position:absolute; inset:0; opacity:.022; pointer-events:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
-    .tc-hero-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; width:100%; display:grid; grid-template-columns:1.2fr auto; align-items:end; gap:48px; }
-    .tc-hero-copy { max-width:720px; }
-    .tc-hero-eyebrow { display:inline-flex; align-items:center; gap:10px; padding:6px 14px 6px 10px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:999px; font-size:12px; font-weight:600; color:#e8e8e8; margin-bottom:28px; backdrop-filter:blur(12px); }
-    .tc-hero-eyebrow-dot { width:6px; height:6px; border-radius:50%; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.25); animation:tc-pulse 1.6s ease-in-out infinite; }
-    @keyframes tc-pulse { 0%,100%{opacity:1}50%{opacity:.5} }
-    .tc-hero-h1 { font-size:clamp(52px,8vw,108px); font-weight:800; letter-spacing:-.045em; line-height:.96; margin:0 0 24px; color:#fff; }
-    .tc-hero-h1 i { font-style:italic; font-weight:700; color:#22c55e; }
-    .tc-hero-h1 .tc-grad-text { color:unset; }
-    .tc-hero-sub { font-size:17px; font-weight:400; color:#c8c8c8; line-height:1.55; max-width:500px; margin:0 0 36px; }
+    .p-home-hero { position:relative; z-index:10; min-height:92vh; display:flex; align-items:flex-end; padding:120px 40px 64px; overflow:visible; }
+    .p-home-hero-visuals { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
+    .p-home-hero-bg { position:absolute; inset:0; background:linear-gradient(135deg,var(--ink-900) 0%,var(--bg) 45%,var(--lima-900) 100%); }
+    .p-home-hero-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 60% 50% at 20% 100%,var(--accent-bg-muted),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,var(--accent-bg-faint),transparent 65%); }
+    .p-home-hero-noise { position:absolute; inset:0; opacity:.022; pointer-events:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+    .p-home-hero-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; width:100%; display:grid; grid-template-columns:1.2fr auto; align-items:end; gap:48px; }
+    .p-home-hero-copy { max-width:720px; }
+    .p-home-hero-eyebrow { display:inline-flex; align-items:center; gap:10px; padding:6px 14px 6px 10px; background:var(--border-subtle); border:1px solid var(--border); border-radius:999px; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:28px; backdrop-filter:blur(12px); }
+    .p-home-hero-eyebrow-dot { width:6px; height:6px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 3px var(--accent-border); animation:p-home-pulse 1.6s ease-in-out infinite; }
+    @keyframes p-home-pulse { 0%,100%{opacity:1}50%{opacity:.5} }
+    .p-home-hero-h1 { font-size:clamp(52px,8vw,108px); font-weight:800; letter-spacing:-.045em; line-height:.96; margin:0 0 24px; color:var(--ink-50); }
+    .p-home-hero-h1 i { font-style:italic; font-weight:700; color:var(--accent-fg); }
+    .p-home-hero-h1 .p-home-grad-text { color:unset; }
+    .p-home-hero-sub { font-size:17px; font-weight:400; color:var(--text-secondary); line-height:1.55; max-width:500px; margin:0 0 36px; }
     /* Search */
-    .tc-search { position:relative; z-index:25; display:flex; gap:0; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px; backdrop-filter:blur(20px); max-width:620px; align-items:center; flex-wrap:wrap; }
-    .tc-search-seg { display:flex; align-items:center; gap:8px; padding:10px 16px; font-size:13px; font-weight:600; color:#e8e8e8; cursor:pointer; position:relative; white-space:nowrap; border-radius:999px; transition:background .15s; }
-    .tc-search-seg:hover { background:rgba(255,255,255,.06); }
-    .tc-search-caret { width:12px; height:12px; color:#666; flex-shrink:0; transform-origin:center; transition:transform .22s ease, color .18s ease; }
-    .tc-search-seg:hover .tc-search-caret { color:#9ca3af; }
-    .tc-search-caret.tc-search-caret-open { transform:rotate(180deg); color:#22c55e; }
-    .tc-search-divider { width:1px; height:28px; background:rgba(255,255,255,.12); flex-shrink:0; margin:0 2px; }
-    .tc-search-input { flex:1; min-width:120px; padding:10px 14px; background:transparent; border:none; color:#e8e8e8; font-family:'Sora',system-ui,sans-serif; font-size:13px; font-weight:500; outline:none; }
-    .tc-search-input::placeholder { color:#555; }
-    .tc-search-cta { padding:12px 20px; background:#22c55e; color:#052010; border:none; border-radius:999px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:8px; transition:background .15s; cursor:pointer; font-family:inherit; white-space:nowrap; flex-shrink:0; }
-    .tc-search-cta:hover { background:#4ade80; }
-    .tc-search-quicks { display:flex; gap:6px; margin-top:14px; flex-wrap:wrap; }
-    .tc-quick-chip { padding:5px 13px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:999px; font-size:12px; font-weight:500; color:#c8c8c8; transition:background .15s,color .15s; cursor:pointer; font-family:inherit; }
-    .tc-quick-chip:hover { background:rgba(255,255,255,.1); color:#fff; }
-    .tc-hero-side { display:flex; flex-direction:column; gap:12px; min-width:260px; }
-    .tc-live-card { padding:20px 22px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1); border-radius:20px; backdrop-filter:blur(20px); }
-    .tc-live-head { display:flex; align-items:center; gap:8px; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#555; margin-bottom:10px; }
-    .tc-live-dot { width:7px; height:7px; border-radius:50%; background:#22c55e; animation:tc-pulse 1.2s ease-in-out infinite; }
-    .tc-live-stat { font-size:26px; font-weight:700; letter-spacing:-.03em; color:#fff; }
-    .tc-live-label { font-size:12px; color:#c8c8c8; margin-top:8px; line-height:1.5; font-weight:400; }
+    .p-home-search { position:relative; z-index:25; display:flex; gap:0; background:var(--border-subtle); border:1px solid var(--border-subtle); border-radius:999px; padding:4px; backdrop-filter:blur(20px); max-width:620px; align-items:center; flex-wrap:wrap; }
+    .p-home-search-seg { display:flex; align-items:center; gap:8px; padding:10px 16px; font-size:13px; font-weight:600; color:var(--text-secondary); cursor:pointer; position:relative; white-space:nowrap; border-radius:999px; transition:background .15s; }
+    .p-home-search-seg:hover { background:var(--border-subtle); }
+    .p-home-search-caret { width:12px; height:12px; color:var(--text-muted); flex-shrink:0; transform-origin:center; transition:transform .22s ease, color .18s ease; }
+    .p-home-search-seg:hover .p-home-search-caret { color:var(--text-muted); }
+    .p-home-search-caret.p-home-search-caret-open { transform:rotate(180deg); color:var(--accent-fg); }
+    .p-home-search-divider { width:1px; height:28px; background:var(--border); flex-shrink:0; margin:0 2px; }
+    .p-home-search-input { flex:1; min-width:120px; padding:10px 14px; background:transparent; border:none; color:var(--text-secondary); font-family:var(--font-sans); font-size:13px; font-weight:500; outline:none; }
+    .p-home-search-input::placeholder { color:var(--text-muted); }
+    .p-home-search-cta { padding:12px 20px; background:var(--brand); color:var(--brand-on); border:none; border-radius:999px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:8px; transition:background .15s; cursor:pointer; font-family:inherit; white-space:nowrap; flex-shrink:0; }
+    .p-home-search-cta:hover { background:var(--brand-hover); }
+    .p-home-search-quicks { display:flex; gap:6px; margin-top:14px; flex-wrap:wrap; }
+    .p-home-quick-chip { padding:5px 13px; background:var(--border-subtle); border:1px solid var(--border-subtle); border-radius:999px; font-size:12px; font-weight:500; color:var(--text-secondary); transition:background .15s,color .15s; cursor:pointer; font-family:inherit; }
+    .p-home-quick-chip:hover { background:var(--border-subtle); color:var(--ink-50); }
+    .p-home-hero-side { display:flex; flex-direction:column; gap:12px; min-width:260px; }
+    .p-home-live-card { padding:20px 22px; background:var(--border-subtle); border:1px solid var(--border-subtle); border-radius:20px; backdrop-filter:blur(20px); }
+    .p-home-live-head { display:flex; align-items:center; gap:8px; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); margin-bottom:10px; }
+    .p-home-live-dot { width:7px; height:7px; border-radius:50%; background:var(--brand); animation:p-home-pulse 1.2s ease-in-out infinite; }
+    .p-home-live-stat { font-size:26px; font-weight:700; letter-spacing:-.03em; color:var(--ink-50); }
+    .p-home-live-label { font-size:12px; color:var(--text-secondary); margin-top:8px; line-height:1.5; font-weight:400; }
     /* Trust */
     /* Sports */
-    .tc-sports { padding:72px 40px; background:var(--tc-bg-a); border-bottom:1px solid rgba(255,255,255,.07); }
-    .tc-sports-head { max-width:1360px; margin:0 auto 36px; display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; }
-    .tc-sports-h3 { font-size:32px; font-weight:700; letter-spacing:-.03em; margin:0; color:#f2f2f2; }
-    .tc-sports-h3 i { font-style:italic; color:#22c55e; }
-    .tc-sports-grid { max-width:1360px; margin:0 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-    .tc-sport-card { position:relative; height:260px; border-radius:18px; overflow:hidden; border:1px solid rgba(255,255,255,.07); display:flex; flex-direction:column; justify-content:flex-end; padding:20px 22px; cursor:pointer; transition:border-color .3s,transform .3s; text-decoration:none; }
-    .tc-sport-card:hover { border-color:rgba(34,197,94,.3); transform:translateY(-3px); }
-    .tc-sport-bg { position:absolute; inset:0; background-size:cover; background-position:center; transition:transform .5s; }
-    .tc-sport-card:hover .tc-sport-bg { transform:scale(1.05); }
-    .tc-sport-bg::after { content:''; position:absolute; inset:0; background:linear-gradient(0deg,rgba(5,5,5,.95),transparent 60%); }
-    .tc-sport-content { position:relative; z-index:2; }
-    .tc-sport-count { font-size:10px; color:#888; letter-spacing:.1em; text-transform:uppercase; font-weight:600; margin-bottom:6px; }
-    .tc-sport-name { font-size:22px; font-weight:800; letter-spacing:-.02em; color:#fff; }
+    .p-home-sports { padding:72px 40px; background:var(--p-home-bg-a); border-bottom:1px solid var(--border-subtle); }
+    .p-home-sports-head { max-width:1360px; margin:0 auto 36px; display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap; }
+    .p-home-sports-h3 { font-size:32px; font-weight:700; letter-spacing:-.03em; margin:0; color:var(--text-primary); }
+    .p-home-sports-h3 i { font-style:italic; color:var(--accent-fg); }
+    .p-home-sports-grid { max-width:1360px; margin:0 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+    .p-home-sport-card { position:relative; height:260px; border-radius:18px; overflow:hidden; border:1px solid var(--border-subtle); display:flex; flex-direction:column; justify-content:flex-end; padding:20px 22px; cursor:pointer; transition:border-color .3s,transform .3s; text-decoration:none; }
+    .p-home-sport-card:hover { border-color:var(--accent-border); transform:translateY(-3px); }
+    .p-home-sport-bg { position:absolute; inset:0; background-size:cover; background-position:center; transition:transform .5s; }
+    .p-home-sport-card:hover .p-home-sport-bg { transform:scale(1.05); }
+    .p-home-sport-bg::after { content:''; position:absolute; inset:0; background:linear-gradient(0deg,var(--overlay-strong),transparent 60%); }
+    .p-home-sport-content { position:relative; z-index:2; }
+    .p-home-sport-count { font-size:10px; color:var(--text-muted); letter-spacing:.1em; text-transform:uppercase; font-weight:600; margin-bottom:6px; }
+    .p-home-sport-name { font-size:22px; font-weight:800; letter-spacing:-.02em; color:var(--ink-50); }
     /* Clubs */
-    .tc-clubs { padding:80px 40px; background:#080808; border-top:1px solid rgba(255,255,255,.07); }
-    .tc-clubs-inner { max-width:1360px; margin:0 auto; }
-    .tc-clubs-h { font-size:28px; font-weight:700; letter-spacing:-.025em; color:#f2f2f2; margin:0 0 32px; display:flex; align-items:center; gap:10px; }
-    .tc-club-card { background:#111; border:1px solid rgba(255,255,255,.08); border-radius:16px; overflow:hidden; transition:border-color .2s,transform .2s; display:flex; flex-direction:column; text-decoration:none; height:100%; }
-    .tc-club-card:hover { border-color:rgba(34,197,94,.25); transform:translateY(-2px); }
-    .tc-club-img { height:160px; background:#1a1a1a; position:relative; flex-shrink:0; }
-    .tc-club-body { padding:18px 20px; flex:1; display:flex; flex-direction:column; gap:4px; }
-    .tc-club-name { font-size:17px; font-weight:800; color:#f2f2f2; margin:0; }
-    .tc-club-addr { font-size:13px; color:#777; margin:0; }
-    .tc-club-cta { margin-top:auto; padding-top:14px; display:block; text-align:center; background:#22c55e; color:#052010; border-radius:10px; padding:10px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; transition:background .15s; }
-    .tc-club-cta:hover { background:#4ade80; }
+    .p-home-clubs { padding:80px 40px; background:var(--surface-1); border-top:1px solid var(--border-subtle); }
+    .p-home-clubs-inner { max-width:1360px; margin:0 auto; }
+    .p-home-clubs-h { font-size:28px; font-weight:700; letter-spacing:-.025em; color:var(--text-primary); margin:0 0 32px; display:flex; align-items:center; gap:10px; }
+    .p-home-club-card { background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:16px; overflow:hidden; transition:border-color .2s,transform .2s; display:flex; flex-direction:column; text-decoration:none; height:100%; }
+    .p-home-club-card:hover { border-color:var(--accent-border); transform:translateY(-2px); }
+    .p-home-club-img { height:160px; background:var(--surface-3); position:relative; flex-shrink:0; }
+    .p-home-club-body { padding:18px 20px; flex:1; display:flex; flex-direction:column; gap:4px; }
+    .p-home-club-name { font-size:17px; font-weight:800; color:var(--text-primary); margin:0; }
+    .p-home-club-addr { font-size:13px; color:var(--text-muted); margin:0; }
+    .p-home-club-cta { margin-top:auto; padding-top:14px; display:block; text-align:center; background:var(--brand); color:var(--brand-on); border-radius:10px; padding:10px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; transition:background .15s; }
+    .p-home-club-cta:hover { background:var(--brand-hover); }
     /* Section wrapper */
-    .tc-sec-w { max-width:1360px; margin:0 auto; padding:100px 40px; }
-    .tc-eyebrow { display:inline-flex; align-items:center; gap:10px; font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#555; margin-bottom:20px; }
-    .tc-eyebrow::before { content:''; display:inline-block; width:24px; height:1px; background:#555; }
-    .tc-sec-h { font-size:clamp(36px,4.5vw,60px); font-weight:700; letter-spacing:-.035em; line-height:1.02; margin:0 0 20px; color:#f2f2f2; }
-    .tc-sec-h b { font-weight:900; }
-    .tc-sec-h i { font-style:italic; color:#22c55e; }
-    .tc-sec-sub { font-size:16px; font-weight:400; color:#c8c8c8; line-height:1.55; max-width:560px; margin:0 0 52px; }
+    .p-home-sec-w { max-width:1360px; margin:0 auto; padding:100px 40px; }
+    .p-home-eyebrow { display:inline-flex; align-items:center; gap:10px; font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--text-muted); margin-bottom:20px; }
+    .p-home-eyebrow::before { content:''; display:inline-block; width:24px; height:1px; background:var(--text-muted); }
+    .p-home-sec-h { font-size:clamp(36px,4.5vw,60px); font-weight:700; letter-spacing:-.035em; line-height:1.02; margin:0 0 20px; color:var(--text-primary); }
+    .p-home-sec-h b { font-weight:900; }
+    .p-home-sec-h i { font-style:italic; color:var(--accent-fg); }
+    .p-home-sec-sub { font-size:16px; font-weight:400; color:var(--text-secondary); line-height:1.55; max-width:560px; margin:0 0 52px; }
     /* Values */
-    .tc-values-band { border-top:1px solid rgba(255,255,255,.07); background:var(--tc-bg-b); }
-    .tc-values-grid { display:grid; grid-template-columns:1fr 1fr; gap:80px; align-items:start; }
-    .tc-values-h { position:sticky; top:90px; }
-    .tc-values-list { display:flex; flex-direction:column; }
-    .tc-value { padding:36px 0; border-top:1px solid rgba(255,255,255,.07); display:grid; grid-template-columns:72px 1fr; gap:24px; align-items:start; }
-    .tc-value:first-child { border-top:0; padding-top:0; }
-    .tc-value-num { font-size:34px; font-weight:700; color:#2a2a2a; letter-spacing:-.04em; line-height:1; }
-    .tc-value-body h4 { margin:0 0 8px; font-size:20px; font-weight:800; color:#f2f2f2; }
+    .p-home-values-band { border-top:1px solid var(--border-subtle); background:var(--p-home-bg-b); }
+    .p-home-values-grid { display:grid; grid-template-columns:1fr 1fr; gap:80px; align-items:start; }
+    .p-home-values-h { position:sticky; top:90px; }
+    .p-home-values-list { display:flex; flex-direction:column; }
+    .p-home-value { padding:36px 0; border-top:1px solid var(--border-subtle); display:grid; grid-template-columns:72px 1fr; gap:24px; align-items:start; }
+    .p-home-value:first-child { border-top:0; padding-top:0; }
+    .p-home-value-num { font-size:34px; font-weight:700; color:var(--text-muted); letter-spacing:-.04em; line-height:1; }
+    .p-home-value-body h4 { margin:0 0 8px; font-size:20px; font-weight:800; color:var(--text-primary); }
 
-    .tc-value-body p { margin:0; color:#c8c8c8; font-size:14px; line-height:1.7; max-width:400px; }
+    .p-home-value-body p { margin:0; color:var(--text-secondary); font-size:14px; line-height:1.7; max-width:400px; }
     /* Stats */
     /* Steps */
-    .tc-step:hover { background:#0f0f0f; }
-    .tc-step-num { font-weight:800; font-size:60px; color:#2a2a2a; line-height:1; letter-spacing:-.05em; margin-bottom:24px; transition:color .3s; }
-    .tc-step:hover .tc-step-num { color:#22c55e; }
-    .tc-step-foot { margin-top:24px; padding-top:24px; border-top:1px solid rgba(255,255,255,.07); font-size:12px; color:#555; display:flex; align-items:center; gap:8px; }
-    .tc-step-foot b { color:#f2f2f2; font-weight:700; }
+    .p-home-step:hover { background:var(--surface-2); }
+    .p-home-step-num { font-weight:800; font-size:60px; color:var(--text-muted); line-height:1; letter-spacing:-.05em; margin-bottom:24px; transition:color .3s; }
+    .p-home-step:hover .p-home-step-num { color:var(--accent-fg); }
+    .p-home-step-foot { margin-top:24px; padding-top:24px; border-top:1px solid var(--border-subtle); font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
+    .p-home-step-foot b { color:var(--text-primary); font-weight:700; }
     /* Owner */
-    .tc-owner { --tc-owner-parallax:0px; position:relative; isolation:isolate; border-top:1px solid rgba(255,255,255,.07); background:#050505; overflow:hidden; }
-    .tc-owner-media { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; transform:translate3d(0,var(--tc-owner-parallax),0); will-change:transform; }
-    .tc-owner-media-img { position:absolute; inset:-4%; background-image:url('https://images.pexels.com/photos/32474981/pexels-photo-32474981.jpeg?auto=compress&cs=tinysrgb&w=1800'); background-size:cover; background-position:center; opacity:.58; transform:scale(1.03); will-change:transform; animation:tc-owner-kenburns 24s ease-in-out infinite alternate; }
-    .tc-owner::after { content:''; position:absolute; inset:0; background:linear-gradient(112deg,rgba(5,8,6,.88) 12%,rgba(6,8,7,.7) 48%,rgba(5,5,5,.86) 100%),linear-gradient(180deg,rgba(5,5,5,.05) 0%,rgba(5,5,5,.72) 100%); z-index:1; pointer-events:none; }
-    .tc-owner-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; padding:106px 40px; display:grid; grid-template-columns:1.05fr .95fr; gap:72px; align-items:center; }
-    .tc-owner .tc-sec-h { max-width:620px; }
-    .tc-owner .tc-sec-sub { max-width:520px; margin-bottom:30px; color:#d3d3d3; }
-    .tc-owner-side { padding:34px; border:1px solid rgba(255,255,255,.16); border-radius:20px; background:rgba(6,10,8,.58); backdrop-filter:blur(8px); }
-    .tc-owner-side-h { font-size:10px; color:#7f8d86; font-weight:700; letter-spacing:.14em; text-transform:uppercase; margin-bottom:20px; }
-    .tc-owner-perk { display:flex; gap:14px; align-items:center; padding:13px 0; border-top:1px solid rgba(255,255,255,.07); font-size:13px; color:#c8c8c8; font-weight:400; }
-    .tc-owner-perk:first-child { border-top:0; padding-top:0; }
-    .tc-owner-perk b { color:#f2f2f2; font-size:16px; letter-spacing:-.02em; min-width:90px; font-weight:800; }
-    .tc-owner-ctas { display:flex; gap:10px; margin-top:32px; flex-wrap:wrap; }
-    @keyframes tc-owner-kenburns {
+    .p-home-owner { --p-home-owner-parallax:0px; position:relative; isolation:isolate; border-top:1px solid var(--border-subtle); background:var(--bg); overflow:hidden; }
+    .p-home-owner-media { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; transform:translate3d(0,var(--p-home-owner-parallax),0); will-change:transform; }
+    .p-home-owner-media-img { position:absolute; inset:-4%; background-image:url('https://images.pexels.com/photos/32474981/pexels-photo-32474981.jpeg?auto=compress&cs=tinysrgb&w=1800'); background-size:cover; background-position:center; opacity:.58; transform:scale(1.03); will-change:transform; animation:p-home-owner-kenburns 24s ease-in-out infinite alternate; }
+    .p-home-owner::after { content:''; position:absolute; inset:0; background:linear-gradient(112deg,var(--overlay-strong) 12%,var(--overlay-strong) 48%,var(--overlay-strong) 100%),linear-gradient(180deg,var(--overlay) 0%,var(--overlay-strong) 100%); z-index:1; pointer-events:none; }
+    .p-home-owner-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; padding:106px 40px; display:grid; grid-template-columns:1.05fr .95fr; gap:72px; align-items:center; }
+    .p-home-owner .p-home-sec-h { max-width:620px; }
+    .p-home-owner .p-home-sec-sub { max-width:520px; margin-bottom:30px; color:var(--text-secondary); }
+    .p-home-owner-side { padding:34px; border:1px solid var(--border-strong); border-radius:20px; background:var(--overlay); backdrop-filter:blur(8px); }
+    .p-home-owner-side-h { font-size:10px; color:var(--text-muted); font-weight:700; letter-spacing:.14em; text-transform:uppercase; margin-bottom:20px; }
+    .p-home-owner-perk { display:flex; gap:14px; align-items:center; padding:13px 0; border-top:1px solid var(--border-subtle); font-size:13px; color:var(--text-secondary); font-weight:400; }
+    .p-home-owner-perk:first-child { border-top:0; padding-top:0; }
+    .p-home-owner-perk b { color:var(--text-primary); font-size:16px; letter-spacing:-.02em; min-width:90px; font-weight:800; }
+    .p-home-owner-ctas { display:flex; gap:10px; margin-top:32px; flex-wrap:wrap; }
+    @keyframes p-home-owner-kenburns {
       0% { transform:scale(1.03) translate3d(-1.2%, -0.8%, 0); }
       50% { transform:scale(1.07) translate3d(0.9%, 1.1%, 0); }
       100% { transform:scale(1.05) translate3d(-0.6%, 1.3%, 0); }
     }
     /* FAQ */
-    .tc-faq-band { border-top:1px solid rgba(255,255,255,.07); background:linear-gradient(180deg,var(--tc-bg-a) 0%,var(--tc-bg-c) 100%); }
-    .tc-faq-grid { display:grid; grid-template-columns:1fr 1.2fr; gap:72px; align-items:start; }
-    .tc-faq-list { position:relative; display:flex; flex-direction:column; padding-left:26px; }
-    .tc-faq-list::before { content:''; position:absolute; left:0; top:6px; bottom:6px; width:1px; background:linear-gradient(180deg,rgba(34,197,94,.45) 0%,rgba(255,255,255,.06) 100%); }
-    .tc-faq-item { border-top:1px solid rgba(255,255,255,.07); padding:22px 0 22px 2px; cursor:pointer; }
-    .tc-faq-item:last-child { border-bottom:1px solid rgba(255,255,255,.07); }
-    .tc-faq-q { display:flex; justify-content:space-between; align-items:center; gap:16px; font-size:16px; font-weight:700; color:#f2f2f2; }
-    .tc-faq-icon { flex-shrink:0; color:#555; transition:transform .3s,color .3s; }
-    .tc-faq-item.tc-open .tc-faq-icon { transform:rotate(45deg); color:#22c55e; }
-    .tc-faq-a { max-height:0; overflow:hidden; transition:max-height .4s cubic-bezier(.2,.6,.2,1),margin .3s; color:#c8c8c8; font-size:14px; line-height:1.7; }
-    .tc-faq-item.tc-open .tc-faq-a { max-height:300px; margin-top:14px; }
+    .p-home-faq-band { border-top:1px solid var(--border-subtle); background:linear-gradient(180deg,var(--p-home-bg-a) 0%,var(--p-home-bg-c) 100%); }
+    .p-home-faq-grid { display:grid; grid-template-columns:1fr 1.2fr; gap:72px; align-items:start; }
+    .p-home-faq-list { position:relative; display:flex; flex-direction:column; padding-left:26px; }
+    .p-home-faq-list::before { content:''; position:absolute; left:0; top:6px; bottom:6px; width:1px; background:linear-gradient(180deg,var(--accent-border-strong) 0%,var(--border-subtle) 100%); }
+    .p-home-faq-item { border-top:1px solid var(--border-subtle); padding:22px 0 22px 2px; cursor:pointer; }
+    .p-home-faq-item:last-child { border-bottom:1px solid var(--border-subtle); }
+    .p-home-faq-q { display:flex; justify-content:space-between; align-items:center; gap:16px; font-size:16px; font-weight:700; color:var(--text-primary); }
+    .p-home-faq-icon { flex-shrink:0; color:var(--text-muted); transition:transform .3s,color .3s; }
+    .p-home-faq-item.p-home-open .p-home-faq-icon { transform:rotate(45deg); color:var(--accent-fg); }
+    .p-home-faq-a { max-height:0; overflow:hidden; transition:max-height .4s cubic-bezier(.2,.6,.2,1),margin .3s; color:var(--text-secondary); font-size:14px; line-height:1.7; }
+    .p-home-faq-item.p-home-open .p-home-faq-a { max-height:300px; margin-top:14px; }
     /* Closing */
-    .tc-closing { --tc-closing-parallax:0px; position:relative; isolation:isolate; border-top:1px solid rgba(255,255,255,.07); padding:100px 40px 80px; background:#050505; overflow:hidden; }
-    .tc-closing-media { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; transform:translate3d(0,var(--tc-closing-parallax),0); will-change:transform; }
-    .tc-closing-media-img { position:absolute; inset:-4%; background-image:url('/closing-botines.jpg'); background-size:cover; background-position:center 43%; opacity:.84; transform:scale(1.03); will-change:transform; animation:tc-closing-kenburns 26s ease-in-out infinite alternate; }
-    .tc-closing::after { content:''; position:absolute; inset:0; background:linear-gradient(110deg,rgba(5,8,7,.52) 8%,rgba(5,5,5,.24) 48%,rgba(5,5,5,.5) 100%),linear-gradient(180deg,rgba(5,5,5,.03) 0%,rgba(5,5,5,.5) 92%); z-index:1; pointer-events:none; }
-    .tc-closing-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; }
-    .tc-big-closing { font-size:clamp(44px,7vw,88px); font-weight:800; letter-spacing:-.05em; line-height:.98; color:#f2f2f2; margin:0 0 36px; }
-    .tc-big-closing i { font-style:italic; color:#22c55e; }
-    .tc-closing-ctas { display:flex; gap:12px; flex-wrap:wrap; }
-    @keyframes tc-closing-kenburns {
+    .p-home-closing { --p-home-closing-parallax:0px; position:relative; isolation:isolate; border-top:1px solid var(--border-subtle); padding:100px 40px 80px; background:var(--bg); overflow:hidden; }
+    .p-home-closing-media { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; transform:translate3d(0,var(--p-home-closing-parallax),0); will-change:transform; }
+    .p-home-closing-media-img { position:absolute; inset:-4%; background-image:url('/closing-botines.jpg'); background-size:cover; background-position:center 43%; opacity:.84; transform:scale(1.03); will-change:transform; animation:p-home-closing-kenburns 26s ease-in-out infinite alternate; }
+    .p-home-closing::after { content:''; position:absolute; inset:0; background:linear-gradient(110deg,var(--overlay) 8%,var(--overlay) 48%,var(--overlay) 100%),linear-gradient(180deg,var(--overlay) 0%,var(--overlay) 92%); z-index:1; pointer-events:none; }
+    .p-home-closing-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; }
+    .p-home-big-closing { font-size:clamp(44px,7vw,88px); font-weight:800; letter-spacing:-.05em; line-height:.98; color:var(--text-primary); margin:0 0 36px; }
+    .p-home-big-closing i { font-style:italic; color:var(--accent-fg); }
+    .p-home-closing-ctas { display:flex; gap:12px; flex-wrap:wrap; }
+    @keyframes p-home-closing-kenburns {
       0% { transform:scale(1.03) translate3d(-1.3%, -1.1%, 0); }
       50% { transform:scale(1.08) translate3d(1.2%, 0.9%, 0); }
       100% { transform:scale(1.05) translate3d(-0.7%, 1.2%, 0); }
     }
     @media (prefers-reduced-motion: reduce) {
-      .tc-owner-media { transform:translate3d(0,0,0); }
-      .tc-owner-media-img { animation:none; transform:scale(1.03); }
-      .tc-closing-media { transform:translate3d(0,0,0); }
-      .tc-closing-media-img { animation:none; transform:scale(1.03); }
+      .p-home-owner-media { transform:translate3d(0,0,0); }
+      .p-home-owner-media-img { animation:none; transform:scale(1.03); }
+      .p-home-closing-media { transform:translate3d(0,0,0); }
+      .p-home-closing-media-img { animation:none; transform:scale(1.03); }
     }
     /* Footer */
-    .tc-foot { background:#0a0a0a; border-top:1px solid rgba(255,255,255,.06); padding:52px 40px 28px; }
-    .tc-foot-inner { max-width:1360px; margin:0 auto; }
-    .tc-foot-cols { display:grid; grid-template-columns:1.6fr repeat(3,1fr); gap:48px; padding-bottom:36px; border-bottom:1px solid rgba(255,255,255,.06); }
-    .tc-foot-brand { display:flex; flex-direction:column; gap:12px; max-width:320px; }
-    .tc-foot-brand-name { font-size:13px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; color:#22c55e; }
-    .tc-foot-brand p { font-size:13px; line-height:1.6; color:#555; margin:0; }
-    .tc-foot-col h6 { font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#444; margin:0 0 14px; }
-    .tc-foot-col ul { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px; }
-    .tc-foot-col li a,.tc-foot-col li button { font-size:13px; color:#777; font-weight:500; transition:color .15s; background:none; border:none; padding:0; cursor:pointer; font-family:inherit; text-align:left; }
-    .tc-foot-col li a:hover,.tc-foot-col li button:hover { color:#22c55e; }
-    .tc-foot-base { padding-top:24px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:12px; color:#444; margin-top:28px; }
+    .p-home-foot { background:var(--surface-1); border-top:1px solid var(--border-subtle); padding:52px 40px 28px; }
+    .p-home-foot-inner { max-width:1360px; margin:0 auto; }
+    .p-home-foot-cols { display:grid; grid-template-columns:1.6fr repeat(3,1fr); gap:48px; padding-bottom:36px; border-bottom:1px solid var(--border-subtle); }
+    .p-home-foot-brand { display:flex; flex-direction:column; gap:12px; max-width:320px; }
+    .p-home-foot-brand p { font-size:13px; line-height:1.6; color:var(--text-muted); margin:0; }
+    .p-home-foot-col h6 { font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--text-muted); margin:0 0 14px; }
+    .p-home-foot-col ul { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px; }
+    .p-home-foot-col li a,.p-home-foot-col li button { font-size:13px; color:var(--text-muted); font-weight:500; transition:color .15s; background:none; border:none; padding:0; cursor:pointer; font-family:inherit; text-align:left; }
+    .p-home-foot-col li a:hover,.p-home-foot-col li button:hover { color:var(--accent-fg); }
+    .p-home-foot-base { padding-top:24px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); margin-top:28px; }
     /* Contact panel */
-    .tc-contact-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:60; transition:opacity .3s; }
-    .tc-contact-panel { position:fixed; top:0; right:0; height:100%; width:100%; max-width:360px; background:#111; z-index:70; box-shadow:-8px 0 32px rgba(0,0,0,.5); transform:translateX(100%); transition:transform .3s ease-out; border-left:1px solid rgba(255,255,255,.08); }
-    .tc-contact-panel.tc-open { transform:translateX(0); }
+    .p-home-contact-overlay { position:fixed; inset:0; background:var(--overlay); z-index:60; transition:opacity .3s; }
+    .p-home-contact-panel { position:fixed; top:0; right:0; height:100%; width:100%; max-width:360px; background:var(--surface-1); z-index:70; box-shadow:var(--shadow-lg); transform:translateX(100%); transition:transform .3s ease-out; border-left:1px solid var(--border-subtle); }
+    .p-home-contact-panel.p-home-open { transform:translateX(0); }
     /* Dropdowns */
-    .tc-dropdown { position:absolute; top:calc(100% + 8px); left:0; min-width:220px; background:#111; border:1px solid rgba(255,255,255,.1); border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:100; }
+    .p-home-dropdown { position:absolute; top:calc(100% + 8px); left:0; min-width:220px; background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:12px; overflow:hidden; box-shadow:var(--shadow-md); z-index:100; }
     /* Responsive */
     @media(max-width:1024px){
-      .tc-hero-inner{grid-template-columns:1fr;gap:40px}
-      .tc-hero-side{flex-direction:row;min-width:auto;width:100%}
-      .tc-values-grid{grid-template-columns:1fr;gap:40px}
-      .tc-values-h{position:static}
-      .tc-owner-inner{grid-template-columns:1fr;gap:48px;padding:72px 32px}
-      .tc-faq-grid{grid-template-columns:1fr;gap:40px}
-      .tc-sports-grid{grid-template-columns:repeat(2,1fr)}
+      .p-home-hero-inner{grid-template-columns:1fr;gap:40px}
+      .p-home-hero-side{flex-direction:row;min-width:auto;width:100%}
+      .p-home-values-grid{grid-template-columns:1fr;gap:40px}
+      .p-home-values-h{position:static}
+      .p-home-owner-inner{grid-template-columns:1fr;gap:48px;padding:72px 32px}
+      .p-home-faq-grid{grid-template-columns:1fr;gap:40px}
+      .p-home-sports-grid{grid-template-columns:repeat(2,1fr)}
     }
     @media(max-width:900px){
     }
     @media(max-width:720px){
-      .tc-hero{padding:100px 24px 56px;min-height:auto}
-      .tc-sports{padding:52px 24px}
-      .tc-sports-grid{grid-template-columns:1fr;gap:10px}
-      .tc-sec-w{padding:64px 24px}
-      .tc-clubs{padding:56px 24px}
-      .tc-owner-inner{padding:56px 24px}
-      .tc-closing{padding:72px 24px}
-      .tc-foot{padding:44px 24px 24px}
-      .tc-foot-cols{grid-template-columns:1fr 1fr;gap:28px}
-      .tc-foot-brand{grid-column:1 / -1;max-width:none}
-      .tc-search{border-radius:16px;padding:8px}
-      .tc-search-divider{display:none}
+      .p-home-hero{padding:100px 24px 56px;min-height:auto}
+      .p-home-sports{padding:52px 24px}
+      .p-home-sports-grid{grid-template-columns:1fr;gap:10px}
+      .p-home-sec-w{padding:64px 24px}
+      .p-home-clubs{padding:56px 24px}
+      .p-home-owner-inner{padding:56px 24px}
+      .p-home-closing{padding:72px 24px}
+      .p-home-foot{padding:44px 24px 24px}
+      .p-home-foot-cols{grid-template-columns:1fr 1fr;gap:28px}
+      .p-home-foot-brand{grid-column:1 / -1;max-width:none}
+      .p-home-search{border-radius:16px;padding:8px}
+      .p-home-search-divider{display:none}
     }
     @media(max-width:480px){
-      .tc-foot-cols{grid-template-columns:1fr}
+      .p-home-foot-cols{grid-template-columns:1fr}
     }
-    @keyframes tc-spin{to{transform:rotate(360deg)}}
+    @keyframes p-home-spin{to{transform:rotate(360deg)}}
     /* Scroll reveal */
-    .tc-sr { opacity:0; transform:translateY(28px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
-    .tc-sr.tc-in { opacity:1; transform:translateY(0); }
-    .tc-sr-d1 { transition-delay:.08s; }
-    .tc-sr-d2 { transition-delay:.18s; }
-    .tc-sr-d3 { transition-delay:.28s; }
-    .tc-sr-d4 { transition-delay:.38s; }
-    .tc-sr-up { opacity:0; transform:translateY(40px); transition:opacity .8s cubic-bezier(.2,.8,.2,1), transform .8s cubic-bezier(.2,.8,.2,1); }
-    .tc-sr-up.tc-in { opacity:1; transform:translateY(0); }
-    .tc-sr-left { opacity:0; transform:translateX(-24px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
-    .tc-sr-left.tc-in { opacity:1; transform:translateX(0); }
-    .tc-sr-right { opacity:0; transform:translateX(24px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
-    .tc-sr-right.tc-in { opacity:1; transform:translateX(0); }
+    .p-home-sr { opacity:0; transform:translateY(28px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
+    .p-home-sr.p-home-in { opacity:1; transform:translateY(0); }
+    .p-home-sr-d1 { transition-delay:.08s; }
+    .p-home-sr-d2 { transition-delay:.18s; }
+    .p-home-sr-d3 { transition-delay:.28s; }
+    .p-home-sr-d4 { transition-delay:.38s; }
+    .p-home-sr-up { opacity:0; transform:translateY(40px); transition:opacity .8s cubic-bezier(.2,.8,.2,1), transform .8s cubic-bezier(.2,.8,.2,1); }
+    .p-home-sr-up.p-home-in { opacity:1; transform:translateY(0); }
+    .p-home-sr-left { opacity:0; transform:translateX(-24px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
+    .p-home-sr-left.p-home-in { opacity:1; transform:translateX(0); }
+    .p-home-sr-right { opacity:0; transform:translateX(24px); transition:opacity .75s cubic-bezier(.2,.8,.2,1), transform .75s cubic-bezier(.2,.8,.2,1); }
+    .p-home-sr-right.p-home-in { opacity:1; transform:translateX(0); }
     /* Hero fade-in stagger */
-    @keyframes tc-fade-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-    .tc-hero-eyebrow { animation:tc-fade-up .7s ease both .05s; }
-    .tc-hero-h1 { animation:tc-fade-up .85s ease both .18s; }
-    .tc-hero-sub { animation:tc-fade-up .7s ease both .38s; }
-    .tc-search { animation:tc-fade-up .7s ease both .52s; }
-    .tc-search-quicks { animation:tc-fade-up .6s ease both .68s; }
+    @keyframes p-home-fade-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+    .p-home-hero-eyebrow { animation:p-home-fade-up .7s ease both .05s; }
+    .p-home-hero-h1 { animation:p-home-fade-up .85s ease both .18s; }
+    .p-home-hero-sub { animation:p-home-fade-up .7s ease both .38s; }
+    .p-home-search { animation:p-home-fade-up .7s ease both .52s; }
+    .p-home-search-quicks { animation:p-home-fade-up .6s ease both .68s; }
     /* Hero stat bar */
-    .tc-hero-stat { display:flex; align-items:center; gap:8px; margin-top:18px; font-size:13px; color:#555; font-weight:500; animation:tc-fade-up .6s ease both .82s; }
-    .tc-hero-stat b { color:#22c55e; font-weight:700; }
-    .tc-hero-stat-dot { width:6px; height:6px; border-radius:50%; background:#22c55e; opacity:.7; flex-shrink:0; }
+    .p-home-hero-stat { display:flex; align-items:center; gap:8px; margin-top:18px; font-size:13px; color:var(--text-muted); font-weight:500; animation:p-home-fade-up .6s ease both .82s; }
+    .p-home-hero-stat b { color:var(--accent-fg); font-weight:700; }
+    .p-home-hero-stat-dot { width:6px; height:6px; border-radius:50%; background:var(--brand); opacity:.7; flex-shrink:0; }
     /* Marquee strip */
-    .tc-marquee-wrap { overflow:hidden; border-bottom:1px solid rgba(255,255,255,.06); background:#080808; padding:20px 0; }
-    .tc-marquee-track { display:flex; gap:14px; width:max-content; animation:tc-marquee 40s linear infinite; }
-    .tc-marquee-wrap:hover .tc-marquee-track { animation-play-state:paused; }
-    @keyframes tc-marquee { to { transform:translateX(-50%); } }
-    .tc-marquee-item { display:inline-flex; align-items:center; gap:8px; padding:7px 16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); border-radius:999px; font-size:12px; font-weight:600; color:#666; white-space:nowrap; transition:color .2s,border-color .2s; cursor:default; }
-    .tc-marquee-item:hover { color:#c8c8c8; border-color:rgba(255,255,255,.14); }
-    .tc-marquee-dot { width:5px; height:5px; border-radius:50%; background:#22c55e; opacity:.5; flex-shrink:0; }
+    .p-home-marquee-wrap { overflow:hidden; border-bottom:1px solid var(--border-subtle); background:var(--surface-1); padding:20px 0; }
+    .p-home-marquee-track { display:flex; gap:14px; width:max-content; animation:p-home-marquee 40s linear infinite; }
+    .p-home-marquee-wrap:hover .p-home-marquee-track { animation-play-state:paused; }
+    @keyframes p-home-marquee { to { transform:translateX(-50%); } }
+    .p-home-marquee-item { display:inline-flex; align-items:center; gap:8px; padding:7px 16px; background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:999px; font-size:12px; font-weight:600; color:var(--text-muted); white-space:nowrap; transition:color .2s,border-color .2s; cursor:default; }
+    .p-home-marquee-item:hover { color:var(--text-secondary); border-color:var(--border); }
+    .p-home-marquee-dot { width:5px; height:5px; border-radius:50%; background:var(--brand); opacity:.5; flex-shrink:0; }
     /* Sport card count overlay */
-    .tc-sport-club-count { font-size:11px; color:var(--card-accent,#22c55e); font-weight:700; letter-spacing:.08em; margin-bottom:4px; opacity:.85; }
+    .p-home-sport-club-count { font-size:11px; color:var(--card-accent,var(--brand)); font-weight:700; letter-spacing:.08em; margin-bottom:4px; opacity:.85; }
     /* Aurora orbs */
-    .tc-aurora-orb { position:absolute; border-radius:50%; filter:blur(90px); pointer-events:none; will-change:transform; }
-    .tc-aurora-1 { width:700px; height:500px; top:-150px; left:-140px; background:rgba(34,197,94,.1); animation:tc-aurora-1 16s ease-in-out infinite; }
-    .tc-aurora-2 { width:580px; height:420px; bottom:-120px; right:8%; background:rgba(56,189,248,.07); animation:tc-aurora-2 20s ease-in-out infinite; }
-    .tc-aurora-3 { width:360px; height:280px; top:35%; right:22%; background:rgba(167,139,250,.055); animation:tc-aurora-3 24s ease-in-out infinite; }
-    @keyframes tc-aurora-1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(70px,-60px) scale(1.1)} 66%{transform:translate(-40px,50px) scale(.93)} }
-    @keyframes tc-aurora-2 { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(-90px,35px) scale(1.13)} 70%{transform:translate(55px,-25px) scale(.97)} }
-    @keyframes tc-aurora-3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(50px,70px) scale(1.18)} }
+    .p-home-aurora-orb { position:absolute; border-radius:50%; filter:blur(90px); pointer-events:none; will-change:transform; }
+    .p-home-aurora-1 { width:700px; height:500px; top:-150px; left:-140px; background:var(--accent-bg-soft); animation:p-home-aurora-1 16s ease-in-out infinite; }
+    .p-home-aurora-2 { width:580px; height:420px; bottom:-120px; right:8%; background:var(--accent-bg-soft); animation:p-home-aurora-2 20s ease-in-out infinite; }
+    .p-home-aurora-3 { width:360px; height:280px; top:35%; right:22%; background:var(--accent-bg-faint); animation:p-home-aurora-3 24s ease-in-out infinite; }
+    @keyframes p-home-aurora-1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(70px,-60px) scale(1.1)} 66%{transform:translate(-40px,50px) scale(.93)} }
+    @keyframes p-home-aurora-2 { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(-90px,35px) scale(1.13)} 70%{transform:translate(55px,-25px) scale(.97)} }
+    @keyframes p-home-aurora-3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(50px,70px) scale(1.18)} }
     /* Gradient animated text */
-    .tc-grad-text { display:inline-block; overflow:visible; padding-inline:.14em; margin-inline:-.14em; background:linear-gradient(90deg,#22c55e 0%,#86efac 35%,#4ade80 65%,#22c55e 100%); background-size:220% 100%; background-repeat:no-repeat; background-position:0% 50%; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:tc-grad-shift 4.6s ease-in-out infinite alternate; font-style:italic; }
-    @keyframes tc-grad-shift { from{background-position:0% 50%} to{background-position:100% 50%} }
+    .p-home-grad-text { display:inline-block; overflow:visible; padding-inline:.14em; margin-inline:-.14em; background:linear-gradient(90deg,var(--brand) 0%,var(--brand-hover) 35%,var(--brand-hover) 65%,var(--brand) 100%); background-size:220% 100%; background-repeat:no-repeat; background-position:0% 50%; -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; animation:p-home-grad-shift 4.6s ease-in-out infinite alternate; font-style:italic; }
+    @keyframes p-home-grad-shift { from{background-position:0% 50%} to{background-position:100% 50%} }
     /* Rotating sport word */
-    .tc-sport-word { display:inline-block; letter-spacing:0; line-height:1.02; overflow:visible; padding-inline:.1em; margin-inline:-.1em; transition:opacity .36s ease, transform .36s ease; }
-    .tc-sport-word-out { opacity:0; transform:translateY(12px); }
+    .p-home-sport-word { display:inline-block; letter-spacing:0; line-height:1.02; overflow:visible; padding-inline:.1em; margin-inline:-.1em; transition:opacity .36s ease, transform .36s ease; }
+    .p-home-sport-word-out { opacity:0; transform:translateY(12px); }
     /* Sport card per-card glow */
-    .tc-sport-card:hover { border-color:rgba(255,255,255,.12); transform:translateY(-5px); }
+    .p-home-sport-card:hover { border-color:var(--border); transform:translateY(-5px); }
     /* Universal close button */
-    .tc-close-btn { width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center; cursor:pointer; color:#888; flex-shrink:0; transition:background .15s,color .15s; }
-    .tc-close-btn:hover { background:rgba(255,255,255,.12); color:#c8c8c8; }
-    .tc-root.tc-theme-light .tc-close-btn { background:rgba(15,23,42,.05); border-color:rgba(15,23,42,.1); color:#64748b; }
-    .tc-root.tc-theme-light .tc-close-btn:hover { background:rgba(15,23,42,.1); color:#334155; }
+    .p-home-close-btn { width:30px; height:30px; border-radius:8px; background:var(--border-subtle); border:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-muted); flex-shrink:0; transition:background .15s,color .15s; }
+    .p-home-close-btn:hover { background:var(--border); color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-close-btn { background:var(--surface-2); border-color:var(--border); color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-close-btn:hover { background:var(--border); color:var(--text-secondary); }
     /* Light theme */
-    .tc-root.tc-theme-light { background:#edf2f7; color:#0f172a; --tc-bg-a:#f8fbff; --tc-bg-b:#f3f7fc; --tc-bg-c:#eef4fb; }
-    .tc-root.tc-theme-light .tc-header { background:rgba(248,252,255,.92); border-bottom:1px solid rgba(15,23,42,.1); box-shadow:0 8px 30px rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-brand-text { color:#15803d; }
-    .tc-root.tc-theme-light .tc-btn { background:#ffffff; color:#0f172a; border-color:rgba(15,23,42,.16); box-shadow:0 2px 12px rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-btn-primary { background:#22c55e!important; color:#052010!important; border-color:#22c55e!important; box-shadow:none; }
-    .tc-root.tc-theme-light .tc-btn-ghost { background:rgba(255,255,255,.9); border-color:rgba(15,23,42,.14); }
-    .tc-root.tc-theme-light .tc-user-btn { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 4px 14px rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-user-name { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-user-menu { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 16px 36px rgba(15,23,42,.16); }
-    .tc-root.tc-theme-light .tc-user-menu a,
-    .tc-root.tc-theme-light .tc-user-menu button { color:#1f2937!important; }
-    .tc-root.tc-theme-light .tc-user-menu a:hover,
-    .tc-root.tc-theme-light .tc-user-menu button:hover { background:rgba(15,23,42,.05)!important; }
-    .tc-root.tc-theme-light .tc-hero-bg { background:linear-gradient(135deg,#f8fcff 0%,#eff5fb 45%,#e8eff7 100%); }
-    .tc-root.tc-theme-light .tc-hero-bg::after { background:radial-gradient(ellipse 60% 50% at 20% 100%,rgba(34,197,94,.16),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,rgba(14,165,233,.1),transparent 65%); }
-    .tc-root.tc-theme-light .tc-hero-noise { opacity:.012; }
-    .tc-root.tc-theme-light .tc-hero-h1 { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-hero-sub { color:#334155; }
-    .tc-root.tc-theme-light .tc-hero-eyebrow { background:rgba(255,255,255,.92); border-color:rgba(15,23,42,.1); color:#334155; box-shadow:0 8px 20px rgba(15,23,42,.1); }
-    .tc-root.tc-theme-light .tc-search { background:rgba(255,255,255,.92); border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.1); }
-    .tc-root.tc-theme-light .tc-search-seg { color:#1f2937; }
-    .tc-root.tc-theme-light .tc-search-seg:hover { background:rgba(15,23,42,.04); }
-    .tc-root.tc-theme-light .tc-search-caret { color:#64748b; }
-    .tc-root.tc-theme-light .tc-search-seg:hover .tc-search-caret { color:#334155; }
-    .tc-root.tc-theme-light .tc-search-caret.tc-search-caret-open { color:#15803d; }
-    .tc-root.tc-theme-light .tc-search-divider { background:rgba(15,23,42,.12); }
-    .tc-root.tc-theme-light .tc-search-input { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-search-input::placeholder { color:#94a3b8; }
-    .tc-root.tc-theme-light .tc-quick-chip { background:#ffffff; border-color:rgba(15,23,42,.12); color:#334155; }
-    .tc-root.tc-theme-light .tc-quick-chip:hover { background:rgba(15,23,42,.05); color:#0f172a; }
-    .tc-root.tc-theme-light .tc-live-card { background:rgba(255,255,255,.9); border-color:rgba(15,23,42,.12); box-shadow:0 10px 28px rgba(15,23,42,.1); }
-    .tc-root.tc-theme-light .tc-live-head { color:#64748b; }
-    .tc-root.tc-theme-light .tc-live-stat { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-live-label { color:#334155; }
-    .tc-root.tc-theme-light .tc-sports { border-bottom-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-sports-h3,
-    .tc-root.tc-theme-light .tc-sec-h,
-    .tc-root.tc-theme-light .tc-value-body h4,
-    .tc-root.tc-theme-light .tc-clubs-h,
-    .tc-root.tc-theme-light .tc-big-closing { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-sport-card { border-color:rgba(15,23,42,.1); box-shadow:0 8px 26px rgba(15,23,42,.1); }
-    .tc-root.tc-theme-light .tc-sport-bg::after { background:linear-gradient(0deg,rgba(15,23,42,.58),transparent 62%); }
-    .tc-root.tc-theme-light .tc-sport-count { color:#dbeafe; }
-    .tc-root.tc-theme-light .tc-sport-name { color:#ffffff; }
-    .tc-root.tc-theme-light .tc-clubs { background:#f5f9fd; border-top-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-club-card { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 10px 24px rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-club-name { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-club-addr { color:#475569; }
-    .tc-root.tc-theme-light .tc-sec-sub,
-    .tc-root.tc-theme-light .tc-value-body p,
-    .tc-root.tc-theme-light .tc-faq-a { color:#475569; }
-    .tc-root.tc-theme-light .tc-eyebrow,
-    .tc-root.tc-theme-light .tc-foot-col h6,
-    .tc-root.tc-theme-light .tc-owner-side-h { color:#64748b; }
-    .tc-root.tc-theme-light .tc-eyebrow::before { background:#94a3b8; }
-    .tc-root.tc-theme-light .tc-values-band,
-    .tc-root.tc-theme-light .tc-owner,
-    .tc-root.tc-theme-light .tc-faq-band,
-    .tc-root.tc-theme-light .tc-closing { border-top-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-value { border-top-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-value-num,
-    .tc-root.tc-theme-light .tc-step-num { color:#cbd5e1; }
-    .tc-root.tc-theme-light .tc-step-foot { border-top-color:rgba(15,23,42,.08); color:#64748b; }
-    .tc-root.tc-theme-light .tc-step-foot b { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-owner::after { background:linear-gradient(112deg,rgba(241,247,253,.76) 12%,rgba(238,245,251,.62) 48%,rgba(233,241,249,.8) 100%),linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(237,243,249,.62) 100%); }
-    .tc-root.tc-theme-light .tc-owner .tc-sec-sub { color:#334155; }
-    .tc-root.tc-theme-light .tc-owner-side { background:rgba(255,255,255,.88); border-color:rgba(15,23,42,.14); box-shadow:0 12px 30px rgba(15,23,42,.12); }
-    .tc-root.tc-theme-light .tc-owner-perk { border-top-color:rgba(15,23,42,.08); color:#475569; }
-    .tc-root.tc-theme-light .tc-owner-perk b { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-faq-list::before { background:linear-gradient(180deg,rgba(34,197,94,.45) 0%,rgba(15,23,42,.14) 100%); }
-    .tc-root.tc-theme-light .tc-faq-item { border-top-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-faq-item:last-child { border-bottom-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-faq-q { color:#0f172a; }
-    .tc-root.tc-theme-light .tc-faq-icon { color:#64748b; }
-    .tc-root.tc-theme-light .tc-closing::after { background:linear-gradient(110deg,rgba(241,247,253,.58) 8%,rgba(238,245,251,.2) 48%,rgba(233,241,249,.48) 100%),linear-gradient(180deg,rgba(255,255,255,.12) 0%,rgba(233,241,249,.42) 92%); }
-    .tc-root.tc-theme-light .tc-foot { background:#f8fbff; border-top-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-foot-cols { border-bottom-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-foot-brand p,
-    .tc-root.tc-theme-light .tc-foot-col li a,
-    .tc-root.tc-theme-light .tc-foot-col li button,
-    .tc-root.tc-theme-light .tc-foot-base { color:#64748b; }
-    .tc-root.tc-theme-light .tc-foot-col li a:hover,
-    .tc-root.tc-theme-light .tc-foot-col li button:hover { color:#15803d; }
-    .tc-root.tc-theme-light .tc-contact-overlay { background:rgba(15,23,42,.28); }
-    .tc-root.tc-theme-light .tc-contact-panel { background:#ffffff; border-left-color:rgba(15,23,42,.12); box-shadow:-10px 0 30px rgba(15,23,42,.2); }
-    .tc-root.tc-theme-light .tc-contact-panel p,
-    .tc-root.tc-theme-light .tc-contact-panel div,
-    .tc-root.tc-theme-light .tc-contact-panel button { color:#1f2937!important; }
-    .tc-root.tc-theme-light .tc-dropdown { background:#ffffff; border-color:rgba(15,23,42,.14); box-shadow:0 12px 28px rgba(15,23,42,.14); }
-    .tc-root.tc-theme-light .tc-dropdown button { color:#1f2937!important; }
-    .tc-root.tc-theme-light .tc-dropdown button:hover { background:rgba(15,23,42,.05)!important; }
-    .tc-root.tc-theme-light .tc-marquee-wrap { background:#f5f9fd; border-bottom-color:rgba(15,23,42,.08); }
-    .tc-root.tc-theme-light .tc-marquee-item { background:#ffffff; border-color:rgba(15,23,42,.1); color:#334155; }
-    .tc-root.tc-theme-light .tc-marquee-item:hover { color:#0f172a; border-color:rgba(15,23,42,.16); }
+    .p-home-root.p-home-theme-light { background:var(--bg); color:var(--text-primary); --p-home-bg-a:var(--bg); --p-home-bg-b:var(--surface-2); --p-home-bg-c:var(--surface-3); }
+    .p-home-root.p-home-theme-light .p-home-btn { background:var(--surface-1); color:var(--text-primary); border-color:var(--border-strong); box-shadow:0 2px 12px var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-btn-primary { background:var(--brand)!important; color:var(--brand-on)!important; border-color:var(--accent-fg)!important; box-shadow:none; }
+    .p-home-root.p-home-theme-light .p-home-btn-ghost { background:var(--surface-1); border-color:var(--border); }
+    .p-home-root.p-home-theme-light .p-home-hero-bg { background:linear-gradient(135deg,var(--bg) 0%,var(--surface-2) 45%,var(--surface-3) 100%); }
+    .p-home-root.p-home-theme-light .p-home-hero-bg::after { background:radial-gradient(ellipse 60% 50% at 20% 100%,var(--accent-bg-muted),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,var(--accent-bg-soft),transparent 65%); }
+    .p-home-root.p-home-theme-light .p-home-hero-noise { opacity:.012; }
+    .p-home-root.p-home-theme-light .p-home-hero-h1 { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-hero-sub { color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-hero-eyebrow { background:var(--surface-1); border-color:var(--border); color:var(--text-secondary); box-shadow:0 8px 20px var(--border); }
+    .p-home-root.p-home-theme-light .p-home-search { background:var(--surface-1); border-color:var(--border); box-shadow:0 10px 24px var(--border); }
+    .p-home-root.p-home-theme-light .p-home-search-seg { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-search-seg:hover { background:var(--surface-2); }
+    .p-home-root.p-home-theme-light .p-home-search-caret { color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-search-seg:hover .p-home-search-caret { color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-search-caret.p-home-search-caret-open { color:var(--positive-fg); }
+    .p-home-root.p-home-theme-light .p-home-search-divider { background:var(--border); }
+    .p-home-root.p-home-theme-light .p-home-search-input { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-search-input::placeholder { color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-quick-chip { background:var(--surface-1); border-color:var(--border); color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-quick-chip:hover { background:var(--surface-2); color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-live-card { background:var(--surface-1); border-color:var(--border); box-shadow:0 10px 28px var(--border); }
+    .p-home-root.p-home-theme-light .p-home-live-head { color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-live-stat { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-live-label { color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-sports { border-bottom-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-sports-h3,
+    .p-home-root.p-home-theme-light .p-home-sec-h,
+    .p-home-root.p-home-theme-light .p-home-value-body h4,
+    .p-home-root.p-home-theme-light .p-home-clubs-h,
+    .p-home-root.p-home-theme-light .p-home-big-closing { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-sport-card { border-color:var(--border); box-shadow:0 8px 26px var(--border); }
+    .p-home-root.p-home-theme-light .p-home-sport-bg::after { background:linear-gradient(0deg,var(--overlay-strong),transparent 62%); }
+    .p-home-root.p-home-theme-light .p-home-sport-count { color:var(--ink-50); }
+    .p-home-root.p-home-theme-light .p-home-sport-name { color:var(--surface-1); }
+    .p-home-root.p-home-theme-light .p-home-clubs { background:var(--surface-2); border-top-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-club-card { background:var(--surface-1); border-color:var(--border); box-shadow:0 10px 24px var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-club-name { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-club-addr { color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-sec-sub,
+    .p-home-root.p-home-theme-light .p-home-value-body p,
+    .p-home-root.p-home-theme-light .p-home-faq-a { color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-eyebrow,
+    .p-home-root.p-home-theme-light .p-home-foot-col h6,
+    .p-home-root.p-home-theme-light .p-home-owner-side-h { color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-eyebrow::before { background:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-values-band,
+    .p-home-root.p-home-theme-light .p-home-owner,
+    .p-home-root.p-home-theme-light .p-home-faq-band,
+    .p-home-root.p-home-theme-light .p-home-closing { border-top-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-value { border-top-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-value-num,
+    .p-home-root.p-home-theme-light .p-home-step-num { color:var(--border-strong); }
+    .p-home-root.p-home-theme-light .p-home-step-foot { border-top-color:var(--border-subtle); color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-step-foot b { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-owner-media-img { opacity:.96; }
+    .p-home-root.p-home-theme-light .p-home-owner::after { background:linear-gradient(112deg,rgba(245,244,240,.78) 0%,rgba(245,244,240,.4) 42%,rgba(245,244,240,.08) 100%),linear-gradient(180deg,rgba(245,244,240,.18) 0%,rgba(245,244,240,.48) 100%); }
+    .p-home-root.p-home-theme-light .p-home-owner .p-home-sec-sub { color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-owner-side { background:var(--surface-1); border-color:var(--border); box-shadow:var(--shadow-lg); }
+    .p-home-root.p-home-theme-light .p-home-owner-perk { border-top-color:var(--border-subtle); color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-owner-perk b { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-faq-list::before { background:linear-gradient(180deg,var(--accent-border-strong) 0%,var(--border) 100%); }
+    .p-home-root.p-home-theme-light .p-home-faq-item { border-top-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-faq-item:last-child { border-bottom-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-faq-q { color:var(--text-primary); }
+    .p-home-root.p-home-theme-light .p-home-faq-icon { color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-closing-media-img { opacity:.98; }
+    .p-home-root.p-home-theme-light .p-home-closing::after { background:linear-gradient(110deg,rgba(245,244,240,.8) 0%,rgba(245,244,240,.42) 44%,rgba(245,244,240,.1) 100%),linear-gradient(180deg,rgba(245,244,240,.12) 0%,rgba(245,244,240,.5) 92%); }
+    .p-home-root.p-home-theme-light .p-home-foot { background:var(--bg); border-top-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-foot-cols { border-bottom-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-foot-brand p,
+    .p-home-root.p-home-theme-light .p-home-foot-col li a,
+    .p-home-root.p-home-theme-light .p-home-foot-col li button,
+    .p-home-root.p-home-theme-light .p-home-foot-base { color:var(--text-muted); }
+    .p-home-root.p-home-theme-light .p-home-foot-col li a:hover,
+    .p-home-root.p-home-theme-light .p-home-foot-col li button:hover { color:var(--positive-fg); }
+    .p-home-root.p-home-theme-light .p-home-contact-overlay { background:var(--overlay); }
+    .p-home-root.p-home-theme-light .p-home-contact-panel { background:var(--surface-1); border-left-color:var(--border); box-shadow:var(--shadow-lg); }
+    .p-home-root.p-home-theme-light .p-home-contact-panel p,
+    .p-home-root.p-home-theme-light .p-home-contact-panel div,
+    .p-home-root.p-home-theme-light .p-home-contact-panel button { color:var(--text-primary)!important; }
+    .p-home-root.p-home-theme-light .p-home-dropdown { background:var(--surface-1); border-color:var(--border); box-shadow:var(--shadow-md); }
+    .p-home-root.p-home-theme-light .p-home-dropdown button { color:var(--text-primary)!important; }
+    .p-home-root.p-home-theme-light .p-home-dropdown button:hover { background:var(--surface-2)!important; }
+    .p-home-root.p-home-theme-light .p-home-marquee-wrap { background:var(--surface-2); border-bottom-color:var(--border-subtle); }
+    .p-home-root.p-home-theme-light .p-home-marquee-item { background:var(--surface-1); border-color:var(--border); color:var(--text-secondary); }
+    .p-home-root.p-home-theme-light .p-home-marquee-item:hover { color:var(--text-primary); border-color:var(--border-strong); }
     /* Aurora orbs — reduce intensity on light background */
-    .tc-root.tc-theme-light .tc-aurora-1 { background:rgba(34,197,94,.18); opacity:.6; }
-    .tc-root.tc-theme-light .tc-aurora-2 { background:rgba(56,189,248,.14); opacity:.6; }
-    .tc-root.tc-theme-light .tc-aurora-3 { background:rgba(167,139,250,.1); opacity:.6; }
+    .p-home-root.p-home-theme-light .p-home-aurora-1 { background:var(--accent-bg-strong); opacity:.6; }
+    .p-home-root.p-home-theme-light .p-home-aurora-2 { background:var(--accent-bg-muted); opacity:.6; }
+    .p-home-root.p-home-theme-light .p-home-aurora-3 { background:var(--accent-bg-soft); opacity:.6; }
     /* Value/step section numbers — stronger contrast in light mode */
-    .tc-root.tc-theme-light .tc-value-num,
-    .tc-root.tc-theme-light .tc-step-num { color:#94a3b8; }
+    .p-home-root.p-home-theme-light .p-home-value-num,
+    .p-home-root.p-home-theme-light .p-home-step-num { color:var(--text-muted); }
   `;
 
   return (
     <>
       <Head>
-        <title>TuCancha — Reservá, jugá, encontrá jugadores</title>
+        <title>Punto — Reservá, jugá, encontrá jugadores</title>
       </Head>
-      <style dangerouslySetInnerHTML={{ __html: tcCss }} />
+      <style dangerouslySetInnerHTML={{ __html: homeCss }} />
       {/* eslint-disable-next-line @next/next/no-css-tags */}
-      <div className={`tc-root${isLight ? ' tc-theme-light' : ''}`} onClick={() => {
+      <div className={`p-home-root${isLight ? ' p-home-theme-light' : ''}`} onClick={() => {
         setShowCityDropdown(false);
         setShowSportDropdown(false);
-        setShowUserMenu(false);
-      }}>
-      
-      {/* ── HEADER ── */}
-      <header className={`tc-header${navHidden ? ' tc-header-hidden' : ''}`}>
-        <div className="tc-header-inner">
-          <Link href="/" className="tc-brand">
-            <span className="tc-brand-text">TuCancha</span>
-          </Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="tc-btn tc-btn-ghost"
-              aria-label={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
-              title={isLight ? 'Activar modo oscuro' : 'Activar modo claro'}
-            >
-              {isLight ? 'Oscuro' : 'Claro'}
-            </button>
-            {user ? (
-              <div style={{ position: 'relative' }}>
-                <button className="tc-user-btn" onClick={(e) => { e.stopPropagation(); setShowUserMenu(p => !p); }}>
-                  <div className="tc-user-avatar">
-                    {userInitials}
-                    {activeBookingsCount > 0 && (
-                      <span style={{ position: 'absolute', top: -3, right: -3, background: '#22c55e', color: '#052010', fontSize: 9, fontWeight: 900, borderRadius: '50%', width: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {activeBookingsCount}
-                      </span>
-                    )}
-                  </div>
-                  <span className="tc-user-name">{user.firstName || user.name || 'Usuario'}</span>
-                </button>
-                {showUserMenu && (
-                  <div className="tc-user-menu" onClick={e => e.stopPropagation()}>
-                    <div style={{ padding: '20px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-                      <div className="tc-user-avatar" style={{ width: 52, height: 52, borderRadius: '50%', fontSize: 16, margin: '0 auto 10px' }}>{userInitials}</div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#22c55e' }}>{user.firstName || user.name || 'Usuario'}</div>
-                      <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: '.1em', marginTop: 3 }}>{isAdmin ? 'Administrador' : 'Miembro'}</div>
-                    </div>
-                    <div style={{ padding: 6 }}>
-                      {isAdmin && <Link href="/admin/agenda" onClick={() => setShowUserMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, color: '#c8c8c8', fontSize: 13, fontWeight: 600 }}><ShieldCheck size={15} /> Gestión</Link>}
-                      {isAdmin && adminClubSlug && <Link href={`/club/${adminClubSlug}`} onClick={() => setShowUserMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, color: '#c8c8c8', fontSize: 13, fontWeight: 600 }}><MapPin size={15} /> Mi club</Link>}
-                      <Link href="/perfil" onClick={() => setShowUserMenu(false)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, color: '#c8c8c8', fontSize: 13, fontWeight: 600 }}><Users size={15} /> Mi perfil</Link>
-                      <Link href="/bookings" onClick={() => setShowUserMenu(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 12px', borderRadius: 10, color: '#c8c8c8', fontSize: 13, fontWeight: 600 }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Calendar size={15} /> Mis reservas</span>
-                        {activeBookingsCount > 0 && <span style={{ background: '#22c55e', color: '#052010', fontSize: 10, fontWeight: 800, borderRadius: 999, padding: '1px 7px' }}>{activeBookingsCount}</span>}
-                      </Link>
-                      <button type="button" onClick={() => { setShowLogoutModal(true); setShowUserMenu(false); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, color: '#f87171', fontSize: 13, fontWeight: 600, background: 'none', border: 'none', width: '100%', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        <LogOut size={15} /> Cerrar sesión
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <button onClick={() => setShowContact(true)} className="tc-btn tc-btn-ghost">Contacto</button>
-                <Link href="/login" className="tc-btn tc-btn-primary">Ingresar</Link>
-              </>
-            )}
-            <button onClick={(e) => { e.stopPropagation(); user ? setShowUserMenu(p => !p) : setShowContact(true); }} style={{ display: 'none', background: 'none', border: 'none', cursor: 'pointer', color: '#e8e8e8', padding: 4 }} className="md:hidden">
-              <Menu size={22} />
-            </button>
-          </div>
-        </div>
-      </header>
+        }}>
+      <NavBar onContactClick={() => setShowContact(true)} />
 
-      {/* ── HERO ── */}
-      <section className="tc-hero">
-        <div className="tc-hero-visuals" aria-hidden="true">
-          <div className="tc-hero-bg" />
-          <div className="tc-hero-noise" />
-          <div className="tc-aurora-orb tc-aurora-1" />
-          <div className="tc-aurora-orb tc-aurora-2" />
-          <div className="tc-aurora-orb tc-aurora-3" />
+      {/* Hero */}
+      <section className="p-home-hero">
+        <div className="p-home-hero-visuals" aria-hidden="true">
+          <div className="p-home-hero-bg" />
+          <div className="p-home-hero-noise" />
+          <div className="p-home-aurora-orb p-home-aurora-1" />
+          <div className="p-home-aurora-orb p-home-aurora-2" />
+          <div className="p-home-aurora-orb p-home-aurora-3" />
         </div>
-        <div className="tc-hero-inner">
-          <div className="tc-hero-copy">
-            <span className="tc-hero-eyebrow">
-              <span className="tc-hero-eyebrow-dot" />
+        <div className="p-home-hero-inner">
+          <div className="p-home-hero-copy">
+            <span className="p-home-hero-eyebrow">
+              <span className="p-home-hero-eyebrow-dot" />
               <span>Reservas deportivas en Argentina</span>
             </span>
-            <h1 className="tc-hero-h1">
+            <h1 className="p-home-hero-h1">
               Reservá<br />
-              <span className={`tc-sport-word${heroWordVisible ? '' : ' tc-sport-word-out'}`}>
-                <span className="tc-grad-text" style={{ backgroundImage: [
-                  'linear-gradient(90deg,#22c55e 0%,#86efac 40%,#4ade80 100%)',
-                  'linear-gradient(90deg,#0ea5e9 0%,#7dd3fc 40%,#38bdf8 100%)',
-                  'linear-gradient(90deg,#f97316 0%,#fbbf24 40%,#fb923c 100%)',
-                  'linear-gradient(90deg,#8b5cf6 0%,#c4b5fd 40%,#a78bfa 100%)',
+              <span className={`p-home-sport-word${heroWordVisible ? '' : ' p-home-sport-word-out'}`}>
+                <span className="p-home-grad-text" style={{ backgroundImage: [
+                  'linear-gradient(90deg,var(--brand) 0%,var(--brand-hover) 50%,var(--brand) 100%)',
+                  'linear-gradient(90deg,var(--accent-fg) 0%,var(--brand-hover) 50%,var(--accent-fg) 100%)',
+                  'linear-gradient(90deg,var(--lima-700) 0%,var(--brand) 50%,var(--lima-500) 100%)',
+                  'linear-gradient(90deg,var(--ink-500) 0%,var(--brand-hover) 50%,var(--accent-fg) 100%)',
                 ][heroSportIdx] }}>{sportWords[heroSportIdx]}</span>
               </span>
               <br />al toque.
             </h1>
-            <p className="tc-hero-sub">Sin llamadas, sin WhatsApp, sin esperas. Elegí deporte, zona y horario, confirmá online y jugá.</p>
+            <p className="p-home-hero-sub">Sin llamadas, sin WhatsApp, sin esperas. Elegí deporte, zona y horario, confirmá online y jugá.</p>
 
             {/* Search bar */}
-            <div ref={searchBarRef} className="tc-search" onClick={e => e.stopPropagation()}>
+            <div ref={searchBarRef} className="p-home-search" onClick={e => e.stopPropagation()}>
               {/* Sport selector */}
-              <div className="tc-search-seg" style={{ position: 'relative' }} onClick={(e) => { e.stopPropagation(); setShowCityDropdown(false); closeDatepicker(); setShowSportDropdown(p => !p); }}>
-                <span style={{ color: '#888', display: 'flex' }}>{selectedSport.icon}</span>
+              <div className="p-home-search-seg" style={{ position: 'relative' }} onClick={(e) => { e.stopPropagation(); setShowCityDropdown(false); closeDatepicker(); setShowSportDropdown(p => !p); }}>
+                <span style={{ color: 'var(--text-muted)', display: 'flex' }}>{selectedSport.icon}</span>
                 <span>{selectedSport.label}</span>
-                <ChevronDown className={`tc-search-caret${showSportDropdown ? ' tc-search-caret-open' : ''}`} />
+                <ChevronDown className={`p-home-search-caret${showSportDropdown ? ' p-home-search-caret-open' : ''}`} />
                 {showSportDropdown && (
-                  <div className="tc-dropdown" onClick={e => e.stopPropagation()}>
-                    <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,.08)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.14em', color: '#555' }}>Elegí deporte</div>
+                  <div className="p-home-dropdown" onClick={e => e.stopPropagation()}>
+                    <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--text-muted)' }}>Elegí deporte</div>
                     {sportOptions.map(sport => (
                       <button key={sport.value} onClick={() => { setSearchSport(sport.value); setShowSportDropdown(false); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 16px', background: searchSport === sport.value ? 'rgba(34,197,94,.1)' : 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: searchSport === sport.value ? '#22c55e' : '#c8c8c8', fontSize: 14, fontWeight: 600 }}>
-                        <span style={{ color: searchSport === sport.value ? '#22c55e' : '#666', display: 'flex' }}>{sport.icon}</span>
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 16px', background: searchSport === sport.value ? 'var(--accent-bg-soft)' : 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: searchSport === sport.value ? 'var(--brand)' : 'var(--text-secondary)', fontSize: 14, fontWeight: 600 }}>
+                        <span style={{ color: searchSport === sport.value ? 'var(--brand)' : 'var(--text-muted)', display: 'flex' }}>{sport.icon}</span>
                         {sport.label}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="tc-search-divider" />
+              <div className="p-home-search-divider" />
               {/* Location */}
               <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
                 <input
                   id="cityInput"
                   type="text"
                   placeholder="¿Dónde jugás?"
-                  className="tc-search-input"
+                  className="p-home-search-input"
                   value={searchCity}
                   onChange={(e) => { const v = e.target.value; setSearchCity(v); if (!v.trim()) setSelectedLocation(null); setShowCityDropdown(true); }}
                   onFocus={(e) => { e.target.select(); setShowSportDropdown(false); closeDatepicker(); setShowCityDropdown(true); }}
                   autoComplete="off"
                 />
                 {showCityDropdown && (
-                  <div className="tc-dropdown" style={{ minWidth: 280 }} onClick={e => e.stopPropagation()}>
-                    <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,.08)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.14em', color: '#555' }}>Lugares disponibles</div>
+                  <div className="p-home-dropdown" style={{ minWidth: 280 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.14em', color: 'var(--text-muted)' }}>Lugares disponibles</div>
                     <ul style={{ maxHeight: 220, overflowY: 'auto', margin: 0, padding: 0, listStyle: 'none' }}>
                       {loadingLocations ? (
-                        <li style={{ padding: '16px', textAlign: 'center', color: '#555', fontSize: 13 }}>Cargando...</li>
+                        <li style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Cargando...</li>
                       ) : locationSuggestions.length > 0 ? (
                         locationSuggestions.map((loc, i) => (
-                          <li key={i} onClick={() => selectCity(loc)} style={{ padding: '11px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,.05)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#c8c8c8', fontWeight: 500, transition: 'background .15s' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.05)')}
+                          <li key={i} onClick={() => selectCity(loc)} style={{ padding: '11px 16px', cursor: 'pointer', borderBottom: '1px solid var(--surface-2)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, transition: 'background .15s' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                            <MapPin size={13} style={{ color: '#22c55e', flexShrink: 0 }} />
-                            <div><div style={{ fontWeight: 600, color: '#f2f2f2' }}>{loc.label}</div><div style={{ fontSize: 11, color: '#555' }}>{loc.country}</div></div>
+                            <MapPin size={13} style={{ color: 'var(--brand)', flexShrink: 0 }} />
+                            <div><div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{loc.label}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{loc.country}</div></div>
                           </li>
                         ))
                       ) : (
-                        <li style={{ padding: '16px', textAlign: 'center', color: '#555', fontSize: 13 }}>Sin resultados</li>
+                        <li style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Sin resultados</li>
                       )}
                     </ul>
                   </div>
                 )}
               </div>
-              <div className="tc-search-divider" />
+              <div className="p-home-search-divider" />
               {/* Date */}
-              <div className="tc-search-seg" onClick={() => { setShowCityDropdown(false); setShowSportDropdown(false); }}>
-                <Calendar size={13} style={{ color: '#666' }} />
+              <div className="p-home-search-seg" onClick={() => { setShowCityDropdown(false); setShowSportDropdown(false); }}>
+                <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
                 <DatePickerDark
                   selected={searchDate ? (() => { const [y,m,d] = searchDate.split('-').map(Number); return new Date(y,m-1,d); })() : null}
                   onChange={(date: Date | null) => { if (!date) { setSearchDate(''); return; } setSearchDate(formatLocalDate(date)); }}
@@ -1287,35 +1128,35 @@ export default function Home() {
                 />
               </div>
               {/* CTA */}
-              <button className="tc-search-cta" onClick={handleSearch} disabled={isSearching}>
+              <button className="p-home-search-cta" onClick={handleSearch} disabled={isSearching}>
                 {isSearching ? 'Buscando...' : 'Buscar'}
                 <Search size={13} />
               </button>
             </div>
 
-            <div className="tc-search-quicks">
+            <div className="p-home-search-quicks">
               {locationOptions.slice(0, 4).map((loc, i) => (
-                <button key={i} className="tc-quick-chip" onClick={() => selectCity(loc)}>{loc.label}</button>
+                <button key={i} className="p-home-quick-chip" onClick={() => selectCity(loc)}>{loc.label}</button>
               ))}
             </div>
             {!loadingClubs && clubs.length > 0 && (
-              <div className="tc-hero-stat">
-                <span className="tc-hero-stat-dot" />
+              <div className="p-home-hero-stat">
+                <span className="p-home-hero-stat-dot" />
                 <span><b>{clubs.length}</b> clubes disponibles en Argentina</span>
               </div>
             )}
           </div>
 
-          <div className="tc-hero-side">
-            <div className="tc-live-card">
-              <div className="tc-live-head"><span className="tc-live-dot" />Disponibilidad</div>
-              <div className="tc-live-stat">Al instante</div>
-              <div className="tc-live-label">Ves qué canchas hay libres ahora mismo. Sin WhatsApp, sin esperar respuesta.</div>
+          <div className="p-home-hero-side">
+            <div className="p-home-live-card">
+              <div className="p-home-live-head"><span className="p-home-live-dot" />Disponibilidad</div>
+              <div className="p-home-live-stat">Al instante</div>
+              <div className="p-home-live-label">Ves qué canchas hay libres ahora mismo. Sin WhatsApp, sin esperar respuesta.</div>
             </div>
-            <div className="tc-live-card">
-              <div className="tc-live-head">Confirmación</div>
-              <div className="tc-live-stat" style={{ fontSize: 20 }}>30 segundos</div>
-              <div className="tc-live-label">Reservás, confirmás y listo. Tu turno queda guardado al instante.</div>
+            <div className="p-home-live-card">
+              <div className="p-home-live-head">Confirmación</div>
+              <div className="p-home-live-stat" style={{ fontSize: 20 }}>30 segundos</div>
+              <div className="p-home-live-label">Reservás, confirmás y listo. Tu turno queda guardado al instante.</div>
             </div>
           </div>
         </div>
@@ -1323,11 +1164,11 @@ export default function Home() {
 
       {/* ── MARQUEE STRIP ── */}
       {!loadingClubs && clubs.length > 0 && (
-        <div className="tc-marquee-wrap">
-          <div className="tc-marquee-track">
+        <div className="p-home-marquee-wrap">
+          <div className="p-home-marquee-track">
             {[...clubs, ...clubs].map((club, i) => (
-              <div key={i} className="tc-marquee-item">
-                <span className="tc-marquee-dot" />
+              <div key={i} className="p-home-marquee-item">
+                <span className="p-home-marquee-dot" />
                 {club.name}
               </div>
             ))}
@@ -1336,94 +1177,94 @@ export default function Home() {
       )}
 
       {/* ── SPORTS GRID ── */}
-      <section className="tc-sports">
-        <div className="tc-sports-head">
-          <h3 className="tc-sports-h3 tc-sr">Jugá lo que quieras, <i>donde quieras</i>.</h3>
+      <section className="p-home-sports">
+        <div className="p-home-sports-head">
+          <h3 className="p-home-sports-h3 p-home-sr">Jugá lo que quieras, <i>donde quieras</i>.</h3>
         </div>
-        <div className="tc-sports-grid">
+        <div className="p-home-sports-grid">
           {[
             {
               name: 'Fútbol',
               sub: 'F5 · F7 · F11',
               sport: 'futbol',
-              bg: 'linear-gradient(135deg,#061a0a,#0d2e12)',
+              bg: 'linear-gradient(135deg,var(--ink-900),var(--lima-900))',
               photo: 'https://images.pexels.com/photos/27394466/pexels-photo-27394466.jpeg?auto=compress&cs=tinysrgb&w=1600',
               bgPosition: 'center 52%',
-              accent: '#22c55e',
+              accent: 'var(--brand)',
               countKey: 'futbol' as const
             },
             {
               name: 'Pádel',
               sub: 'Cubierto & Panorámico',
               sport: 'padel',
-              bg: 'linear-gradient(135deg,#06121a,#0c1e33)',
+              bg: 'linear-gradient(135deg,var(--ink-900),var(--ink-700))',
               photo: 'https://images.pexels.com/photos/32897038/pexels-photo-32897038.jpeg?auto=compress&cs=tinysrgb&w=1600',
               bgPosition: 'center 42%',
-              accent: '#38bdf8',
+              accent: 'var(--accent-fg)',
               countKey: 'padel' as const
             },
             {
               name: 'Tenis',
               sub: 'Polvo & cemento',
               sport: 'tenis',
-              bg: 'linear-gradient(135deg,#1a0e06,#2e1a08)',
+              bg: 'linear-gradient(135deg,var(--ink-900),var(--lima-900))',
               photo: 'https://images.pexels.com/photos/19872965/pexels-photo-19872965.jpeg?auto=compress&cs=tinysrgb&w=1600',
               bgPosition: 'center 54%',
-              accent: '#fb923c',
+              accent: 'var(--lima-500)',
               countKey: 'tenis' as const
             },
             {
               name: 'Otros deportes',
               sub: 'Hockey · Vóley · Básquet',
               sport: '',
-              bg: 'linear-gradient(135deg,#0e081a,#180f2e)',
+              bg: 'linear-gradient(135deg,var(--ink-900),var(--ink-700))',
               photo: 'https://images.pexels.com/photos/9716286/pexels-photo-9716286.jpeg?auto=compress&cs=tinysrgb&w=1600',
               bgPosition: 'center',
-              accent: '#a78bfa',
+              accent: 'var(--accent-fg)',
               countKey: 'otros' as const
             },
           ].map((s, si) => (
-            <div key={s.name} className={`tc-sport-card tc-sr tc-sr-d${si + 1}`} style={{'--card-accent': s.accent} as React.CSSProperties} onClick={() => router.push({ pathname: '/complejos', query: s.sport ? { sport: s.sport } : {} })}>
+            <div key={s.name} className={`p-home-sport-card p-home-sr p-home-sr-d${si + 1}`} style={{'--card-accent': s.accent} as React.CSSProperties} onClick={() => router.push({ pathname: '/complejos', query: s.sport ? { sport: s.sport } : {} })}>
               <div
-                className="tc-sport-bg"
+                className="p-home-sport-bg"
                 style={{
                   background: s.bg,
                   backgroundImage: s.photo
-                    ? `linear-gradient(160deg, rgba(5,8,6,.2) 0%, rgba(5,5,5,.55) 58%, rgba(5,5,5,.82) 100%), url('${s.photo}')`
+                    ? `linear-gradient(160deg, var(--overlay) 0%, var(--overlay) 58%, var(--overlay-strong) 100%), url('${s.photo}')`
                     : undefined,
                   backgroundPosition: s.bgPosition || 'center',
                 }}
               />
-              <div className="tc-sport-content">
+              <div className="p-home-sport-content">
                 {!loadingClubs && sportClubCounts[s.countKey] > 0 && (
-                  <div className="tc-sport-club-count">{sportClubCounts[s.countKey]} clubes</div>
+                  <div className="p-home-sport-club-count">{sportClubCounts[s.countKey]} clubes</div>
                 )}
-                <div className="tc-sport-count">{s.sub}</div>
-                <div className="tc-sport-name">{s.name} →</div>
+                <div className="p-home-sport-count">{s.sub}</div>
+                <div className="p-home-sport-name">{s.name} →</div>
               </div>
             </div>
           ))}
         </div>
       </section>
-      {/* ── VALUES (POR QUÉ TUCANCHA) ── */}
-      <section className="tc-values-band">
-        <div className="tc-sec-w">
-          <div className="tc-values-grid">
-            <div className="tc-values-h tc-sr-left">
-              <span className="tc-eyebrow">Por qué TuCancha</span>
-              <h2 className="tc-sec-h">La forma más<br /><b>fluida</b> de <i>jugar</i>.</h2>
-              <p className="tc-sec-sub">Nada de llamadas, esperar respuestas o señas por WhatsApp. Encontrás la cancha, confirmás y listo.</p>
+      {/* ── VALUES (POR QUE PUNTO) ── */}
+      <section className="p-home-values-band">
+        <div className="p-home-sec-w">
+          <div className="p-home-values-grid">
+            <div className="p-home-values-h p-home-sr-left">
+              <span className="p-home-eyebrow">Por qué Punto</span>
+              <h2 className="p-home-sec-h">La forma más<br /><b>fluida</b> de <i>jugar</i>.</h2>
+              <p className="p-home-sec-sub">Nada de llamadas, esperar respuestas o señas por WhatsApp. Encontrás la cancha, confirmás y listo.</p>
             </div>
-            <div className="tc-values-list">
+            <div className="p-home-values-list">
               {[
                 { num: '01', title: 'Confirmación al instante', desc: 'Si la cancha está libre, es tuya en segundos. Sin "te confirmo más tarde", sin esperar que alguien te conteste.' },
                 { num: '02', title: 'Clubes verificados', desc: 'Cada complejo pasa por un control antes de entrar. Fotos reales, precios actualizados, horarios al día.' },
                 { num: '03', title: 'Cancelás sin drama', desc: '¿Lluvia? ¿Se cae un jugador? Modificás o cancelás desde la app, con anticipación y sin llamar a nadie.' },
                 { num: '04', title: 'Pagá como arreglás', desc: 'Online con tarjeta o en efectivo al llegar. Cada club tiene sus opciones y las ves claras antes de confirmar.' },
               ].map((v, vi) => (
-                <div key={v.num} className={`tc-value tc-sr tc-sr-d${vi + 1}`}>
-                  <div className="tc-value-num">{v.num}</div>
-                  <div className="tc-value-body"><h4>{v.title}</h4><p>{v.desc}</p></div>
+                <div key={v.num} className={`p-home-value p-home-sr p-home-sr-d${vi + 1}`}>
+                  <div className="p-home-value-num">{v.num}</div>
+                  <div className="p-home-value-body"><h4>{v.title}</h4><p>{v.desc}</p></div>
                 </div>
               ))}
             </div>
@@ -1432,28 +1273,28 @@ export default function Home() {
       </section>
 
       {/* ── OWNER (PARA COMPLEJOS) ── */}
-      <section ref={ownerSectionRef} className="tc-owner">
-        <div className="tc-owner-media" aria-hidden="true">
-          <div className="tc-owner-media-img" />
+      <section ref={ownerSectionRef} className="p-home-owner">
+        <div className="p-home-owner-media" aria-hidden="true">
+          <div className="p-home-owner-media-img" />
         </div>
-        <div className="tc-owner-inner">
-          <div className="tc-sr-left">
-            <span className="tc-eyebrow">Para complejos</span>
-            <h2 className="tc-sec-h">Convertí horas libres en<br /><i>reservas confirmadas</i>.</h2>
-            <p className="tc-sec-sub">Digitalizá tu operación en un panel claro: agenda, cobros y comunicación con jugadores, todo en un mismo lugar.</p>
-            <div className="tc-owner-ctas">
-              <button className="tc-btn tc-btn-primary" onClick={() => setShowContact(true)}>Registrá tu complejo →</button>
+        <div className="p-home-owner-inner">
+          <div className="p-home-sr-left">
+            <span className="p-home-eyebrow">Para complejos</span>
+            <h2 className="p-home-sec-h">Convertí horas libres en<br /><i>reservas confirmadas</i>.</h2>
+            <p className="p-home-sec-sub">Digitalizá tu operación en un panel claro: agenda, cobros y comunicación con jugadores, todo en un mismo lugar.</p>
+            <div className="p-home-owner-ctas">
+              <button className="p-home-btn p-home-btn-primary" onClick={() => setShowContact(true)}>Registrá tu complejo →</button>
             </div>
           </div>
-          <div className="tc-owner-side tc-sr-right">
-            <div className="tc-owner-side-h">Qué resolvemos</div>
+          <div className="p-home-owner-side p-home-sr-right">
+            <div className="p-home-owner-side-h">Qué resolvemos</div>
             <div>
               {[
                 { b: 'Agenda', t: 'Horarios y canchas en tiempo real, sin cruces ni planillas.' },
                 { b: 'Cobros', t: 'Pagos más ordenados y trazables, en un flujo simple.' },
                 { b: 'Clientes', t: 'Confirmaciones automáticas y acompañamiento desde el inicio.' },
               ].map(p => (
-                <div key={p.b} className="tc-owner-perk"><b>{p.b}</b>{p.t}</div>
+                <div key={p.b} className="p-home-owner-perk"><b>{p.b}</b>{p.t}</div>
               ))}
             </div>
           </div>
@@ -1461,18 +1302,18 @@ export default function Home() {
       </section>
 
       {/* ── FAQ ── */}
-      <section className="tc-faq-band" onClick={() => setOpenFaqIndex(null)}>
-        <div className="tc-sec-w">
-          <div className="tc-faq-grid">
-            <div className="tc-sr-up">
-              <span className="tc-eyebrow">FAQ</span>
-              <h2 className="tc-sec-h">Preguntas<br /><i>frecuentes</i>.</h2>
-              <p className="tc-sec-sub">Todo lo que necesitás saber antes de reservar.</p>
-              <button className="tc-btn tc-btn-ghost" onClick={() => setShowContact(true)} style={{ marginTop: 4 }}>Escribinos →</button>
+      <section className="p-home-faq-band" onClick={() => setOpenFaqIndex(null)}>
+        <div className="p-home-sec-w">
+          <div className="p-home-faq-grid">
+            <div className="p-home-sr-up">
+              <span className="p-home-eyebrow">FAQ</span>
+              <h2 className="p-home-sec-h">Preguntas<br /><i>frecuentes</i>.</h2>
+              <p className="p-home-sec-sub">Todo lo que necesitás saber antes de reservar.</p>
+              <button className="p-home-btn p-home-btn-ghost" onClick={() => setShowContact(true)} style={{ marginTop: 4 }}>Escribinos →</button>
             </div>
-            <div className="tc-faq-list">
+            <div className="p-home-faq-list">
               {[
-                { q: '¿Tengo que pagar para usar TuCancha?', a: 'No. Usar la app es gratis. Solo pagás el valor de la cancha que reservás, igual que si llamaras al complejo directamente — sin recargos ocultos.' },
+                { q: '¿Tengo que pagar para usar Punto?', a: 'No. Usar la app es gratis. Solo pagás el valor de la cancha que reservás, igual que si llamaras al complejo directamente — sin recargos ocultos.' },
                 { q: '¿Puedo cancelar una reserva si no puedo ir?', a: 'Sí. Cada complejo define su política de cancelación, pero la mayoría permite cancelar sin costo hasta horas antes del turno. Lo ves claramente antes de pagar.' },
                 { q: '¿Qué pasa si llueve el día de mi partido?', a: 'Si el complejo suspende por lluvia, se gestiona el reintegro o podés cambiar de fecha según la política del club. Si es cancha cubierta, siempre se juega.' },
                 { q: '¿Con cuánta anticipación puedo reservar?', a: 'Podés reservar con hasta 30 días de anticipación. Recomendamos asegurar el lugar temprano, especialmente en horarios pico (18:00 a 22:00).' },
@@ -1481,14 +1322,14 @@ export default function Home() {
                 <div
                   key={idx}
                   ref={el => { faqRefs.current[idx] = el; }}
-                  className={`tc-faq-item${openFaqIndex === idx ? ' tc-open' : ''}`}
+                  className={`p-home-faq-item${openFaqIndex === idx ? ' p-home-open' : ''}`}
                   onClick={e => { e.stopPropagation(); setOpenFaqIndex(openFaqIndex === idx ? null : idx); }}
                 >
-                  <div className="tc-faq-q">
+                  <div className="p-home-faq-q">
                     {item.q}
-                    <svg className="tc-faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 5v14M5 12h14" /></svg>
+                    <svg className="p-home-faq-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 5v14M5 12h14" /></svg>
                   </div>
-                  <div className="tc-faq-a">{item.a}</div>
+                  <div className="p-home-faq-a">{item.a}</div>
                 </div>
               ))}
             </div>
@@ -1497,78 +1338,78 @@ export default function Home() {
       </section>
 
       {/* ── CLOSING CTA ── */}
-      <section ref={closingSectionRef} className="tc-closing">
-        <div className="tc-closing-media" aria-hidden="true">
-          <div className="tc-closing-media-img" />
+      <section ref={closingSectionRef} className="p-home-closing">
+        <div className="p-home-closing-media" aria-hidden="true">
+          <div className="p-home-closing-media-img" />
         </div>
-        <div className="tc-closing-inner">
-          <div className="tc-big-closing tc-sr-up">
+        <div className="p-home-closing-inner">
+          <div className="p-home-big-closing p-home-sr-up">
             Ponete los botines.<br /><i>Nosotros nos encargamos del resto.</i>
           </div>
-          <div className="tc-closing-ctas tc-sr tc-sr-d2">
-            <button className="tc-btn tc-btn-primary" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setTimeout(() => document.getElementById('cityInput')?.focus(), 600); }}>
+          <div className="p-home-closing-ctas p-home-sr p-home-sr-d2">
+            <button className="p-home-btn p-home-btn-primary" onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setTimeout(() => document.getElementById('cityInput')?.focus(), 600); }}>
               Buscar cancha →
             </button>
-            <button className="tc-btn tc-btn-ghost" onClick={() => setShowContact(true)}>Contactar</button>
+            <button className="p-home-btn p-home-btn-ghost" onClick={() => setShowContact(true)}>Contactar</button>
           </div>
         </div>
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="tc-foot">
-        <div className="tc-foot-inner">
-          <div className="tc-foot-cols">
-            <div className="tc-foot-brand">
-              <span className="tc-foot-brand-name">TuCancha</span>
+      <footer className="p-home-foot">
+        <div className="p-home-foot-inner">
+          <div className="p-home-foot-cols">
+            <div className="p-home-foot-brand">
+              <PuntoLogo variant={isLight ? 'horizontal' : 'horizontalDark'} style={{ width: 96, height: 'auto', display: 'block' }} />
               <p>La plataforma para reservar canchas en Argentina. Hecha por jugadores, para jugadores.</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 {[
                   { href: 'https://wa.me/5493513436163', label: 'WhatsApp', icon: <Phone size={15} /> },
-                  { href: 'mailto:soporte.tucancha@gmail.com', label: 'Email', icon: <Mail size={15} /> },
-                  { href: 'https://www.instagram.com/tucancha.app_/', label: 'Instagram', icon: <Instagram size={15} /> },
+                  { href: 'mailto:soporte.punto@gmail.com', label: 'Email', icon: <Mail size={15} /> },
+                  { href: 'https://www.instagram.com/punto.app_/', label: 'Instagram', icon: <Instagram size={15} /> },
                 ].map(s => (
                   <a key={s.label} href={s.href} target="_blank" rel="noopener" aria-label={s.label}
-                    style={{ width: 34, height: 34, borderRadius: 10, border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', transition: 'color .15s, border-color .15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#22c55e'; e.currentTarget.style.borderColor = 'rgba(34,197,94,.3)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#555'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)'; }}>
+                    style={{ width: 34, height: 34, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', transition: 'color .15s, border-color .15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--brand)'; e.currentTarget.style.borderColor = 'var(--accent-border)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}>
                     {s.icon}
                   </a>
                 ))}
               </div>
             </div>
-            <div className="tc-foot-col">
+            <div className="p-home-foot-col">
               <h6>Jugadores</h6>
               <ul>
                 <li><Link href="/bookings">Mis reservas</Link></li>
                 <li><Link href="/login">Crear cuenta</Link></li>
               </ul>
             </div>
-            <div className="tc-foot-col">
+            <div className="p-home-foot-col">
               <h6>Complejos</h6>
               <ul>
                 <li><button onClick={() => setShowContact(true)}>Sumá tu complejo</button></li>
                 <li><button onClick={() => setShowContact(true)}>Contactar ventas</button></li>
               </ul>
             </div>
-            <div className="tc-foot-col">
+            <div className="p-home-foot-col">
               <h6>Soporte</h6>
               <ul>
-                <li><a href="mailto:soporte.tucancha@gmail.com">soporte.tucancha@gmail.com</a></li>
+                <li><a href="mailto:soporte.punto@gmail.com">soporte.punto@gmail.com</a></li>
                 <li><a href="https://wa.me/5493513436163" target="_blank" rel="noopener">WhatsApp</a></li>
               </ul>
             </div>
           </div>
-          <div className="tc-foot-base">
-            <span>© {new Date().getFullYear()} TuCancha · Hecho en Argentina · Con pasión por el juego</span>
+          <div className="p-home-foot-base">
+            <span>© {new Date().getFullYear()} Punto · Hecho en Argentina · Con pasión por el juego</span>
           </div>
         </div>
       </footer>
 
       {/* ── CONTACT SIDEBAR ── */}
-      <div className="tc-contact-overlay" style={{ opacity: showContact ? 1 : 0, pointerEvents: showContact ? 'auto' : 'none' }} onClick={() => setShowContact(false)} />
+      <div className="p-home-contact-overlay" style={{ opacity: showContact ? 1 : 0, pointerEvents: showContact ? 'auto' : 'none' }} onClick={() => setShowContact(false)} />
       <div
         ref={sidebarRef}
-        className={`tc-contact-panel${showContact ? ' tc-open' : ''}`}
+        className={`p-home-contact-panel${showContact ? ' p-home-open' : ''}`}
         style={{
           transform: showContact ? 'translateX(0)' : 'translateX(100%)',
           visibility: showContact ? 'visible' : 'hidden',
@@ -1576,60 +1417,49 @@ export default function Home() {
         }}
         aria-hidden={!showContact}
       >
-        <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${isLight ? 'rgba(15,23,42,.1)' : 'rgba(255,255,255,.08)'}` }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#22c55e', margin: 0 }}>Contacto</h2>
-          <button className="tc-close-btn" onClick={() => setShowContact(false)} aria-label="Cerrar">
+        <div style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}` }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand)', margin: 0 }}>Contacto</h2>
+          <button className="p-home-close-btn" onClick={() => setShowContact(false)} aria-label="Cerrar">
             <X size={15} />
           </button>
         </div>
         <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <p style={{ fontSize: 13, color: '#777', lineHeight: 1.6, margin: 0 }}>¿Tenés dudas o querés dar de alta tu club? Escribinos.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>¿Tenés dudas o querés dar de alta tu club? Escribinos.</p>
           {([
             { type: 'whatsapp' as const, label: 'WhatsApp', value: '+54 351 343 6163', icon: <Phone size={16} /> },
-            { type: 'email' as const, label: 'Email', value: 'soporte.tucancha@gmail.com', icon: <Mail size={16} /> },
+            { type: 'email' as const, label: 'Email', value: 'soporte.punto@gmail.com', icon: <Mail size={16} /> },
           ]).map(c => (
             <button key={c.type} type="button" onClick={e => openContactMenu(e, c.type)}
-              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: isLight ? 'rgba(15,23,42,.04)' : 'rgba(255,255,255,.04)', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)'}`, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s', width: '100%' }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(34,197,94,.3)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)')}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(34,197,94,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e', flexShrink: 0 }}>{c.icon}</div>
+              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: isLight ? 'var(--surface-2)' : 'var(--border-subtle)', border: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}`, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s', width: '100%' }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent-border)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = isLight ? 'var(--border)' : 'var(--border-subtle)')}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent-bg-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand)', flexShrink: 0 }}>{c.icon}</div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: isLight ? '#64748b' : '#555' }}>{c.label}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: isLight ? '#0f172a' : '#f2f2f2' }}>{c.value}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.12em', color: isLight ? 'var(--text-muted)' : 'var(--text-muted)' }}>{c.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: isLight ? 'var(--text-primary)' : 'var(--text-primary)' }}>{c.value}</div>
               </div>
             </button>
           ))}
-          <div style={{ marginTop: 8, paddingTop: 14, borderTop: `1px solid ${isLight ? 'rgba(15,23,42,.1)' : 'rgba(255,255,255,.07)'}` }}>
-            <button type="button" onClick={e => openContactMenu(e, 'instagram')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: isLight ? 'rgba(15,23,42,.04)' : 'rgba(255,255,255,.04)', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.08)'}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', color: isLight ? '#334155' : '#e8e8e8', fontSize: 13, fontWeight: 600 }}>
-              <Instagram size={15} /> @tucancha.app_
+          <div style={{ marginTop: 8, paddingTop: 14, borderTop: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}` }}>
+            <button type="button" onClick={e => openContactMenu(e, 'instagram')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: isLight ? 'var(--surface-2)' : 'var(--border-subtle)', border: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', color: isLight ? 'var(--text-secondary)' : 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>
+              <Instagram size={15} /> @punto.app_
             </button>
           </div>
           {contactMenu && (
-            <div ref={menuRef} role="dialog" style={{ position: 'absolute', top: contactMenu.top, left: contactMenu.left, zIndex: 90, background: isLight ? '#ffffff' : '#1a1a1a', border: `1px solid ${isLight ? 'rgba(15,23,42,.12)' : 'rgba(255,255,255,.1)'}`, borderRadius: 12, padding: 6, minWidth: 150, boxShadow: isLight ? '0 8px 24px rgba(15,23,42,.14)' : '0 8px 24px rgba(0,0,0,.4)' }}>
-              <button onClick={() => handleOpenHref(contactMenu.href)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? '#0f172a' : '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
-                onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)')}
+            <div ref={menuRef} role="dialog" style={{ position: 'absolute', top: contactMenu.top, left: contactMenu.left, zIndex: 90, background: isLight ? 'var(--surface-1)' : 'var(--surface-3)', border: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}`, borderRadius: 12, padding: 6, minWidth: 150, boxShadow: isLight ? '0 8px 24px var(--border)' : 'var(--shadow-md)' }}>
+              <button onClick={() => handleOpenHref(contactMenu.href)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? 'var(--text-primary)' : 'var(--text-primary)', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
+                onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'var(--surface-2)' : 'var(--border-subtle)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>Abrir</button>
-              <button onClick={() => handleCopy(contactMenu.copyText)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? '#0f172a' : '#f2f2f2', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
-                onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'rgba(15,23,42,.05)' : 'rgba(255,255,255,.06)')}
+              <button onClick={() => handleCopy(contactMenu.copyText)} style={{ display: 'block', width: '100%', padding: '9px 13px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: isLight ? 'var(--text-primary)' : 'var(--text-primary)', fontWeight: 500, textAlign: 'left', borderRadius: 8 }}
+                onMouseEnter={e => (e.currentTarget.style.background = isLight ? 'var(--surface-2)' : 'var(--border-subtle)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>Copiar</button>
             </div>
           )}
         </div>
       </div>
 
-      <AppModal
-        show={showLogoutModal}
-        title="Cerrar sesión"
-        message="¿Seguro que querés cerrar sesión?"
-        isWarning
-        confirmText="Salir"
-        cancelText="Cancelar"
-        onConfirm={() => { setShowLogoutModal(false); logout(); setUser(null); }}
-        onClose={() => setShowLogoutModal(false)}
-        onCancel={() => setShowLogoutModal(false)}
-      />
 
-      </div>{/* end tc-root */}
+      </div>{/* end p-home-root */}
     </>
   );
 }

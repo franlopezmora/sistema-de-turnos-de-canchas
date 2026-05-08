@@ -165,7 +165,7 @@ type CashShiftCloseReport = {
 const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString('es-AR')}`;
 const ACCOUNT_PAYMENT_EPSILON = 0.009;
 const EMPTY_REFUNDS: RefundRecord[] = [];
-const drawerSectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
+const drawerSectionCardClass = 'rounded-2xl border border-p-border bg-p-surface-2 p-4';
 
 const shortCode = (value: unknown) => {
   const raw = String(value || '').trim();
@@ -1459,7 +1459,7 @@ export default function AdminPaymentsPlaygroundPage() {
   return (
     <>
       <Head>
-        <title>Caja | TuCancha Admin</title>
+        <title>Caja | Punto Admin</title>
       </Head>
       <AdminPlaygroundShell activeItem="Caja" user={user} contentMuted={cashActionSidebarOpen}>
         <div className="flex h-full min-h-0 flex-col gap-4 p-4 lg:p-6">
@@ -1478,7 +1478,7 @@ export default function AdminPaymentsPlaygroundPage() {
           />
 
           {error && (
-            <div className="rounded-xl border border-[#f2b8c3] bg-[#fff2f5] px-3 py-2 text-[12px] font-semibold text-[#b42346]">
+            <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error">
               {error}
             </div>
           )}
@@ -1486,16 +1486,16 @@ export default function AdminPaymentsPlaygroundPage() {
           <section ref={paymentsContentScrollRef} className="min-h-0 flex-1 overflow-auto">
             {loading && (activeTab === 'ACCOUNTS' || activeTab === 'REFUNDS') ? (
               <div className="h-full grid place-items-center">
-                <div className="inline-flex items-center gap-2 text-[13px] text-[#6f7890]">
-                  <span className="h-4 w-4 rounded-full border-2 border-[#b9c6f4] border-t-[#3053e2] animate-spin" />
+                <div className="inline-flex items-center gap-2 text-[13px] text-p-text-muted">
+                  <span className="h-4 w-4 rounded-full border-2 border-p-accent border-t-p-accent animate-spin" />
                   Cargando módulo de pagos...
                 </div>
               </div>
             ) : activeTab === 'ACCOUNTS' ? (
               <div className="space-y-4">
-                <div className="w-full rounded-2xl border border-[#dce2ee] bg-white p-3">
+                <div className="w-full rounded-2xl border border-p-border bg-p-surface p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-1">
+                    <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface-2 p-1">
                       {(['hoy', 'semana', 'mes'] as CashPeriod[]).map((period) => (
                         <button
                           key={`accounts-${period}`}
@@ -1506,8 +1506,8 @@ export default function AdminPaymentsPlaygroundPage() {
                           }}
                           className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
                             cashActivePeriod === period
-                              ? 'bg-white text-[#3053e2] shadow-sm'
-                              : 'text-[#6f7890] hover:text-[#4e5870]'
+                              ? 'bg-p-surface text-p-accent shadow-sm'
+                              : 'text-p-text-muted hover:text-p-text-secondary'
                           }`}
                         >
                           {period === 'hoy' ? 'Hoy' : period === 'semana' ? 'Semana' : 'Mes'}
@@ -1515,20 +1515,20 @@ export default function AdminPaymentsPlaygroundPage() {
                       ))}
                     </div>
 
-                    <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white px-1 py-1">
+                    <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface px-1 py-1">
                       <button
                         type="button"
                         onClick={() => setCashPeriodOffset((prev) => prev - 1)}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2"
                       >
                         <ChevronLeft size={16} />
                       </button>
-                      <span className="min-w-[120px] text-center text-[12px] font-semibold text-[#4e5870]">{cashPeriodLabel}</span>
+                      <span className="min-w-[120px] text-center text-[12px] font-semibold text-p-text-secondary">{cashPeriodLabel}</span>
                       <button
                         type="button"
                         onClick={() => setCashPeriodOffset((prev) => Math.min(0, prev + 1))}
                         disabled={cashPeriodOffset === 0}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:cursor-not-allowed disabled:text-[#b8c1d4] disabled:hover:bg-transparent"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2 disabled:cursor-not-allowed disabled:text-p-text-muted disabled:hover:bg-transparent"
                       >
                         <ChevronRight size={16} />
                       </button>
@@ -1542,10 +1542,10 @@ export default function AdminPaymentsPlaygroundPage() {
                     label="Con deuda"
                     value={visibleAccountsWithDebtCount}
                     format="number"
-                    valueColor="#9a5a00"
+                    valueColor="var(--warn-fg)"
                   />
-                  <MetricCard label="Cerradas" value={visibleClosedAccounts.length} format="number" valueColor="#2f5e46" />
-                  <MetricCard label="Con devoluciones" value={visibleAccountsWithRefundsCount} format="number" valueColor="#7b3fb4" />
+                  <MetricCard label="Cerradas" value={visibleClosedAccounts.length} format="number" valueColor="var(--positive-fg)" />
+                  <MetricCard label="Con devoluciones" value={visibleAccountsWithRefundsCount} format="number" valueColor="var(--accent-fg)" />
                 </div>
                 <AdminPanel
                   title="Cuentas"
@@ -1554,16 +1554,16 @@ export default function AdminPaymentsPlaygroundPage() {
                   actions={(
                     <AdminFilterToolbar className="border-0 bg-transparent p-0 gap-1 sm:flex-nowrap sm:justify-end">
                       <label className="relative w-full sm:w-[300px] sm:flex-none">
-                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8b93a5]" />
+                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="text"
                           value={accountsSearchTerm}
                           onChange={(event) => setAccountsSearchTerm(event.target.value)}
                           placeholder="Buscar por cliente, cuenta, reserva o cancha"
-                          className="h-8 w-full rounded-xl border border-[#dce2ee] bg-white pl-9 pr-3 text-[12px] outline-none focus:border-[#3053e2]"
+                          className="h-8 w-full rounded-xl border border-p-border bg-p-surface pl-9 pr-3 text-[12px] outline-none focus:border-p-accent"
                         />
                       </label>
-                      <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white p-1">
+                      <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface p-1">
                         {[
                           { id: 'ALL', label: 'Todas' },
                           { id: 'OPEN', label: 'Abiertas' },
@@ -1576,8 +1576,8 @@ export default function AdminPaymentsPlaygroundPage() {
                             onClick={() => setAccountsFilter(option.id as AccountsFilter)}
                             className={`h-7 rounded-lg px-2.5 text-[11px] font-semibold transition ${
                               accountsFilter === option.id
-                                ? 'bg-[#edf1ff] text-[#3053e2]'
-                                : 'text-[#6f7890] hover:bg-[#f4f6fb]'
+                                ? 'bg-p-positive-bg text-p-accent'
+                                : 'text-p-text-muted hover:bg-p-surface-2'
                             }`}
                           >
                             {option.label}
@@ -1588,7 +1588,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         type="button"
                         onClick={() => void handleQuickOpenAccount()}
                         disabled={openingAccount}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#3053e2] px-2.5 text-[11px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-60"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-60"
                       >
                         <Plus size={14} strokeWidth={2.5} />
                         {openingAccount ? 'Creando...' : 'Nueva cuenta'}
@@ -1597,9 +1597,9 @@ export default function AdminPaymentsPlaygroundPage() {
                   )}
                 >
                   {filteredAccounts.length === 0 ? (
-                    <div className="rounded-xl border border-[#dce2ee] bg-white px-4 py-10 text-center">
-                      <p className="text-[13px] font-semibold text-[#44506b]">No hay cuentas para este período</p>
-                      <p className="mt-1 text-[12px] text-[#7a8398]">Cambiá el rango o ajustá los filtros para encontrar registros.</p>
+                    <div className="rounded-xl border border-p-border bg-p-surface px-4 py-10 text-center">
+                      <p className="text-[13px] font-semibold text-p-text-secondary">No hay cuentas para este período</p>
+                      <p className="mt-1 text-[12px] text-p-text-muted">Cambiá el rango o ajustá los filtros para encontrar registros.</p>
                     </div>
                   ) : (
                   <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -1628,9 +1628,9 @@ export default function AdminPaymentsPlaygroundPage() {
                           onCloseAccount={() => openAccountDrawer(selectedAccount.id, 'close')}
                         />
                       ) : (
-                        <div className="rounded-xl border border-[#dce2ee] bg-white px-4 py-10 text-center">
-                          <p className="text-[13px] font-semibold text-[#44506b]">Seleccioná una cuenta</p>
-                          <p className="mt-1 text-[12px] text-[#7a8398]">Elegí un registro de la lista para ver su detalle y deuda actual.</p>
+                        <div className="rounded-xl border border-p-border bg-p-surface px-4 py-10 text-center">
+                          <p className="text-[13px] font-semibold text-p-text-secondary">Seleccioná una cuenta</p>
+                          <p className="mt-1 text-[12px] text-p-text-muted">Elegí un registro de la lista para ver su detalle y deuda actual.</p>
                         </div>
                       )}
                     </div>
@@ -1642,9 +1642,9 @@ export default function AdminPaymentsPlaygroundPage() {
               <div className="space-y-4">
                 {cashActiveView === 'live' && (
                   <>
-                    <div className="w-full rounded-2xl border border-[#dce2ee] bg-white p-3">
+                    <div className="w-full rounded-2xl border border-p-border bg-p-surface p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-1">
+                        <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface-2 p-1">
                           {(['hoy', 'semana', 'mes'] as CashPeriod[]).map((period) => (
                             <button
                               key={period}
@@ -1655,8 +1655,8 @@ export default function AdminPaymentsPlaygroundPage() {
                               }}
                               className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
                                 cashActivePeriod === period
-                                  ? 'bg-white text-[#3053e2] shadow-sm'
-                                  : 'text-[#6f7890] hover:text-[#4e5870]'
+                                  ? 'bg-p-surface text-p-accent shadow-sm'
+                                  : 'text-p-text-muted hover:text-p-text-secondary'
                               }`}
                             >
                               {period === 'hoy' ? 'Hoy' : period === 'semana' ? 'Semana' : 'Mes'}
@@ -1664,20 +1664,20 @@ export default function AdminPaymentsPlaygroundPage() {
                           ))}
                         </div>
 
-                        <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white px-1 py-1">
+                        <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface px-1 py-1">
                           <button
                             type="button"
                             onClick={() => setCashPeriodOffset((prev) => prev - 1)}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                            className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2"
                           >
                             <ChevronLeft size={16} />
                           </button>
-                          <span className="min-w-[120px] text-center text-[12px] font-semibold text-[#4e5870]">{cashPeriodLabel}</span>
+                          <span className="min-w-[120px] text-center text-[12px] font-semibold text-p-text-secondary">{cashPeriodLabel}</span>
                           <button
                             type="button"
                             onClick={() => setCashPeriodOffset((prev) => Math.min(0, prev + 1))}
                             disabled={cashPeriodOffset === 0}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:cursor-not-allowed disabled:text-[#b8c1d4] disabled:hover:bg-transparent"
+                            className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2 disabled:cursor-not-allowed disabled:text-p-text-muted disabled:hover:bg-transparent"
                           >
                             <ChevronRight size={16} />
                           </button>
@@ -1690,9 +1690,9 @@ export default function AdminPaymentsPlaygroundPage() {
                 )}
 
                 {cashActiveView === 'movements' && (
-                  <div className="w-full rounded-2xl border border-[#dce2ee] bg-white p-3">
+                  <div className="w-full rounded-2xl border border-p-border bg-p-surface p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-1">
+                      <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface-2 p-1">
                         {(['hoy', 'semana', 'mes'] as CashPeriod[]).map((period) => (
                           <button
                             key={`movements-${period}`}
@@ -1703,8 +1703,8 @@ export default function AdminPaymentsPlaygroundPage() {
                             }}
                             className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
                               cashActivePeriod === period
-                                ? 'bg-white text-[#3053e2] shadow-sm'
-                                : 'text-[#6f7890] hover:text-[#4e5870]'
+                                ? 'bg-p-surface text-p-accent shadow-sm'
+                                : 'text-p-text-muted hover:text-p-text-secondary'
                             }`}
                           >
                             {period === 'hoy' ? 'Hoy' : period === 'semana' ? 'Semana' : 'Mes'}
@@ -1712,20 +1712,20 @@ export default function AdminPaymentsPlaygroundPage() {
                         ))}
                       </div>
 
-                      <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white px-1 py-1">
+                      <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface px-1 py-1">
                         <button
                           type="button"
                           onClick={() => setCashPeriodOffset((prev) => prev - 1)}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                          className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2"
                         >
                           <ChevronLeft size={16} />
                         </button>
-                        <span className="min-w-[120px] text-center text-[12px] font-semibold text-[#4e5870]">{cashPeriodLabel}</span>
+                        <span className="min-w-[120px] text-center text-[12px] font-semibold text-p-text-secondary">{cashPeriodLabel}</span>
                         <button
                           type="button"
                           onClick={() => setCashPeriodOffset((prev) => Math.min(0, prev + 1))}
                           disabled={cashPeriodOffset === 0}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:cursor-not-allowed disabled:text-[#b8c1d4] disabled:hover:bg-transparent"
+                          className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2 disabled:cursor-not-allowed disabled:text-p-text-muted disabled:hover:bg-transparent"
                         >
                           <ChevronRight size={16} />
                         </button>
@@ -1736,9 +1736,9 @@ export default function AdminPaymentsPlaygroundPage() {
 
                 {(cashSummaryError || cashShiftError || cashMovementError) && (
                   <div className="space-y-2">
-                    {cashSummaryError && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{cashSummaryError}</div>}
-                    {cashShiftError && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{cashShiftError}</div>}
-                    {cashMovementError && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{cashMovementError}</div>}
+                    {cashSummaryError && <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">{cashSummaryError}</div>}
+                    {cashShiftError && <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">{cashShiftError}</div>}
+                    {cashMovementError && <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">{cashMovementError}</div>}
                   </div>
                 )}
 
@@ -1771,7 +1771,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         <button
                           type="button"
                           onClick={() => setCashSidebarView('movement_create')}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#3053e2] px-2.5 text-[11px] font-semibold text-white shadow-[0_6px_16px_rgba(48,83,226,0.24)] transition hover:bg-[#2746c9]"
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 shadow-p-md transition hover:bg-ink-800"
                         >
                           <Plus size={14} strokeWidth={2.5} />
                           Nuevo movimiento
@@ -1779,11 +1779,11 @@ export default function AdminPaymentsPlaygroundPage() {
                         <button
                           type="button"
                           onClick={() => setCashShowFilters((prev) => !prev)}
-                          className="h-8 rounded-lg border border-[#dce2ee] bg-white px-2.5 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
+                          className="h-8 rounded-lg border border-p-border bg-p-surface px-2.5 text-[12px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
                         >
                           {cashShowFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
                         </button>
-                        <div className="inline-flex items-center gap-2 text-[12px] text-[#6f7890]">
+                        <div className="inline-flex items-center gap-2 text-[12px] text-p-text-muted">
                           <Landmark size={14} />
                           <span>{loadingCashSummary ? 'Actualizando...' : `${filteredCashMovements.length} de ${cashMovements.length}`}</span>
                         </div>
@@ -1797,39 +1797,39 @@ export default function AdminPaymentsPlaygroundPage() {
                         label="Resultado visible"
                         value={Math.abs(filteredNetAmount)}
                         format="money"
-                        valueColor={filteredNetAmount >= 0 ? '#15803d' : '#b91c1c'}
+                        valueColor={filteredNetAmount >= 0 ? 'var(--positive-fg)' : 'var(--error-fg)'}
                       />
                       <MetricCard
                         label="Ingresos visibles"
                         value={filteredIncomeAmount}
                         format="money"
-                        valueColor="#15803d"
+                        valueColor="var(--positive-fg)"
                       />
                       <MetricCard
                         label="Egresos visibles"
                         value={filteredExpenseAmount}
                         format="money"
-                        valueColor="#b91c1c"
+                        valueColor="var(--error-fg)"
                       />
                     </div>
 
                     {cashShowFilters && (
                       <AdminFilterToolbar className="mb-3 grid grid-cols-1 md:grid-cols-[1fr_140px_160px_auto]">
                         <label className="relative">
-                          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8b93a5]" />
+                          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                           <input
                             type="text"
                             value={cashSearchTerm}
                             onChange={(event) => setCashSearchTerm(event.target.value)}
                             placeholder="Buscar por concepto o método"
-                            className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-[#3053e2]"
+                            className="h-10 w-full rounded-xl border border-p-border bg-p-surface pl-9 pr-3 text-[13px] outline-none focus:border-p-accent"
                           />
                         </label>
 
                         <select
                           value={cashTypeFilter}
                           onChange={(event) => setCashTypeFilter(event.target.value as MovementTypeFilter)}
-                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                         >
                           <option value="ALL">Todos los tipos</option>
                           <option value="INCOME">Solo ingresos</option>
@@ -1839,7 +1839,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         <select
                           value={cashMethodFilter}
                           onChange={(event) => setCashMethodFilter(event.target.value as MovementMethodFilter)}
-                  className="h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                         >
                           <option value="ALL">Todos los métodos</option>
                           <option value="CASH">Efectivo</option>
@@ -1854,7 +1854,7 @@ export default function AdminPaymentsPlaygroundPage() {
                             setCashTypeFilter('ALL');
                             setCashMethodFilter('ALL');
                           }}
-                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
                         >
                           <X size={13} />
                           Limpiar filtros
@@ -1862,7 +1862,7 @@ export default function AdminPaymentsPlaygroundPage() {
                       </AdminFilterToolbar>
                     )}
 
-                    <div className="overflow-auto rounded-xl border border-[#dce2ee] bg-white max-h-[68vh] px-4 py-2">
+                    <div className="overflow-auto rounded-xl border border-p-border bg-p-surface max-h-[68vh] px-4 py-2">
                       <CashMovementsTimeline movements={filteredCashMovements} />
                     </div>
                   </AdminPanel>
@@ -1886,9 +1886,9 @@ export default function AdminPaymentsPlaygroundPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="w-full rounded-2xl border border-[#dce2ee] bg-white p-3">
+                <div className="w-full rounded-2xl border border-p-border bg-p-surface p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-1">
+                    <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface-2 p-1">
                       {(['hoy', 'semana', 'mes'] as CashPeriod[]).map((period) => (
                         <button
                           key={`refunds-${period}`}
@@ -1899,8 +1899,8 @@ export default function AdminPaymentsPlaygroundPage() {
                           }}
                           className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
                             cashActivePeriod === period
-                              ? 'bg-white text-[#3053e2] shadow-sm'
-                              : 'text-[#6f7890] hover:text-[#4e5870]'
+                              ? 'bg-p-surface text-p-accent shadow-sm'
+                              : 'text-p-text-muted hover:text-p-text-secondary'
                           }`}
                         >
                           {period === 'hoy' ? 'Hoy' : period === 'semana' ? 'Semana' : 'Mes'}
@@ -1908,20 +1908,20 @@ export default function AdminPaymentsPlaygroundPage() {
                       ))}
                     </div>
 
-                    <div className="flex items-center gap-1 rounded-xl border border-[#dce2ee] bg-white px-1 py-1">
+                    <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface px-1 py-1">
                       <button
                         type="button"
                         onClick={() => setCashPeriodOffset((prev) => prev - 1)}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb]"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2"
                       >
                         <ChevronLeft size={16} />
                       </button>
-                      <span className="min-w-[120px] text-center text-[12px] font-semibold text-[#4e5870]">{cashPeriodLabel}</span>
+                      <span className="min-w-[120px] text-center text-[12px] font-semibold text-p-text-secondary">{cashPeriodLabel}</span>
                       <button
                         type="button"
                         onClick={() => setCashPeriodOffset((prev) => Math.min(0, prev + 1))}
                         disabled={cashPeriodOffset === 0}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-[#6f7890] transition hover:bg-[#f4f6fb] disabled:cursor-not-allowed disabled:text-[#b8c1d4] disabled:hover:bg-transparent"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2 disabled:cursor-not-allowed disabled:text-p-text-muted disabled:hover:bg-transparent"
                       >
                         <ChevronRight size={16} />
                       </button>
@@ -1930,8 +1930,8 @@ export default function AdminPaymentsPlaygroundPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <MetricCard label="Pendientes (período)" value={filteredPendingRefunds.length} format="number" valueColor="#3053e2" />
-                  <MetricCard label="Total recientes (período)" value={filteredRecentRefunds.length} format="number" valueColor="#2f5e46" />
+                  <MetricCard label="Pendientes (período)" value={filteredPendingRefunds.length} format="number" valueColor="var(--accent-fg)" />
+                  <MetricCard label="Total recientes (período)" value={filteredRecentRefunds.length} format="number" valueColor="var(--positive-fg)" />
                   <MetricCard label="Monto pendiente (período)" value={filteredPendingRefundAmount} format="money" />
                 </div>
 
@@ -1944,27 +1944,27 @@ export default function AdminPaymentsPlaygroundPage() {
                       <button
                         type="button"
                         onClick={openRefundRequestSelector}
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-[#3053e2] px-3 text-[12px] font-semibold text-white transition hover:bg-[#2748cc]"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-900"
                       >
                         <Plus size={14} strokeWidth={2.4} />
                         Nueva devolución
                       </button>
 
                       <label className="relative w-full sm:w-[260px] sm:flex-none">
-                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8b93a5]" />
+                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                         <input
                           type="text"
                           value={refundSearchTerm}
                           onChange={(event) => setRefundSearchTerm(event.target.value)}
                           placeholder="Buscar por código, motivo o referencia"
-                          className="h-8 w-full rounded-xl border border-[#dce2ee] bg-white pl-9 pr-3 text-[12px] outline-none focus:border-[#3053e2]"
+                          className="h-8 w-full rounded-xl border border-p-border bg-p-surface pl-9 pr-3 text-[12px] outline-none focus:border-p-accent"
                         />
                       </label>
 
                       <select
                         value={refundStatusFilter}
                         onChange={(event) => setRefundStatusFilter(event.target.value as RefundStatusFilter)}
-                        className="h-8 min-w-[145px] rounded-xl border border-[#dce2ee] bg-white px-2.5 text-[12px] outline-none focus:border-[#3053e2]"
+                        className="h-8 min-w-[145px] rounded-xl border border-p-border bg-p-surface px-2.5 text-[12px] outline-none focus:border-p-accent"
                       >
                         <option value="ALL">Todos los estados</option>
                         <option value="REQUESTED">Solicitada</option>
@@ -1978,7 +1978,7 @@ export default function AdminPaymentsPlaygroundPage() {
                       <select
                         value={refundMethodFilter}
                         onChange={(event) => setRefundMethodFilter(event.target.value as RefundMethodFilter)}
-                        className="h-8 min-w-[165px] rounded-xl border border-[#dce2ee] bg-white px-2.5 text-[12px] outline-none focus:border-[#3053e2]"
+                        className="h-8 min-w-[165px] rounded-xl border border-p-border bg-p-surface px-2.5 text-[12px] outline-none focus:border-p-accent"
                       >
                         <option value="ALL">Todos los métodos</option>
                         <option value="CASH">Efectivo</option>
@@ -1992,7 +1992,7 @@ export default function AdminPaymentsPlaygroundPage() {
                 >
                   {filteredRecentRefunds.length > 0 && (
                     <>
-                      <div className="hidden grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_120px_120px_110px] border-b border-[#eef2f8] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#6f7890] lg:grid">
+                      <div className="hidden grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_120px_120px_110px] border-b border-p-border px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-p-text-muted lg:grid">
                         <p>Código</p>
                         <p>Fecha</p>
                         <p>Motivo</p>
@@ -2002,7 +2002,7 @@ export default function AdminPaymentsPlaygroundPage() {
                         <p className="text-right">Monto</p>
                         <p className="text-right">Acciones</p>
                       </div>
-                      <div className="hidden divide-y divide-[#eef2f8] lg:block">
+                      <div className="hidden divide-y divide-p-border lg:block">
                         {filteredRecentRefunds.map((refund) => {
                           const isSelected = selectedRefundId === refund.id;
                           return (
@@ -2011,21 +2011,21 @@ export default function AdminPaymentsPlaygroundPage() {
                             type="button"
                             onClick={() => setSelectedRefundId(refund.id)}
                             className={`group relative grid min-h-[46px] w-full grid-cols-[130px_140px_minmax(0,1fr)_140px_140px_120px_120px_110px] items-center px-4 py-3 text-left text-[13px] transition ${
-                              isSelected ? 'bg-[#f3f6ff] text-[#2a3245]' : 'text-[#4b5672] hover:bg-[#f8f9fd]'
+                              isSelected ? 'bg-p-surface-2 text-p-text' : 'text-p-text-secondary hover:bg-p-surface-2'
                             }`}
                           >
-                            {isSelected ? <span className="absolute -inset-y-px left-0 w-0.5 rounded-r-full bg-[#3053e2]" aria-hidden="true" /> : null}
-                            <p className="font-semibold text-[#2a3245]">{refundCodeLabel(refund)}</p>
+                            {isSelected ? <span className="absolute -inset-y-px left-0 w-0.5 rounded-r-full bg-ink-900" aria-hidden="true" /> : null}
+                            <p className="font-semibold text-p-text">{refundCodeLabel(refund)}</p>
                             <p>{formatDateTime24(refund.createdAt)}</p>
                             <p className="truncate">{refund.reason?.trim() || refundReasonTypeLabel(refund.reasonType)}</p>
                             <p>{refundExecutionMethodLabel(refund.executionMethod)}</p>
-                            <p className="truncate text-[#5f6984]">P:{shortId(refund.paymentId)} · C:{shortId(refund.accountId)}</p>
+                            <p className="truncate text-p-text-secondary">P:{shortId(refund.paymentId)} · C:{shortId(refund.accountId)}</p>
                             <div>
-                              <span className="rounded-full bg-[#eef1f7] px-2 py-0.5 text-[11px] font-semibold text-[#55617f]">
+                              <span className="rounded-full bg-p-surface-3 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
                                 {formatRefundStatus(refund.status)}
                               </span>
                             </div>
-                            <p className="text-right font-semibold text-[#27314a]">{formatMoney(refund.amount)}</p>
+                            <p className="text-right font-semibold text-p-text">{formatMoney(refund.amount)}</p>
                             <div
                               className={`flex min-h-8 items-center justify-end gap-1.5 transition-opacity ${
                                 isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -2046,10 +2046,10 @@ export default function AdminPaymentsPlaygroundPage() {
                                   onClick={() => openRefundActionConfirm(refund, quickAction.action)}
                                   className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition ${
                                     quickAction.tone === 'danger'
-                                      ? 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] hover:bg-[#ffecec]'
+                                      ? 'border-p-error bg-p-error-bg text-p-error hover:bg-p-error-bg'
                                       : quickAction.tone === 'muted'
-                                        ? 'border-[#dce2ee] bg-white text-[#6f7890] hover:bg-[#f8f9fd]'
-                                        : 'border-[#dce2ee] bg-white text-[#3053e2] hover:bg-[#eef2ff]'
+                                        ? 'border-p-border bg-p-surface text-p-text-muted hover:bg-p-surface-2'
+                                        : 'border-p-border bg-p-surface text-p-accent hover:bg-p-positive-bg'
                                   }`}
                                 >
                                   {quickAction.icon}
@@ -2063,11 +2063,11 @@ export default function AdminPaymentsPlaygroundPage() {
                   )}
                   {filteredRecentRefunds.length === 0 && (
                     <div className="hidden px-3 py-8 text-center lg:block">
-                      <p className="text-[13px] font-semibold text-[#44506b]">No hay devoluciones para este período</p>
-                      <p className="mt-1 text-[12px] text-[#7a8398]">Proba otro rango o ajustá los filtros para ver resultados.</p>
+                      <p className="text-[13px] font-semibold text-p-text-secondary">No hay devoluciones para este período</p>
+                      <p className="mt-1 text-[12px] text-p-text-muted">Proba otro rango o ajustá los filtros para ver resultados.</p>
                     </div>
                   )}
-                  <div className="divide-y divide-[#eef2f8] lg:hidden">
+                  <div className="divide-y divide-p-border lg:hidden">
                     {filteredRecentRefunds.map((refund) => {
                       const isSelected = selectedRefundId === refund.id;
                       return (
@@ -2076,13 +2076,13 @@ export default function AdminPaymentsPlaygroundPage() {
                         type="button"
                         onClick={() => setSelectedRefundId(refund.id)}
                         className={`relative block min-h-[46px] w-full px-4 py-3 text-left text-[13px] transition ${
-                          isSelected ? 'bg-[#f3f6ff] text-[#2a3245]' : 'text-[#4b5672] hover:bg-[#f8f9fd]'
+                          isSelected ? 'bg-p-surface-2 text-p-text' : 'text-p-text-secondary hover:bg-p-surface-2'
                         }`}
                       >
-                        {isSelected ? <span className="absolute -inset-y-px left-0 w-0.5 rounded-r-full bg-[#3053e2]" aria-hidden="true" /> : null}
+                        {isSelected ? <span className="absolute -inset-y-px left-0 w-0.5 rounded-r-full bg-ink-900" aria-hidden="true" /> : null}
                         <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-[#2a3245]">{refundCodeLabel(refund)}</p>
-                          <span className="rounded-full bg-[#eef1f7] px-2 py-0.5 text-[10px] font-semibold text-[#55617f]">
+                          <p className="font-semibold text-p-text">{refundCodeLabel(refund)}</p>
+                          <span className="rounded-full bg-p-surface-3 px-2 py-0.5 text-[10px] font-semibold text-p-text-secondary">
                             {formatRefundStatus(refund.status)}
                           </span>
                         </div>
@@ -2091,8 +2091,8 @@ export default function AdminPaymentsPlaygroundPage() {
                     )})}
                     {filteredRecentRefunds.length === 0 && (
                       <div className="px-3 py-8 text-center">
-                        <p className="text-[13px] font-semibold text-[#44506b]">No hay devoluciones para este período</p>
-                        <p className="mt-1 text-[12px] text-[#7a8398]">Proba otro rango o ajustá los filtros para ver resultados.</p>
+                        <p className="text-[13px] font-semibold text-p-text-secondary">No hay devoluciones para este período</p>
+                        <p className="mt-1 text-[12px] text-p-text-muted">Proba otro rango o ajustá los filtros para ver resultados.</p>
                       </div>
                     )}
                   </div>
@@ -2106,7 +2106,7 @@ export default function AdminPaymentsPlaygroundPage() {
               {adminToasts.map((toast) => (
                 <div
                   key={toast.id}
-                  className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[12px] font-semibold text-[#27314a] shadow-lg"
+                  className="rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[12px] font-semibold text-p-text shadow-lg"
                 >
                   {toast.message}
                 </div>
@@ -2150,7 +2150,7 @@ export default function AdminPaymentsPlaygroundPage() {
             : 'Seleccioná una cuenta y un pago para devolver.'
         }
         statusChip={refundRequestAccount?.status === 'OPEN' ? 'Cuenta abierta' : refundRequestAccount ? 'Cuenta cerrada' : undefined}
-        statusChipClassName={refundRequestAccount?.status === 'OPEN' ? 'bg-[#edf1ff] text-[#3155df]' : 'bg-[#e8f8ec] text-[#16733f]'}
+        statusChipClassName={refundRequestAccount?.status === 'OPEN' ? 'bg-p-positive-bg text-p-accent' : 'bg-p-positive-bg text-p-positive'}
         size="md"
         footer={
           <div className="flex items-center justify-end gap-2">
@@ -2158,7 +2158,7 @@ export default function AdminPaymentsPlaygroundPage() {
               type="button"
               onClick={closeRefundRequestDrawer}
               disabled={submittingRefundRequest}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd] disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2 disabled:opacity-60"
             >
               <X size={14} />
               Cancelar
@@ -2167,7 +2167,7 @@ export default function AdminPaymentsPlaygroundPage() {
               type="button"
               onClick={() => void submitRefundRequest()}
               disabled={submittingRefundRequest || !refundRequestAmountIsValid}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-4 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900 disabled:opacity-60"
             >
               <Check size={14} />
               {submittingRefundRequest
@@ -2182,16 +2182,16 @@ export default function AdminPaymentsPlaygroundPage() {
         <AdminDrawerSection title="Cuenta" className={drawerSectionCardClass}>
           <div className="space-y-3">
             {refundRequestAccountLocked && refundRequestAccount ? (
-              <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5">
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Cuenta seleccionada</p>
-                <p className="mt-1 text-[13px] font-semibold text-[#27314b]">{accountDisplayLabel(refundRequestAccount)}</p>
-                <p className="mt-0.5 text-[11px] text-[#6f7890]">
+              <div className="rounded-xl border border-p-border bg-p-surface px-3 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-p-text-muted">Cuenta seleccionada</p>
+                <p className="mt-1 text-[13px] font-semibold text-p-text">{accountDisplayLabel(refundRequestAccount)}</p>
+                <p className="mt-0.5 text-[11px] text-p-text-muted">
                   #{shortCode(refundRequestAccount.id)} · {refundRequestAccount.status === 'OPEN' ? 'Abierta' : 'Cerrada'}
                 </p>
               </div>
             ) : (
               <label className="block">
-                <span className="text-[12px] font-medium text-[#4e5870]">Cuenta asociada</span>
+                <span className="text-[12px] font-medium text-p-text-secondary">Cuenta asociada</span>
                 <select
                   value={refundRequestAccountId}
                   onChange={(event) => {
@@ -2208,7 +2208,7 @@ export default function AdminPaymentsPlaygroundPage() {
                     void openRefundRequestForAccount(nextAccountId, { lockAccount: false });
                   }}
                   disabled={submittingRefundRequest}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2] disabled:opacity-60"
+                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent disabled:opacity-60"
                 >
                   <option value="">Seleccionar cuenta</option>
                   {allAccounts.map((account) => (
@@ -2220,12 +2220,12 @@ export default function AdminPaymentsPlaygroundPage() {
               </label>
             )}
             {!refundRequestAccountId && (
-              <p className="text-[12px] text-[#6f7890]">
+              <p className="text-[12px] text-p-text-muted">
                 Elegí una cuenta para ver sus pagos disponibles y solicitar la devolución sobre un pago concreto.
               </p>
             )}
             {allAccounts.length === 0 && (
-              <p className="border-t border-[#edf0f6] pt-3 text-[12px] text-[#6f7890]">
+              <p className="border-t border-p-border pt-3 text-[12px] text-p-text-muted">
                 No hay cuentas cargadas para iniciar una devolución.
               </p>
             )}
@@ -2235,12 +2235,12 @@ export default function AdminPaymentsPlaygroundPage() {
         <AdminDrawerSection title="Pago a devolver" className={drawerSectionCardClass}>
           <div className="space-y-2">
             {Boolean(refundRequestAccountId && loadingRefundsByAccountId[refundRequestAccountId]) && (
-              <div className="rounded-xl border border-[#dce7ff] bg-[#f4f7ff] px-3 py-2 text-[12px] font-semibold text-[#3053e2]">
+              <div className="rounded-xl border border-p-accent bg-p-positive-bg px-3 py-2 text-[12px] font-semibold text-p-accent">
                 Cargando pagos y devoluciones...
               </div>
             )}
             {refundRequestPaymentOptions.length === 0 ? (
-              <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-4 text-center text-[12px] text-[#6f7890]">
+              <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-4 text-center text-[12px] text-p-text-muted">
                 {refundRequestAccountId
                   ? 'Esta cuenta no tiene pagos disponibles para devolver.'
                   : 'Seleccioná una cuenta para ver sus pagos disponibles.'}
@@ -2262,20 +2262,20 @@ export default function AdminPaymentsPlaygroundPage() {
                     }}
                 className={[
                   'w-full rounded-xl border px-3 py-3 text-left transition',
-                  selected ? 'border-[#3053e2] bg-[#f4f7ff]' : 'border-[#dce2ee] bg-white hover:bg-[#f8f9fd]',
+                  selected ? 'border-p-accent bg-p-positive-bg' : 'border-p-border bg-p-surface hover:bg-p-surface-2',
                   disabled ? 'cursor-not-allowed opacity-50' : '',
                 ].join(' ')}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-[#27314b]">Pago #{shortCode(payment.id)}</p>
-                        <p className="mt-0.5 text-[11px] text-[#6f7890]">
+                        <p className="text-[13px] font-semibold text-p-text">Pago #{shortCode(payment.id)}</p>
+                        <p className="mt-0.5 text-[11px] text-p-text-muted">
                           {paymentMethodLabel(payment.method)} · {paymentChannelLabel(payment.channel || '')}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[13px] font-bold text-[#27314b]">{formatMoney(payment.amount)}</p>
-                        <p className="mt-0.5 text-[11px] text-[#6f7890]">Disponible {formatMoney(payment.availableAmount)}</p>
+                        <p className="text-[13px] font-bold text-p-text">{formatMoney(payment.amount)}</p>
+                        <p className="mt-0.5 text-[11px] text-p-text-muted">Disponible {formatMoney(payment.availableAmount)}</p>
                       </div>
                     </div>
                   </button>
@@ -2288,7 +2288,7 @@ export default function AdminPaymentsPlaygroundPage() {
         <AdminDrawerSection title="Datos de la devolución" className={drawerSectionCardClass}>
           <div className="space-y-3">
             <label className="block">
-              <span className="text-[12px] font-medium text-[#4e5870]">Monto a devolver</span>
+              <span className="text-[12px] font-medium text-p-text-secondary">Monto a devolver</span>
               <input
                 type="number"
                 min="0"
@@ -2298,20 +2298,20 @@ export default function AdminPaymentsPlaygroundPage() {
                   setRefundRequestAmountDraft(event.target.value);
                   setRefundRequestError('');
                 }}
-                className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                 placeholder="0.00"
               />
-              <span className="mt-1 block text-[11px] text-[#7a8398]">
+              <span className="mt-1 block text-[11px] text-p-text-muted">
                 Máximo: {formatMoney(refundRequestSelectedPayment?.availableAmount || 0)}
               </span>
             </label>
 
             <label className="block">
-              <span className="text-[12px] font-medium text-[#4e5870]">Motivo</span>
+              <span className="text-[12px] font-medium text-p-text-secondary">Motivo</span>
               <select
                 value={refundRequestReasonType}
                 onChange={(event) => setRefundRequestReasonType(event.target.value as RefundReasonType)}
-                className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
               >
                 {refundReasonOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -2320,29 +2320,29 @@ export default function AdminPaymentsPlaygroundPage() {
             </label>
 
             <label className="block">
-              <span className="text-[12px] font-medium text-[#4e5870]">Nota interna</span>
+              <span className="text-[12px] font-medium text-p-text-secondary">Nota interna</span>
               <textarea
                 value={refundRequestNotes}
                 onChange={(event) => setRefundRequestNotes(event.target.value)}
                 rows={3}
                 maxLength={500}
-                className="mt-1 w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                className="mt-1 w-full resize-none rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[13px] text-p-text outline-none focus:border-p-accent"
                 placeholder="Detalle operativo"
               />
             </label>
 
-            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5">
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-p-border bg-p-surface px-3 py-2.5">
               <input
                 type="checkbox"
                 checked={refundRequestExecuteNow}
                 onChange={(event) => setRefundRequestExecuteNow(event.target.checked)}
-                className="h-4 w-4 accent-[#3053e2]"
+                className="h-4 w-4 accent-p-brand"
               />
-              <span className="text-[12px] font-semibold text-[#27314b]">Ejecutar ahora</span>
+              <span className="text-[12px] font-semibold text-p-text">Ejecutar ahora</span>
             </label>
           </div>
           {refundRequestError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+            <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">
               {refundRequestError}
             </div>
           )}
@@ -2357,10 +2357,10 @@ export default function AdminPaymentsPlaygroundPage() {
         statusChip={selectedRefund ? formatRefundStatus(selectedRefund.status) : undefined}
         statusChipClassName={
           selectedRefund?.status === 'EXECUTED'
-            ? 'bg-[#e8f8ec] text-[#16733f]'
+            ? 'bg-p-positive-bg text-p-positive'
             : selectedRefund?.status === 'FAILED' || selectedRefund?.status === 'CANCELLED'
-              ? 'bg-[#fff1f3] text-[#9f1635]'
-              : 'bg-[#edf1ff] text-[#3155df]'
+              ? 'bg-p-error-bg text-p-error'
+              : 'bg-p-positive-bg text-p-accent'
         }
         size="md"
         footer={
@@ -2371,21 +2371,21 @@ export default function AdminPaymentsPlaygroundPage() {
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'cancel')}
-                    className="h-10 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-3 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#fff0f0]"
+                    className="h-10 rounded-xl border border-p-error bg-p-error-bg px-3 text-[13px] font-semibold text-p-error transition hover:bg-p-error-bg"
                   >
                     Cancelar
                   </button>
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'approve')}
-                    className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
+                    className="h-10 rounded-xl border border-p-border bg-p-surface px-3 text-[13px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
                   >
                     Aprobar
                   </button>
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'approve_execute')}
-                    className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+                    className="h-10 rounded-xl bg-ink-900 px-4 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900"
                   >
                     Aprobar y ejecutar
                   </button>
@@ -2396,21 +2396,21 @@ export default function AdminPaymentsPlaygroundPage() {
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'cancel')}
-                    className="h-10 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-3 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#fff0f0]"
+                    className="h-10 rounded-xl border border-p-error bg-p-error-bg px-3 text-[13px] font-semibold text-p-error transition hover:bg-p-error-bg"
                   >
                     Cancelar
                   </button>
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'fail')}
-                    className="h-10 rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] font-semibold text-[#4e5870] transition hover:bg-[#f8f9fd]"
+                    className="h-10 rounded-xl border border-p-border bg-p-surface px-3 text-[13px] font-semibold text-p-text-secondary transition hover:bg-p-surface-2"
                   >
                     Marcar fallida
                   </button>
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'execute')}
-                    className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+                    className="h-10 rounded-xl bg-ink-900 px-4 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900"
                   >
                     Ejecutar
                   </button>
@@ -2421,14 +2421,14 @@ export default function AdminPaymentsPlaygroundPage() {
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'cancel')}
-                    className="h-10 rounded-xl border border-[#ffd6d6] bg-[#fff5f5] px-3 text-[13px] font-semibold text-[#b42318] transition hover:bg-[#fff0f0]"
+                    className="h-10 rounded-xl border border-p-error bg-p-error-bg px-3 text-[13px] font-semibold text-p-error transition hover:bg-p-error-bg"
                   >
                     Cancelar
                   </button>
                   <button
                     type="button"
                     onClick={() => openRefundActionConfirm(selectedRefund, 'retry')}
-                    className="h-10 rounded-xl bg-[#3053e2] px-4 text-[13px] font-semibold text-white transition hover:bg-[#2748cc]"
+                    className="h-10 rounded-xl bg-ink-900 px-4 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900"
                   >
                     Reintentar
                   </button>
@@ -2442,36 +2442,36 @@ export default function AdminPaymentsPlaygroundPage() {
           <>
             <AdminDrawerSection title="Resumen" className={drawerSectionCardClass}>
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Monto</p>
-                  <p className="mt-1 text-[18px] font-bold text-[#27314b]">{formatMoney(selectedRefund.amount)}</p>
+                <div className="rounded-xl border border-p-border bg-p-surface px-3 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-p-text-muted">Monto</p>
+                  <p className="mt-1 text-[18px] font-bold text-p-text">{formatMoney(selectedRefund.amount)}</p>
                 </div>
-                <div className="rounded-xl border border-[#dce2ee] bg-white px-3 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">Método</p>
-                  <p className="mt-1 text-[14px] font-bold text-[#27314b]">{refundExecutionMethodLabel(selectedRefund.executionMethod)}</p>
+                <div className="rounded-xl border border-p-border bg-p-surface px-3 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-p-text-muted">Método</p>
+                  <p className="mt-1 text-[14px] font-bold text-p-text">{refundExecutionMethodLabel(selectedRefund.executionMethod)}</p>
                 </div>
               </div>
             </AdminDrawerSection>
 
             <AdminDrawerSection title="Referencias" className={drawerSectionCardClass}>
-              <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 text-[12px] text-[#4e5870]">
+              <div className="divide-y divide-p-border rounded-xl border border-p-border bg-p-surface-2 px-3 text-[12px] text-p-text-secondary">
                 <div className="flex items-center justify-between gap-3 py-2.5">
                   <span>Pago</span>
-                  <span className="font-mono font-semibold text-[#27314b]">{shortCode(selectedRefund.paymentId)}</span>
+                  <span className="font-mono font-semibold text-p-text">{shortCode(selectedRefund.paymentId)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-2.5">
                   <span>Cuenta</span>
-                  <span className="font-mono font-semibold text-[#27314b]">{shortCode(selectedRefund.accountId)}</span>
+                  <span className="font-mono font-semibold text-p-text">{shortCode(selectedRefund.accountId)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-2.5">
                   <span>Turno de caja</span>
-                  <span className="font-mono font-semibold text-[#27314b]">{selectedRefund.cashShiftId ? shortCode(selectedRefund.cashShiftId) : '-'}</span>
+                  <span className="font-mono font-semibold text-p-text">{selectedRefund.cashShiftId ? shortCode(selectedRefund.cashShiftId) : '-'}</span>
                 </div>
               </div>
             </AdminDrawerSection>
 
             <AdminDrawerSection title="Trazabilidad" className={drawerSectionCardClass}>
-              <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 text-[12px]">
+              <div className="divide-y divide-p-border rounded-xl border border-p-border bg-p-surface-2 px-3 text-[12px]">
                 {[
                   ['Creada', selectedRefund.createdAt],
                   ['Aprobada', selectedRefund.approvedAt],
@@ -2480,20 +2480,20 @@ export default function AdminPaymentsPlaygroundPage() {
                   ['Fallida', selectedRefund.failedAt],
                 ].map(([label, value]) => (
                   <div key={label} className="grid grid-cols-[104px_minmax(0,1fr)] items-center gap-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#98a1b3]">{label}</p>
-                    <p className="font-semibold text-[#27314b]">{value ? formatDateTime24(String(value)) : '-'}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-p-text-muted">{label}</p>
+                    <p className="font-semibold text-p-text">{value ? formatDateTime24(String(value)) : '-'}</p>
                   </div>
                 ))}
               </div>
             </AdminDrawerSection>
 
             <AdminDrawerSection title="Notas" className={drawerSectionCardClass}>
-              <div className="divide-y divide-[#e8edf5] rounded-xl border border-[#dce2ee] bg-[#fbfcff] px-3 text-[12px] text-[#4e5870]">
-                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Motivo:</span> {selectedRefund.reason?.trim() || refundReasonTypeLabel(selectedRefund.reasonType)}</p>
-                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Nota:</span> {selectedRefund.executionNotes?.trim() || '-'}</p>
-                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Referencia:</span> {selectedRefund.executionReference?.trim() || '-'}</p>
-                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Cancelación:</span> {selectedRefund.cancelReason?.trim() || '-'}</p>
-                <p className="py-2.5"><span className="font-semibold text-[#27314b]">Fallo:</span> {selectedRefund.failedReason?.trim() || '-'}</p>
+              <div className="divide-y divide-p-border rounded-xl border border-p-border bg-p-surface-2 px-3 text-[12px] text-p-text-secondary">
+                <p className="py-2.5"><span className="font-semibold text-p-text">Motivo:</span> {selectedRefund.reason?.trim() || refundReasonTypeLabel(selectedRefund.reasonType)}</p>
+                <p className="py-2.5"><span className="font-semibold text-p-text">Nota:</span> {selectedRefund.executionNotes?.trim() || '-'}</p>
+                <p className="py-2.5"><span className="font-semibold text-p-text">Referencia:</span> {selectedRefund.executionReference?.trim() || '-'}</p>
+                <p className="py-2.5"><span className="font-semibold text-p-text">Cancelación:</span> {selectedRefund.cancelReason?.trim() || '-'}</p>
+                <p className="py-2.5"><span className="font-semibold text-p-text">Fallo:</span> {selectedRefund.failedReason?.trim() || '-'}</p>
               </div>
             </AdminDrawerSection>
           </>
@@ -2521,7 +2521,7 @@ export default function AdminPaymentsPlaygroundPage() {
               <p>{refundActionCopyValue.message}</p>
               {refundActionCopyValue.needsReason && (
                 <label className="block">
-                  <span className="text-[12px] font-medium text-[#4e5870]">Motivo</span>
+                  <span className="text-[12px] font-medium text-p-text-secondary">Motivo</span>
                   <textarea
                     value={refundActionReason}
                     onChange={(event) => {
@@ -2530,13 +2530,13 @@ export default function AdminPaymentsPlaygroundPage() {
                     }}
                     rows={3}
                     maxLength={500}
-                    className="mt-1 w-full resize-none rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[13px] text-[#2a3245] outline-none transition focus:border-[#3053e2]"
+                    className="mt-1 w-full resize-none rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[13px] text-p-text outline-none transition focus:border-p-accent"
                     placeholder="Detalle operativo"
                   />
                 </label>
               )}
               {refundActionError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+                <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">
                   {refundActionError}
                 </div>
               )}
@@ -2579,14 +2579,14 @@ export default function AdminPaymentsPlaygroundPage() {
                   : undefined
         }
         statusChip={cashCurrentShift ? 'Caja abierta' : 'Caja cerrada'}
-        statusChipClassName={cashCurrentShift ? 'border-[#d4f0dc] bg-[#e8f8ec] text-[#16733f]' : 'border-[#dce5ff] bg-[#edf1ff] text-[#3155df]'}
+        statusChipClassName={cashCurrentShift ? 'border-p-positive bg-p-positive-bg text-p-positive' : 'border-p-accent bg-p-positive-bg text-p-accent'}
         size="sm"
         footer={
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={closeActionSidebar}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
             >
               <X size={14} />
               {cashSidebarView === 'close_report' ? 'Cerrar' : 'Cancelar'}
@@ -2597,7 +2597,7 @@ export default function AdminPaymentsPlaygroundPage() {
                 type="submit"
                 form="cash-open-shift-form"
                 disabled={openingCashShift}
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Landmark size={14} />
                 {openingCashShift ? 'Abriendo...' : 'Abrir caja'}
@@ -2609,7 +2609,7 @@ export default function AdminPaymentsPlaygroundPage() {
                 type="submit"
                 form="cash-close-shift-form"
                 disabled={closingCashShift || !cashCurrentShift}
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Check size={14} />
                 {closingCashShift ? 'Cerrando...' : 'Confirmar cierre'}
@@ -2621,7 +2621,7 @@ export default function AdminPaymentsPlaygroundPage() {
                 type="submit"
                 form="cash-new-movement-form"
                 disabled={submittingCashMovement || !cashCurrentShift}
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Plus size={14} />
                 {submittingCashMovement ? 'Registrando...' : 'Registrar movimiento'}
@@ -2634,11 +2634,11 @@ export default function AdminPaymentsPlaygroundPage() {
           <form id="cash-open-shift-form" className="space-y-5" onSubmit={handleOpenShift}>
             <AdminDrawerSection title="Caja" className={drawerSectionCardClass}>
               <label className="block">
-                <span className="text-[12px] font-medium text-[#4e5870]">Caja registradora</span>
+                <span className="text-[12px] font-medium text-p-text-secondary">Caja registradora</span>
                 <select
                   value={cashOpenShiftForm.cashRegisterId}
                   onChange={(event) => setCashOpenShiftForm((prev) => ({ ...prev, cashRegisterId: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                 >
                   <option value="">Seleccionar</option>
                   {cashRegisters.map((register) => (
@@ -2652,14 +2652,14 @@ export default function AdminPaymentsPlaygroundPage() {
 
             <AdminDrawerSection title="Monto inicial" className={drawerSectionCardClass}>
               <label className="block">
-                <span className="text-[12px] font-medium text-[#4e5870]">Monto inicial</span>
+                <span className="text-[12px] font-medium text-p-text-secondary">Monto inicial</span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={cashOpenShiftForm.openingAmount}
                   onChange={(event) => setCashOpenShiftForm((prev) => ({ ...prev, openingAmount: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                   placeholder="0"
                 />
               </label>
@@ -2670,7 +2670,7 @@ export default function AdminPaymentsPlaygroundPage() {
         {cashSidebarView === 'close_shift' && (
           <form id="cash-close-shift-form" className="space-y-5" onSubmit={handleCloseShift}>
             <AdminDrawerSection title="Turno actual" className={drawerSectionCardClass}>
-              <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3 text-[12px] text-[#4e5870]">
+              <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[12px] text-p-text-secondary">
                 <p><span className="font-semibold">Caja:</span> {cashCurrentShift?.cashRegister?.name || '-'}</p>
                 <p><span className="font-semibold">Apertura:</span> {cashCurrentShift?.openedAt ? formatDateTime24(cashCurrentShift.openedAt) : '-'}</p>
                 <p><span className="font-semibold">Monto inicial:</span> {formatMoney(Number(cashCurrentShift?.openingAmount || 0))}</p>
@@ -2679,14 +2679,14 @@ export default function AdminPaymentsPlaygroundPage() {
 
             <AdminDrawerSection title="Arqueo" className={drawerSectionCardClass}>
               <label className="block">
-                <span className="text-[12px] font-medium text-[#4e5870]">Dinero contado al cierre</span>
+                <span className="text-[12px] font-medium text-p-text-secondary">Dinero contado al cierre</span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={cashCloseShiftForm.countedCash}
                   onChange={(event) => setCashCloseShiftForm({ countedCash: event.target.value })}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                   placeholder="0"
                 />
               </label>
@@ -2703,8 +2703,8 @@ export default function AdminPaymentsPlaygroundPage() {
                   onClick={() => setCashNewMovement((prev) => ({ ...prev, type: 'INCOME' }))}
                   className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-[12px] font-semibold ${
                     cashNewMovement.type === 'INCOME'
-                      ? 'border-[#d4f0dc] bg-[#e8f8ec] text-[#16733f]'
-                      : 'border-[#dce2ee] bg-white text-[#4e5870]'
+                      ? 'border-p-positive bg-p-positive-bg text-p-positive'
+                      : 'border-p-border bg-p-surface text-p-text-secondary'
                   }`}
                 >
                   <Plus size={12} />
@@ -2715,8 +2715,8 @@ export default function AdminPaymentsPlaygroundPage() {
                   onClick={() => setCashNewMovement((prev) => ({ ...prev, type: 'EXPENSE' }))}
                   className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-[12px] font-semibold ${
                     cashNewMovement.type === 'EXPENSE'
-                      ? 'border-[#f5c8d0] bg-[#fff0f2] text-[#b42346]'
-                      : 'border-[#dce2ee] bg-white text-[#4e5870]'
+                      ? 'border-p-error bg-p-error-bg text-p-error'
+                      : 'border-p-border bg-p-surface text-p-text-secondary'
                   }`}
                 >
                   <X size={12} />
@@ -2727,25 +2727,25 @@ export default function AdminPaymentsPlaygroundPage() {
 
             <AdminDrawerSection title="Detalle" className={drawerSectionCardClass}>
               <label className="block">
-                <span className="text-[12px] font-medium text-[#4e5870]">Concepto</span>
+                <span className="text-[12px] font-medium text-p-text-secondary">Concepto</span>
                 <input
                   type="text"
                   value={cashNewMovement.description}
                   onChange={(event) => setCashNewMovement((prev) => ({ ...prev, description: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                   placeholder="Descripción del movimiento"
                 />
               </label>
 
               <label className="mt-3 block">
-                <span className="text-[12px] font-medium text-[#4e5870]">Monto</span>
+                <span className="text-[12px] font-medium text-p-text-secondary">Monto</span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={cashNewMovement.amount}
                   onChange={(event) => setCashNewMovement((prev) => ({ ...prev, amount: event.target.value }))}
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                   placeholder="0"
                 />
               </label>
@@ -2753,13 +2753,13 @@ export default function AdminPaymentsPlaygroundPage() {
 
             <AdminDrawerSection title="Método" className={drawerSectionCardClass}>
               <label className="block">
-                <span className="text-[12px] font-medium text-[#4e5870]">Método</span>
+                <span className="text-[12px] font-medium text-p-text-secondary">Método</span>
                 <select
                   value={cashNewMovement.method}
                   onChange={(event) =>
                     setCashNewMovement((prev) => ({ ...prev, method: event.target.value as 'CASH' | 'TRANSFER' | 'CARD' }))
                   }
-                  className="mt-1 h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] text-[#27314b] outline-none focus:border-[#3053e2]"
+                  className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
                 >
                   <option value="CASH">Efectivo</option>
                   <option value="TRANSFER">Transferencia</option>
@@ -2768,7 +2768,7 @@ export default function AdminPaymentsPlaygroundPage() {
               </label>
 
               {!cashCurrentShift && (
-                <p className="mt-3 text-[12px] text-[#7a8398]">Abrí caja para habilitar movimientos.</p>
+                <p className="mt-3 text-[12px] text-p-text-muted">Abrí caja para habilitar movimientos.</p>
               )}
             </AdminDrawerSection>
           </form>
@@ -2776,20 +2776,20 @@ export default function AdminPaymentsPlaygroundPage() {
 
         {cashSidebarView === 'close_report' && (
           <AdminDrawerSection title="Arqueo" className={drawerSectionCardClass}>
-            <div className="space-y-3 text-[13px] text-[#4e5870]">
+            <div className="space-y-3 text-[13px] text-p-text-secondary">
               {cashLastCloseReport ? (
                 <>
-                  <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3">
+                  <div className="rounded-xl border border-p-border bg-p-surface-2 p-3">
                     <p><span className="font-semibold">Esperado:</span> {formatMoney(cashLastCloseReport.expectedCash)}</p>
                     <p><span className="font-semibold">Contado:</span> {formatMoney(cashLastCloseReport.countedCash)}</p>
                     <p><span className="font-semibold">Diferencia:</span> {formatMoney(cashLastCloseReport.difference)}</p>
                   </div>
-                  <p className="text-[12px] text-[#6f7890]">
+                  <p className="text-[12px] text-p-text-muted">
                     ID cierre: {cashLastCloseReport.shift?.id || '-'}
                   </p>
                 </>
               ) : (
-                <p className="text-[12px] text-[#6f7890]">No hay arqueo disponible en esta sesión.</p>
+                <p className="text-[12px] text-p-text-muted">No hay arqueo disponible en esta sesión.</p>
               )}
             </div>
           </AdminDrawerSection>

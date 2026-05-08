@@ -79,24 +79,24 @@ export default function PlaytomicPaymentModal({
 
   return (
     <div
-      className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[#0d1326]/45 p-4"
+      className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[var(--overlay)] p-4"
       role="presentation"
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}
     >
       <div
-        className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[#dce2ee] bg-white shadow-2xl"
+        className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-p-border bg-p-surface shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[#eef1f6] px-4 py-3">
+        <div className="flex items-center justify-between border-b border-p-border px-4 py-3">
           <div>
-            <p className="text-[18px] font-semibold text-[#1f2638]">{title}</p>
-            <p className="text-[12px] text-[#707a92]">{subtitle}</p>
+            <p className="text-[18px] font-semibold text-p-text">{title}</p>
+            <p className="text-[12px] text-p-text-secondary">{subtitle}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="h-8 w-8 rounded-full text-[#7e879c] grid place-items-center hover:bg-[#f3f5fa]"
+            className="h-8 w-8 rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
             aria-label="Cerrar"
           >
             <X size={16} />
@@ -106,11 +106,11 @@ export default function PlaytomicPaymentModal({
         <div className="space-y-3 overflow-hidden px-4 py-3">
           <div className="grid grid-cols-1 gap-3">
             <div className="block">
-              <span className="text-[12px] font-medium text-[#79829a]">Método</span>
+              <span className="text-[12px] font-medium text-p-text-muted">Método</span>
               <select
                 value={methodValue}
                 onChange={(event) => onMethodChange(String(event.target.value || ''))}
-                className="mt-1 h-11 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[14px] text-[#2a3245] outline-none focus:border-[#3053e2]"
+                className="mt-1 h-11 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[14px] text-p-text outline-none focus:border-p-accent"
               >
                 {methodOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -121,8 +121,8 @@ export default function PlaytomicPaymentModal({
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
-            <p className="text-[12px] font-semibold text-[#44506b]">Conceptos a cobrar</p>
+          <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
+            <p className="text-[12px] font-semibold text-p-text-secondary">Conceptos a cobrar</p>
             <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
               {presetOptions.map((option) => {
                 const isActive = selectedPreset === option.id;
@@ -133,8 +133,8 @@ export default function PlaytomicPaymentModal({
                     onClick={() => onPresetChange(option.id)}
                     className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
                       isActive
-                        ? 'border-[#3155df] bg-[#eef2ff] text-[#3155df]'
-                        : 'border-[#dce2ee] bg-white text-[#5f6880] hover:bg-[#f5f7fc]'
+                        ? 'border-p-accent bg-p-positive-bg text-p-accent'
+                        : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
                     }`}
                   >
                     {option.label}
@@ -145,10 +145,10 @@ export default function PlaytomicPaymentModal({
           </div>
 
           {selectedPreset === 'CUSTOM_ITEMS' && (
-            <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] px-3 py-2.5">
+            <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[12px] font-semibold text-[#44506b]">Selección manual</p>
-                <span className="text-[11px] font-semibold text-[#6f7890]">
+                <p className="text-[12px] font-semibold text-p-text-secondary">Selección manual</p>
+                <span className="text-[11px] font-semibold text-p-text-muted">
                   Total: {customSelectedTotal.toFixed(2)} $
                 </span>
                 <div className="flex items-center gap-2">
@@ -156,7 +156,7 @@ export default function PlaytomicPaymentModal({
                     <button
                       type="button"
                       onClick={onSelectAll}
-                      className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                      className="h-7 rounded-md border border-p-border bg-p-surface px-2 text-[11px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                     >
                       Seleccionar todo
                     </button>
@@ -165,16 +165,16 @@ export default function PlaytomicPaymentModal({
                     <button
                       type="button"
                       onClick={onClear}
-                      className="h-7 rounded-md border border-[#d9e0ed] bg-white px-2 text-[11px] font-semibold text-[#4d5875] hover:bg-[#f4f7fc]"
+                      className="h-7 rounded-md border border-p-border bg-p-surface px-2 text-[11px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                     >
                       Limpiar
                     </button>
                   )}
                 </div>
               </div>
-              <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-[#dce2ee] bg-white p-2">
+              <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-p-border bg-p-surface p-2">
                 {pendingItems.length === 0 ? (
-                  <p className="px-1 py-2 text-[12px] text-[#7a8398]">
+                  <p className="px-1 py-2 text-[12px] text-p-text-muted">
                     No hay conceptos con deuda pendiente.
                   </p>
                 ) : (
@@ -190,20 +190,20 @@ export default function PlaytomicPaymentModal({
                         <div
                           key={`payment-playtomic-concept-item-${itemId}`}
                           onClick={() => onToggleItem(itemId, !checked)}
-                          className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-[#f5f7fc]"
+                          className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-p-surface-2"
                         >
-                          <span className="min-w-0 flex items-center gap-2 text-[12px] text-[#2a3245]">
+                          <span className="min-w-0 flex items-center gap-2 text-[12px] text-p-text">
                             <input
                               type="checkbox"
                               checked={checked}
                               onClick={(event) => event.stopPropagation()}
                               onChange={(event) => onToggleItem(itemId, event.target.checked)}
-                              className="h-4 w-4 accent-[#3053e2]"
+                              className="h-4 w-4 accent-p-brand"
                             />
                             <span className="truncate">{label}</span>
                           </span>
                           <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-[116px] items-center rounded-md border border-[#dce2ee] bg-white px-2">
+                            <div className="flex h-8 w-[116px] items-center rounded-md border border-p-border bg-p-surface px-2">
                               <input
                                 type="number"
                                 min={0}
@@ -219,11 +219,11 @@ export default function PlaytomicPaymentModal({
                                     : ''
                                 }
                                 onChange={(event) => onItemAmountChange(itemId, event.target.value)}
-                                className="w-full bg-transparent text-right text-[12px] font-semibold text-[#2a3245] outline-none disabled:text-[#9ca5ba]"
+                                className="w-full bg-transparent text-right text-[12px] font-semibold text-p-text outline-none disabled:text-p-text-muted"
                               />
-                              <span className="ml-1 text-[11px] font-semibold text-[#8a92a5]">$</span>
+                              <span className="ml-1 text-[11px] font-semibold text-p-text-muted">$</span>
                             </div>
-                            <span className="w-[88px] text-right text-[11px] font-semibold text-[#62708f]">
+                            <span className="w-[88px] text-right text-[11px] font-semibold text-p-text-secondary">
                               {Number(item.remainingAmount || 0).toFixed(2)} $
                             </span>
                           </div>
@@ -237,43 +237,43 @@ export default function PlaytomicPaymentModal({
           )}
 
           <label className="block">
-            <span className="text-[12px] font-medium text-[#79829a]">Monto final</span>
-            <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+            <span className="text-[12px] font-medium text-p-text-muted">Monto final</span>
+            <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
               <input
                 type="number"
                 min={0}
                 step="0.01"
                 value={amountDraft}
                 onChange={(event) => onAmountChange(event.target.value)}
-                className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
+                className="w-full bg-transparent text-[16px] text-p-text outline-none"
               />
-              <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
+              <span className="text-[15px] font-semibold text-p-text-muted">$</span>
             </div>
-            <p className="mt-1 text-[11px] text-[#6f7890]">{maxInlineLabel}</p>
+            <p className="mt-1 text-[11px] text-p-text-muted">{maxInlineLabel}</p>
           </label>
 
           <label className="block">
-            <span className="text-[12px] font-medium text-[#79829a]">Monto</span>
-            <div className="mt-1 h-11 rounded-xl border border-[#dce2ee] bg-white px-3 flex items-center justify-between">
+            <span className="text-[12px] font-medium text-p-text-muted">Monto</span>
+            <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
               <input
                 type="number"
                 min={0}
                 step="0.01"
                 value={amountDraft}
                 onChange={(event) => onAmountChange(event.target.value)}
-                className="w-full bg-transparent text-[16px] text-[#2a3245] outline-none"
+                className="w-full bg-transparent text-[16px] text-p-text outline-none"
               />
-              <span className="text-[15px] font-semibold text-[#8a92a5]">$</span>
+              <span className="text-[15px] font-semibold text-p-text-muted">$</span>
             </div>
-            <p className="mt-1 text-[11px] text-[#6f7890]">{maxFooterLabel}</p>
+            <p className="mt-1 text-[11px] text-p-text-muted">{maxFooterLabel}</p>
           </label>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[#eef1f6] px-4 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-p-border px-4 py-3">
           <button
             type="button"
             onClick={onClose}
-            className="h-10 rounded-xl border border-[#dce2ee] px-4 text-[14px] font-semibold text-[#5d667f] hover:bg-[#f7f9fc]"
+            className="h-10 rounded-xl border border-p-border px-4 text-[14px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
           >
             Cancelar
           </button>
@@ -281,7 +281,7 @@ export default function PlaytomicPaymentModal({
             type="button"
             onClick={onContinue}
             disabled={continueDisabled}
-            className="h-10 rounded-xl bg-[#3053e2] px-4 text-[14px] font-semibold text-white hover:bg-[#2748cc] disabled:opacity-50"
+            className="h-10 rounded-xl bg-ink-900 px-4 text-[14px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
           >
             {continueLabel}
           </button>

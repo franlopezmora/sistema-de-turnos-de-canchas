@@ -41,8 +41,8 @@ type ClientActionSidebarView = 'none' | 'client_create' | 'client_edit' | 'clien
 
 
 const EPSILON = 0.009;
-const drawerSectionCardClass = 'rounded-2xl border border-[#dce2ee] bg-[#f8f9fd] p-4';
-const drawerListClass = 'divide-y divide-[#edf0f6] rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px]';
+const drawerSectionCardClass = 'rounded-2xl border border-p-border bg-p-surface-2 p-4';
+const drawerListClass = 'divide-y divide-p-border rounded-xl border border-p-border bg-p-surface px-3 text-[13px]';
 
 const normalizeClientFormError = (error: unknown) => {
   const raw =
@@ -572,7 +572,7 @@ export default function AdminClientesPlayground2Page() {
   return (
     <>
       <Head>
-        <title>Clientes | TuCancha Admin</title>
+        <title>Clientes | Punto Admin</title>
       </Head>
 
       <AdminPlaygroundShell activeItem="Clientes" user={user} contentMuted={sidebarOpen}>
@@ -590,43 +590,43 @@ export default function AdminClientesPlayground2Page() {
               />
 
               <div className="grid grid-cols-2 gap-3">
-                <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Total clientes</p>
-                  <p className="mt-2 text-lg font-semibold text-[#1f2638]">{totalClients}</p>
+                <article className="rounded-xl border border-p-border bg-p-surface p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">Total clientes</p>
+                  <p className="mt-2 text-lg font-semibold text-p-text">{totalClients}</p>
                 </article>
-                <article className="rounded-xl border border-[#dce2ee] bg-white p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6f7890]">Deuda total</p>
-                  <p className={`mt-2 text-lg font-semibold ${totalDebt > 0 ? 'text-red-700' : 'text-emerald-700'}`}>{formatMoney(totalDebt)}</p>
+                <article className="rounded-xl border border-p-border bg-p-surface p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">Deuda total</p>
+                  <p className={`mt-2 text-lg font-semibold ${totalDebt > 0 ? 'text-p-error' : 'text-p-positive'}`}>{formatMoney(totalDebt)}</p>
                 </article>
               </div>
 
               <div className="min-h-0 flex-1 overflow-hidden">
                 {activeView === 'directory' && (
                   <div className="flex h-full flex-col">
-                    <article className="flex min-h-0 flex-1 flex-col rounded-xl border border-[#dce2ee] bg-white">
-                      <div className="border-b border-[#eef2f7] pl-4 pr-2 py-3">
+                    <article className="flex min-h-0 flex-1 flex-col rounded-xl border border-p-border bg-p-surface">
+                      <div className="border-b border-p-border pl-4 pr-2 py-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <h2 className="text-[13px] font-semibold text-[#1f2638]">Directorio de clientes</h2>
-                            <p className="mt-1 text-[12px] text-[#6f7890]">
+                            <h2 className="text-[13px] font-semibold text-p-text">Directorio de clientes</h2>
+                            <p className="mt-1 text-[12px] text-p-text-muted">
                               Listado operativo con acceso rápido a perfil, edición y baja.
                             </p>
                           </div>
                           <AdminFilterToolbar className="border-0 bg-transparent p-0 gap-1 sm:flex-nowrap sm:justify-end">
                             <label className="relative w-full sm:w-[300px] sm:flex-none">
-                              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8b93a5]" />
+                              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                               <input
                                 type="text"
                                 value={searchTerm}
                                 onChange={(event) => setSearchTerm(event.target.value)}
                                 placeholder="Buscar por nombre, dni, email o telefono"
-                                className="h-8 w-full rounded-xl border border-[#dce2ee] bg-white pl-9 pr-3 text-[12px] outline-none focus:border-[#3053e2]"
+                                className="h-8 w-full rounded-xl border border-p-border bg-p-surface pl-9 pr-3 text-[12px] outline-none focus:border-p-accent"
                               />
                             </label>
                             <button
                               type="button"
                               onClick={openCreateClient}
-                              className="h-8 rounded-lg bg-[#3053e2] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#2748cc]"
+                              className="h-8 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 transition hover:bg-ink-900"
                             >
                               <span className="inline-flex items-center gap-1"><Plus size={14} /> Nuevo cliente</span>
                             </button>
@@ -650,35 +650,35 @@ export default function AdminClientesPlayground2Page() {
                 {activeView === 'debt' && (
                   <div className="grid h-full grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
                     {/* Left: debtor list with search + count badge */}
-                    <article className="flex min-h-0 flex-col rounded-xl border border-[#dce2ee] bg-white">
+                    <article className="flex min-h-0 flex-col rounded-xl border border-p-border bg-p-surface">
                       <div className="p-4 pb-3">
                         <div className="flex items-center justify-between">
-                          <h2 className="text-[13px] font-semibold text-[#1f2638]">Clientes con deuda</h2>
-                          <span className="rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                          <h2 className="text-[13px] font-semibold text-p-text">Clientes con deuda</h2>
+                          <span className="rounded-full border border-p-error bg-p-error-bg px-2 py-0.5 text-[11px] font-semibold text-p-error">
                             {clientsWithOpenDebt.length}
                           </span>
                         </div>
                         <div className="relative mt-3">
-                          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8b93a5]" />
+                          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                           <input
                             type="text"
                             value={debtSearchTerm}
                             onChange={(event) => setDebtSearchTerm(event.target.value)}
                             placeholder="Buscar deudor..."
-                            className="h-8 w-full rounded-xl border border-[#dce2ee] bg-[#f8f9fd] pl-9 pr-3 text-[12px] outline-none focus:border-[#3053e2]"
+                            className="h-8 w-full rounded-xl border border-p-border bg-p-surface-2 pl-9 pr-3 text-[12px] outline-none focus:border-p-accent"
                           />
                         </div>
                       </div>
 
-                      <div className="min-h-0 flex-1 overflow-auto border-t border-[#dce2ee]">
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-p-border">
                         {loading ? (
-                          <div className="p-6 text-center text-[13px] text-[#6f7890]">Cargando...</div>
+                          <div className="p-6 text-center text-[13px] text-p-text-muted">Cargando...</div>
                         ) : debtFilteredClients.length === 0 ? (
-                          <div className="p-6 text-center text-[13px] text-[#6f7890]">
+                          <div className="p-6 text-center text-[13px] text-p-text-muted">
                             {debtSearchTerm ? 'Sin resultados.' : 'No hay clientes con deuda.'}
                           </div>
                         ) : (
-                          <ul className="divide-y divide-[#eef2f7]">
+                          <ul className="divide-y divide-p-border">
                             {debtFilteredClients.map((client) => {
                               const pendingCount = (Array.isArray(client.history) ? client.history : []).filter(
                                 (a: any) => Number(a?.amount || 0) > EPSILON
@@ -689,18 +689,18 @@ export default function AdminClientesPlayground2Page() {
                                     type="button"
                                     onClick={() => setSelectedClientId(String(client.id))}
                                     className={`w-full min-h-[46px] px-3 py-3 text-left transition ${
-                                      String(selectedClientId) === String(client.id) ? 'bg-[#edf1ff]' : 'hover:bg-[#f8f9fd]'
+                                      String(selectedClientId) === String(client.id) ? 'bg-p-positive-bg' : 'hover:bg-p-surface-2'
                                     }`}
                                   >
                                     <div className="flex items-center justify-between gap-2">
-                                      <p className="truncate text-[13px] font-semibold text-[#1f2638]">{getClientName(client)}</p>
+                                      <p className="truncate text-[13px] font-semibold text-p-text">{getClientName(client)}</p>
                                       {pendingCount > 0 && (
-                                        <span className="flex-none rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                                        <span className="flex-none rounded-full bg-p-error-bg px-1.5 py-0.5 text-[10px] font-bold text-p-error">
                                           {pendingCount}
                                         </span>
                                       )}
                                     </div>
-                                    <p className="text-[12px] font-semibold text-red-600">{formatMoney(Number(client.totalDebt || 0))}</p>
+                                    <p className="text-[12px] font-semibold text-p-error">{formatMoney(Number(client.totalDebt || 0))}</p>
                                   </button>
                                 </li>
                               );
@@ -711,46 +711,46 @@ export default function AdminClientesPlayground2Page() {
                     </article>
 
                     {/* Right: pending accounts for selected debtor */}
-                    <article className="flex min-h-0 flex-col rounded-xl border border-[#dce2ee] bg-white">
+                    <article className="flex min-h-0 flex-col rounded-xl border border-p-border bg-p-surface">
                       <div className="flex items-center justify-between p-4 pb-3">
-                        <h2 className="text-[13px] font-semibold text-[#1f2638]">Cuentas pendientes</h2>
+                        <h2 className="text-[13px] font-semibold text-p-text">Cuentas pendientes</h2>
                         {selectedClient && (
-                          <span className="text-[12px] font-semibold text-[#1f2638]">{getClientName(selectedClient)}</span>
+                          <span className="text-[12px] font-semibold text-p-text">{getClientName(selectedClient)}</span>
                         )}
                       </div>
 
-                      <div className="min-h-0 flex-1 overflow-auto border-t border-[#dce2ee] p-4">
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-p-border p-4">
                         {!selectedClient ? (
-                          <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">
+                          <div className="rounded-xl border border-p-border p-8 text-center text-[13px] text-p-text-muted">
                             Selecciona un cliente para ver su deuda.
                           </div>
                         ) : selectedDebtorPendingEntries.length === 0 ? (
-                          <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">
+                          <div className="rounded-xl border border-p-border p-8 text-center text-[13px] text-p-text-muted">
                             Este cliente no tiene cuentas pendientes.
                           </div>
                         ) : (
                           <div className="space-y-3">
                             {selectedDebtorPendingEntries.map((account: any) => (
-                              <div key={String(account.id)} className="rounded-xl border border-[#dce2ee] bg-white p-4">
+                              <div key={String(account.id)} className="rounded-xl border border-p-border bg-p-surface p-4">
                                 <div className="flex flex-wrap items-start justify-between gap-2">
                                   <div>
-                                    <p className="text-[13px] font-semibold text-[#1f2638]">
+                                    <p className="text-[13px] font-semibold text-p-text">
                                       {formatAccountSourceType(account.sourceType)}{' '}
-                                      <span className="font-normal text-[#6f7890]">#{shortId(account.id)}</span>
+                                      <span className="font-normal text-p-text-muted">#{shortId(account.id)}</span>
                                     </p>
-                                    <p className="mt-0.5 text-[12px] text-[#6f7890]">
+                                    <p className="mt-0.5 text-[12px] text-p-text-muted">
                                       {formatDate(account.date)}{account.time ? ` · ${account.time}` : ''}
                                     </p>
                                   </div>
-                                  <span className="rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-[12px] font-bold text-red-700">
+                                  <span className="rounded-full border border-p-error bg-p-error-bg px-2.5 py-1 text-[12px] font-bold text-p-error">
                                     {formatMoney(Number(account.amount || 0))}
                                   </span>
                                 </div>
-                                <div className="mt-3 flex items-center justify-end gap-2 border-t border-[#eef2f7] pt-3">
+                                <div className="mt-3 flex items-center justify-end gap-2 border-t border-p-border pt-3">
                                   <button
                                     type="button"
                                     onClick={() => openAccountDrawer(String(account.id), 'overview')}
-                                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+                                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                                   >
                                     <Search size={12} />
                                     Ver detalle
@@ -758,7 +758,7 @@ export default function AdminClientesPlayground2Page() {
                                   <button
                                     type="button"
                                     onClick={() => openAccountDrawer(String(account.id), 'payment')}
-                                    className="h-8 rounded-lg bg-[#3053e2] px-3 text-[12px] font-semibold text-white hover:bg-[#2748cc]"
+                                    className="h-8 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 hover:bg-ink-900"
                                   >
                                     <span className="inline-flex items-center gap-1"><DollarSign size={13} /> Cobrar</span>
                                   </button>
@@ -775,27 +775,27 @@ export default function AdminClientesPlayground2Page() {
                 {activeView === 'history' && (
                   <div className="grid h-full grid-cols-1 gap-4 xl:grid-cols-[320px_1fr]">
                     {/* Left: client list with search + debt badge */}
-                    <article className="flex min-h-0 flex-col rounded-xl border border-[#dce2ee] bg-white">
+                    <article className="flex min-h-0 flex-col rounded-xl border border-p-border bg-p-surface">
                       <div className="p-4 pb-3">
-                        <h2 className="text-[13px] font-semibold text-[#1f2638]">Clientes</h2>
+                        <h2 className="text-[13px] font-semibold text-p-text">Clientes</h2>
                         <div className="relative mt-3">
-                          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#8b93a5]" />
+                          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-p-text-muted" />
                           <input
                             type="text"
                             value={searchTerm}
                             onChange={(event) => setSearchTerm(event.target.value)}
                             placeholder="Buscar cliente..."
-                            className="h-8 w-full rounded-xl border border-[#dce2ee] bg-[#f8f9fd] pl-9 pr-3 text-[12px] outline-none focus:border-[#3053e2]"
+                            className="h-8 w-full rounded-xl border border-p-border bg-p-surface-2 pl-9 pr-3 text-[12px] outline-none focus:border-p-accent"
                           />
                         </div>
                       </div>
-                      <div className="min-h-0 flex-1 overflow-auto border-t border-[#dce2ee]">
+                      <div className="min-h-0 flex-1 overflow-auto border-t border-p-border">
                         {loading ? (
-                          <div className="p-6 text-center text-[13px] text-[#6f7890]">Cargando...</div>
+                          <div className="p-6 text-center text-[13px] text-p-text-muted">Cargando...</div>
                         ) : filteredClients.length === 0 ? (
-                          <div className="p-6 text-center text-[13px] text-[#6f7890]">Sin clientes.</div>
+                          <div className="p-6 text-center text-[13px] text-p-text-muted">Sin clientes.</div>
                         ) : (
-                          <ul className="divide-y divide-[#eef2f7]">
+                          <ul className="divide-y divide-p-border">
                             {filteredClients.map((client) => {
                               const hasDebt = Number(client?.totalDebt || 0) > EPSILON;
                               return (
@@ -804,18 +804,18 @@ export default function AdminClientesPlayground2Page() {
                                     type="button"
                                     onClick={() => setSelectedClientId(String(client.id))}
                                     className={`w-full min-h-[46px] px-3 py-3 text-left transition ${
-                                      String(selectedClientId) === String(client.id) ? 'bg-[#edf1ff]' : 'hover:bg-[#f8f9fd]'
+                                      String(selectedClientId) === String(client.id) ? 'bg-p-positive-bg' : 'hover:bg-p-surface-2'
                                     }`}
                                   >
                                     <div className="flex items-center justify-between gap-2">
-                                      <p className="truncate text-[13px] font-semibold text-[#1f2638]">{getClientName(client)}</p>
+                                      <p className="truncate text-[13px] font-semibold text-p-text">{getClientName(client)}</p>
                                       {hasDebt && (
-                                        <span className="flex-none rounded-full border border-red-100 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
+                                        <span className="flex-none rounded-full border border-p-error bg-p-error-bg px-1.5 py-0.5 text-[10px] font-bold text-p-error">
                                           Deuda
                                         </span>
                                       )}
                                     </div>
-                                    <p className="truncate text-[12px] text-[#6f7890]">{String(client.phone || client.email || '-')}</p>
+                                    <p className="truncate text-[12px] text-p-text-muted">{String(client.phone || client.email || '-')}</p>
                                   </button>
                                 </li>
                               );
@@ -826,30 +826,30 @@ export default function AdminClientesPlayground2Page() {
                     </article>
 
                     {/* Right: Perfil panel */}
-                    <article className="flex min-h-0 flex-col overflow-auto rounded-xl border border-[#dce2ee] bg-white">
+                    <article className="flex min-h-0 flex-col overflow-auto rounded-xl border border-p-border bg-p-surface">
                       {!selectedClient ? (
-                        <div className="p-8 text-center text-[13px] text-[#6f7890]">
+                        <div className="p-8 text-center text-[13px] text-p-text-muted">
                           Selecciona un cliente para ver su perfil.
                         </div>
                       ) : (
                         <>
                           {/* Hero */}
-                          <div className="flex items-start justify-between gap-4 border-b border-[#eef2f7] p-5">
+                          <div className="flex items-start justify-between gap-4 border-b border-p-border p-5">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <h2 className="text-[18px] font-bold text-[#1f2638]">{getClientName(selectedClient)}</h2>
+                                <h2 className="text-[18px] font-bold text-p-text">{getClientName(selectedClient)}</h2>
                                 {selectedClient.isProfessor && (
-                                  <span className="rounded-full bg-[#edf1ff] px-2 py-0.5 text-[11px] font-semibold text-[#3053e2]">
+                                  <span className="rounded-full bg-p-positive-bg px-2 py-0.5 text-[11px] font-semibold text-p-accent">
                                     Profesor
                                   </span>
                                 )}
                               </div>
-                              <p className="mt-0.5 text-[12px] text-[#6f7890]">ID #{shortId(selectedClient.id)}</p>
+                              <p className="mt-0.5 text-[12px] text-p-text-muted">ID #{shortId(selectedClient.id)}</p>
                             </div>
                             <button
                               type="button"
                               onClick={() => openEditClient(selectedClient)}
-                              className="h-8 flex-none rounded-lg border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+                              className="h-8 flex-none rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                             >
                               <span className="inline-flex items-center gap-1.5"><Pencil size={13} /> Editar</span>
                             </button>
@@ -857,17 +857,17 @@ export default function AdminClientesPlayground2Page() {
 
                           {/* Debt banner */}
                           {Number(selectedClient.totalDebt || 0) > EPSILON && (
-                            <div className="flex items-center justify-between gap-3 bg-red-600 px-5 py-3">
+                            <div className="flex items-center justify-between gap-3 bg-p-error px-5 py-3">
                               <div>
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-red-200">Deuda pendiente</p>
-                                <p className="text-[20px] font-bold leading-tight text-white">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-50">Deuda pendiente</p>
+                                <p className="text-[20px] font-bold leading-tight text-ink-50">
                                   {formatMoney(Number(selectedClient.totalDebt || 0))}
                                 </p>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => setActiveView('debt')}
-                                className="h-8 flex-none rounded-lg bg-white px-3 text-[12px] font-bold text-red-700 hover:bg-red-50"
+                                className="h-8 flex-none rounded-lg bg-p-surface px-3 text-[12px] font-bold text-p-error hover:bg-p-error-bg"
                               >
                                 <span className="inline-flex items-center gap-1"><DollarSign size={13} /> Cobrar</span>
                               </button>
@@ -877,39 +877,39 @@ export default function AdminClientesPlayground2Page() {
                           <div className="space-y-5 p-5">
                             {/* Quick stats */}
                             <div className="grid grid-cols-3 gap-3">
-                              <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3 text-center">
-                                <p className="text-[18px] font-bold text-[#1f2638]">{Number(selectedClient.totalBookings || 0)}</p>
-                                <p className="mt-0.5 text-[11px] text-[#6f7890]">Reservas</p>
+                              <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-center">
+                                <p className="text-[18px] font-bold text-p-text">{Number(selectedClient.totalBookings || 0)}</p>
+                                <p className="mt-0.5 text-[11px] text-p-text-muted">Reservas</p>
                               </div>
-                              <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3 text-center">
-                                <p className="text-[18px] font-bold text-[#1f2638]">{historyAccounts.length}</p>
-                                <p className="mt-0.5 text-[11px] text-[#6f7890]">Cuentas</p>
+                              <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-center">
+                                <p className="text-[18px] font-bold text-p-text">{historyAccounts.length}</p>
+                                <p className="mt-0.5 text-[11px] text-p-text-muted">Cuentas</p>
                               </div>
-                              <div className="rounded-xl border border-[#dce2ee] bg-[#f8f9fd] p-3 text-center">
-                                <p className="text-[14px] font-bold text-[#1f2638]">
+                              <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-center">
+                                <p className="text-[14px] font-bold text-p-text">
                                   {selectedClient.isProfessor ? 'Profesor' : 'Cliente'}
                                 </p>
-                                <p className="mt-0.5 text-[11px] text-[#6f7890]">Rol</p>
+                                <p className="mt-0.5 text-[11px] text-p-text-muted">Rol</p>
                               </div>
                             </div>
 
                             {/* Contact */}
                             <div>
-                              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#6f7890]">
+                              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-p-text-muted">
                                 Contacto
                               </h3>
-                              <div className="divide-y divide-[#eef2f7] rounded-xl border border-[#dce2ee] text-[13px]">
+                              <div className="divide-y divide-p-border rounded-xl border border-p-border text-[13px]">
                                 <div className="grid grid-cols-[90px_1fr] gap-2 px-3 py-2.5">
-                                  <span className="text-[#6f7890]">DNI</span>
-                                  <span className="font-semibold text-[#1f2638]">{String(selectedClient.dni || '-')}</span>
+                                  <span className="text-p-text-muted">DNI</span>
+                                  <span className="font-semibold text-p-text">{String(selectedClient.dni || '-')}</span>
                                 </div>
                                 <div className="grid grid-cols-[90px_1fr] gap-2 px-3 py-2.5">
-                                  <span className="text-[#6f7890]">Teléfono</span>
-                                  <span className="font-semibold text-[#1f2638]">{String(selectedClient.phone || '-')}</span>
+                                  <span className="text-p-text-muted">Teléfono</span>
+                                  <span className="font-semibold text-p-text">{String(selectedClient.phone || '-')}</span>
                                 </div>
                                 <div className="grid grid-cols-[90px_1fr] gap-2 px-3 py-2.5">
-                                  <span className="text-[#6f7890]">Email</span>
-                                  <span className="break-all font-semibold text-[#1f2638]">{String(selectedClient.email || '-')}</span>
+                                  <span className="text-p-text-muted">Email</span>
+                                  <span className="break-all font-semibold text-p-text">{String(selectedClient.email || '-')}</span>
                                 </div>
                               </div>
                             </div>
@@ -917,14 +917,14 @@ export default function AdminClientesPlayground2Page() {
                             {/* Descuentos — only shown if assigned */}
                             {!loadingDiscountAssignments && selectedClientDiscountAssignments.length > 0 && (
                               <div>
-                                <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#6f7890]">
+                                <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-p-text-muted">
                                   Descuentos
                                 </h3>
                                 <div className="flex flex-wrap gap-2">
                                   {selectedClientDiscountAssignments.map((assignment: any, index: number) => (
                                     <span
                                       key={String(assignment?.id || index)}
-                                      className="rounded-full border border-[#dce2ee] bg-[#f8f9fd] px-3 py-1 text-[12px] font-semibold text-[#4e5870]"
+                                      className="rounded-full border border-p-border bg-p-surface-2 px-3 py-1 text-[12px] font-semibold text-p-text-secondary"
                                     >
                                       {String(assignment?.policy?.name || assignment?.policyName || 'Política')}
                                     </span>
@@ -936,7 +936,7 @@ export default function AdminClientesPlayground2Page() {
                             {/* Cuentas */}
                             {historyAccounts.length > 0 && (
                               <div>
-                                <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#6f7890]">
+                                <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-p-text-muted">
                                   Cuentas ({historyAccounts.length})
                                 </h3>
                                 <div className="space-y-2">
@@ -945,19 +945,19 @@ export default function AdminClientesPlayground2Page() {
                                     return (
                                       <div
                                         key={String(account.id)}
-                                        className="flex items-center gap-3 rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5"
+                                        className="flex items-center gap-3 rounded-xl border border-p-border bg-p-surface px-3 py-2.5"
                                       >
                                         <div className="min-w-0 flex-1">
-                                          <p className="text-[13px] font-semibold text-[#1f2638]">
+                                          <p className="text-[13px] font-semibold text-p-text">
                                             {formatAccountSourceType(account.sourceType)}{' '}
-                                            <span className="font-normal text-[#6f7890]">#{shortId(account.id)}</span>
+                                            <span className="font-normal text-p-text-muted">#{shortId(account.id)}</span>
                                           </p>
-                                          <p className="text-[12px] text-[#6f7890]">
+                                          <p className="text-[12px] text-p-text-muted">
                                             {formatDate(account.date)}{account.time ? ` · ${account.time}` : ''}
                                           </p>
                                         </div>
                                         {isPending && (
-                                          <span className="flex-none rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                                          <span className="flex-none rounded-full border border-p-error bg-p-error-bg px-2 py-0.5 text-[11px] font-semibold text-p-error">
                                             {formatMoney(Number(account.amount || 0))}
                                           </span>
                                         )}
@@ -965,7 +965,7 @@ export default function AdminClientesPlayground2Page() {
                                           <button
                                             type="button"
                                             onClick={() => openAccountDrawer(String(account.id), 'overview')}
-                                            className="inline-flex h-7 items-center gap-1 rounded-lg border border-[#dce2ee] bg-white px-2 text-[11px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+                                            className="inline-flex h-7 items-center gap-1 rounded-lg border border-p-border bg-p-surface px-2 text-[11px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                                           >
                                             <Search size={11} />
                                             Ver
@@ -974,7 +974,7 @@ export default function AdminClientesPlayground2Page() {
                                             <button
                                               type="button"
                                               onClick={() => openAccountDrawer(String(account.id), 'payment')}
-                                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-[#3053e2] px-2 text-[11px] font-semibold text-white hover:bg-[#2748cc]"
+                                              className="inline-flex h-7 items-center gap-1 rounded-lg bg-ink-900 px-2 text-[11px] font-semibold text-ink-50 hover:bg-ink-900"
                                             >
                                               <DollarSign size={11} />
                                               Cobrar
@@ -991,32 +991,32 @@ export default function AdminClientesPlayground2Page() {
                             {/* Reservas */}
                             {historyBookings.length > 0 && (
                               <div>
-                                <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#6f7890]">
+                                <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-p-text-muted">
                                   Reservas ({historyBookings.length})
                                 </h3>
                                 <div className="space-y-2">
                                   {historyBookings.map((booking: any) => (
                                     <div
                                       key={String(booking.bookingId)}
-                                      className="flex items-center gap-3 rounded-xl border border-[#dce2ee] bg-white px-3 py-2.5"
+                                      className="flex items-center gap-3 rounded-xl border border-p-border bg-p-surface px-3 py-2.5"
                                     >
                                       <div className="min-w-0 flex-1">
-                                        <p className="text-[13px] font-semibold text-[#1f2638]">
+                                        <p className="text-[13px] font-semibold text-p-text">
                                           {formatDate(booking.date)}{booking.time ? ` · ${booking.time}` : ''}
                                         </p>
-                                        <p className="text-[12px] text-[#6f7890]">
+                                        <p className="text-[12px] text-p-text-muted">
                                           {booking.courtName || '-'} · {formatMoney(Number(booking.amount || 0))}
                                         </p>
                                       </div>
                                       <span
                                         className={`flex-none rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                                           booking.status === 'COMPLETED'
-                                            ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                                            ? 'border-p-positive bg-p-positive-bg text-p-positive'
                                             : booking.status === 'CANCELLED'
-                                            ? 'border-gray-200 bg-gray-50 text-gray-500'
+                                            ? 'border-p-border bg-p-surface-2 text-p-text-muted'
                                             : booking.status === 'CONFIRMED'
-                                            ? 'border-blue-100 bg-blue-50 text-blue-700'
-                                            : 'border-amber-100 bg-amber-50 text-amber-700'
+                                            ? 'border-p-info bg-p-info-bg text-p-info'
+                                            : 'border-p-warning bg-p-warning-bg text-p-warning'
                                         }`}
                                       >
                                         {bookingStatusLabel[booking.status] || booking.status || '-'}
@@ -1028,7 +1028,7 @@ export default function AdminClientesPlayground2Page() {
                             )}
 
                             {historyAccounts.length === 0 && historyBookings.length === 0 && (
-                              <div className="rounded-xl border border-[#dce2ee] p-8 text-center text-[13px] text-[#6f7890]">
+                              <div className="rounded-xl border border-p-border p-8 text-center text-[13px] text-p-text-muted">
                                 Este cliente no tiene actividad registrada.
                               </div>
                             )}
@@ -1047,7 +1047,7 @@ export default function AdminClientesPlayground2Page() {
           {adminToasts.map((toast) => (
             <div
               key={toast.id}
-              className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[12px] font-semibold text-[#27314a] shadow-lg"
+              className="rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[12px] font-semibold text-p-text shadow-lg"
             >
               {toast.message}
             </div>
@@ -1089,8 +1089,8 @@ export default function AdminClientesPlayground2Page() {
         }
         statusChipClassName={
           sidebarView === 'client_profile' && selectedClient && Number(selectedClient.totalDebt || 0) > EPSILON
-            ? 'border-red-100 bg-red-50 text-red-700'
-            : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+            ? 'border-p-error bg-p-error-bg text-p-error'
+            : 'border-p-positive bg-p-positive-bg text-p-positive'
         }
         size="md"
         footer={
@@ -1098,7 +1098,7 @@ export default function AdminClientesPlayground2Page() {
             <button
               type="button"
               onClick={closeActionSidebar}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
             >
               <RotateCcw size={14} />
               Cancelar
@@ -1120,7 +1120,7 @@ export default function AdminClientesPlayground2Page() {
                       isProfessor: false,
                     });
                   }}
-                  className="h-10 rounded-xl border border-[#dce2ee] bg-white px-4 text-[13px] font-semibold text-[#4e5870] hover:bg-[#f8f9fd]"
+                  className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <RotateCcw size={14} />
@@ -1131,7 +1131,7 @@ export default function AdminClientesPlayground2Page() {
                   type="button"
                   onClick={() => void submitClient()}
                   disabled={submittingClient}
-                  className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white transition hover:bg-[#2748cc] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="inline-flex items-center gap-1.5">
                     {sidebarView === 'client_edit' ? <Save size={14} /> : <UserPlus size={14} />}
@@ -1145,7 +1145,7 @@ export default function AdminClientesPlayground2Page() {
               <button
                 type="button"
                 onClick={() => openEditClient(selectedClient)}
-                className="h-10 rounded-xl bg-[#3053e2] px-5 text-[13px] font-semibold text-white hover:bg-[#2748cc]"
+                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900"
               >
                 <span className="inline-flex items-center gap-1.5">
                   <Pencil size={14} />
@@ -1161,7 +1161,7 @@ export default function AdminClientesPlayground2Page() {
                   if (deletingClient) return;
                   void deleteSelectedClient();
                 }}
-                className="h-10 rounded-xl bg-[#b91c1c] px-5 text-[13px] font-semibold text-white hover:bg-[#991b1b] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-10 rounded-xl bg-[var(--error-fg)] px-5 text-[13px] font-semibold text-ink-50 hover:bg-p-error disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={deletingClient}
               >
                 <span className="inline-flex items-center gap-1.5">
@@ -1179,30 +1179,30 @@ export default function AdminClientesPlayground2Page() {
               {errorMessage && (
                 <div
                   role="alert"
-                  className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-700"
+                  className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error"
                 >
                   {errorMessage}
                 </div>
               )}
 
               <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Nombre y apellido *</span>
+                <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Nombre y apellido *</span>
                 <input
                   type="text"
                   value={clientForm.name}
                   onChange={(event) => setClientForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   placeholder="Ej: Juan Perez"
                 />
               </label>
 
               <div className="grid grid-cols-[110px_1fr] gap-2">
                 <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Pais</span>
+                  <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Pais</span>
                   <select
                     value={clientForm.phoneCountryIso2}
                     onChange={(event) => setClientForm((prev) => ({ ...prev, phoneCountryIso2: normalizePhoneCountryIso2(event.target.value) }))}
-                    className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-2 text-[12px] font-semibold text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                    className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-2 text-[12px] font-semibold text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   >
                     {PHONE_COUNTRY_OPTIONS.map((option) => (
                       <option key={option.iso2} value={option.iso2}>
@@ -1212,42 +1212,42 @@ export default function AdminClientesPlayground2Page() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Telefono *</span>
+                  <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Telefono *</span>
                   <input
                     type="text"
                     value={clientForm.phone}
                     onChange={(event) =>
                       setClientForm((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, '') }))
                     }
-                    className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                    className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                     placeholder="351..."
                   />
                 </label>
               </div>
 
               <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">DNI</span>
+                <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">DNI</span>
                 <input
                   type="text"
                   value={clientForm.dni}
                   onChange={(event) => setClientForm((prev) => ({ ...prev, dni: event.target.value }))}
-                  className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   placeholder="Documento"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-[#4e5870]">Email *</span>
+                <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Email *</span>
                 <input
                   type="email"
                   value={clientForm.email}
                   onChange={(event) => setClientForm((prev) => ({ ...prev, email: event.target.value }))}
-                  className="h-10 w-full rounded-xl border border-[#d6deeb] bg-white px-3 text-[13px] text-[#2a3245] shadow-[0_1px_0_rgba(16,24,40,0.03)] outline-none transition focus:border-[#3053e2] focus:ring-2 focus:ring-[#3053e2]/10"
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   placeholder="cliente@email.com"
                 />
               </label>
 
-              <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#dce2ee] bg-white px-3 text-[12px] font-semibold text-[#4e5870]">
+              <label className="flex min-h-10 items-center gap-2 rounded-xl border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary">
                 <input
                   type="checkbox"
                   checked={Boolean(clientForm.isProfessor)}
@@ -1262,7 +1262,7 @@ export default function AdminClientesPlayground2Page() {
         {sidebarView === 'client_profile' && (
           !selectedClient ? (
             <AdminDrawerSection className={drawerSectionCardClass}>
-              <div className="rounded-xl border border-[#dce2ee] bg-white p-8 text-center text-[13px] text-[#6f7890]">
+              <div className="rounded-xl border border-p-border bg-p-surface p-8 text-center text-[13px] text-p-text-muted">
                 Selecciona un cliente.
               </div>
             </AdminDrawerSection>
@@ -1271,20 +1271,20 @@ export default function AdminClientesPlayground2Page() {
               <AdminDrawerSection title="Datos del cliente" className={drawerSectionCardClass}>
                 <div className={drawerListClass}>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="text-[#6f7890]">Cliente</span>
-                    <span className="font-semibold text-[#1f2638]">{getClientName(selectedClient)}</span>
+                    <span className="text-p-text-muted">Cliente</span>
+                    <span className="font-semibold text-p-text">{getClientName(selectedClient)}</span>
                   </div>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="text-[#6f7890]">DNI</span>
-                    <span className="font-semibold text-[#1f2638]">{String(selectedClient.dni || '-')}</span>
+                    <span className="text-p-text-muted">DNI</span>
+                    <span className="font-semibold text-p-text">{String(selectedClient.dni || '-')}</span>
                   </div>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="text-[#6f7890]">Telefono</span>
-                    <span className="font-semibold text-[#1f2638]">{String(selectedClient.phone || '-')}</span>
+                    <span className="text-p-text-muted">Telefono</span>
+                    <span className="font-semibold text-p-text">{String(selectedClient.phone || '-')}</span>
                   </div>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="text-[#6f7890]">Email</span>
-                    <span className="break-all font-semibold text-[#1f2638]">{String(selectedClient.email || '-')}</span>
+                    <span className="text-p-text-muted">Email</span>
+                    <span className="break-all font-semibold text-p-text">{String(selectedClient.email || '-')}</span>
                   </div>
                 </div>
               </AdminDrawerSection>
@@ -1292,15 +1292,15 @@ export default function AdminClientesPlayground2Page() {
               <AdminDrawerSection title="Estado comercial" className={drawerSectionCardClass}>
                 <div className={drawerListClass}>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="text-[#6f7890]">Reservas</span>
-                    <span className="font-semibold text-[#1f2638]">{Number(selectedClient.totalBookings || 0)}</span>
+                    <span className="text-p-text-muted">Reservas</span>
+                    <span className="font-semibold text-p-text">{Number(selectedClient.totalBookings || 0)}</span>
                   </div>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="text-[#6f7890]">Deuda</span>
+                    <span className="text-p-text-muted">Deuda</span>
                     {Number(selectedClient.totalDebt || 0) > EPSILON ? (
-                      <span className="font-semibold text-red-700">{formatMoney(Number(selectedClient.totalDebt || 0))}</span>
+                      <span className="font-semibold text-p-error">{formatMoney(Number(selectedClient.totalDebt || 0))}</span>
                     ) : (
-                      <span className="font-semibold text-[#6f7890]">Sin deuda vigente</span>
+                      <span className="font-semibold text-p-text-muted">Sin deuda vigente</span>
                     )}
                   </div>
                 </div>
@@ -1311,12 +1311,12 @@ export default function AdminClientesPlayground2Page() {
 
         {sidebarView === 'client_delete' && (
           <AdminDrawerSection title="Confirmacion" className={drawerSectionCardClass}>
-            <div className="rounded-xl border border-[#fecaca] bg-[#fff1f2] p-3 text-[13px] text-[#7f1d1d]">
+            <div className="rounded-xl border border-p-error bg-p-error-bg p-3 text-[13px] text-p-error">
               Vas a eliminar a {selectedClient ? getClientName(selectedClient) : 'este cliente'}. Esta accion no se puede deshacer.
             </div>
-            <div className="rounded-xl border border-[#dce2ee] bg-white p-3">
-              <p className="text-[12px] uppercase tracking-wide text-[#6f7890]">Cliente seleccionado</p>
-              <p className="mt-1 text-[13px] font-semibold text-[#1f2638]">{selectedClient ? getClientName(selectedClient) : '-'}</p>
+            <div className="rounded-xl border border-p-border bg-p-surface p-3">
+              <p className="text-[12px] uppercase tracking-wide text-p-text-muted">Cliente seleccionado</p>
+              <p className="mt-1 text-[13px] font-semibold text-p-text">{selectedClient ? getClientName(selectedClient) : '-'}</p>
             </div>
           </AdminDrawerSection>
         )}

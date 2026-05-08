@@ -279,10 +279,10 @@ export default function AdminTabStatistics({ slugProp }: Props) {
         <ReportsMetricGrid metrics={reportMetrics.map((metric) => ({ ...metric, loading: true }))} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <AdminPanel title="Ingresos por dia" description="Separacion entre reservas y consumos." className="lg:col-span-2">
-            <div className="h-80 animate-pulse rounded-xl bg-[#f3f5fa]" />
+            <div className="h-80 animate-pulse rounded-xl bg-p-surface-2" />
           </AdminPanel>
           <AdminPanel title="Metodos de pago" description="Distribucion de cobros por medio.">
-            <div className="h-80 animate-pulse rounded-xl bg-[#f3f5fa]" />
+            <div className="h-80 animate-pulse rounded-xl bg-p-surface-2" />
           </AdminPanel>
         </div>
       </div>
@@ -333,9 +333,9 @@ export default function AdminTabStatistics({ slugProp }: Props) {
           description="Pagos reales separados entre reservas y consumos."
           className="lg:col-span-2"
           actions={(
-            <div className="flex items-center gap-3 text-[11px] font-semibold text-[#6f7890]">
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#1f2638]" />Reservas</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#3053e2]" />Consumos</span>
+            <div className="flex items-center gap-3 text-[11px] font-semibold text-p-text-muted">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[var(--text-primary)]" />Reservas</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ink-900" />Consumos</span>
             </div>
           )}
         >
@@ -369,7 +369,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
                 value: unsoldCount,
                 format: 'number',
                 icon: <TrendingUp size={18} strokeWidth={2.4} />,
-                valueColor: unsoldCount > 0 ? '#b42318' : undefined,
+                valueColor: unsoldCount > 0 ? 'var(--error-fg)' : undefined,
               },
             ]}
           />
@@ -381,25 +381,25 @@ export default function AdminTabStatistics({ slugProp }: Props) {
 
         <AdminPanel title="Lecturas accionables" description="Listas compactas para entender el comportamiento del catalogo.">
           <div className="space-y-3">
-            <div className="rounded-xl border border-[#e7ebf3] bg-[#fbfcff] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#98a1b3]">
+            <div className="rounded-xl border border-p-border bg-p-surface-2 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-p-text-muted">
                 Ingresos por reservas
               </p>
-              <p className="mt-1 text-[24px] font-bold leading-none text-[#1a2035]">
+              <p className="mt-1 text-[24px] font-bold leading-none text-p-text">
                 ${Number(bookingsRevenue || 0).toLocaleString('es-AR')}
               </p>
-              <p className="mt-2 text-[12px] text-[#6f7890]">
+              <p className="mt-2 text-[12px] text-p-text-muted">
                 Calculado desde los pagos del periodo.
               </p>
             </div>
-            <div className="rounded-xl border border-[#e7ebf3] bg-[#fbfcff] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#98a1b3]">
+            <div className="rounded-xl border border-p-border bg-p-surface-2 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-p-text-muted">
                 Cobros por consumos
               </p>
-              <p className="mt-1 text-[24px] font-bold leading-none text-[#3053e2]">
+              <p className="mt-1 text-[24px] font-bold leading-none text-p-accent">
                 ${Number(consumptionsRevenue || 0).toLocaleString('es-AR')}
               </p>
-              <p className="mt-2 text-[12px] text-[#6f7890]">
+              <p className="mt-2 text-[12px] text-p-text-muted">
                 No incluye datos inventados ni proyecciones.
               </p>
             </div>
@@ -436,7 +436,7 @@ export default function AdminTabStatistics({ slugProp }: Props) {
           {adminToasts.map((toast) => (
             <div
               key={toast.id}
-              className="rounded-xl border border-[#dce2ee] bg-white px-3 py-2 text-[12px] font-semibold text-[#27314a] shadow-lg"
+              className="rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[12px] font-semibold text-p-text shadow-lg"
             >
               {toast.message}
             </div>

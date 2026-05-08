@@ -33,7 +33,7 @@ export default function DatePickerDark({
   const defaultInputCls =
     inputSize === 'compact'
       ? 'bg-transparent border-none outline-none text-sm w-full cursor-pointer focus:ring-0 p-0 h-auto'
-      : 'h-10 w-full rounded-xl border border-[#dce2ee] bg-white px-3 text-[13px] outline-none';
+      : 'h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] outline-none';
 
   return (
     <DatePicker

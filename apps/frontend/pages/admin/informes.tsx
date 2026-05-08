@@ -41,7 +41,7 @@ export default function AdminReportsPage() {
   };
 
   return (
-    <AdminRouteShell title="Informes | TuCancha Admin" activeItem="Informes" fromPath="/admin/informes">
+    <AdminRouteShell title="Informes | Punto Admin" activeItem="Informes" fromPath="/admin/informes">
       {(user) => {
         const userSlug = getActiveClubSlug(normalizeSessionUser(user as any));
 

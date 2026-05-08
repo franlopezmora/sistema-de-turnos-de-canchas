@@ -9,84 +9,84 @@ import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../util
 import { buildCanonicalPhone, DEFAULT_PHONE_COUNTRY_ISO2, normalizePhoneCountryIso2, PHONE_COUNTRY_OPTIONS, resolveCallingCodeByIso2 } from '../utils/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserTheme } from '../contexts/UserThemeContext';
+import PuntoLogo from '../components/PuntoLogo';
 
 type PostLoginRedirectIntent = { sourceUser?: any };
 
-const FONT = "'Sora',system-ui,sans-serif";
+const FONT = "var(--font-sans)";
 
 const LOGIN_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800;900&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&display=swap');
   *, *::before, *::after { box-sizing: border-box; }
-  .lg-root { min-height:100vh; background:#050505; font-family:${FONT}; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; overflow:hidden; -webkit-font-smoothing:antialiased; }
-  .lg-root::before { content:''; position:fixed; inset:0; background:radial-gradient(ellipse 70% 60% at 20% 110%,rgba(34,197,94,.1),transparent 65%), radial-gradient(ellipse 50% 40% at 85% -10%,rgba(34,197,94,.06),transparent 60%); pointer-events:none; }
-  .lg-card { width:100%; max-width:420px; background:#111; border:1px solid rgba(255,255,255,.1); border-radius:24px; box-shadow:0 24px 64px rgba(0,0,0,.7); overflow:hidden; position:relative; z-index:1; animation:lg-scalein .25s ease; }
+  .lg-root { min-height:100vh; background:var(--bg); font-family:${FONT}; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; overflow:hidden; -webkit-font-smoothing:antialiased; }
+  .lg-root::before { content:''; position:fixed; inset:0; background:radial-gradient(ellipse 70% 60% at 20% 110%,var(--accent-bg-soft),transparent 65%), radial-gradient(ellipse 50% 40% at 85% -10%,var(--accent-bg-faint),transparent 60%); pointer-events:none; }
+  .lg-card { width:100%; max-width:420px; background:var(--surface-1); border:1px solid var(--border); border-radius:24px; box-shadow:0 24px 64px var(--shadow-lg); overflow:hidden; position:relative; z-index:1; animation:lg-scalein .25s ease; }
   @keyframes lg-scalein { from{opacity:0;transform:scale(.97) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
-  .lg-header { padding:32px 32px 24px; text-align:center; border-bottom:1px solid rgba(255,255,255,.06); }
-  .lg-icon { width:52px; height:52px; border-radius:16px; background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.25); display:inline-flex; align-items:center; justify-content:center; color:#22c55e; margin-bottom:16px; }
-  .lg-title { font-size:22px; font-weight:800; color:#f2f2f2; letter-spacing:-.03em; margin:0 0 4px; }
-  .lg-sub { font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:#444; margin:0; }
+  .lg-header { padding:32px 32px 24px; text-align:center; border-bottom:1px solid var(--border-subtle); }
+  .lg-icon { width:52px; height:52px; border-radius:16px; background:var(--accent-bg-muted); border:1px solid var(--accent-border); display:inline-flex; align-items:center; justify-content:center; color:var(--accent-fg); margin-bottom:16px; }
+  .lg-title { font-size:22px; font-weight:800; color:var(--text-primary); letter-spacing:-.03em; margin:0 0 4px; }
+  .lg-sub { font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); margin:0; }
   .lg-body { padding:24px 32px 32px; display:flex; flex-direction:column; gap:16px; }
   .lg-notice { display:flex; align-items:flex-start; gap:10px; padding:12px 16px; border-radius:12px; font-size:13px; font-weight:600; line-height:1.5; }
-  .lg-err { background:rgba(248,113,113,.07); border:1px solid rgba(248,113,113,.2); color:#fca5a5; }
-  .lg-ok { background:rgba(34,197,94,.07); border:1px solid rgba(34,197,94,.2); color:#4ade80; }
+  .lg-err { background:var(--error-bg); border:1px solid var(--danger-border); color:var(--error-fg); }
+  .lg-ok { background:var(--accent-bg-soft); border:1px solid var(--accent-bg-muted); color:var(--brand-hover); }
   .lg-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .lg-full { grid-column:1 / -1; }
   .lg-field { display:flex; flex-direction:column; gap:6px; }
-  .lg-label { font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#555; }
+  .lg-label { font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--text-muted); }
   .lg-input-wrap { position:relative; display:flex; align-items:center; }
-  .lg-input-icon { position:absolute; left:13px; color:#444; display:flex; pointer-events:none; }
-  .lg-input { width:100%; padding:11px 14px 11px 38px; background:#0a0a0a; border:1px solid rgba(255,255,255,.09); border-radius:12px; color:#f2f2f2; font-family:${FONT}; font-size:14px; font-weight:600; outline:none; transition:border-color .2s, box-shadow .2s; }
-  .lg-input:focus { border-color:rgba(34,197,94,.5); box-shadow:0 0 0 3px rgba(34,197,94,.1); }
-  .lg-input::placeholder { color:#2a2a2a; font-weight:400; }
+  .lg-input-icon { position:absolute; left:13px; color:var(--text-muted); display:flex; pointer-events:none; }
+  .lg-input { width:100%; padding:11px 14px 11px 38px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; color:var(--text-primary); font-family:${FONT}; font-size:14px; font-weight:600; outline:none; transition:border-color .2s, box-shadow .2s; }
+  .lg-input:focus { border-color:var(--accent-border-strong); box-shadow:0 0 0 3px var(--accent-bg-soft); }
+  .lg-input::placeholder { color:var(--text-muted); font-weight:400; }
   .lg-input-no-icon { padding-left:14px; }
-  .lg-eye-btn { position:absolute; right:12px; background:none; border:none; cursor:pointer; color:#555; display:flex; align-items:center; padding:4px; transition:color .15s; }
-  .lg-eye-btn:hover { color:#c8c8c8; }
-  .lg-phone-wrap { display:flex; background:#0a0a0a; border:1px solid rgba(255,255,255,.09); border-radius:12px; overflow:hidden; transition:border-color .2s, box-shadow .2s; }
-  .lg-phone-wrap:focus-within { border-color:rgba(34,197,94,.5); box-shadow:0 0 0 3px rgba(34,197,94,.1); }
-  .lg-phone-prefix { display:flex; align-items:center; gap:8px; padding:0 12px; background:rgba(255,255,255,.03); border-right:1px solid rgba(255,255,255,.07); flex-shrink:0; }
-  .lg-phone-select { background:transparent; border:none; color:#c8c8c8; font-family:${FONT}; font-size:13px; font-weight:700; outline:none; }
-  .lg-phone-input { flex:1; padding:11px 14px; background:transparent; border:none; color:#f2f2f2; font-family:${FONT}; font-size:14px; font-weight:600; outline:none; }
-  .lg-phone-input::placeholder { color:#2a2a2a; font-weight:400; }
+  .lg-eye-btn { position:absolute; right:12px; background:none; border:none; cursor:pointer; color:var(--text-muted); display:flex; align-items:center; padding:4px; transition:color .15s; }
+  .lg-eye-btn:hover { color:var(--text-secondary); }
+  .lg-phone-wrap { display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden; transition:border-color .2s, box-shadow .2s; }
+  .lg-phone-wrap:focus-within { border-color:var(--accent-border-strong); box-shadow:0 0 0 3px var(--accent-bg-soft); }
+  .lg-phone-prefix { display:flex; align-items:center; gap:8px; padding:0 12px; background:var(--surface-2); border-right:1px solid var(--border-subtle); flex-shrink:0; }
+  .lg-phone-select { background:transparent; border:none; color:var(--text-secondary); font-family:${FONT}; font-size:13px; font-weight:700; outline:none; }
+  .lg-phone-input { flex:1; padding:11px 14px; background:transparent; border:none; color:var(--text-primary); font-family:${FONT}; font-size:14px; font-weight:600; outline:none; }
+  .lg-phone-input::placeholder { color:var(--text-muted); font-weight:400; }
   .lg-divider { display:flex; align-items:center; gap:12px; }
-  .lg-divider-line { flex:1; height:1px; background:rgba(255,255,255,.07); }
-  .lg-divider-text { font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#333; }
+  .lg-divider-line { flex:1; height:1px; background:var(--border-subtle); }
+  .lg-divider-text { font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--text-muted); }
   .lg-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:13px 20px; border-radius:12px; font-family:${FONT}; font-size:13px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; border:none; transition:background .15s, transform .15s, opacity .15s; }
   .lg-btn:disabled { opacity:.5; cursor:not-allowed; }
-  .lg-btn-primary { background:#22c55e; color:#052010; }
-  .lg-btn-primary:hover:not(:disabled) { background:#4ade80; transform:translateY(-1px); }
-  .lg-btn-ghost { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09)!important; color:#888; }
-  .lg-btn-ghost:hover:not(:disabled) { background:rgba(255,255,255,.09); color:#c8c8c8; }
-  .lg-toggle { text-align:center; padding-top:16px; border-top:1px solid rgba(255,255,255,.06); }
-  .lg-toggle-btn { background:none; border:none; font-family:${FONT}; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#444; cursor:pointer; transition:color .15s; text-decoration:underline; text-decoration-color:transparent; text-underline-offset:3px; }
-  .lg-toggle-btn:hover { color:#22c55e; text-decoration-color:#22c55e; }
-  .lg-brand { position:absolute; top:20px; left:50%; transform:translateX(-50%); font-size:11px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; color:#22c55e; white-space:nowrap; }
-  .lg-theme-toggle { position:absolute; top:18px; right:20px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.06); color:#d1d5db; border-radius:999px; padding:7px 12px; font-family:${FONT}; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; z-index:2; transition:background .15s,border-color .15s,color .15s; }
-  .lg-theme-toggle:hover { background:rgba(255,255,255,.12); color:#f3f4f6; border-color:rgba(255,255,255,.2); }
-  .lg-root.lg-theme-light { background:#eef3f8; }
-  .lg-root.lg-theme-light::before { background:radial-gradient(ellipse 70% 60% at 20% 110%,rgba(34,197,94,.12),transparent 65%), radial-gradient(ellipse 50% 40% at 85% -10%,rgba(14,165,233,.08),transparent 60%); }
-  .lg-root.lg-theme-light .lg-card { background:#ffffff; border-color:rgba(15,23,42,.12); box-shadow:0 26px 60px rgba(15,23,42,.2); }
-  .lg-root.lg-theme-light .lg-header { border-bottom-color:rgba(15,23,42,.08); }
-  .lg-root.lg-theme-light .lg-title { color:#0f172a; }
-  .lg-root.lg-theme-light .lg-sub { color:#64748b; }
-  .lg-root.lg-theme-light .lg-label { color:#64748b; }
+  .lg-btn-primary { background:var(--brand); color:var(--brand-on); }
+  .lg-btn-primary:hover:not(:disabled) { background:var(--brand-hover); transform:translateY(-1px); }
+  .lg-btn-ghost { background:var(--surface-2); border:1px solid var(--border)!important; color:var(--text-muted); }
+  .lg-btn-ghost:hover:not(:disabled) { background:var(--surface-3); color:var(--text-secondary); }
+  .lg-toggle { text-align:center; padding-top:16px; border-top:1px solid var(--border-subtle); }
+  .lg-toggle-btn { background:none; border:none; font-family:${FONT}; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); cursor:pointer; transition:color .15s; text-decoration:underline; text-decoration-color:transparent; text-underline-offset:3px; }
+  .lg-toggle-btn:hover { color:var(--accent-fg); text-decoration-color:var(--accent-fg); }
+  .lg-brand { position:absolute; top:20px; left:50%; transform:translateX(-50%); display:inline-flex; align-items:center; }
+  .lg-theme-toggle { position:absolute; top:18px; right:20px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-secondary); border-radius:999px; padding:7px 12px; font-family:${FONT}; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; z-index:2; transition:background .15s,border-color .15s,color .15s; }
+  .lg-theme-toggle:hover { background:var(--surface-3); color:var(--text-primary); border-color:var(--border-strong); }
+  .lg-root.lg-theme-light { background:var(--bg); }
+  .lg-root.lg-theme-light::before { background:radial-gradient(ellipse 70% 60% at 20% 110%,var(--accent-bg-muted),transparent 65%), radial-gradient(ellipse 50% 40% at 85% -10%,var(--accent-bg-faint),transparent 60%); }
+  .lg-root.lg-theme-light .lg-card { background:var(--surface-1); border-color:var(--border); box-shadow:var(--shadow-lg); }
+  .lg-root.lg-theme-light .lg-header { border-bottom-color:var(--border-subtle); }
+  .lg-root.lg-theme-light .lg-title { color:var(--text-primary); }
+  .lg-root.lg-theme-light .lg-sub { color:var(--text-muted); }
+  .lg-root.lg-theme-light .lg-label { color:var(--text-muted); }
   .lg-root.lg-theme-light .lg-input,
-  .lg-root.lg-theme-light .lg-phone-wrap { background:#ffffff; border-color:rgba(15,23,42,.14); color:#0f172a; }
+  .lg-root.lg-theme-light .lg-phone-wrap { background:var(--surface-1); border-color:var(--border); color:var(--text-primary); }
   .lg-root.lg-theme-light .lg-input::placeholder,
-  .lg-root.lg-theme-light .lg-phone-input::placeholder { color:#94a3b8; }
+  .lg-root.lg-theme-light .lg-phone-input::placeholder { color:var(--text-muted); }
   .lg-root.lg-theme-light .lg-input-icon,
-  .lg-root.lg-theme-light .lg-eye-btn { color:#94a3b8; }
-  .lg-root.lg-theme-light .lg-phone-prefix { background:rgba(15,23,42,.04); border-right-color:rgba(15,23,42,.08); }
-  .lg-root.lg-theme-light .lg-phone-select { color:#1f2937; }
-  .lg-root.lg-theme-light .lg-phone-input { color:#0f172a; }
-  .lg-root.lg-theme-light .lg-divider-line { background:rgba(15,23,42,.08); }
-  .lg-root.lg-theme-light .lg-divider-text { color:#64748b; }
-  .lg-root.lg-theme-light .lg-btn-ghost { background:rgba(15,23,42,.04); border-color:rgba(15,23,42,.12)!important; color:#475569; }
-  .lg-root.lg-theme-light .lg-btn-ghost:hover:not(:disabled) { background:rgba(15,23,42,.08); color:#1f2937; }
-  .lg-root.lg-theme-light .lg-toggle { border-top-color:rgba(15,23,42,.08); }
-  .lg-root.lg-theme-light .lg-toggle-btn { color:#475569; }
-  .lg-root.lg-theme-light .lg-brand { color:#15803d; }
-  .lg-root.lg-theme-light .lg-theme-toggle { border-color:rgba(15,23,42,.14); background:rgba(255,255,255,.92); color:#334155; }
-  .lg-root.lg-theme-light .lg-theme-toggle:hover { background:#ffffff; color:#0f172a; border-color:rgba(15,23,42,.18); }
+  .lg-root.lg-theme-light .lg-eye-btn { color:var(--text-muted); }
+  .lg-root.lg-theme-light .lg-phone-prefix { background:var(--surface-2); border-right-color:var(--border-subtle); }
+  .lg-root.lg-theme-light .lg-phone-select { color:var(--text-primary); }
+  .lg-root.lg-theme-light .lg-phone-input { color:var(--text-primary); }
+  .lg-root.lg-theme-light .lg-divider-line { background:var(--border-subtle); }
+  .lg-root.lg-theme-light .lg-divider-text { color:var(--text-muted); }
+  .lg-root.lg-theme-light .lg-btn-ghost { background:var(--surface-2); border-color:var(--border)!important; color:var(--text-secondary); }
+  .lg-root.lg-theme-light .lg-btn-ghost:hover:not(:disabled) { background:var(--border-subtle); color:var(--text-primary); }
+  .lg-root.lg-theme-light .lg-toggle { border-top-color:var(--border-subtle); }
+  .lg-root.lg-theme-light .lg-toggle-btn { color:var(--text-secondary); }
+  .lg-root.lg-theme-light .lg-theme-toggle { border-color:var(--border); background:var(--surface-1); color:var(--text-secondary); }
+  .lg-root.lg-theme-light .lg-theme-toggle:hover { background:var(--surface-1); color:var(--text-primary); border-color:var(--border-strong); }
   @media(max-width:480px) { .lg-grid2 { grid-template-columns:1fr; } .lg-header { padding:24px 24px 20px; } .lg-body { padding:20px 24px 28px; } }
 `;
 
@@ -253,13 +253,18 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>{isLogin ? 'Ingresar' : 'Crear cuenta'} | TuCancha</title>
+        <title>{isLogin ? 'Ingresar' : 'Crear cuenta'} | Punto</title>
       </Head>
       <style dangerouslySetInnerHTML={{ __html: LOGIN_CSS }} />
 
       <div className={`lg-root${isLight ? ' lg-theme-light' : ''}`}>
         {/* Brand top link */}
-        <Link href="/" className="lg-brand">TuCancha</Link>
+        <Link href="/" className="lg-brand" aria-label="punto - inicio">
+          <PuntoLogo
+            variant={isLight ? 'horizontal' : 'horizontalDark'}
+            style={{ width: 92, height: 'auto', display: 'block' }}
+          />
+        </Link>
         <button
           type="button"
           className="lg-theme-toggle"
@@ -323,7 +328,7 @@ export default function LoginPage() {
                   </div>
                   {/* DNI */}
                   <div className="lg-field lg-full">
-                    <label className="lg-label">DNI <span style={{ color: '#333', fontWeight: 500 }}>(opcional)</span></label>
+                    <label className="lg-label">DNI <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>(opcional)</span></label>
                     <div className="lg-input-wrap">
                       <span className="lg-input-icon"><IdCard size={14} /></span>
                       <input type="number" value={dni} onChange={e => setDni(e.target.value)} className="lg-input" placeholder="Ej: 35123456" />
@@ -334,7 +339,7 @@ export default function LoginPage() {
                     <label className="lg-label">Teléfono</label>
                     <div className="lg-phone-wrap">
                       <div className="lg-phone-prefix">
-                        <Phone size={13} style={{ color: '#444', flexShrink: 0 }} />
+                        <Phone size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                         <select
                           value={phoneCountryIso2}
                           onChange={e => setPhoneCountryIso2(normalizePhoneCountryIso2(e.target.value))}

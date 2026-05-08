@@ -60,11 +60,11 @@ export default function AdminDateInput({
       aria-label={placeholder}
       onClick={handleClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
-      className={`relative flex h-10 cursor-pointer items-center rounded-xl border border-[#dce2ee] bg-white px-3 transition-all focus-within:border-[#3053e2] hover:border-[#b0bacc] ${disabled ? 'pointer-events-none opacity-50' : ''} ${className}`}
+      className={`relative flex h-10 cursor-pointer items-center rounded-xl border border-p-border bg-p-surface px-3 transition-all focus-within:border-p-accent hover:border-p-border-strong ${disabled ? 'pointer-events-none opacity-50' : ''} ${className}`}
     >
-      <CalendarDays size={14} className="mr-2 shrink-0 text-[#8b95aa]" />
+      <CalendarDays size={14} className="mr-2 shrink-0 text-p-text-muted" />
       <span
-        className={`pointer-events-none flex-1 truncate text-[13px] ${displayValue ? 'text-[#1f2638]' : 'text-[#8b93a5]'}`}
+        className={`pointer-events-none flex-1 truncate text-[13px] ${displayValue ? 'text-p-text' : 'text-p-text-muted'}`}
       >
         {displayValue || placeholder}
       </span>

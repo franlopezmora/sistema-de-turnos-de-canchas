@@ -24,12 +24,12 @@ export default function AdminPanel({
   const resolvedBodyClassName = bodyClassName ? bodyClassName : 'p-4';
 
   return (
-    <section className={cx('rounded-xl border border-[#dce2ee] bg-white', className)}>
+    <section className={cx('rounded-xl border border-p-border bg-p-surface shadow-p-card', className)}>
       {(title || description || actions) && (
-        <header className={cx('flex flex-wrap items-start justify-between gap-3 border-b border-[#eef2f8] px-4 py-3', headerClassName)}>
+        <header className={cx('flex flex-wrap items-start justify-between gap-3 border-b border-p-border px-4 py-3', headerClassName)}>
           <div className="min-w-0">
-            {title && <h2 className="text-[13px] font-semibold text-[#1f2638]">{title}</h2>}
-            {description && <p className="mt-1 text-[12px] text-[#6f7890]">{description}</p>}
+            {title && <h2 className="text-[13px] font-semibold text-p-text">{title}</h2>}
+            {description && <p className="mt-1 text-[12px] text-p-text-muted">{description}</p>}
           </div>
           {actions && <div className="shrink-0">{actions}</div>}
         </header>

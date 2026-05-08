@@ -29,7 +29,7 @@ function buildColumns(
       key: 'code',
       label: 'Código',
       render: (s) => (
-        <span className="font-mono text-[12px] font-semibold uppercase tracking-wide text-[#3053e2]">
+        <span className="font-mono text-[12px] font-semibold uppercase tracking-wide text-p-accent">
           {s.code}
         </span>
       ),
@@ -39,9 +39,9 @@ function buildColumns(
       label: 'Servicio',
       render: (s) => (
         <div className="min-w-0">
-          <p className="truncate font-semibold text-[#2a3245]">{s.name}</p>
+          <p className="truncate font-semibold text-p-text">{s.name}</p>
           {s.description && (
-            <p className="mt-0.5 truncate text-[11px] text-[#98a1b3]">{s.description}</p>
+            <p className="mt-0.5 truncate text-[11px] text-p-text-muted">{s.description}</p>
           )}
         </div>
       ),
@@ -50,7 +50,7 @@ function buildColumns(
       key: 'price',
       label: 'Precio',
       render: (s) => (
-        <span className="font-semibold text-[#2a3245]">
+        <span className="font-semibold text-p-text">
           ${Number(s.price || 0).toLocaleString('es-AR')}
         </span>
       ),
@@ -62,8 +62,8 @@ function buildColumns(
         <span
           className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
             s.isActive
-              ? 'border-[#ccebd7] bg-[#f0fbf4] text-[#167647]'
-              : 'border-[#ffd6d6] bg-[#fff5f5] text-[#b42318]'
+              ? 'border-p-positive bg-p-positive-bg text-p-positive'
+              : 'border-p-error bg-p-error-bg text-[var(--error-fg)]'
           }`}
         >
           {s.isActive ? 'Activo' : 'Inactivo'}
@@ -80,7 +80,7 @@ function buildColumns(
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); onEdit(s); }}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#3053e2] hover:bg-[#eef1fd] hover:text-[#3053e2]"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-accent hover:bg-p-positive-bg hover:text-p-accent"
             title="Editar"
           >
             <Edit size={15} strokeWidth={2.5} />
@@ -89,7 +89,7 @@ function buildColumns(
             <button
               type="button"
               onClick={(event) => { event.stopPropagation(); onDelete(s); }}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] transition hover:bg-[#b42318] hover:text-white"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-p-error bg-p-error-bg text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-ink-50"
               title="Dar de baja"
             >
               <Trash2 size={15} strokeWidth={2.5} />
@@ -99,7 +99,7 @@ function buildColumns(
             <button
               type="button"
               onClick={(event) => { event.stopPropagation(); onRowClick(s); }}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#bfcffe] hover:bg-[#eef1fd] hover:text-[#3053e2]"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-accent hover:bg-p-positive-bg hover:text-p-accent"
               title="Ver detalle"
             >
               <ArrowRight size={15} strokeWidth={2.5} />
@@ -152,7 +152,7 @@ export default function ServicesTable({
         onRowClick={onRowClick}
         rowClassName={(s) =>
           String(s.id) === String(selectedId ?? '')
-            ? 'bg-[#eef1fd] [&>td:first-child]:shadow-[2px_0_0_0_#3053e2_inset]'
+            ? 'bg-p-positive-bg [&>td:first-child]:shadow-[2px_0_0_0_var(--accent-fg)_inset]'
             : ''
         }
         className={['w-full', className].filter(Boolean).join(' ')}

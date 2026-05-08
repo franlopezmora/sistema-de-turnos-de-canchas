@@ -64,21 +64,21 @@ export default function ClientsTable({
       key: 'name',
       label: 'Nombre',
       render: (c) => (
-        <span className="font-semibold text-[#1a2035]">{c.name}</span>
+        <span className="font-semibold text-p-text">{c.name}</span>
       ),
     },
     {
       key: 'phone',
       label: 'Teléfono',
       render: (c) => (
-        <span className="text-[#4e5870]">{c.phone || '—'}</span>
+        <span className="text-p-text-secondary">{c.phone || '—'}</span>
       ),
     },
     {
       key: 'lastBookingAt',
       label: 'Última reserva',
       render: (c) => (
-        <span className="text-[#6f7890]">{formatRelativeDate(c.lastBookingAt)}</span>
+        <span className="text-p-text-muted">{formatRelativeDate(c.lastBookingAt)}</span>
       ),
     },
     {
@@ -87,11 +87,11 @@ export default function ClientsTable({
       align: 'right',
       render: (c) =>
         c.totalDebt > 0 ? (
-          <span className="inline-flex items-center rounded-full border border-[#ffd6d6] bg-[#fff5f5] px-2.5 py-0.5 text-[11px] font-semibold text-[#b42318]">
+          <span className="inline-flex items-center rounded-full border border-p-error bg-p-error-bg px-2.5 py-0.5 text-[11px] font-semibold text-[var(--error-fg)]">
             {formatMoney(c.totalDebt)}
           </span>
         ) : (
-          <span className="text-[11px] font-semibold text-[#167647]">Al día</span>
+          <span className="text-[11px] font-semibold text-p-positive">Al día</span>
         ),
     },
     {
@@ -105,7 +105,7 @@ export default function ClientsTable({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onEdit(c); }}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#3053e2] hover:bg-[#eef1fd] hover:text-[#3053e2]"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-accent hover:bg-p-positive-bg hover:text-p-accent"
               title="Editar cliente"
             >
               <Pencil size={15} strokeWidth={2.5} />
@@ -115,7 +115,7 @@ export default function ClientsTable({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onDelete(c); }}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-[#ffd6d6] bg-[#fff5f5] text-[#b42318] transition hover:bg-[#b42318] hover:text-white"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-p-error bg-p-error-bg text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-ink-50"
               title="Eliminar cliente"
             >
               <Trash2 size={15} strokeWidth={2.5} />
@@ -125,7 +125,7 @@ export default function ClientsTable({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onRowClick(c); }}
-              className="grid h-9 w-9 place-items-center rounded-lg border border-[#dce2ee] bg-white text-[#6f7890] transition hover:border-[#bfcffe] hover:bg-[#eef1fd] hover:text-[#3053e2]"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-p-border bg-p-surface text-p-text-muted transition hover:border-p-accent hover:bg-p-positive-bg hover:text-p-accent"
               title="Ver perfil"
             >
               <ArrowRight size={15} strokeWidth={2.5} />
@@ -149,7 +149,7 @@ export default function ClientsTable({
       onRowClick={onRowClick}
       rowClassName={(c) =>
         String(c.id) === String(selectedId ?? '')
-          ? 'bg-[#eef1fd] [&>td:first-child]:shadow-[2px_0_0_0_#3053e2_inset]'
+          ? 'bg-p-positive-bg [&>td:first-child]:shadow-[2px_0_0_0_var(--accent-fg)_inset]'
           : ''
       }
       className={['w-full', className].filter(Boolean).join(' ')}

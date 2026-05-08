@@ -38,8 +38,8 @@ import { authConfig } from './utils/authConfig';
 const defaultAllowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://tucancha.app',
-  'https://www.tucancha.app',
+  'https://punto.app',
+  'https://www.punto.app',
   'http://187.77.48.97',
   'https://187.77.48.97'
 ];

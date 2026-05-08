@@ -100,7 +100,7 @@ export default function AgendaBookingBlock({
             )}
             {visibility.showTitle && <p className="font-semibold truncate">{isConflict ? conflictLabel : title}</p>}
             {isConflict && visibility.showTimeRange && (
-              <p className="font-semibold text-[#b42346]">{conflictLabel}</p>
+              <p className="font-semibold text-p-error">{conflictLabel}</p>
             )}
             {visibility.showTimeRange && (
               <p className="opacity-70">
