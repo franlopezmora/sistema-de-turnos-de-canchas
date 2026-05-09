@@ -1,4 +1,4 @@
-import Head from 'next/head';
+﻿import Head from 'next/head';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
@@ -6,18 +6,13 @@ import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAler
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
-import AdminDrawer from '../../components/admin/ui/AdminDrawer';
+import AdminDrawer, { AdminDrawerSection } from '../../components/admin/ui/AdminDrawer';
 import AgendaBookingBlock from '../../components/admin/agenda/AgendaBookingBlock';
 import AgendaSelectionPreview from '../../components/admin/agenda/AgendaSelectionPreview';
 import AgendaSlotLayer from '../../components/admin/agenda/AgendaSlotLayer';
 import AgendaTimeGutter from '../../components/admin/agenda/AgendaTimeGutter';
 import AgendaToolbar from '../../components/admin/agenda/AgendaToolbar';
 import BookingHoverCard from '../../components/admin/agenda/BookingHoverCard';
-import {
-  AdminPaymentFormModal,
-  AdminPaymentPreconfirmModal,
-  AdminPaymentResultModal,
-} from '../../components/admin/payments/AdminPaymentFlowModals';
 import PlaytomicPaymentModal from '../../components/admin/payments/PlaytomicPaymentModal';
 import PaymentRegistrationDrawer from '../../components/admin/payments/PaymentRegistrationDrawer';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
@@ -13448,63 +13443,284 @@ export default function AdminAgendaPlaygroundPage() {
       {activePaymentModal?.flow === 'playtomicPayment' &&
         activePaymentModal.step === 'preconfirm' &&
         isPlaytomicPaymentModal && (
-        <AdminPaymentPreconfirmModal
-          onBackdropPointerDown={handleModalBackdropPointerDown}
-          onBackdropPointerUp={(event) =>
-            handleModalBackdropPointerUp(event, () =>
-              setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })
-            )
-          }
-          methodValue={simplifiedPaymentMethodLabel}
-          summaryRows={[
-            { label: 'Monto a cobrar', value: `${playtomicPreviewRequestedAmount.toFixed(2)} $` },
-            { label: 'Saldo luego del cobro', value: `${playtomicPreviewRemainingAfter.toFixed(2)} $` },
-          ]}
-          conceptRows={playtomicPreviewConceptRows.map((row) => ({
-            id: `playtomic-preview-row-${row.id}`,
-            label: row.label,
-            value: `${row.amount.toFixed(2)} $`,
-          }))}
-          onBack={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+        <AdminDrawer
+          open={true}
           onClose={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
-          onConfirm={() => queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
-        />
+          title="Confirmar cobro"
+          subtitle="Revisá los datos antes de confirmar."
+          size="lg"
+          footer={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
+                className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
+              >
+                Volver
+              </button>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={() => queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
+                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900 disabled:opacity-40"
+              >
+                Confirmar cobro
+              </button>
+            </div>
+          }
+        >
+          <AdminDrawerSection title="Resumen del cobro" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
+            <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
+              <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                <span className="text-[13px] text-p-text-muted">Monto</span>
+                <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicPreviewRequestedAmount.toFixed(2)} $`}</span>
+              </div>
+              <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                <span className="text-[13px] text-p-text-muted">Método</span>
+                <span className="text-right text-[13px] font-medium text-p-text">{simplifiedPaymentMethodLabel}</span>
+              </div>
+              <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                <span className="text-[13px] text-p-text-muted">Saldo luego del cobro</span>
+                <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicPreviewRemainingAfter.toFixed(2)} $`}</span>
+              </div>
+            </div>
+          </AdminDrawerSection>
+
+          {playtomicPreviewConceptRows.length > 0 && (
+            <AdminDrawerSection title="Conceptos cubiertos" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
+              <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
+                {playtomicPreviewConceptRows.map((row) => (
+                  <div key={`playtomic-preview-row-${row.id}`} className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                    <span className="text-[13px] text-p-text">{row.label}</span>
+                    <span className="text-right text-[13px] font-medium text-p-text">{`${row.amount.toFixed(2)} $`}</span>
+                  </div>
+                ))}
+              </div>
+            </AdminDrawerSection>
+          )}
+
+          <div className="rounded-xl border border-p-warning bg-p-warning-bg px-4 py-3">
+            <p className="text-[13px] text-p-warning">
+              Revisá los datos antes de confirmar. Esta acción no se puede deshacer directamente.
+            </p>
+          </div>
+        </AdminDrawer>
       )}
 
       {activePaymentModal?.flow === 'playtomicPayment' &&
         activePaymentModal.step === 'result' &&
-        playtomicResultModal && (
-        <AdminPaymentResultModal
-          onBackdropPointerDown={handleModalBackdropPointerDown}
-          onBackdropPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
-          title={playtomicResultModal.title}
-          detail={playtomicResultModal.detail}
-          variant={playtomicResultModal.variant}
-          summaryRows={[
-            { label: 'Solicitado', value: `${playtomicResultModal.requestedAmount.toFixed(2)} $` },
-            { label: 'Aplicado', value: `${playtomicResultModal.appliedAmount.toFixed(2)} $` },
-            { label: 'Método', value: playtomicResultModal.methodLabel },
-            { label: 'Saldo actual', value: `${playtomicResultModal.remainingAfter.toFixed(2)} $` },
-          ]}
-          conceptTitle="Conceptos aplicados"
-          conceptRows={playtomicResultModal.appliedItems.map((row, index) => ({
-            id: `playtomic-result-row-${index}`,
-            label: row.label,
-            value: `${row.amount.toFixed(2)} $`,
-          }))}
+        playtomicResultModal &&
+        isPlaytomicPaymentModal && (
+        <AdminDrawer
+          open={true}
           onClose={closeSimplifiedPaymentModal}
-          onRetry={
-            playtomicResultModal.variant !== 'success'
-              ? () => {
-                  setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
-                  void openSimplifiedPaymentModal();
-                }
-              : null
+          title={playtomicResultModal.title}
+          subtitle={playtomicResultModal.detail}
+          size="lg"
+          footer={
+            <div className="flex items-center gap-2">
+              {playtomicResultModal.variant !== 'success' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
+                    void openSimplifiedPaymentModal();
+                  }}
+                  className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
+                >
+                  Reintentar
+                </button>
+              )}
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={closeSimplifiedPaymentModal}
+                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900"
+              >
+                {playtomicResultModal.variant === 'success' ? 'Ver cuenta' : 'Cerrar'}
+              </button>
+            </div>
           }
-        />
+        >
+          {(() => {
+            const isSuccess = playtomicResultModal.variant === 'success';
+            return (
+              <>
+                <div
+                  className={[
+                    'flex flex-col items-center gap-3 rounded-2xl border p-6 text-center',
+                    isSuccess ? 'account-success-card account-success-glow-bold' : '',
+                    isSuccess
+                      ? 'border-emerald-500/35 bg-p-surface text-p-text'
+                      : 'bg-p-error-bg text-[var(--error-fg)]',
+                  ].join(' ')}
+                >
+                  <div
+                    className={[
+                      'grid h-12 w-12 place-items-center rounded-full',
+                      isSuccess ? 'account-success-icon account-success-icon-bold' : '',
+                      isSuccess ? 'bg-emerald-500/20' : 'bg-[var(--error-fg)]',
+                    ].join(' ')}
+                  >
+                    {isSuccess ? (
+                      <Check size={24} className="text-emerald-300" />
+                    ) : (
+                      <X size={24} className="text-ink-50" />
+                    )}
+                  </div>
+                  <p className={`text-[18px] font-bold ${isSuccess ? 'text-p-text account-success-title' : ''}`}>
+                    {playtomicResultModal.title}
+                  </p>
+                  <p className={`text-[13px] ${isSuccess ? 'text-p-text-muted account-success-detail' : 'opacity-80'}`}>
+                    {playtomicResultModal.detail}
+                  </p>
+                </div>
+
+                {isSuccess && (
+                  <AdminDrawerSection title="Detalle" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
+                    <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
+                      <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                        <span className="text-[13px] text-p-text-muted">Cobrado</span>
+                        <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicResultModal.appliedAmount.toFixed(2)} $`}</span>
+                      </div>
+                      <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                        <span className="text-[13px] text-p-text-muted">Método</span>
+                        <span className="text-right text-[13px] font-medium text-p-text">{playtomicResultModal.methodLabel}</span>
+                      </div>
+                      <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                        <span className="text-[13px] text-p-text-muted">Saldo restante</span>
+                        <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicResultModal.remainingAfter.toFixed(2)} $`}</span>
+                      </div>
+                    </div>
+                  </AdminDrawerSection>
+                )}
+
+                {isSuccess && playtomicResultModal.appliedItems.length > 0 && (
+                  <AdminDrawerSection title="Conceptos" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
+                    <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
+                      {playtomicResultModal.appliedItems.map((row, index) => (
+                        <div key={`playtomic-result-row-${index}`} className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
+                          <span className="text-[13px] text-p-text">{row.label}</span>
+                          <span className="text-right text-[13px] font-semibold text-p-positive">{`${row.amount.toFixed(2)} $`}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </AdminDrawerSection>
+                )}
+              </>
+            );
+          })()}
+        </AdminDrawer>
       )}
 
       <style jsx global>{`
+        @media (prefers-reduced-motion: no-preference) {
+          .account-success-card {
+            animation: accountSuccessCardIn 280ms cubic-bezier(0.22, 1, 0.36, 1);
+          }
+          .account-success-glow-bold {
+            position: relative;
+            overflow: hidden;
+          }
+          .account-success-glow-bold::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            transform: translateX(-130%);
+            pointer-events: none;
+            background: linear-gradient(
+              110deg,
+              transparent 14%,
+              rgba(16, 185, 129, 0.2) 32%,
+              rgba(110, 231, 183, 0.34) 50%,
+              rgba(16, 185, 129, 0.2) 68%,
+              transparent 86%
+            );
+            animation: accountSuccessSweep 980ms ease-out 120ms 1 both;
+          }
+          .account-success-glow-bold::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            background: radial-gradient(88% 58% at 50% 0%, rgba(16, 185, 129, 0.18), transparent 72%);
+            opacity: 0;
+            animation: accountSuccessGlowFade 620ms ease-out 140ms both;
+          }
+          .account-success-icon {
+            will-change: transform, opacity;
+          }
+          .account-success-icon-bold {
+            animation: accountSuccessIconPopBold 520ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+          }
+          .account-success-title {
+            animation: accountSuccessTextIn 320ms ease-out 120ms both;
+          }
+          .account-success-detail {
+            animation: accountSuccessTextIn 320ms ease-out 180ms both;
+          }
+          @keyframes accountSuccessCardIn {
+            from {
+              opacity: 0;
+              transform: translateY(8px) scale(0.985);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+          }
+          @keyframes accountSuccessSweep {
+            0% {
+              transform: translateX(-130%);
+              opacity: 0;
+            }
+            16% {
+              opacity: 0.7;
+            }
+            100% {
+              transform: translateX(135%);
+              opacity: 0;
+            }
+          }
+          @keyframes accountSuccessGlowFade {
+            from {
+              opacity: 0;
+            }
+            to {
+              opacity: 1;
+            }
+          }
+          @keyframes accountSuccessIconPopBold {
+            0% {
+              opacity: 0;
+              transform: scale(0.78) rotate(-14deg);
+            }
+            44% {
+              opacity: 1;
+              transform: scale(1.12) rotate(8deg);
+            }
+            70% {
+              transform: scale(0.96) rotate(-2deg);
+            }
+            100% {
+              opacity: 1;
+              transform: scale(1) rotate(0deg);
+            }
+          }
+          @keyframes accountSuccessTextIn {
+            from {
+              opacity: 0;
+              transform: translateY(3px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        }
+
         body {
           background: var(--bg);
         }
