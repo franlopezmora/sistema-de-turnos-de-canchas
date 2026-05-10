@@ -30,7 +30,7 @@ export default function AdminAppModal({
   show,
   onClose,
   onCancel,
-  title = 'Informacion',
+  title = 'Información',
   message = '',
   cancelText = 'Cancelar',
   confirmText = 'Aceptar',

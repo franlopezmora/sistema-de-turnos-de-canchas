@@ -35,7 +35,7 @@ export const BOOKING_ERROR_BEHAVIOR_BY_CODE: Record<string, BookingErrorBehavior
     blocking: true,
     channel: 'inline',
     disableSave: true,
-    fallbackMessage: 'Ese horario no esta permitido por la configuracion del club.'
+    fallbackMessage: 'Ese horario no está permitido por la configuración del club.'
   },
   CLUB_CLOSED: {
     field: 'date',
@@ -77,7 +77,7 @@ export const BOOKING_ERROR_BEHAVIOR_BY_CODE: Record<string, BookingErrorBehavior
     blocking: true,
     channel: 'inline',
     disableSave: true,
-    fallbackMessage: 'La asignacion de cobro es invalida para el modo de pago.'
+    fallbackMessage: 'La asignación de cobro es inválida para el modo de pago.'
   },
   BILLING_ASSIGNMENTS_REQUIRED: {
     field: 'participants',
@@ -91,7 +91,7 @@ export const BOOKING_ERROR_BEHAVIOR_BY_CODE: Record<string, BookingErrorBehavior
     blocking: true,
     channel: 'inline',
     disableSave: true,
-    fallbackMessage: 'Hay campos invalidos. Revisa los datos del formulario.'
+    fallbackMessage: 'Hay campos inválidos. Revisá los datos del formulario.'
   }
 };
 

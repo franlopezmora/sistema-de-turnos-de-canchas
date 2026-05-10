@@ -1459,7 +1459,7 @@ export default function AdminPaymentsPlaygroundPage() {
   return (
     <>
       <Head>
-        <title>Caja | Punto Admin</title>
+        <title>Caja | Pique Admin</title>
       </Head>
       <AdminPlaygroundShell activeItem="Caja" user={user} contentMuted={cashActionSidebarOpen}>
         <div className="flex h-full min-h-0 flex-col gap-4 p-4 lg:p-6">

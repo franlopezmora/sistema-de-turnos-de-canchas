@@ -15,7 +15,7 @@ import { logout } from '../../services/AuthService';
 import { useUserTheme } from '../../contexts/UserThemeContext';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser, setActiveClubId } from '../../utils/session';
 import { PLAYGROUND_SIDEBAR_ITEMS } from './playgroundNavigation';
-import PuntoLogo from '../PuntoLogo';
+import PiqueLogo from '../PiqueLogo';
 
 type AdminPlaygroundShellProps = {
   activeItem: string;
@@ -25,7 +25,7 @@ type AdminPlaygroundShellProps = {
 };
 
 const HELP_WHATSAPP_URL = 'https://wa.me/5493513436163';
-const HELP_EMAIL_URL = 'mailto:soporte.punto@gmail.com';
+const HELP_EMAIL_URL = 'mailto:soporte.pique@gmail.com';
 
 const HELP_TIPS_BY_SECTION: Record<string, string[]> = {
   Calendario: [
@@ -200,11 +200,11 @@ export default function AdminPlaygroundShell({
   };
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-p-bg text-p-text punto-root">
+    <div className="h-screen w-full overflow-hidden bg-p-bg text-p-text pique-root">
       <div className="flex h-full w-full flex-col">
         <header className="relative z-50 flex h-16 items-center overflow-visible bg-p-surface border-b border-p-border px-4 lg:px-6">
           <div className="hidden w-[168px] items-center gap-2 overflow-hidden transition-[width] duration-200 ease-out lg:flex">
-            <PuntoLogo
+            <PiqueLogo
               variant={isSidebarCollapsed ? (isLight ? 'isotipo' : 'isotipoDark') : (isLight ? 'horizontal' : 'horizontalDark')}
               className={`transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
                 isSidebarCollapsed ? 'h-8 w-8' : 'h-9 w-auto'
@@ -213,7 +213,7 @@ export default function AdminPlaygroundShell({
           </div>
 
           <div className="flex items-center gap-2 lg:hidden">
-            <PuntoLogo variant={isLight ? 'horizontal' : 'horizontalDark'} className="h-9 w-auto" />
+            <PiqueLogo variant={isLight ? 'horizontal' : 'horizontalDark'} className="h-9 w-auto" />
           </div>
 
           <div className="ml-auto flex items-center gap-2">

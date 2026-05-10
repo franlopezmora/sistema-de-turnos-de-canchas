@@ -67,7 +67,7 @@ export default function BookingDrawerShell({
           <p className="text-[13px] font-semibold text-p-text">Como usar este bloque</p>
           <ul className="mt-2 space-y-1 text-[12px] text-p-text-secondary">
             <li>1. Revisa el resumen para ver total, pagado y saldo.</li>
-            <li>2. Define asignacion de cobro en la pestana Asignacion.</li>
+            <li>2. Definí asignación de cobro en la pestaña Asignación.</li>
             <li>3. Registra pagos en la pestana Pagos y guarda cambios.</li>
           </ul>
         </div>

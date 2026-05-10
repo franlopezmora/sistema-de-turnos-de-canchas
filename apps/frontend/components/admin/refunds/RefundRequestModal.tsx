@@ -22,7 +22,7 @@ type RefundRequestModalProps = {
 
 export default function RefundRequestModal({
   show,
-  title = 'Gestion de devolucion',
+  title = 'Gestión de devolución',
   paymentId,
   maxAmount,
   draft,
@@ -52,7 +52,7 @@ export default function RefundRequestModal({
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink-900/50">Gestion de cobros</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink-900/50">Gestión de cobros</p>
             <h3 className="text-2xl font-black uppercase italic tracking-tight">{title}</h3>
             {paymentId ? (
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink-900/60 mt-1">

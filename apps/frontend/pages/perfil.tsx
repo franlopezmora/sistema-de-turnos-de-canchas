@@ -134,7 +134,7 @@ export default function PerfilPage() {
 
   return (
     <DarkPageLayout
-      title="Mi Perfil | Punto"
+      title="Mi Perfil | Pique"
       extraCss={PAGE_CSS}
       breadcrumbs={[
         { label: 'Inicio', href: '/' },

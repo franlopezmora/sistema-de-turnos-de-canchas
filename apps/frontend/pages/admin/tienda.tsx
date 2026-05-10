@@ -38,7 +38,7 @@ export default function AdminStorePage() {
   };
 
   return (
-    <AdminRouteShell title="Tienda | Punto Admin" activeItem="Tienda" fromPath="/admin/tienda">
+    <AdminRouteShell title="Tienda | Pique Admin" activeItem="Tienda" fromPath="/admin/tienda">
       {(user) => {
         const normalizedUser = normalizeSessionUser(user as any);
         const clubSlug = getActiveClubSlug(normalizedUser);

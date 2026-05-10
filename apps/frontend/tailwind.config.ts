@@ -1,4 +1,4 @@
-﻿/** @type {import('tailwindcss').Config} */
+/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     './src/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,7 +9,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Punto semantic tokens (all read from punto.css)
+        // Pique semantic tokens (all read from pique.css)
         'p-bg': 'var(--bg)',
         'p-surface': 'var(--surface-1)',
         'p-surface-2': 'var(--surface-2)',
@@ -51,7 +51,7 @@ module.exports = {
         'red-800':  '#991B1B',
         'red-900':  '#7F1D1D',
 
-        // Punto raw lima scale
+        // Pique raw lima scale
         'lima-50': '#F0FBDD',
         'lima-100': '#DFFDB0',
         'lima-200': '#CCFB8A',
@@ -63,7 +63,7 @@ module.exports = {
         'lima-800': '#2B5014',
         'lima-900': '#1F3A0E',
 
-        // Punto raw ink scale
+        // Pique raw ink scale
         'ink-50': '#F5F4F0',
         'ink-100': '#DBD9D1',
         'ink-200': '#C5C3BC',
@@ -75,7 +75,7 @@ module.exports = {
         'ink-800': '#1A1E27',
         'ink-900': '#0E1116',
 
-        // Compatibility aliases resolved to Punto semantic tokens
+        // Compatibility aliases resolved to Pique semantic tokens
         bg: 'var(--bg)',
         surface: 'var(--surface-1)',
         muted: 'var(--text-muted)',

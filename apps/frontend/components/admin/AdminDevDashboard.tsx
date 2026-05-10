@@ -58,7 +58,7 @@ const AdminDevDashboard = () => {
             <Activity size={300} strokeWidth={1} />
         </div>
 
-        {/* Header Punto */}
+        {/* Header Pique */}
         <div className="flex justify-between items-center mb-10 border-b border-lima-900/10 pb-6 relative z-10">
           <div className="flex items-center gap-4">
             <div className="bg-lima-300 p-2 rounded-xl shadow-lg shadow-lima-300/20">

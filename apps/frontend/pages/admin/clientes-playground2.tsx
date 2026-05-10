@@ -399,7 +399,7 @@ export default function AdminClientesPlayground2Page() {
       return;
     }
     if (!phoneLocal || !canonicalPhone) {
-      setErrorMessage('Ingresa un telefono valido.');
+      setErrorMessage('Ingresá un teléfono válido.');
       return;
     }
     if (!email) {
@@ -572,7 +572,7 @@ export default function AdminClientesPlayground2Page() {
   return (
     <>
       <Head>
-        <title>Clientes | Punto Admin</title>
+        <title>Clientes | Pique Admin</title>
       </Head>
 
       <AdminPlaygroundShell activeItem="Clientes" user={user} contentMuted={sidebarOpen}>
@@ -619,7 +619,7 @@ export default function AdminClientesPlayground2Page() {
                                 type="text"
                                 value={searchTerm}
                                 onChange={(event) => setSearchTerm(event.target.value)}
-                                placeholder="Buscar por nombre, dni, email o telefono"
+                                placeholder="Buscar por nombre, DNI, email o teléfono"
                                 className="h-8 w-full rounded-xl border border-p-border bg-p-surface pl-9 pr-3 text-[12px] outline-none focus:border-p-accent"
                               />
                             </label>
@@ -1071,7 +1071,7 @@ export default function AdminClientesPlayground2Page() {
         }
         subtitle={
           isClientFormView
-            ? 'Gestion de datos basicos del cliente.'
+            ? 'Gestión de datos básicos del cliente.'
             : sidebarView === 'client_profile'
               ? selectedClient
                 ? getClientName(selectedClient)
@@ -1212,7 +1212,7 @@ export default function AdminClientesPlayground2Page() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Telefono *</span>
+                  <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Teléfono *</span>
                   <input
                     type="text"
                     value={clientForm.phone}
@@ -1279,7 +1279,7 @@ export default function AdminClientesPlayground2Page() {
                     <span className="font-semibold text-p-text">{String(selectedClient.dni || '-')}</span>
                   </div>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">
-                    <span className="text-p-text-muted">Telefono</span>
+                    <span className="text-p-text-muted">Teléfono</span>
                     <span className="font-semibold text-p-text">{String(selectedClient.phone || '-')}</span>
                   </div>
                   <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2.5">

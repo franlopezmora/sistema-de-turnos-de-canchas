@@ -1,4 +1,4 @@
-﻿import { BookingRepository } from '../repositories/BookingRepository';
+import { BookingRepository } from '../repositories/BookingRepository';
 import { ClubRepository } from '../repositories/ClubRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { ActivityTypeRepository } from '../repositories/ActivityTypeRepository';
@@ -2129,7 +2129,7 @@ export class BookingService {
         const clientMessage = `
 🎾 *¡Reserva Registrada en ${params.clubName}!* 🎾
 
-Hola *${params.clientName}*, tu turno ha sido agendado a través de Punto.
+Hola *${params.clientName}*, tu turno ha sido agendado a través de Pique.
 
 📅 *Fecha:* ${date}
 ⏰ *Hora:* ${time}
@@ -2330,7 +2330,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         } else if (autoCancelBlockedByPayment) {
             autoCancelStatusLabel = 'No se cancelara automaticamente porque tiene pagos';
         } else if (!autoCancelAt) {
-            autoCancelStatusLabel = 'Configuracion incompleta';
+            autoCancelStatusLabel = 'Configuración incompleta';
         } else if (autoCancelEligibleNow) {
             autoCancelStatusLabel = 'Lista para cancelación automática ahora';
         } else {

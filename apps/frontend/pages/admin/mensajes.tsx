@@ -3,7 +3,7 @@ import AdminComingSoonPanel from '../../components/admin/AdminComingSoonPanel';
 
 export default function AdminMessagesPage() {
   return (
-    <AdminRouteShell title="Mensajes | Punto Admin" activeItem="Mensajes" fromPath="/admin/mensajes">
+    <AdminRouteShell title="Mensajes | Pique Admin" activeItem="Mensajes" fromPath="/admin/mensajes">
       <section className="h-full min-h-0 overflow-y-auto p-4 pb-20 lg:p-6">
         <AdminComingSoonPanel
           title="Mensajes"

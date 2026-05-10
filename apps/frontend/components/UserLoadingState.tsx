@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useUserTheme } from '../contexts/UserThemeContext';
-import PuntoLogo from './PuntoLogo';
+import PiqueLogo from './PiqueLogo';
 
 type UserLoadingStateMode = 'page' | 'block' | 'inline';
 
@@ -38,7 +38,7 @@ export default function UserLoadingState({
         letterSpacing: '.01em',
       }}
     >
-      <PuntoLogo
+      <PiqueLogo
         variant={isLight ? 'isotipo' : 'isotipoDark'}
         style={{
           width: mode === 'inline' ? 18 : 22,

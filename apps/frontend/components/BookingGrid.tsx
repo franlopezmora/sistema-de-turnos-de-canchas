@@ -292,7 +292,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       pendingAfterLoginActionRef.current = null;
       if (pendingAction) { try { pendingAction(); } catch (err) { reportUiError({ area: 'BookingGrid', action: 'postLoginPendingAction' }, err); } }
     } catch (err) {
-      const message = extractErrorMessage(err, 'No se pudo iniciar sesion.');
+      const message = extractErrorMessage(err, 'No se pudo iniciar sesión.');
       setLoginModalError(message);
       const norm = message.toLowerCase();
       const isExpected = norm.includes('credenciales') || norm.includes('usuario o contrasena') || norm.includes('401');

@@ -280,7 +280,7 @@ export default function PaymentsSection({
 
       {hasNonChargeableAssignments && (
         <p className="mt-1 text-[11px] text-p-warning">
-          Los participantes marcados como "sin cobro" no se pueden imputar hasta activarlos en Asignacion.
+          Los participantes marcados como "sin cobro" no se pueden imputar hasta activarlos en Asignación.
         </p>
       )}
 

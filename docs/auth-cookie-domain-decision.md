@@ -15,7 +15,7 @@ This is the required decision record before implementing cookie sessions in back
 | --- | --- | --- | --- | --- | --- | --- |
 | Local dev | `http://localhost:3001` | `http://localhost:3002` | host-only (`localhost`) | `false` | `Lax` | Cross-port only, same-site on localhost. |
 | Preview | `https://app-preview.<domain>` | `https://api-preview.<domain>` | host-only by default | `true` | `Lax` | Use explicit domain only if both apps share a stable parent domain. |
-| Production | `https://app.tucancha.app` | `https://api.tucancha.app` | `.tucancha.app` | `true` | `Lax` | Keep `None` disabled unless a real cross-site integration requires it. |
+| Production | `https://app.pique.app` | `https://api.pique.app` | `.pique.app` | `true` | `Lax` | Keep `None` disabled unless a real cross-site integration requires it. |
 
 ## Rules
 1. Default is `SameSite=Lax`.

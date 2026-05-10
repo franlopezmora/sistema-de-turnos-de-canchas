@@ -1,15 +1,15 @@
-# Benchmarks Visuales — TuCancha Admin v2
+# Benchmarks Visuales — Pique Admin v2
 
 > **Propósito:** Inventario + síntesis visual de las referencias recopiladas para el diseño del Admin v2.
-> No es una colección de estilos a copiar; es la base para derivar un lenguaje visual propio de TuCancha.
+> No es una colección de estilos a copiar; es la base para derivar un lenguaje visual propio de Pique.
 
 ---
 
 ## 1. Inventario completo
 
-| Archivo | Qué muestra | Patrón útil | Aplicación en TuCancha | Valor |
+| Archivo | Qué muestra | Patrón útil | Aplicación en Pique | Valor |
 |---------|-------------|-------------|------------------------|-------|
-| `admin-de-partidos/reservas-match-management-table-desktop.png` | Tabla de gestión de partidos/reservas con acciones en fila | Tabla con estado de color + acciones inline | `/admin/reservas` — columnas: cancha, hora, cliente, estado, acción | Alta |
+| `admin-de-partidos/reservas-match-management-table-desktop.png` | Tabla de gestión de partidos/reservas con acciónes en fila | Tabla con estado de color + acciónes inline | `/admin/reservas` — columnas: cancha, hora, cliente, estado, acción | Alta |
 | `agenda/agenda-calendar-day-columns-desktop.png` | Vista diaria con columna por recurso (cancha/pista) | Grid columnar de recursos en eje X, hora en eje Y | Patrón base para la agenda de canchas | Alta |
 | `agenda/agenda-calendar-day-view-desktop.png` | Vista diaria compacta, un solo recurso o día entero | Bloques de tiempo con color por tipo de reserva | Variante mobile o vista por cancha individual | Media |
 | `agenda/agenda-calendar-overview-grid-desktop.png` | Vista semana/mes con miniaturas de ocupación | Grid de disponibilidad a vista de pájaro | Posible "mini mapa" de ocupación semanal | Media |
@@ -23,9 +23,9 @@
 | `ajustes/ajustes-settings-sidebar-sections-desktop.png` | Sidebar izquierdo con secciones de configuración | Lista de ítems con estado activo subrayado/resaltado | **Patrón ganador para Ajustes:** sidebar de secciones | Alta |
 | `ajustes/ajustes-settings-tabs-configuration-desktop.png` | Tabs de configuración con contenido cambiante | Tab bar + contenido dinámico a la derecha | Tabs internos dentro de una sección de Ajustes | Media |
 | `asignaciones-staff/cuentas-staff-assignments-board-desktop.png` | Board de asignaciones de staff por turno | Kanban/grid de turnos por persona | Fuera de scope para Admin v2 | Baja |
-| `caja/caja-payments-dashboard-desktop.png` | Dashboard financiero con KPIs + tabla + acciones | Layout de dos zonas: métricas arriba + listado abajo | Caja → zona de resumen diario | Alta |
+| `caja/caja-payments-dashboard-desktop.png` | Dashboard financiero con KPIs + tabla + acciónes | Layout de dos zonas: métricas arriba + listado abajo | Caja → zona de resumen diario | Alta |
 | `caja/caja-payments-kpi-summary-desktop.png` | Fila/grid de KPIs de caja (efectivo, transferencia, total) | Tarjetas de KPI pequeñas alineadas horizontalmente | `MetricCard` en Caja → fila superior | Alta |
-| `caja/caja-payments-transactions-table-desktop.png` | Tabla de transacciones con filtro de método y estado | Tabla compacta con chips de método de pago | Caja → listado de movimientos | Alta |
+| `caja/caja-payments-transactions-table-desktop.png` | Tabla de transacciónes con filtro de método y estado | Tabla compacta con chips de método de pago | Caja → listado de movimientos | Alta |
 | `clientes/clientes-crm-detail-panel-desktop.png` | Panel de detalle de cliente con historial | Split view: lista izquierda + ficha derecha | Base directa para `/admin/clientes/[id]` | Alta |
 | `clientes/clientes-crm-list-with-filters-desktop.png` | Lista de clientes con buscador + filtros | Search bar + chips de filtro + lista de resultados | Clientes → vista lista con search | Alta |
 | `crear-cliente/clientes-crm-create-form-compact-desktop.png` | Formulario de alta de cliente compacto (modal o drawer) | Form de 2 columnas con campos esenciales | Modal/drawer de creación de cliente | Alta |
@@ -35,7 +35,7 @@
 | `cuentas/cuentas-billing-accounts-table-desktop.png` | Tabla de cuentas con estado OPEN/CLOSED | Tabla con badge de estado y totales | Referencia de tabla — **NO usar para Cuentas operativas** | Baja |
 | `cuentas/cuentas-open-tabs-cards-desktop.png` | Cards de cuentas abiertas (POS style) | Cards con cliente, monto, acción [Cobrar] | **Patrón correcto para Caja → Cuentas:** lista enriquecida | Alta |
 | `dashboard-home/informes-operations-activity-feed-desktop.png` | Feed de actividad reciente con timestamps | Timeline de eventos ordenados por hora | `MovementsTimeline` + Informes → actividad | Alta |
-| `dashboard-home/informes-operations-dashboard-overview-desktop.png` | Dashboard operacional completo | Combinación de KPIs + gráfico + tabla compacta | Modelo para Informes → vista general | Alta |
+| `dashboard-home/informes-operations-dashboard-overview-desktop.png` | Dashboard operaciónal completo | Combinación de KPIs + gráfico + tabla compacta | Modelo para Informes → vista general | Alta |
 | `dashboard-home/informes-operations-executive-summary-desktop.png` | Resumen ejecutivo con métricas de alto nivel | Layout limpio con cifras grandes y contexto | Informes → vista ejecutiva / cierre de período | Media |
 | `dashboard-home/informes-operations-kpi-cards-desktop.png` | Grid de 4 KPI cards con delta | Cards con icono, valor, etiqueta, porcentaje de cambio | Referencia directa para `MetricCard` | Alta |
 | `dashboard-home/informes-operations-metrics-grid-desktop.png` | Grid de métricas con gráficos sparkline | KPI + mini gráfico de tendencia embebido | Informes → KPIs con contexto temporal | Media |
@@ -43,13 +43,13 @@
 | `detalle-empleado/cuentas-staff-profile-detail-desktop.png` | Ficha de empleado con historial de turnos | Split view: info básica + actividad reciente | Fuera de scope para Admin v2 | Baja |
 | `detalle-pagos/caja-payment-detail-breakdown-desktop.png` | Desglose de un pago: conceptos + montos + método | Lista de ítems con subtotales y total | Drawer de pago en Caja | Alta |
 | `detalle-pagos/caja-payment-detail-right-panel-desktop.png` | Panel derecho con detalle de pago seleccionado | Slide-in desde la derecha con info completa | `AgendaLikeRightSidebar` para detalle de pago | Alta |
-| `detalle-transacciones/caja-transaction-detail-panel-desktop.png` | Panel de detalle de transacción | Datos de transacción + acciones (reimprimir, etc.) | Detalle de movimiento en Caja | Media |
+| `detalle-transacciónes/caja-transaction-detail-panel-desktop.png` | Panel de detalle de transacción | Datos de transacción + acciónes (reimprimir, etc.) | Detalle de movimiento en Caja | Media |
 | `detalles-clientes/clientes-crm-customer-profile-desktop.png` | Ficha completa de cliente con tabs internos | Tabs: Info / Reservas / Pagos / Notas | Base para `ClientProfile` → sección de historial | Alta |
-| `drawer-reservas-appointments/reservas-appointments-drawer-actions-desktop.png` | Drawer de cita/reserva con acciones disponibles | Botones de acción agrupados en zona inferior del drawer | Patrón de acciones en `BookingDrawerShell` | Alta |
-| `drawer-reservas-appointments/reservas-appointments-drawer-detail-desktop.png` | Drawer de detalle de reserva | Estructura: header + info + timeline + acciones | Base para drawer de reserva en agenda | Alta |
-| `drawer-reservas-appointments/reservas-appointments-drawer-with-history-desktop.png` | Drawer con historial de interacciones | Historial de cambios de estado dentro del drawer | Historial de una reserva (cambios, pagos) | Alta |
+| `drawer-reservas-appointments/reservas-appointments-drawer-actions-desktop.png` | Drawer de cita/reserva con acciónes disponibles | Botones de acción agrupados en zona inferior del drawer | Patrón de acciónes en `BookingDrawerShell` | Alta |
+| `drawer-reservas-appointments/reservas-appointments-drawer-detail-desktop.png` | Drawer de detalle de reserva | Estructura: header + info + timeline + acciónes | Base para drawer de reserva en agenda | Alta |
+| `drawer-reservas-appointments/reservas-appointments-drawer-with-history-desktop.png` | Drawer con historial de interacciónes | Historial de cambios de estado dentro del drawer | Historial de una reserva (cambios, pagos) | Alta |
 | `ejemplos-calendar-bookings/agenda-bookings-calendar-reference-desktop.png` | Referencia general de calendario de reservas | Vista tipo Google Calendar adaptada a SaaS | Referencia de alto nivel para la agenda | Media |
-| `gestion-empleados/cuentas-staff-management-table-desktop.png` | Tabla de gestión de empleados | Tabla con foto, nombre, rol, estado, acciones | Fuera de scope para Admin v2 | Baja |
+| `gestión-empleados/cuentas-staff-management-table-desktop.png` | Tabla de gestión de empleados | Tabla con foto, nombre, rol, estado, acciónes | Fuera de scope para Admin v2 | Baja |
 | `historial-pagos/caja-payment-history-table-desktop.png` | Historial de pagos con filtros temporales | Tabla con filtros de fecha y método | Caja → historial de caja | Alta |
 | `hovers-agenda/agenda-calendar-hover-state-highlight-desktop.png` | Estado hover de bloque en agenda (resaltado) | Overlay de color con elevación sutil | Hover state de `AgendaBookingBlock` | Alta |
 | `hovers-agenda/agenda-calendar-hover-state-tooltip-desktop.png` | Estado hover con tooltip flotante | Tooltip con info resumida + link a detalle | Hover card compacta sobre bloque de reserva | Alta |
@@ -65,7 +65,7 @@
 | `mobile/mobile-reservas-list-and-detail.png` | Lista + detalle de reserva en mobile | Split adaptativo: lista full + detalle full (native nav) | Reservas mobile → navegación entre lista y detalle | Media |
 | `modales/general-modal-confirmation-dialog-desktop.png` | Modal de confirmación destructiva | Diálogo centrado con título, descripción, 2 botones | Eliminar cliente, cancelar reserva, cerrar turno | Alta |
 | `modales/general-modal-form-dialog-desktop.png` | Modal con formulario embebido | Dialog de 480-560px con formulario compacto | Crear/editar cliente, crear movimiento de caja | Alta |
-| `navbar-arriba-ejemplo/sidebar-top-navbar-actions-desktop.png` | Navbar superior con acciones + notificaciones | Zona de iconos de acción a la derecha del navbar | Posible toolbar superior del Admin v2 | Media |
+| `navbar-arriba-ejemplo/sidebar-top-navbar-actions-desktop.png` | Navbar superior con acciónes + notificaciones | Zona de iconos de acción a la derecha del navbar | Posible toolbar superior del Admin v2 | Media |
 | `notificaciones/ajustes-notifications-center-desktop.png` | Centro de notificaciones con listado | Panel de notificaciones agrupadas por tipo | Fuera de scope para Admin v2 | Baja |
 | `notificaciones/ajustes-notifications-list-and-status-desktop.png` | Listado de notificaciones con estado leído/no leído | Filas con dot de estado + tiempo relativo | Fuera de scope para Admin v2 | Baja |
 | `pagos/caja-payments-invoices-overview-desktop.png` | Vista de facturas/cobros pendientes | Lista de cobros con estado (pagado/pendiente/vencido) | Caja → cobros pendientes del día | Alta |
@@ -79,9 +79,9 @@
 | `sidebar/sidebar-collapsed-navigation-icons-desktop.png` | Sidebar colapsado mostrando solo iconos | 64px de ancho con iconos centrados + tooltip al hover | **Estado colapsado del `AdminPlaygroundShell`** | Alta |
 | `sidebar/sidebar-expanded-navigation-sections-desktop.png` | Sidebar expandido con secciones y etiquetas | 200px con iconos + labels + sección activa resaltada | **Estado expandido del `AdminPlaygroundShell`** | Alta |
 | `tienda/productos/editar-productos/tienda-products-edit-form-desktop.png` | Formulario de edición de producto | Form con imagen, precio, stock, descripción | Tienda → editar producto en drawer | Alta |
-| `tienda/productos/tienda-products-table-desktop.png` | Tabla de productos con foto, precio, stock | Tabla con celda de imagen + acciones inline | **Referencia principal para `AdminDataTable`** en Tienda | Alta |
+| `tienda/productos/tienda-products-table-desktop.png` | Tabla de productos con foto, precio, stock | Tabla con celda de imagen + acciónes inline | **Referencia principal para `AdminDataTable`** en Tienda | Alta |
 | `waitlist-turnosfijos?/reservas-waitlist-management-table-desktop.png` | Tabla de gestión de lista de espera | Tabla con posición, cliente, turno solicitado | Posible en /admin/reservas → Fijos/Espera | Baja |
-| `waitlist-turnosfijos?/reservas-waitlist-priority-queue-desktop.png` | Cola de prioridad para lista de espera | Vista de cola ordenada con acciones | Baja relevancia para v2 inicial | Baja |
+| `waitlist-turnosfijos?/reservas-waitlist-priority-queue-desktop.png` | Cola de prioridad para lista de espera | Vista de cola ordenada con acciónes | Baja relevancia para v2 inicial | Baja |
 
 ---
 
@@ -98,11 +98,11 @@
 
 ### Referencias de bajo valor para Admin v2
 
-Estas imágenes muestran patrones fuera del scope del administrador operativo de TuCancha:
+Estas imágenes muestran patrones fuera del scope del administrador operativo de Pique:
 
 - `asignaciones-staff/` — gestión de turnos de empleados
 - `detalle-empleado/` — ficha de empleado
-- `gestion-empleados/` — tabla de personal
+- `gestión-empleados/` — tabla de personal
 - `shift-de-empleados/` — calendario de empleados
 - `notificaciones/ajustes-notifications-center-desktop.png` — centro de notificaciones
 - `notificaciones/ajustes-notifications-list-and-status-desktop.png`
@@ -113,11 +113,11 @@ Estas imágenes muestran patrones fuera del scope del administrador operativo de
 
 ---
 
-## 3. Lenguaje visual propio de TuCancha Admin v2
+## 3. Lenguaje visual propio de Pique Admin v2
 
 ### 3.1 Estética base
 
-TuCancha Admin v2 no imita ningún producto referenciado. Toma lo mejor de cada uno y lo simplifica:
+Pique Admin v2 no imita ningún producto referenciado. Toma lo mejor de cada uno y lo simplifica:
 
 | Decisión | Valor |
 |----------|-------|
@@ -170,7 +170,7 @@ TuCancha Admin v2 no imita ningún producto referenciado. Toma lo mejor de cada 
 - Fondo blanco, header `#f5f6f8`, borde `#dce2ee`
 - Celdas: 40-48px de altura, tipografía 13-14px
 - Borde entre filas: `1px solid #f0f2f7`
-- Columna de acciones: botones `ghost` alineados a la derecha
+- Columna de acciónes: botones `ghost` alineados a la derecha
 - Hover de fila: `#f5f6f8`
 - Sort activo: icono + accent color
 
@@ -197,7 +197,7 @@ TuCancha Admin v2 no imita ningún producto referenciado. Toma lo mejor de cada 
 - Ancho: `480px` desktop, `100%` mobile
 - Header: título + [X] cerrar a la derecha
 - Cuerpo: scroll independiente
-- Footer sticky: acciones principales
+- Footer sticky: acciónes principales
 
 **Referencia:** `drawer-reservas-appointments/reservas-appointments-drawer-detail-desktop.png`
 
@@ -212,7 +212,7 @@ TuCancha Admin v2 no imita ningún producto referenciado. Toma lo mejor de cada 
 
 | Cuándo usar... | Patrón |
 |----------------|--------|
-| Lista de entidades gestionables (clientes, productos, reservas) | `AdminDataTable` con sort + filtros |
+| Lista de entidades gestiónables (clientes, productos, reservas) | `AdminDataTable` con sort + filtros |
 | KPIs resumidos en cabecera de sección | `MetricCard` en fila horizontal |
 | Actividad financiera cronológica | `MovementsTimeline` |
 | Detalle de una entidad con historial | Split view (desktop) / full screen (mobile) |
@@ -275,7 +275,7 @@ TuCancha Admin v2 no imita ningún producto referenciado. Toma lo mejor de cada 
 |-----------|----------|
 | ¿Tabla o cards para Cuentas abiertas en Caja? | **Cards** — doc maestro v1.1 explícito; la tabla es para gestión/auditoría, no para operación POS en tiempo real |
 | ¿Horizontal tabs o sidebar para Ajustes? | **Sidebar de secciones** — más escalable, más claro visualmente, referencia directa en benchmarks |
-| ¿Ultra-dense (Linear style) o densidad media para tablas? | **Densidad media** — TuCancha opera en tablet/pantallas medianas; ultra-dense es ilegible sin mouse de precisión |
+| ¿Ultra-dense (Linear style) o densidad media para tablas? | **Densidad media** — Pique opera en tablet/pantallas medianas; ultra-dense es ilegible sin mouse de precisión |
 | ¿Split view en mobile o drawer para clientes? | **Full screen** en mobile (navegación nativa), split solo en desktop ≥ 768px |
 | Referencias mobile B2C (apps de reserva para el jugador) | **Ignorar para admin** — son para el jugador, no para el operador de club |
 | ¿Sombras en paneles? | **No** — borde plano `#dce2ee`; sombra solo en dropdowns flotantes y tooltips |

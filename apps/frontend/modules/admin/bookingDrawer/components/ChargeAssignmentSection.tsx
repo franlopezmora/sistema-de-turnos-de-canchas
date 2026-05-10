@@ -44,7 +44,7 @@ export default function ChargeAssignmentSection({
     <div className="mt-3 rounded-xl border border-p-border bg-p-surface p-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-[13px] font-semibold text-p-text">Asignacion de cobro</p>
+          <p className="text-[13px] font-semibold text-p-text">Asignación de cobro</p>
           <p className="mt-0.5 text-[11px] text-p-text-muted">
             Defini quien asume el cobro de esta reserva.
           </p>

@@ -492,7 +492,7 @@ export class ClubAdminService {
       headers: { 'Content-Type': 'application/json' }
     });
     if (!res.ok) {
-      await throwApiErrorFromResponse(res, 'Error al obtener configuracion de cobro');
+      await throwApiErrorFromResponse(res, 'Error al obtener configuración de cobro');
     }
     const payload = await res.json();
     return {
@@ -539,7 +539,7 @@ export class ClubAdminService {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      await throwApiErrorFromResponse(res, 'Error al guardar configuracion de cobro');
+      await throwApiErrorFromResponse(res, 'Error al guardar configuración de cobro');
     }
     const payload = await res.json();
     return {

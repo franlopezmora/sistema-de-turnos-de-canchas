@@ -131,7 +131,7 @@ const createBookingApiError = (error: unknown): ApiError => {
 const createBillingConfigApiError = (error: unknown): ApiError => {
     const known = (error || {}) as any;
     const rawCode = String(known?.code || '').trim();
-    const message = getErrorMessage(error, 'No se pudo guardar la configuracion de cobro.');
+    const message = getErrorMessage(error, 'No se pudo guardar la configuración de cobro.');
     const lower = message
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -146,7 +146,7 @@ const createBillingConfigApiError = (error: unknown): ApiError => {
             message
         });
     }
-    if (lower.includes('exactamente una asignacion cobrable')) {
+    if (lower.includes('exactamente una asignación cobrable')) {
         return new ApiError({
             statusCode: 400,
             code: rawCode || 'BILLING_INVALID_ASSIGNMENTS',
@@ -155,7 +155,7 @@ const createBillingConfigApiError = (error: unknown): ApiError => {
             message
         });
     }
-    if (lower.includes('debe enviar al menos una asignacion')) {
+    if (lower.includes('debe enviar al menos una asignación')) {
         return new ApiError({
             statusCode: 400,
             code: rawCode || 'BILLING_ASSIGNMENTS_REQUIRED',
@@ -320,7 +320,7 @@ export class BookingController {
                     code: 'VALIDATION_ERROR',
                     field: 'general',
                     blocking: true,
-                    message: 'Datos invalidos para crear la reserva.',
+                    message: 'Datos inválidos para crear la reserva.',
                     meta: { issues: parsed.error.flatten() }
                 });
             }
@@ -351,7 +351,7 @@ export class BookingController {
                             code: 'CLUB_CONFIG_INVALID',
                             field: 'general',
                             blocking: true,
-                            message: 'Configuracion de club invalida: timeZone es obligatorio.'
+                            message: 'Configuración de club inválida: timeZone es obligatorio.'
                         });
                     }
                     startDate = TimeHelper.localSlotToUtc(dateStr, slotTime, tz);
@@ -361,7 +361,7 @@ export class BookingController {
                         code: 'INVALID_DATE_TIME',
                         field: 'time',
                         blocking: true,
-                        message: 'Combinacion fecha/horario invalida o zona horaria del club faltante.'
+                        message: 'Combinación fecha/horario inválida o zona horaria del club faltante.'
                     });
                 }
             } else if (startDateTime) {
@@ -427,7 +427,7 @@ export class BookingController {
 
             if (!effectiveUserId && !useAdminClientMode) {
                 if (resolveOptionalAuthState(req) === 'invalid_token') {
-                    return sendAuthError(res, 401, 'AUTH_INVALID', 'Sesion invalida. Volve a iniciar sesion.');
+                    return sendAuthError(res, 401, 'AUTH_INVALID', 'Sesión inválida. Volvé a iniciar sesión.');
                 }
                 return sendAuthError(res, 401, 'AUTH_MISSING', 'Debes iniciar sesión para reservar.');
             }
@@ -456,7 +456,7 @@ export class BookingController {
                     code: 'CLUB_CONFIG_INVALID',
                     field: 'general',
                     blocking: true,
-                    message: 'Configuracion de club invalida: timeZone es obligatorio.'
+                    message: 'Configuración de club inválida: timeZone es obligatorio.'
                 });
             }
 
@@ -519,7 +519,7 @@ export class BookingController {
                     code: 'VALIDATION_ERROR',
                     field: 'general',
                     blocking: true,
-                    message: 'Datos invalidos para cotizar la reserva.',
+                    message: 'Datos inválidos para cotizar la reserva.',
                     meta: { issues: parsed.error.flatten() }
                 });
             }
@@ -561,7 +561,7 @@ export class BookingController {
                     code: 'INVALID_CLIENT_PHONE',
                     field: 'owner',
                     blocking: true,
-                    message: 'Telefono invalido para cotizacion.'
+                    message: 'Teléfono inválido para cotización.'
                 });
             }
 
@@ -575,7 +575,7 @@ export class BookingController {
                         code: 'CLUB_CONFIG_INVALID',
                         field: 'general',
                         blocking: true,
-                        message: 'Configuracion de club invalida: timeZone es obligatorio.'
+                        message: 'Configuración de club inválida: timeZone es obligatorio.'
                     });
                 }
                 resolvedStart = TimeHelper.localSlotToUtc(dateStr, slotTime, tz);
@@ -955,7 +955,7 @@ export class BookingController {
                     code: 'VALIDATION_ERROR',
                     field: 'general',
                     blocking: true,
-                    message: 'Parametros invalidos para mover la reserva.',
+                    message: 'Parámetros inválidos para mover la reserva.',
                     meta: { issues: p.error.flatten() }
                 });
             }
@@ -965,7 +965,7 @@ export class BookingController {
                     code: 'VALIDATION_ERROR',
                     field: 'time',
                     blocking: true,
-                    message: 'Datos invalidos para mover la reserva.',
+                    message: 'Datos inválidos para mover la reserva.',
                     meta: { issues: b.error.flatten() }
                 });
             }
@@ -1023,7 +1023,7 @@ export class BookingController {
                     code: 'VALIDATION_ERROR',
                     field: 'general',
                     blocking: true,
-                    message: 'Parametros invalidos para leer la configuracion de cobro.',
+                    message: 'Parámetros inválidos para leer la configuración de cobro.',
                     meta: { issues: parsed.error.flatten() }
                 });
             }
@@ -1047,7 +1047,7 @@ export class BookingController {
                 code: 'BILLING_CONFIG_FETCH_FAILED',
                 field: 'payment',
                 blocking: true,
-                message: getErrorMessage(error, 'No se pudo obtener la configuracion de cobro.')
+                message: getErrorMessage(error, 'No se pudo obtener la configuración de cobro.')
             }));
         }
     }
@@ -1083,7 +1083,7 @@ export class BookingController {
                     code: 'VALIDATION_ERROR',
                     field: 'general',
                     blocking: true,
-                    message: 'Parametros invalidos para guardar configuracion de cobro.',
+                    message: 'Parámetros inválidos para guardar configuración de cobro.',
                     meta: { issues: p.error.flatten() }
                 });
             }
@@ -1093,7 +1093,7 @@ export class BookingController {
                     code: 'VALIDATION_ERROR',
                     field: 'payment',
                     blocking: true,
-                    message: 'Datos invalidos para guardar configuracion de cobro.',
+                    message: 'Datos inválidos para guardar configuración de cobro.',
                     meta: { issues: b.error.flatten() }
                 });
             }

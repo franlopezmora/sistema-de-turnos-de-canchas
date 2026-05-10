@@ -48,7 +48,7 @@ export default function AdminSettingsWorkspace({ tab }: AdminSettingsWorkspacePr
   return (
     <AdminComingSoonPanel
       title={comingSoonLabelByTab[tab]}
-      description="Esta configuracion queda visible en roadmap y se migrara a panel lateral con componentes compartidos."
+      description="Esta configuración queda visible en roadmap y se migrará a panel lateral con componentes compartidos."
     />
   );
 }

@@ -9,7 +9,7 @@ import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../util
 import { buildCanonicalPhone, DEFAULT_PHONE_COUNTRY_ISO2, normalizePhoneCountryIso2, PHONE_COUNTRY_OPTIONS, resolveCallingCodeByIso2 } from '../utils/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserTheme } from '../contexts/UserThemeContext';
-import PuntoLogo from '../components/PuntoLogo';
+import PiqueLogo from '../components/PiqueLogo';
 
 type PostLoginRedirectIntent = { sourceUser?: any };
 
@@ -253,14 +253,14 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>{isLogin ? 'Ingresar' : 'Crear cuenta'} | Punto</title>
+        <title>{isLogin ? 'Ingresar' : 'Crear cuenta'} | Pique</title>
       </Head>
       <style dangerouslySetInnerHTML={{ __html: LOGIN_CSS }} />
 
       <div className={`lg-root${isLight ? ' lg-theme-light' : ''}`}>
         {/* Brand top link */}
-        <Link href="/" className="lg-brand" aria-label="punto - inicio">
-          <PuntoLogo
+        <Link href="/" className="lg-brand" aria-label="pique - inicio">
+          <PiqueLogo
             variant={isLight ? 'horizontal' : 'horizontalDark'}
             style={{ width: 92, height: 'auto', display: 'block' }}
           />

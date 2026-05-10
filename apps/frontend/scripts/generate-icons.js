@@ -4,10 +4,10 @@ const sharp = require('sharp');
 
 const publicDir = path.join(__dirname, '..', 'public');
 const brandDir = path.join(publicDir, 'brand');
-const markInput = path.join(brandDir, 'punto-isotipo.svg');
-const markInput40 = path.join(brandDir, 'punto-isotipo-40.svg');
-const markInput28 = path.join(brandDir, 'punto-isotipo-28.svg');
-const logoInput = path.join(brandDir, 'punto-logo-horizontal.svg');
+const markInput = path.join(brandDir, 'pique-isotipo.svg');
+const markInput40 = path.join(brandDir, 'pique-isotipo-40.svg');
+const markInput28 = path.join(brandDir, 'pique-isotipo-28.svg');
+const logoInput = path.join(brandDir, 'pique-logo-horizontal.svg');
 
 if (!fs.existsSync(markInput) || !fs.existsSync(logoInput)) {
   console.error('No se encontraron los SVG fuente en public/brand.');
@@ -72,7 +72,7 @@ async function generate() {
       .png()
       .toFile(path.join(publicDir, 'og-1200x630.png'));
 
-    console.log('Assets Punto generados desde public/brand con escala de isotipo del design system.');
+    console.log('Assets Pique generados desde public/brand con escala de isotipo del design system.');
   } catch (err) {
     console.error('Error generando iconos:', err);
     process.exit(1);

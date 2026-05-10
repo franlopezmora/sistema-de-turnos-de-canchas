@@ -1,4 +1,4 @@
-import PuntoLogo from './PuntoLogo';
+import PiqueLogo from './PiqueLogo';
 
 interface RouteTransitionScreenProps {
   message?: string;
@@ -15,7 +15,7 @@ export default function RouteTransitionScreen({
       </div>
       <div className="relative z-10 flex flex-col items-center gap-4">
         <div className="relative h-14 w-14">
-          <PuntoLogo variant="isotipoDark" className="h-14 w-14" />
+          <PiqueLogo variant="isotipoDark" className="h-14 w-14" />
           <span className="absolute inset-[-6px] rounded-2xl border-2 border-lima-300/20 border-t-lima-300 animate-spin" />
         </div>
         <p className="text-sm font-bold tracking-wide text-ink-50/90">{message}</p>

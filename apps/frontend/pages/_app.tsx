@@ -10,11 +10,11 @@ import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 
 import '../styles/globals.css';
 import '../styles/playground.css';
-import '../styles/punto.css';
+import '../styles/pique.css';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || '';
-const LOGO_PATH = '/brand/punto-logo-horizontal.svg';
-const MARK_PATH = '/brand/punto-isotipo.svg';
+const LOGO_PATH = '/brand/pique-logo-horizontal.svg';
+const MARK_PATH = '/brand/pique-isotipo.svg';
 const APPLE_ICON_PATH = '/favicon-192.png';
 const LOGO_URL = SITE_URL ? `${SITE_URL.replace(/\/+$/,'')}${LOGO_PATH}` : LOGO_PATH;
 const OG_IMAGE_PATH = '/og-1200x630.png';
@@ -182,11 +182,11 @@ export default function MyApp({ Component, pageProps }: AppProps) {
           // Solo persistimos cuando hay navegacion para mostrarlo en destino.
           sessionStorage.setItem(
             PENDING_APP_NOTICE_STORAGE_KEY,
-            JSON.stringify({ message: 'Sesion cerrada correctamente.', tone: 'success', ts: now })
+            JSON.stringify({ message: 'Sesión cerrada correctamente.', tone: 'success', ts: now })
           );
         } else {
           // Sin navegacion, mostrar una vez y no persistir para evitar duplicados.
-          showNotice('Sesion cerrada correctamente.', 'success');
+          showNotice('Sesión cerrada correctamente.', 'success');
         }
         lastLogoutNoticeAtRef.current = now;
       }
@@ -245,7 +245,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "name": "Punto",
+    "name": "Pique",
     "url": SITE_URL || undefined,
     "logo": LOGO_URL
   };
@@ -253,16 +253,16 @@ export default function MyApp({ Component, pageProps }: AppProps) {
   return (
     <>
       <Head>
-        <title>Punto</title>
+        <title>Pique</title>
         <link rel="icon" href={MARK_PATH} type="image/svg+xml" />
         <link rel="shortcut icon" href="/favicon.ico" />
         <link rel="manifest" href="/site.webmanifest" />
         <link rel="apple-touch-icon" href={APPLE_ICON_PATH} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="Punto" />
-        <meta property="og:title" content="Punto" />
-        <meta property="og:description" content="Reserva canchas y gestiona turnos facilmente." />
+        <meta property="og:site_name" content="Pique" />
+        <meta property="og:title" content="Pique" />
+        <meta property="og:description" content="Reserva canchas y gestiona turnos fácilmente." />
         <meta property="og:image" content={OG_IMAGE_URL} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />

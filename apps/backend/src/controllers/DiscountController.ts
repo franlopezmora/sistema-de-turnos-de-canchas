@@ -182,9 +182,8 @@ export class DiscountController {
       });
       return res.status(204).send();
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudo eliminar la asignación' });
+      return res.status(400).json({ error: error.message || 'No se pudo eliminar la asignaciÃ³n' });
     }
   };
 }
-
 

@@ -25,7 +25,7 @@ export default function AdminIndex() {
   return (
     <>
       <Head>
-        <title>Admin | Punto</title>
+        <title>Admin | Pique</title>
       </Head>
       {!authChecked || !user
         ? <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />

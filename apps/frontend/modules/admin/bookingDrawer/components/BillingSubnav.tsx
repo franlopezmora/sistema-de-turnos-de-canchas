@@ -7,7 +7,7 @@ type Props = {
 
 const options: Array<{ value: BillingTab; label: string }> = [
   { value: 'SUMMARY', label: 'Resumen' },
-  { value: 'ASSIGNMENTS', label: 'Asignacion' },
+  { value: 'ASSIGNMENTS', label: 'Asignación' },
   { value: 'PAYMENTS', label: 'Pagos' },
 ];
 

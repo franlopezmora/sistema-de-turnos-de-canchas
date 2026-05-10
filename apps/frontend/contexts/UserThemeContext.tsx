@@ -9,7 +9,7 @@ type UserThemeContextValue = {
   toggleTheme: () => void;
 };
 
-const STORAGE_KEY = 'punto:user-theme';
+const STORAGE_KEY = 'pique:user-theme';
 
 const UserThemeContext = createContext<UserThemeContextValue | null>(null);
 

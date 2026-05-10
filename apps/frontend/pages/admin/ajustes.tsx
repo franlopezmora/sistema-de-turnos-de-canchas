@@ -52,7 +52,7 @@ export default function AdminSettingsV2Page() {
   };
 
   return (
-    <AdminRouteShell title="Ajustes | Punto Admin" activeItem="Ajustes" fromPath="/admin/ajustes">
+    <AdminRouteShell title="Ajustes | Pique Admin" activeItem="Ajustes" fromPath="/admin/ajustes">
       <div className="flex h-full min-h-0 flex-col gap-4 p-4 pb-0 lg:p-6 lg:pb-0">
         <AdminSegmentedControl
           options={SETTINGS_TABS.map((tab) => ({ value: tab.value, label: tab.label }))}

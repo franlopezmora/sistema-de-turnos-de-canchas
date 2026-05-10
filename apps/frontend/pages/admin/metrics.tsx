@@ -5,7 +5,7 @@ const MetricsPage = () => {
   return (
     <>
       <Head>
-        <title>Metricas | Punto Admin</title>
+        <title>Metricas | Pique Admin</title>
       </Head>
       <div className="min-h-screen bg-p-bg p-6">
         <div className="mb-6">

@@ -10,7 +10,7 @@ import { getActiveClubSlug, getLastClubSlug, hasAdminAccess, normalizeSessionUse
 import { reportUiError } from '../utils/uiError';
 import { isAuthSessionInvalidatedError } from '../utils/apiClient';
 import AppModal from './AppModal';
-import PuntoLogo from './PuntoLogo';
+import PiqueLogo from './PiqueLogo';
 
 interface NavbarProps {
   onContactClick?: () => void;
@@ -175,7 +175,7 @@ export default function Navbar({
       { href: '/bookings', label: 'Mis reservas', icon: <Calendar size={15} />, badge: activeBookingsCount },
     ];
     if (isAdmin) {
-      rows.unshift({ href: '/admin/agenda', label: 'Gestion', icon: <ShieldCheck size={15} /> });
+      rows.unshift({ href: '/admin/agenda', label: 'Gestión', icon: <ShieldCheck size={15} /> });
       if (adminClubSlug) rows.splice(1, 0, { href: `/club/${adminClubSlug}`, label: 'Mi club', icon: <Users size={15} /> });
     }
     return rows;
@@ -188,7 +188,7 @@ export default function Navbar({
       return;
     }
     if (typeof window !== 'undefined') {
-      window.location.href = 'mailto:soporte.punto@gmail.com';
+      window.location.href = 'mailto:soporte.pique@gmail.com';
     }
   };
 
@@ -204,10 +204,10 @@ export default function Navbar({
       <header ref={navRef} className={`p-header p-player-nav${navHidden ? ' p-header-hidden' : ''}`}>
         <div className="p-header-inner">
           <div className="p-player-brand">
-            <Link href="/" aria-label="Punto - Inicio" style={{ display: 'flex', alignItems: 'center' }}>
-              <PuntoLogo
+            <Link href="/" aria-label="Pique - Inicio" style={{ display: 'flex', alignItems: 'center' }}>
+              <PiqueLogo
                 variant={isLight ? 'horizontal' : 'horizontalDark'}
-                style={{ width: 96, height: 'auto', display: 'block' }}
+                style={{ width: 123, height: 'auto', display: 'block' }}
               />
             </Link>
           </div>
@@ -282,7 +282,7 @@ export default function Navbar({
                         className="p-player-menu-item p-player-menu-danger"
                         onClick={() => setShowLogoutModal(true)}
                       >
-                        <span className="p-player-menu-item-main"><LogOut size={15} /> Cerrar sesion</span>
+                        <span className="p-player-menu-item-main"><LogOut size={15} /> Cerrar sesión</span>
                       </button>
                     </div>
                   </div>
@@ -300,7 +300,7 @@ export default function Navbar({
       <AppModal
         show={showLogoutModal}
         onClose={() => setShowLogoutModal(false)}
-        title="Cerrar sesion"
+        title="Cerrar sesión"
         message="Estas seguro que queres salir de tu cuenta?"
         cancelText="Cancelar"
         confirmText="Salir"

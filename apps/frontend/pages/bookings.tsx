@@ -331,7 +331,7 @@ export default function MyBookingsPage() {
 
   return (
     <DarkPageLayout
-      title="Mis Reservas | Punto"
+      title="Mis Reservas | Pique"
       extraCss={PAGE_CSS}
       breadcrumbs={[
         { label: 'Inicio', href: '/' },

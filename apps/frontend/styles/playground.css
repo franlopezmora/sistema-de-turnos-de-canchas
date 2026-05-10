@@ -1,5 +1,5 @@
-﻿/* Punto compatibility utilities.
-   Tokens live in punto.css; this file only keeps legacy class names working
+/* Pique compatibility utilities.
+   Tokens live in pique.css; this file only keeps legacy class names working
    without redefining the design system or reinjecting Tailwind layers. */
 
 /* Hide number-input spinners consistently across browsers. */
@@ -70,7 +70,7 @@ input[type='number'] {
   transform: translateY(-1px);
 }
 
-/* Legacy class names kept as compatibility wrappers, now rendered with Punto tokens. */
+/* Legacy class names kept as compatibility wrappers, now rendered with Pique tokens. */
 .p-legacy-pill {
   display: inline-flex;
   align-items: center;

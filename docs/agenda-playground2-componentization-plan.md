@@ -19,7 +19,7 @@
 
 Reducir riesgo y costo de mantenimiento separando "UI de presentacion", "estado local de feature" y "acceso a servicios"; luego reutilizar piezas en las otras playground (`clientes-playground2`, `cash-playground2`).
 
-## Criterio de extraccion
+## Criterio de extracción
 
 Extraer primero piezas:
 1. De alto reuso.
@@ -28,7 +28,7 @@ Extraer primero piezas:
 
 ## Fase 0 (ya iniciada)
 
-- [x] Configuracion del sidebar playground compartida en:
+- [x] Configuración del sidebar playground compartida en:
   - `apps/frontend/components/admin/playgroundNavigation.ts`
 - Reusada en:
   - `apps/frontend/components/admin/AdminPlaygroundShell.tsx`
@@ -79,7 +79,7 @@ Responsabilidad:
 Props sugeridas:
 - Datos ya filtrados (`visibleCourts`, `visibleBookings`)
 - Estado de seleccion/drag (`dragSelection`, `bookingDropPreview`, `draggingBookingId`, etc.)
-- Callbacks de interaccion (`onSlotMouseDown`, `onSlotMouseEnter`, `onBookingMouseDown`, etc.)
+- Callbacks de interacción (`onSlotMouseDown`, `onSlotMouseEnter`, `onBookingMouseDown`, etc.)
 
 Nota:
 - Mantener logica de drag en hook dedicado para no inflar el componente visual.
@@ -125,7 +125,7 @@ Internamente debe reutilizar (o ampliar) `modules/admin/bookingDrawer`.
 
 - Encapsular notificaciones temporales y limpieza de timers.
 
-## Fase 4 - Modales y acciones transversales
+## Fase 4 - Modales y acciónes transversales
 
 Extraer modales en componentes puros:
 - Confirmaciones.
@@ -138,7 +138,7 @@ Objetivo:
 
 ## Estrategia de rollout (sin frenar feature)
 
-1. Extracciones pequeñas y seguras (shell/nav/wrappers).
+1. Extracciónes pequeñas y seguras (shell/nav/wrappers).
 2. Mover solo UI presentacional (sin tocar negocio).
 3. Mover hooks de efecto despues de estabilizar UI.
 4. Validar cada PR con smoke tests manuales:

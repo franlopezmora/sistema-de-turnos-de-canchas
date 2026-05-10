@@ -194,7 +194,7 @@ export default function CheckoutPage() {
     } catch (error) {
       const message = extractErrorMessage(error, 'No pudimos confirmar la reserva. Intentá nuevamente.');
       reportUiError({ area: 'CheckoutPage', action: 'confirmBooking' }, error);
-      if (message.toLowerCase().includes('sesión expirada') || message.toLowerCase().includes('sesion expirada')) {
+      if (message.toLowerCase().includes('sesión expirada')) {
         void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/checkout')}`);
         return;
       }
@@ -210,7 +210,7 @@ export default function CheckoutPage() {
 
   if (!draft) {
     return (
-      <DarkPageLayout title="Checkout | Punto" extraCss={CHECKOUT_CSS} breadcrumbs={checkoutBreadcrumbs}>
+      <DarkPageLayout title="Checkout | Pique" extraCss={CHECKOUT_CSS} breadcrumbs={checkoutBreadcrumbs}>
         <main className="p-public-page-sm">
           <section className="checkout-card checkout-card-pad checkout-success">
             <div className="checkout-success-icon">
@@ -231,7 +231,7 @@ export default function CheckoutPage() {
 
   if (confirmedBookingId !== null) {
     return (
-      <DarkPageLayout title="Reserva confirmada | Punto" extraCss={CHECKOUT_CSS} breadcrumbs={checkoutBreadcrumbs}>
+      <DarkPageLayout title="Reserva confirmada | Pique" extraCss={CHECKOUT_CSS} breadcrumbs={checkoutBreadcrumbs}>
         <main className="p-public-page-sm">
           <section className="checkout-card checkout-card-pad checkout-success">
             <div className="checkout-success-icon">
@@ -276,7 +276,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <DarkPageLayout title="Checkout | Punto" extraCss={CHECKOUT_CSS} breadcrumbs={checkoutBreadcrumbs}>
+    <DarkPageLayout title="Checkout | Pique" extraCss={CHECKOUT_CSS} breadcrumbs={checkoutBreadcrumbs}>
       <main className="p-public-page">
         <div className="checkout-shell">
           <div className="checkout-layout">

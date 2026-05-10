@@ -38,8 +38,8 @@ import { authConfig } from './utils/authConfig';
 const defaultAllowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://punto.app',
-  'https://www.punto.app',
+  'https://pique.app',
+  'https://www.pique.app',
   'http://187.77.48.97',
   'https://187.77.48.97'
 ];

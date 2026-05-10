@@ -7,7 +7,7 @@ type ClubMediaDefaults = {
 
 const CLUB_MEDIA_BY_SLUG: Record<string, ClubMediaDefaults> = {
   'las-tejas': {
-    logoUrl: '/brand/punto-isotipo.svg',
+    logoUrl: '/clubs/logo-las-tejas.svg',
     clubImageUrl: '/clubs/las-tejas.jpg'
   },
   'club-central': {
@@ -47,15 +47,15 @@ async function main() {
 
   for (const club of clubs) {
     const mapped = CLUB_MEDIA_BY_SLUG[club.slug];
-    const desiredLogo = mapped?.logoUrl ?? club.logoUrl ?? '/brand/punto-isotipo.svg';
+    const desiredLogo = mapped?.logoUrl ?? club.logoUrl ?? null;
     const desiredImage =
       mapped?.clubImageUrl ??
       club.clubImageUrl ??
       FALLBACK_IMAGES[Math.abs(club.id) % FALLBACK_IMAGES.length];
 
     const shouldUpdate =
-      (club.logoUrl || '') !== desiredLogo ||
-      (club.clubImageUrl || '') !== desiredImage;
+      (club.logoUrl ?? null) !== desiredLogo ||
+      (club.clubImageUrl ?? null) !== desiredImage;
 
     if (!shouldUpdate) {
       continue;
@@ -84,5 +84,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-
-

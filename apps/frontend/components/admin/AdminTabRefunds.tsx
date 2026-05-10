@@ -256,7 +256,7 @@ export default function AdminTabRefunds() {
           >
             <div className="px-6 py-5 border-b border-lima-900/10 bg-p-surface/60 flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink-900/50">Gestion de devoluciones</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-ink-900/50">Gestión de devoluciones</p>
                 <h3 className="text-2xl font-black uppercase italic tracking-tight">Detalle de devolución</h3>
                 <p className="text-[11px] font-black uppercase tracking-widest text-ink-900/60 mt-1">
                   {formatRefundStatus(selectedRefund.status)} · {formatMoney(selectedRefund.amount)}

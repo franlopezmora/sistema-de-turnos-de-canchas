@@ -1,7 +1,7 @@
 {
-  "name": "Punto",
-  "short_name": "Punto",
-  "description": "Reserva canchas y gestiona turnos facilmente.",
+  "name": "Pique",
+  "short_name": "Pique",
+  "description": "Reserva canchas y gestiona turnos fácilmente.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F5F4F0",

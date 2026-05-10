@@ -11,7 +11,7 @@ import { logout } from '../services/AuthService';
 import { getMyBookings } from '../services/BookingService';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../utils/session';
 import { reportUiError } from '../utils/uiError';
-import PuntoLogo from '../components/PuntoLogo';
+import PiqueLogo from '../components/PiqueLogo';
 import { IoFootballOutline } from "react-icons/io5"; // Pelota de fútbol limpia
 import { IoTennisballOutline } from "react-icons/io5"; // Pelota de tenis limpia
 
@@ -257,11 +257,11 @@ export default function Home() {
       href = 'https://wa.me/5493513436163';
       copyText = '+5493513436163';
     } else if (type === 'email') {
-      href = 'mailto:soporte.punto@gmail.com';
-      copyText = 'soporte.punto@gmail.com';
+      href = 'mailto:soporte.pique@gmail.com';
+      copyText = 'soporte.pique@gmail.com';
     } else if (type === 'instagram') {
-      href = 'https://www.instagram.com/punto.app_/';
-      copyText = '@punto.app_';
+      href = 'https://www.instagram.com/pique.app_/';
+      copyText = '@pique.app_';
     }
     setContactMenu({ type, top: Math.max(top, 10), left: Math.max(left, 10), href, copyText });
   };
@@ -836,7 +836,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Inicio | Punto</title>
+        <title>Inicio | Pique</title>
       </Head>
       <div
         className="min-h-screen relative overflow-x-hidden bg-ink-900 text-ink-50 selection:bg-lima-300 selection:text-ink-900"
@@ -852,7 +852,7 @@ export default function Home() {
         <nav className="sticky top-0 z-50">
           <div className="mx-auto mt-5 flex w-[min(1120px,calc(100%-2rem))] items-center justify-between rounded-2xl border border-white/20 bg-p-surface/10 px-4 py-3 backdrop-blur-xl md:px-6">
             <div className="flex items-center gap-3">
-              <PuntoLogo variant="horizontalDark" className="h-10 w-auto md:h-11" />
+              <PiqueLogo variant="horizontalDark" className="h-10 w-auto md:h-11" />
             </div>
 
             <div
@@ -1686,7 +1686,7 @@ export default function Home() {
             </RevealOnScroll>
             <div className="space-y-3">
               {[
-                { q: '¿Con cuánto tiempo de anticipación puedo reservar?', a: 'Podés reservar tu cancha hasta con 30 días de anticipación desde el calendario.' },
+                { q: '¿Con cuánto tiempo de anticipación puedo reservar?', a: 'Podés reservar un turno hasta con 30 días de anticipación desde el calendario.' },
                 { q: '¿Puedo cancelar o reprogramar mi turno?', a: 'Sí, podés hacerlo desde tu panel según la política del club.' },
                 { q: '¿Cómo recibo avisos de reservas?', a: 'Las notificaciones llegan por WhatsApp y quedan reflejadas en el sistema.' },
                 { q: '¿Puedo gestionar varias canchas y deportes?', a: 'Sí, la plataforma permite múltiples canchas, horarios y precios por actividad.' },
@@ -1709,7 +1709,7 @@ export default function Home() {
 
         <footer className="border-t border-white/10 py-8 text-center text-ink-50/55 text-sm">
           <div className="flex flex-col items-center justify-center gap-3">
-            <PuntoLogo variant="horizontalDark" className="h-9 w-auto opacity-80" />
+            <PiqueLogo variant="horizontalDark" className="h-9 w-auto opacity-80" />
             <p className="font-medium">&copy; {new Date().getFullYear()} Todos los derechos reservados.</p>
           </div>
         </footer>
@@ -1727,7 +1727,7 @@ export default function Home() {
             <div>
               <span className="p-legacy-pill p-legacy-pill-soft text-[11px]">
                 <MessageSquare size={12} />
-                Soporte Punto
+                Soporte Pique
               </span>
               <h2 className="mt-3 text-2xl font-black text-ink-700 leading-none">Contacto</h2>
             </div>
@@ -1781,7 +1781,7 @@ export default function Home() {
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-ink-700/55 text-xs font-bold uppercase tracking-[0.16em]">Email</p>
-                <p className="text-ink-700 font-bold truncate">soporte.punto@gmail.com</p>
+                <p className="text-ink-700 font-bold truncate">soporte.pique@gmail.com</p>
               </div>
               <ChevronRight size={16} className="text-ink-700/35 group-hover:text-ink-700 transition-colors" />
             </button>
@@ -1792,7 +1792,7 @@ export default function Home() {
               className="w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-ink-700 text-ink-50 rounded-2xl hover:bg-lima-700 transition-colors font-bold"
             >
               <Instagram size={18} />
-              <span>@punto.app_</span>
+              <span>@pique.app_</span>
             </button>
           </div>
           {contactMenu && (

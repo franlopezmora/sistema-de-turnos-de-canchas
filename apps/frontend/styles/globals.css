@@ -13,7 +13,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Punto base reset ── */
+/* ── Pique base reset ── */
 @layer base {
   html {
     font-family: 'Geist', system-ui, -apple-system, sans-serif;
@@ -44,7 +44,7 @@
   .text-glow { text-shadow: 0 0 10px var(--border-subtle); }
   .box-glow  { box-shadow: 0 0 16px var(--border-subtle); }
 
-  /* Punto scrollbars */
+  /* Pique scrollbars */
   .p-scrollbar-x {
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;

@@ -60,13 +60,13 @@ async function main() {
     update: {
       name: 'Las Tejas Pádel', addressLine: 'Sarmiento 60', city: 'Río Tercero', province: 'Córdoba', country: 'Argentina',
       locationId: locationRíoTercero.id, contactInfo: 'contacto@lastejas.com', phone: '+54 9 357 135 9791',
-      logoUrl: '/logo1.svg', clubImageUrl: '/clubs/las-tejas.jpg',
+      logoUrl: '/clubs/logo-las-tejas.svg', clubImageUrl: '/clubs/las-tejas.jpg',
       instagramUrl: 'https://www.instagram.com/lastejaspadel/', description: 'Complejo deportivo Las Tejas Pádel'
     },
     create: {
       slug: 'las-tejas', name: 'Las Tejas Pádel', addressLine: 'Sarmiento 60', city: 'Río Tercero', province: 'Córdoba', country: 'Argentina',
       locationId: locationRíoTercero.id, contactInfo: 'contacto@lastejas.com', phone: '+54 9 357 135 9791',
-      logoUrl: '/logo1.svg', clubImageUrl: '/clubs/las-tejas.jpg',
+      logoUrl: '/clubs/logo-las-tejas.svg', clubImageUrl: '/clubs/las-tejas.jpg',
       instagramUrl: 'https://www.instagram.com/lastejaspadel/', description: 'Complejo deportivo Las Tejas Pádel'
     }
   });

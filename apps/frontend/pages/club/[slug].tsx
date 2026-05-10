@@ -341,7 +341,7 @@ export default function ClubPage() {
 
   const slugReady = router.isReady && slug && typeof slug === 'string';
   const stillLoading = !slugReady || loadingClub;
-  const pageTitle = club?.name ? `${club.name} | Punto` : 'Club | Punto';
+  const pageTitle = club?.name ? `${club.name} | Pique` : 'Club | Pique';
   const clubBreadcrumbs = [
     { label: 'Inicio', href: '/' },
     { label: 'Complejos', href: '/complejos' },

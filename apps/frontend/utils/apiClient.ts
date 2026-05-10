@@ -21,7 +21,7 @@ export class AuthSessionInvalidatedError extends Error {
   public readonly status: number;
 
   constructor(code: ApiErrorCode, status: number) {
-    super('Sesion finalizada.');
+    super('Sesión finalizada.');
     this.name = 'AuthSessionInvalidatedError';
     this.code = code;
     this.status = status;

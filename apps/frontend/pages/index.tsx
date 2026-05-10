@@ -12,7 +12,7 @@ import { reportUiError } from '../utils/uiError';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserTheme } from '../contexts/UserThemeContext';
 import { isAuthSessionInvalidatedError } from '../utils/apiClient';
-import PuntoLogo from '../components/PuntoLogo';
+import PiqueLogo from '../components/PiqueLogo';
 import NavBar from '../components/NavBar';
 // Importamos los iconos de la libreria
 import { FaTableTennis } from "react-icons/fa"; // Paleta (Perfecta para Padel)
@@ -349,11 +349,11 @@ export default function Home() {
       href = 'https://wa.me/5493513436163';
       copyText = '+5493513436163';
     } else if (type === 'email') {
-      href = 'mailto:soporte.punto@gmail.com';
-      copyText = 'soporte.punto@gmail.com';
+      href = 'mailto:soporte.pique@gmail.com';
+      copyText = 'soporte.pique@gmail.com';
     } else if (type === 'instagram') {
-      href = 'https://www.instagram.com/punto.app_/';
-      copyText = '@punto.app_';
+      href = 'https://www.instagram.com/pique.app_/';
+      copyText = '@pique.app_';
     }
     setContactMenu({ type, top: Math.max(top, 10), left: Math.max(left, 10), href, copyText });
   };
@@ -679,8 +679,28 @@ export default function Home() {
     /* Hero */
     .p-home-hero { position:relative; z-index:10; min-height:92vh; display:flex; align-items:flex-end; padding:120px 40px 64px; overflow:visible; }
     .p-home-hero-visuals { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
-    .p-home-hero-bg { position:absolute; inset:0; background:linear-gradient(135deg,var(--ink-900) 0%,var(--bg) 45%,var(--lima-900) 100%); }
-    .p-home-hero-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 60% 50% at 20% 100%,var(--accent-bg-muted),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,var(--accent-bg-faint),transparent 65%); }
+    .p-home-hero-bg { position:absolute; inset:0; overflow:hidden; background:linear-gradient(135deg,var(--ink-900) 0%,var(--bg) 45%,var(--lima-900) 100%); }
+    .p-home-hero-bg::before,
+    .p-home-hero-bg::after { content:''; position:absolute; inset:-22%; will-change:transform; }
+    .p-home-hero-bg::before {
+      background:radial-gradient(ellipse 62% 50% at 20% 100%,var(--accent-bg-muted),transparent 70%),
+                 radial-gradient(ellipse 42% 38% at 85% 15%,var(--accent-bg-faint),transparent 66%);
+      animation:p-home-hero-drift-a 18s ease-in-out infinite alternate;
+    }
+    .p-home-hero-bg::after {
+      background:radial-gradient(ellipse 44% 34% at 68% 72%,rgba(182,243,106,.13),transparent 68%),
+                 radial-gradient(ellipse 36% 28% at 9% 20%,rgba(255,255,255,.08),transparent 64%);
+      opacity:.7;
+      animation:p-home-hero-drift-b 24s ease-in-out infinite alternate;
+    }
+    @keyframes p-home-hero-drift-a {
+      from { transform:translate3d(-1.3%, -1%, 0) scale(1); }
+      to { transform:translate3d(1.7%, 1.2%, 0) scale(1.04); }
+    }
+    @keyframes p-home-hero-drift-b {
+      from { transform:translate3d(1.1%, -.8%, 0) scale(1.02); }
+      to { transform:translate3d(-1.5%, 1.3%, 0) scale(1.06); }
+    }
     .p-home-hero-noise { position:absolute; inset:0; opacity:.022; pointer-events:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
     .p-home-hero-inner { position:relative; z-index:2; max-width:1360px; margin:0 auto; width:100%; display:grid; grid-template-columns:1.2fr auto; align-items:end; gap:48px; }
     .p-home-hero-copy { max-width:720px; }
@@ -811,6 +831,9 @@ export default function Home() {
       100% { transform:scale(1.05) translate3d(-0.7%, 1.2%, 0); }
     }
     @media (prefers-reduced-motion: reduce) {
+      .p-home-hero-bg::before,
+      .p-home-hero-bg::after,
+      .p-home-aurora-orb { animation:none; }
       .p-home-owner-media { transform:translate3d(0,0,0); }
       .p-home-owner-media-img { animation:none; transform:scale(1.03); }
       .p-home-closing-media { transform:translate3d(0,0,0); }
@@ -923,9 +946,19 @@ export default function Home() {
     .p-home-root.p-home-theme-light .p-home-btn { background:var(--surface-1); color:var(--text-primary); border-color:var(--border-strong); box-shadow:0 2px 12px var(--border-subtle); }
     .p-home-root.p-home-theme-light .p-home-btn-primary { background:var(--brand)!important; color:var(--brand-on)!important; border-color:var(--accent-fg)!important; box-shadow:none; }
     .p-home-root.p-home-theme-light .p-home-btn-ghost { background:var(--surface-1); border-color:var(--border); }
-    .p-home-root.p-home-theme-light .p-home-hero-bg { background:linear-gradient(135deg,var(--bg) 0%,var(--surface-2) 45%,var(--surface-3) 100%); }
-    .p-home-root.p-home-theme-light .p-home-hero-bg::after { background:radial-gradient(ellipse 60% 50% at 20% 100%,var(--accent-bg-muted),transparent 70%),radial-gradient(ellipse 40% 40% at 85% 15%,var(--accent-bg-soft),transparent 65%); }
-    .p-home-root.p-home-theme-light .p-home-hero-noise { opacity:.012; }
+    .p-home-root.p-home-theme-light .p-home-hero-bg { background:linear-gradient(180deg,#fbfff4 0%,rgba(245,244,240,.9) 52%,#eef8df 100%); }
+    .p-home-root.p-home-theme-light .p-home-hero-bg::before {
+      background:radial-gradient(ellipse 62% 52% at 18% 96%,rgba(182,243,106,.48) 0%,rgba(182,243,106,.22) 38%,transparent 72%),
+                 radial-gradient(ellipse 42% 38% at 86% 15%,rgba(47,175,106,.22) 0%,rgba(47,175,106,.1) 36%,transparent 68%);
+      opacity:1;
+      filter:saturate(1.14);
+    }
+    .p-home-root.p-home-theme-light .p-home-hero-bg::after {
+      background:radial-gradient(ellipse 44% 34% at 68% 72%,rgba(255,209,102,.22),transparent 68%);
+      opacity:.58;
+      mix-blend-mode:multiply;
+    }
+    .p-home-root.p-home-theme-light .p-home-hero-noise { opacity:0; }
     .p-home-root.p-home-theme-light .p-home-hero-h1 { color:var(--text-primary); }
     .p-home-root.p-home-theme-light .p-home-hero-sub { color:var(--text-secondary); }
     .p-home-root.p-home-theme-light .p-home-hero-eyebrow { background:var(--surface-1); border-color:var(--border); color:var(--text-secondary); box-shadow:0 8px 20px var(--border); }
@@ -1007,9 +1040,9 @@ export default function Home() {
     .p-home-root.p-home-theme-light .p-home-marquee-item { background:var(--surface-1); border-color:var(--border); color:var(--text-secondary); }
     .p-home-root.p-home-theme-light .p-home-marquee-item:hover { color:var(--text-primary); border-color:var(--border-strong); }
     /* Aurora orbs — reduce intensity on light background */
-    .p-home-root.p-home-theme-light .p-home-aurora-1 { background:var(--accent-bg-strong); opacity:.6; }
-    .p-home-root.p-home-theme-light .p-home-aurora-2 { background:var(--accent-bg-muted); opacity:.6; }
-    .p-home-root.p-home-theme-light .p-home-aurora-3 { background:var(--accent-bg-soft); opacity:.6; }
+    .p-home-root.p-home-theme-light .p-home-aurora-1 { background:rgba(182,243,106,.48); opacity:.78; }
+    .p-home-root.p-home-theme-light .p-home-aurora-2 { background:rgba(47,175,106,.22); opacity:.72; }
+    .p-home-root.p-home-theme-light .p-home-aurora-3 { background:rgba(255,209,102,.24); opacity:.7; }
     /* Value/step section numbers — stronger contrast in light mode */
     .p-home-root.p-home-theme-light .p-home-value-num,
     .p-home-root.p-home-theme-light .p-home-step-num { color:var(--text-muted); }
@@ -1018,7 +1051,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Punto — Reservá, jugá, encontrá jugadores</title>
+        <title>Pique — Reservá, jugá, encontrá jugadores</title>
       </Head>
       <style dangerouslySetInnerHTML={{ __html: homeCss }} />
       {/* eslint-disable-next-line @next/next/no-css-tags */}
@@ -1246,12 +1279,12 @@ export default function Home() {
           ))}
         </div>
       </section>
-      {/* ── VALUES (POR QUE PUNTO) ── */}
+      {/* ── VALUES (POR QUE PIQUE) ── */}
       <section className="p-home-values-band">
         <div className="p-home-sec-w">
           <div className="p-home-values-grid">
             <div className="p-home-values-h p-home-sr-left">
-              <span className="p-home-eyebrow">Por qué Punto</span>
+              <span className="p-home-eyebrow">Por qué Pique</span>
               <h2 className="p-home-sec-h">La forma más<br /><b>fluida</b> de <i>jugar</i>.</h2>
               <p className="p-home-sec-sub">Nada de llamadas, esperar respuestas o señas por WhatsApp. Encontrás la cancha, confirmás y listo.</p>
             </div>
@@ -1313,7 +1346,7 @@ export default function Home() {
             </div>
             <div className="p-home-faq-list">
               {[
-                { q: '¿Tengo que pagar para usar Punto?', a: 'No. Usar la app es gratis. Solo pagás el valor de la cancha que reservás, igual que si llamaras al complejo directamente — sin recargos ocultos.' },
+                { q: '¿Tengo que pagar para usar Pique?', a: 'No. Usar la app es gratis. Solo pagás el valor de la cancha que reservás, igual que si llamaras al complejo directamente — sin recargos ocultos.' },
                 { q: '¿Puedo cancelar una reserva si no puedo ir?', a: 'Sí. Cada complejo define su política de cancelación, pero la mayoría permite cancelar sin costo hasta horas antes del turno. Lo ves claramente antes de pagar.' },
                 { q: '¿Qué pasa si llueve el día de mi partido?', a: 'Si el complejo suspende por lluvia, se gestiona el reintegro o podés cambiar de fecha según la política del club. Si es cancha cubierta, siempre se juega.' },
                 { q: '¿Con cuánta anticipación puedo reservar?', a: 'Podés reservar con hasta 30 días de anticipación. Recomendamos asegurar el lugar temprano, especialmente en horarios pico (18:00 a 22:00).' },
@@ -1360,13 +1393,13 @@ export default function Home() {
         <div className="p-home-foot-inner">
           <div className="p-home-foot-cols">
             <div className="p-home-foot-brand">
-              <PuntoLogo variant={isLight ? 'horizontal' : 'horizontalDark'} style={{ width: 96, height: 'auto', display: 'block' }} />
+              <PiqueLogo variant={isLight ? 'horizontal' : 'horizontalDark'} style={{ width: 96, height: 'auto', display: 'block' }} />
               <p>La plataforma para reservar canchas en Argentina. Hecha por jugadores, para jugadores.</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 {[
                   { href: 'https://wa.me/5493513436163', label: 'WhatsApp', icon: <Phone size={15} /> },
-                  { href: 'mailto:soporte.punto@gmail.com', label: 'Email', icon: <Mail size={15} /> },
-                  { href: 'https://www.instagram.com/punto.app_/', label: 'Instagram', icon: <Instagram size={15} /> },
+                  { href: 'mailto:soporte.pique@gmail.com', label: 'Email', icon: <Mail size={15} /> },
+                  { href: 'https://www.instagram.com/pique.app_/', label: 'Instagram', icon: <Instagram size={15} /> },
                 ].map(s => (
                   <a key={s.label} href={s.href} target="_blank" rel="noopener" aria-label={s.label}
                     style={{ width: 34, height: 34, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', transition: 'color .15s, border-color .15s' }}
@@ -1394,13 +1427,13 @@ export default function Home() {
             <div className="p-home-foot-col">
               <h6>Soporte</h6>
               <ul>
-                <li><a href="mailto:soporte.punto@gmail.com">soporte.punto@gmail.com</a></li>
+                <li><a href="mailto:soporte.pique@gmail.com">soporte.pique@gmail.com</a></li>
                 <li><a href="https://wa.me/5493513436163" target="_blank" rel="noopener">WhatsApp</a></li>
               </ul>
             </div>
           </div>
           <div className="p-home-foot-base">
-            <span>© {new Date().getFullYear()} Punto · Hecho en Argentina · Con pasión por el juego</span>
+            <span>© {new Date().getFullYear()} Pique · Hecho en Argentina · Con pasión por el juego</span>
           </div>
         </div>
       </footer>
@@ -1427,7 +1460,7 @@ export default function Home() {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>¿Tenés dudas o querés dar de alta tu club? Escribinos.</p>
           {([
             { type: 'whatsapp' as const, label: 'WhatsApp', value: '+54 351 343 6163', icon: <Phone size={16} /> },
-            { type: 'email' as const, label: 'Email', value: 'soporte.punto@gmail.com', icon: <Mail size={16} /> },
+            { type: 'email' as const, label: 'Email', value: 'soporte.pique@gmail.com', icon: <Mail size={16} /> },
           ]).map(c => (
             <button key={c.type} type="button" onClick={e => openContactMenu(e, c.type)}
               style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: isLight ? 'var(--surface-2)' : 'var(--border-subtle)', border: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}`, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color .15s', width: '100%' }}
@@ -1442,7 +1475,7 @@ export default function Home() {
           ))}
           <div style={{ marginTop: 8, paddingTop: 14, borderTop: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}` }}>
             <button type="button" onClick={e => openContactMenu(e, 'instagram')} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', background: isLight ? 'var(--surface-2)' : 'var(--border-subtle)', border: `1px solid ${isLight ? 'var(--border)' : 'var(--border-subtle)'}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', color: isLight ? 'var(--text-secondary)' : 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>
-              <Instagram size={15} /> @punto.app_
+              <Instagram size={15} /> @pique.app_
             </button>
           </div>
           {contactMenu && (

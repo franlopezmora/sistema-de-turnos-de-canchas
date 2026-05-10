@@ -23,10 +23,36 @@ const geocode = async (address: string): Promise<{ lat: number; lon: number } | 
 /* ── CSS ─────────────────────────────────────────────────────────── */
 const PAGE_CSS = `
   /* Hero */
-  .vn-hero { position:relative; overflow:visible; border-bottom:1px solid var(--border-subtle); z-index:30; }
-  .vn-hero-bg { position:absolute; inset:0;
-    background: radial-gradient(ellipse 70% 60% at 60% 80%, var(--positive-bg) 0%, transparent 70%),
-                radial-gradient(ellipse 50% 40% at 10% 20%, var(--accent-bg-faint) 0%, transparent 60%); }
+  .p-breadcrumbs-wrap { position:relative; z-index:45; background:transparent; }
+  .vn-hero { position:relative; overflow:visible; border-bottom:1px solid var(--border-subtle); z-index:30; isolation:isolate; }
+  .vn-hero-bg { position:absolute; top:-76px; right:0; bottom:0; left:0; z-index:0; pointer-events:none; overflow:hidden;
+    background:linear-gradient(180deg, rgba(182,243,106,.07) 0%, transparent 76%); }
+  .vn-hero-bg::before,
+  .vn-hero-bg::after { content:""; position:absolute; inset:-26%; will-change:transform; }
+  .vn-hero-bg::before {
+    background:radial-gradient(ellipse 70% 58% at 62% 78%, var(--positive-bg) 0%, transparent 68%),
+               radial-gradient(ellipse 48% 38% at 12% 20%, var(--accent-bg-faint) 0%, transparent 62%);
+    opacity:.88;
+    animation:vn-gradient-drift-a 13s ease-in-out infinite alternate;
+  }
+  .vn-hero-bg::after {
+    background:radial-gradient(ellipse 42% 34% at 82% 18%, rgba(182,243,106,.14) 0%, transparent 64%),
+               radial-gradient(ellipse 36% 28% at 22% 88%, rgba(255,255,255,.08) 0%, transparent 66%);
+    opacity:.56;
+    animation:vn-gradient-drift-b 18s ease-in-out infinite alternate;
+  }
+  @keyframes vn-gradient-drift-a {
+    from { transform:translate3d(-3.2%, -2.2%, 0) scale(1); }
+    to { transform:translate3d(3.6%, 2.8%, 0) scale(1.08); }
+  }
+  @keyframes vn-gradient-drift-b {
+    from { transform:translate3d(2.8%, -1.8%, 0) scale(1.03); }
+    to { transform:translate3d(-3.4%, 3%, 0) scale(1.1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .vn-hero-bg::before,
+    .vn-hero-bg::after { animation:none; }
+  }
   .vn-hero-inner { position:relative; z-index:2; max-width:860px; margin:0 auto; padding:72px 40px 60px; text-align:center; }
   .vn-badge { display:inline-flex; align-items:center; gap:8px; padding:5px 14px; border-radius:999px;
     background:var(--positive-bg); border:1px solid var(--accent-border-subtle);
@@ -172,8 +198,21 @@ const PAGE_CSS = `
     .vn-feat-inner,.vn-map-inner { padding-top:48px; padding-bottom:48px; }
     .vn-feat-head { flex-direction:column; }
   }
-  .p-public-root.p-public-theme-light .vn-hero { border-bottom-color:var(--border-subtle); }
-  .p-public-root.p-public-theme-light .vn-hero-bg { background:radial-gradient(ellipse 70% 60% at 60% 80%, var(--accent-bg-soft) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 10% 20%, var(--accent-bg-faint) 0%, transparent 60%); }
+  .p-public-root.p-public-theme-light .vn-hero { border-bottom-color:rgba(106,176,48,.18); }
+  .p-public-root.p-public-theme-light .vn-hero-bg {
+    background:linear-gradient(180deg, #fbfff4 0%, rgba(245,244,240,.88) 72%, var(--bg) 100%);
+  }
+  .p-public-root.p-public-theme-light .vn-hero-bg::before {
+    background:radial-gradient(ellipse 72% 58% at 62% 74%, rgba(182,243,106,.52) 0%, rgba(182,243,106,.23) 34%, transparent 70%),
+               radial-gradient(ellipse 48% 38% at 11% 22%, rgba(47,175,106,.22) 0%, rgba(47,175,106,.11) 35%, transparent 64%);
+    opacity:1;
+    filter:saturate(1.12);
+  }
+  .p-public-root.p-public-theme-light .vn-hero-bg::after {
+    background:radial-gradient(ellipse 42% 32% at 84% 18%, rgba(255,209,102,.20) 0%, transparent 64%);
+    opacity:.56;
+    mix-blend-mode:multiply;
+  }
   .p-public-root.p-public-theme-light .vn-badge { background:var(--positive-bg); border-color:var(--accent-border); color:var(--accent-fg); }
   .p-public-root.p-public-theme-light .vn-eyebrow { color:var(--text-muted); }
   .p-public-root.p-public-theme-light .vn-h1,
@@ -439,7 +478,7 @@ export default function ComplejosPage() {
     L.control.attribution({ prefix: '© OpenStreetMap · CartoDB' }).addTo(map);
     leafletMapRef.current = map;
 
-    // Punto marker icon
+    // Pique marker icon
     const markerIcon = (name: string) => L.divIcon({
       className: '',
       html: `<div style="width:32px;height:32px;border-radius:50% 50% 50% 0;background:var(--brand);border:2px solid var(--brand-on);transform:rotate(-45deg);box-shadow:var(--shadow-md);display:flex;align-items:center;justify-content:center">
@@ -519,7 +558,7 @@ export default function ComplejosPage() {
 
   return (
     <DarkPageLayout
-      title="Complejos · Punto"
+      title="Complejos · Pique"
       extraCss={PAGE_CSS}
       breadcrumbs={[
         { label: 'Inicio', href: '/' },
@@ -538,7 +577,7 @@ export default function ComplejosPage() {
             </div>
           )}
           <div className="vn-eyebrow">Explorar complejos</div>
-          <h1 className="vn-h1">Encontrá <i>tu cancha</i></h1>
+          <h1 className="vn-h1">Encontrá <i>tu próximo turno</i></h1>
           <p className="vn-sub">Filtrá por zona y deporte. Reservá online en segundos, sin llamar.</p>
 
           <div className="vn-search">

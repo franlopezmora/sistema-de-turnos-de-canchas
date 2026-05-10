@@ -857,8 +857,8 @@ export default function AdminTabClub({
     if (beforeSchedule !== afterSchedule) {
       changes.push({
         label: labels.activityScheduleForm,
-        before: 'Configuracion previa',
-        after: 'Configuracion editada',
+        before: 'Configuración previa',
+        after: 'Configuración editada',
         critical: true
       });
     }
@@ -1727,7 +1727,7 @@ export default function AdminTabClub({
       return;
     }
     if (!selectedPolicyIdForAssignment) {
-      showError('Selecciona una politica para asignar');
+      showError('Seleccioná una política para asignar');
       return;
     }
     try {
@@ -1738,7 +1738,7 @@ export default function AdminTabClub({
       setSelectedPolicyIdForAssignment('');
       setAssignmentNotes('');
       await loadClientAssignments(club.slug, resolvedClientId);
-      showInfo('Politica asignada al cliente', 'Exito');
+      showInfo('Política asignada al cliente', 'Éxito');
     } catch (error: any) {
       showError(`No se pudo asignar: ${error.message}`);
     }
@@ -1755,7 +1755,7 @@ export default function AdminTabClub({
       await ClubAdminService.updateDiscountAssignment(club.slug, assignmentId, nextStatus);
       await loadClientAssignments(club.slug, resolvedClientId);
     } catch (error: any) {
-      showError(`No se pudo actualizar la asignacion: ${error.message}`);
+      showError(`No se pudo actualizar la asignación: ${error.message}`);
     }
   };
 
@@ -1771,9 +1771,9 @@ export default function AdminTabClub({
     try {
       await ClubAdminService.deleteDiscountAssignment(club.slug, assignmentId);
       await loadClientAssignments(club.slug, resolvedClientId);
-      showInfo('Asignacion eliminada', 'Exito');
+      showInfo('Asignación eliminada', 'Éxito');
     } catch (error: any) {
-      showError(`No se pudo eliminar la asignacion: ${error.message}`);
+      showError(`No se pudo eliminar la asignación: ${error.message}`);
     }
   };
 
@@ -2082,7 +2082,7 @@ export default function AdminTabClub({
                         className={inputCls}
                         placeholder="ej: las-tejas-padel"
                       />
-                      <p className="mt-1 text-[11px] text-p-text-muted">punto.com.ar/club/<span className="text-p-accent">{clubForm.slug || '...'}</span></p>
+                      <p className="mt-1 text-[11px] text-p-text-muted">pique.com.ar/club/<span className="text-p-accent">{clubForm.slug || '...'}</span></p>
                     </div>
                     <div>
                       <label className={labelCls}>Nombre comercial</label>
@@ -3153,7 +3153,7 @@ export default function AdminTabClub({
         }
       >
         {discountDrawerMode === 'create' ? (
-          <AdminDrawerSection title="Datos de la politica">
+          <AdminDrawerSection title="Datos de la política">
             <div className="space-y-4">
               <div>
                 <label className={labelCls}>Nombre</label>
@@ -3236,7 +3236,7 @@ export default function AdminTabClub({
             </div>
           </AdminDrawerSection>
         ) : (
-          <AdminDrawerSection title="Datos de la politica">
+          <AdminDrawerSection title="Datos de la política">
             <div className="space-y-4">
             <div>
               <label className={labelCls}>Nombre</label>

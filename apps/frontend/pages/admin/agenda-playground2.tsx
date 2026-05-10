@@ -1,4 +1,4 @@
-﻿import Head from 'next/head';
+import Head from 'next/head';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
@@ -8914,7 +8914,7 @@ export default function AdminAgendaPlaygroundPage() {
   return (
     <>
       <Head>
-        <title>Agenda de reservas | Punto Admin</title>
+        <title>Agenda de reservas | Pique Admin</title>
       </Head>
       <style jsx global>{`
         input[type='number']::-webkit-outer-spin-button,
@@ -13898,5 +13898,3 @@ export default function AdminAgendaPlaygroundPage() {
     </>
   );
 }
-
-

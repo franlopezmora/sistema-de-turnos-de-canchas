@@ -19,10 +19,10 @@ export class AuthEmailService {
 
   async sendMagicLink(email: string, url: string, ttlMinutes: number): Promise<void> {
     const safeTtl = Math.max(1, Math.floor(ttlMinutes));
-    const subject = 'Tu enlace de acceso a Punto';
+    const subject = 'Tu enlace de acceso a Pique';
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937;">
-        <h2 style="margin-bottom: 12px;">Ingresá a Punto</h2>
+        <h2 style="margin-bottom: 12px;">Ingresá a Pique</h2>
         <p>Recibimos una solicitud para iniciar sesión con este correo.</p>
         <p>
           <a

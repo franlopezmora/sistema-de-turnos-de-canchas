@@ -8,7 +8,7 @@ Usa este archivo para registrar patrones transversales que aparezcan repetidos e
 - Densidad de contenido.
 - Tratamiento de estados.
 - Comportamiento mobile.
-- Acciones primarias y secundarias.
+- Acciónes primarias y secundarias.
 
 ## Plantilla rapida
 

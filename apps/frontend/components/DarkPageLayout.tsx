@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import PuntoLogo from './PuntoLogo';
+import PiqueLogo from './PiqueLogo';
 import NavBar from './NavBar';
 import { X, Phone, Mail, Instagram } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,15 +12,15 @@ import { reportUiError } from '../utils/uiError';
 
 // Extra scoped styles for layout internals that can't easily use Tailwind
 const LAYOUT_CSS = `
-  .punto-layout { min-height:100vh; background:var(--bg); color:var(--text-primary); font-family:var(--font-sans); -webkit-font-smoothing:antialiased; overflow-x:hidden; padding-top:64px; }
-  .punto-layout *,.punto-layout *::before,.punto-layout *::after { box-sizing:border-box; }
-  .punto-layout a { color:inherit; text-decoration:none; }
-  .punto-layout ::selection { background:var(--brand); color:var(--brand-on); }
+  .pique-layout { min-height:100vh; background:var(--bg); color:var(--text-primary); font-family:var(--font-sans); -webkit-font-smoothing:antialiased; overflow-x:hidden; padding-top:64px; }
+  .pique-layout *,.pique-layout *::before,.pique-layout *::after { box-sizing:border-box; }
+  .pique-layout a { color:inherit; text-decoration:none; }
+  .pique-layout ::selection { background:var(--brand); color:var(--brand-on); }
   /* User menu link/button hover */
-  .punto-menu-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--r-md); color:var(--text-secondary); font-size:13px; font-weight:600; background:none; border:none; width:100%; cursor:pointer; font-family:var(--font-sans); text-align:left; transition:background .15s,color .15s; }
-  .punto-menu-item:hover { background:var(--surface-2); color:var(--text-primary); }
-  .punto-menu-item-danger { color:var(--error-fg); }
-  .punto-menu-item-danger:hover { background:var(--error-bg); }
+  .pique-menu-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--r-md); color:var(--text-secondary); font-size:13px; font-weight:600; background:none; border:none; width:100%; cursor:pointer; font-family:var(--font-sans); text-align:left; transition:background .15s,color .15s; }
+  .pique-menu-item:hover { background:var(--surface-2); color:var(--text-primary); }
+  .pique-menu-item-danger { color:var(--error-fg); }
+  .pique-menu-item-danger:hover { background:var(--error-bg); }
 `;
 
 interface DarkPageLayoutProps {
@@ -73,8 +73,8 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
     }
     const map: Record<string, { href: string; copyText: string }> = {
       whatsapp: { href: 'https://wa.me/5493513436163', copyText: '+54 351 343 6163' },
-      email:    { href: 'mailto:soporte.punto@gmail.com', copyText: 'soporte.punto@gmail.com' },
-      instagram: { href: 'https://instagram.com/punto.app_', copyText: '@punto.app_' },
+      email:    { href: 'mailto:soporte.pique@gmail.com', copyText: 'soporte.pique@gmail.com' },
+      instagram: { href: 'https://instagram.com/pique.app_', copyText: '@pique.app_' },
     };
     setContactMenu({ type, top: Math.max(top, 10), left: Math.max(left, 10), ...map[type] });
   };
@@ -101,7 +101,7 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
       </Head>
       <style dangerouslySetInnerHTML={{ __html: LAYOUT_CSS + (extraCss ? '\n' + extraCss : '') }} />
 
-      <div className={`punto-layout punto-root p-public-root${isLight ? ' p-public-theme-light' : ''}`}>
+      <div className={`pique-layout pique-root p-public-root${isLight ? ' p-public-theme-light' : ''}`}>
         <NavBar onContactClick={() => setShowContact(true)} />
 
         {/* Breadcrumbs */}
@@ -133,7 +133,7 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
         {/* ── FOOTER ── */}
         <footer className="p-footer">
           <div className="p-footer-inner">
-            <span className="p-footer-brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><PuntoLogo variant={isLight ? 'horizontal' : 'horizontalDark'} style={{ width: 82, height: 'auto', display: 'block' }} /><span>© {currentYear}</span></span>
+            <span className="p-footer-brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><PiqueLogo variant={isLight ? 'horizontal' : 'horizontalDark'} style={{ width: 82, height: 'auto', display: 'block' }} /><span>© {currentYear}</span></span>
             <nav className="p-footer-links" aria-label="Enlaces del sitio">
               <Link href="/" className="p-footer-link">Inicio</Link>
               <Link href="/complejos" className="p-footer-link">Complejos</Link>
@@ -179,7 +179,7 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
 
             {([
               { type: 'whatsapp' as const, label: 'WhatsApp', value: '+54 351 343 6163', icon: <Phone size={16} /> },
-              { type: 'email'    as const, label: 'Email',    value: 'soporte.punto@gmail.com', icon: <Mail size={16} /> },
+              { type: 'email'    as const, label: 'Email',    value: 'soporte.pique@gmail.com', icon: <Mail size={16} /> },
             ]).map(c => (
               <button
                 key={c.type}
@@ -221,7 +221,7 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
                   color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600
                 }}
               >
-                <Instagram size={15} /> @punto.app_
+                <Instagram size={15} /> @pique.app_
               </button>
             </div>
 
@@ -247,7 +247,7 @@ export default function DarkPageLayout({ title, children, extraCss = '', breadcr
                   <button
                     key={item.label}
                     onClick={item.action}
-                    className="punto-menu-item"
+                    className="pique-menu-item"
                     style={{ borderRadius: 'var(--r-md)', fontSize: 13 }}
                   >
                     {item.label}

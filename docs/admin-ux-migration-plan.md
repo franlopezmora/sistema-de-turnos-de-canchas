@@ -2,7 +2,7 @@
 
 ## Norte
 
-El admin nuevo toma `playground2` como direccion visual oficial: moderno, denso, claro, vendible por impacto visual y consistente en operacion diaria.
+El admin nuevo toma `playground2` como dirección visual oficial: moderno, denso, claro, vendible por impacto visual y consistente en operación diaria.
 
 El objetivo no es migrar paginas sueltas. El objetivo es que todo el admin se sienta como un solo producto: mismas reglas de navegacion, mismos overlays, mismas jerarquias visuales, mismos estados y buen comportamiento en mobile.
 
@@ -17,18 +17,18 @@ El trabajo inmediato es:
 - Asegurar accesibilidad y mobile.
 - Llevar las rutas reales del admin hacia la nueva experiencia.
 
-Partidos, ligas, torneos, facturacion formal avanzada y gestion profunda de profesores quedan como roadmap futuro.
+Partidos, ligas, torneos, facturación formal avanzada y gestión profunda de profesores quedan como roadmap futuro.
 
 ## Mapa de modulos actuales
 
 ### Calendario
 
-Pantalla principal de operacion diaria.
+Pantalla principal de operación diaria.
 
 Muestra:
 - Agenda por dia, cancha y horario.
 - Estados de reserva, pagos, bloqueos y recurrencias.
-- Acciones rapidas para crear, mover, confirmar, cancelar y cobrar.
+- Acciónes rapidas para crear, mover, confirmar, cancelar y cobrar.
 
 Patron:
 - Pagina completa.
@@ -50,7 +50,7 @@ Patron:
 - Tabla desktop.
 - Cards mobile.
 - Drawer derecho para detalle.
-- Modal para cancelar, eliminar serie o restaurar acciones sensibles.
+- Modal para cancelar, eliminar serie o restaurar acciónes sensibles.
 - Si una parte de este modulo todavia no existe, debe entrar como estructura visual primero solo cuando reutilice datos existentes.
 
 ### Clientes
@@ -65,8 +65,8 @@ Muestra:
 
 Patron:
 - Drawer derecho para crear, editar y ver perfil.
-- Modal para eliminar, fusionar duplicados y acciones irreversibles.
-- Mobile con cards compactas: nombre, telefono, deuda, ultima reserva y accion primaria.
+- Modal para eliminar, fusionar duplicados y acciónes irreversibles.
+- Mobile con cards compactas: nombre, teléfono, deuda, última reserva y acción primaria.
 
 ### Caja
 
@@ -95,7 +95,7 @@ Patron:
 
 ### Tienda
 
-Punto de venta.
+Módulo de venta.
 
 Muestra:
 - Productos disponibles.
@@ -145,7 +145,7 @@ Patron:
 
 ### Canchas
 
-Configuracion operativa de espacios.
+Configuración operativa de espacios.
 
 Muestra:
 - Canchas.
@@ -197,7 +197,7 @@ Patron:
 
 ### Ajustes
 
-Configuracion transversal.
+Configuración transversal.
 
 Muestra:
 - Datos del club.
@@ -213,7 +213,7 @@ Patron:
 - Formularios por bloques.
 - Modal solo para cambios irreversibles.
 
-## Reglas de interaccion
+## Reglas de interacción
 
 ### Drawer derecho
 
@@ -237,9 +237,9 @@ En mobile, el drawer se transforma en bottom sheet o pantalla deslizable.
 
 Usar para:
 - Confirmaciones.
-- Acciones destructivas.
+- Acciónes destructivas.
 - Resultados de pago.
-- Decisiones cortas que bloquean la operacion.
+- Decisiones cortas que bloquean la operación.
 
 Ejemplos:
 - Cancelar reserva.
@@ -253,17 +253,17 @@ Ejemplos:
 Usar para:
 - Exito simple.
 - Error simple.
-- Accion completada sin decision posterior.
+- Acción completada sin decision posterior.
 
-No usar toast para informacion critica que el usuario deba leer antes de continuar.
+No usar toast para información critica que el usuario deba leer antes de continuar.
 
 ## Accesibilidad minima
 
 - Todo boton iconico debe tener `aria-label` o `title`.
-- Foco visible en inputs, botones, tabs y acciones.
+- Foco visible en inputs, botones, tabs y acciónes.
 - Escape cierra modales/drawers cuando no haya cambios sin guardar.
 - Modales y drawers deben tener `role="dialog"` y `aria-modal` cuando bloqueen el fondo.
-- Estados vacios deben explicar que falta y ofrecer accion primaria.
+- Estados vacios deben explicar que falta y ofrecer acción primaria.
 - En mobile, objetivos tactiles de al menos 40px.
 - Contraste consistente en texto secundario, badges y botones.
 
@@ -272,7 +272,7 @@ No usar toast para informacion critica que el usuario deba leer antes de continu
 Reglas:
 - No comprimir tablas desktop: convertir a cards.
 - No comprimir la grilla del calendario: crear vista mobile especifica.
-- Acciones primarias persistentes abajo cuando el flujo lo necesite.
+- Acciónes primarias persistentes abajo cuando el flujo lo necesite.
 - Filtros complejos dentro de un boton/filtro desplegable.
 - Drawers desktop pasan a bottom sheet o pantalla deslizable.
 
@@ -298,7 +298,7 @@ Podria separarse de Servicios cuando necesite:
 - Asistencia.
 - Comisiones o pagos a profesores.
 
-### Facturacion formal
+### Facturación formal
 
 Podria separarse de Caja cuando necesite:
 - Facturas legales.
@@ -310,7 +310,7 @@ Podria separarse de Caja cuando necesite:
 ### Comunicacion avanzada
 
 Podria crecer desde Mensajes hacia:
-- WhatsApp bidireccional.
+- WhatsApp bidirecciónal.
 - Campanas.
 - Segmentos de clientes.
 - Automatizaciones por deuda, reserva o inactividad.
@@ -333,7 +333,7 @@ Podria crecer desde Mensajes hacia:
 3. Componentizar Calendario.
 4. Migrar Canchas, Productos y Servicios a la misma gramatica.
 5. Ordenar Reservas, Tienda, Informes y Mensajes solo con funcionalidades existentes o preparadas.
-6. Dejar Competencias, Clases avanzado y Facturacion formal como roadmap posterior.
+6. Dejar Competencias, Clases avanzado y Facturación formal como roadmap posterior.
 
 ## Criterio de listo
 
