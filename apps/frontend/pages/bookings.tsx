@@ -4,6 +4,7 @@ import DarkPageLayout from '../components/DarkPageLayout';
 import { getMyBookings, cancelBooking } from '../services/BookingService';
 import { getMyReviewForClub, upsertMyClubReview } from '../services/ClubReviewService';
 import AppModal from '../components/AppModal';
+import { extractErrorMessage } from '../utils/uiError';
 import { useValidateAuth } from '../hooks/useValidateAuth';
 import { getPendingLogoutRedirect } from '../services/AuthService';
 import Link from 'next/link';
@@ -137,12 +138,18 @@ export default function MyBookingsPage() {
   const [modalState, setModalState] = useState<{
     show: boolean;
     title?: string;
-    message?: string;
+    message?: React.ReactNode;
     cancelText?: string;
     confirmText?: string;
     isWarning?: boolean;
     onConfirm?: () => Promise<void> | void;
+    confirmDisabled?: boolean;
+    closeOnBackdrop?: boolean;
+    closeOnEscape?: boolean;
   }>({ show: false });
+  const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [cancelSuccessMessage, setCancelSuccessMessage] = useState('');
+  const cancelSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
@@ -154,7 +161,7 @@ export default function MyBookingsPage() {
     ACTIVE: null, PAST: null, CANCELLED: null
   });
 
-  const closeModal = () => setModalState(p => ({ ...p, show: false, onConfirm: undefined }));
+  const closeModal = () => setModalState(p => ({ ...p, show: false, onConfirm: undefined, confirmDisabled: undefined, closeOnBackdrop: undefined, closeOnEscape: undefined }));
 
   const showError = (message: string) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
 
@@ -173,13 +180,15 @@ export default function MyBookingsPage() {
     });
   };
 
+  useEffect(() => () => { if (cancelSuccessTimerRef.current) clearTimeout(cancelSuccessTimerRef.current); }, []);
+
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
       const data = await getMyBookings(user.id);
       setBookings(data.sort((a: any, b: any) => new Date(b.startDateTime).getTime() - new Date(a.startDateTime).getTime()));
     } catch (err: any) {
-      setError(err.message);
+      setError(extractErrorMessage(err, 'No pudimos cargar tus reservas. Recargá la página.'));
     } finally {
       setLoading(false);
     }
@@ -268,15 +277,51 @@ export default function MyBookingsPage() {
     selectedBookingClubSlug && resolveReviewAnchorForClub(selectedBookingClubSlug)
   );
 
-  const handleCancel = (id: number) => showConfirm({
-    title: 'Cancelar turno',
-    message: '¿Seguro que querés cancelar esta reserva?',
-    confirmText: 'Cancelar reserva',
-    onConfirm: async () => {
-      try { await cancelBooking(id); setSelectedBooking(null); loadData(); }
-      catch (e: any) { showError('Error: ' + e.message); }
-    }
-  });
+  const CANCEL_CONFIRM_MESSAGE = 'Vas a cancelar tu reserva. Si ya realizaste un pago o seña, el club deberá revisar la devolución según sus condiciones.';
+
+  const handleCancel = (id: number) => {
+    if (cancellingBooking) return;
+    setModalState({
+      show: true,
+      title: '¿Cancelar esta reserva?',
+      message: CANCEL_CONFIRM_MESSAGE,
+      isWarning: true,
+      confirmText: 'Cancelar reserva',
+      cancelText: 'Volver',
+      closeOnBackdrop: false,
+      closeOnEscape: false,
+      confirmDisabled: false,
+      onConfirm: async () => {
+        if (cancellingBooking) return;
+        setCancellingBooking(true);
+        setModalState(prev => ({ ...prev, confirmDisabled: true }));
+        try {
+          await cancelBooking(id);
+          closeModal();
+          setSelectedBooking(null);
+          await loadData();
+          if (cancelSuccessTimerRef.current) clearTimeout(cancelSuccessTimerRef.current);
+          setCancelSuccessMessage('Reserva cancelada.');
+          cancelSuccessTimerRef.current = setTimeout(() => setCancelSuccessMessage(''), 4000);
+        } catch (e: any) {
+          setModalState(prev => ({
+            ...prev,
+            confirmDisabled: false,
+            message: (
+              <span>
+                {CANCEL_CONFIRM_MESSAGE}
+                <span style={{ display: 'block', marginTop: 10, color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
+                  {extractErrorMessage(e, 'No pudimos cancelar la reserva. Intentá nuevamente.')}
+                </span>
+              </span>
+            ),
+          }));
+        } finally {
+          setCancellingBooking(false);
+        }
+      },
+    });
+  };
 
   const handleOpenReviewModal = async (booking: any) => {
     const clubSlug = String(booking?.court?.club?.slug || '').trim();
@@ -294,7 +339,7 @@ export default function MyBookingsPage() {
       if (existing) { setReviewRating(Number(existing.rating || 5)); setReviewComment(String(existing.comment || '')); }
       else { setReviewRating(5); setReviewComment(''); }
     } catch (e: any) {
-      showError(e?.message || 'No se pudo cargar tu reseña');
+      showError(extractErrorMessage(e, 'No se pudo cargar tu reseña.'));
       setReviewModalOpen(false);
     } finally { setReviewLoading(false); }
   };
@@ -315,7 +360,7 @@ export default function MyBookingsPage() {
       setReviewAnchorBookingId(null);
       showConfirm({ title: 'Reseña guardada', message: 'Tu reseña fue guardada correctamente.', confirmText: 'Aceptar', cancelText: '', isWarning: false, onConfirm: async () => {} });
     } catch (e: any) {
-      showError(e?.message || 'No se pudo guardar la reseña');
+      showError(extractErrorMessage(e, 'No se pudo guardar la reseña.'));
     } finally { setReviewSaving(false); }
   };
 
@@ -382,6 +427,12 @@ export default function MyBookingsPage() {
               </div>
             </div>
             <div className="bk-list-body" style={{ padding: '16px' }}>
+              {cancelSuccessMessage && (
+                <div style={{ padding: '12px 16px', background: 'var(--positive-bg)', border: '1px solid var(--accent-border-subtle)', borderRadius: 12, fontSize: 13, color: 'var(--accent-fg)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+                  {cancelSuccessMessage}
+                </div>
+              )}
               {loading ? (
                 <div className="bk-empty">
                   <UserLoadingState mode="inline" message="Cargando reservas..." />
@@ -536,6 +587,9 @@ export default function MyBookingsPage() {
         confirmText={modalState.confirmText}
         isWarning={modalState.isWarning}
         onConfirm={modalState.onConfirm}
+        confirmDisabled={modalState.confirmDisabled}
+        closeOnBackdrop={modalState.closeOnBackdrop}
+        closeOnEscape={modalState.closeOnEscape}
       />
 
       {/* ── REVIEW MODAL ── */}

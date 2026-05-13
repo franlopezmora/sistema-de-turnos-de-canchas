@@ -6,6 +6,7 @@ import { PaymentService } from '../services/PaymentService';
 import { mapAccountDto, mapAccountItemDto, mapLedgerEntryDto, mapPaymentDto } from '../dto/financialDto';
 import { sanitizeString } from '../utils/sanitize';
 import { prismaRead } from '../prisma';
+import { sendAppError, badRequest, ErrorCodes } from '../errors';
 
 export class AccountController {
   private readonly accountService = new AccountService();
@@ -14,7 +15,7 @@ export class AccountController {
 
   private resolveClubId(req: Request) {
     const clubId = Number((req as Request & { clubId?: number }).clubId);
-    if (!Number.isFinite(clubId) || clubId <= 0) throw new Error('Club inválido');
+    if (!Number.isFinite(clubId) || clubId <= 0) throw badRequest('Club inválido.', ErrorCodes.INVALID_INPUT);
     return clubId;
   }
 
@@ -73,8 +74,7 @@ export class AccountController {
         };
       }));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Error al listar cuentas';
-      return res.status(500).json({ error: message });
+      return sendAppError(res, error, 'No se pudieron cargar las cuentas.');
     }
   };
 
@@ -96,8 +96,7 @@ export class AccountController {
 
       return res.status(201).json(mapAccountDto(account));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'No se pudo abrir la cuenta';
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo abrir la cuenta.');
     }
   };
 
@@ -118,8 +117,7 @@ export class AccountController {
         remaining: result.remaining
       });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Cuenta no encontrada';
-      return res.status(404).json({ error: message });
+      return sendAppError(res, error, 'Cuenta no encontrada.');
     }
   };
 
@@ -151,8 +149,7 @@ export class AccountController {
       });
       return res.status(201).json(mapAccountItemDto(item));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'No se pudo agregar el consumo';
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo agregar el consumo.');
     }
   };
 
@@ -166,18 +163,7 @@ export class AccountController {
       const account = await this.accountService.closeAccount(clubId, parsed.data.id);
       return res.json(mapAccountDto(account));
     } catch (error: unknown) {
-      const knownError = error as Error & { code?: string; remaining?: number };
-      const message = knownError?.message || 'No se pudo cerrar la cuenta';
-
-      if (knownError?.code === 'ACCOUNT_HAS_PENDING_BALANCE') {
-        return res.status(409).json({
-          error: message,
-          code: knownError.code,
-          remaining: Number(knownError.remaining || 0)
-        });
-      }
-
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo cerrar la cuenta.');
     }
   };
 
@@ -192,8 +178,7 @@ export class AccountController {
       const account = await this.accountService.voidPosAccount(clubId, parsed.data.id);
       return res.json(mapAccountDto(account));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'No se pudo anular la cuenta';
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo anular la cuenta.');
     }
   };
 
@@ -207,8 +192,7 @@ export class AccountController {
       const result = await this.accountService.getAccountSummary(clubId, parsed.data.id);
       return res.json(result);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'No se pudo obtener el resumen de la cuenta';
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo obtener el resumen de la cuenta.');
     }
   };
 
@@ -222,8 +206,7 @@ export class AccountController {
       const result = await this.accountService.getBalance(clubId, parsed.data.id);
       return res.json(result);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'No se pudo obtener el balance';
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo obtener el balance.');
     }
   };
 
@@ -237,8 +220,7 @@ export class AccountController {
       const result = await this.accountService.getLedger(clubId, parsed.data.id);
       return res.json(result.map(mapLedgerEntryDto));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'No se pudo obtener el libro contable';
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo obtener el libro contable.');
     }
   };
 
@@ -299,12 +281,7 @@ export class AccountController {
 
       return res.status(201).json(mapPaymentDto(payment));
     } catch (error: unknown) {
-      const knownError = error as Error & { code?: string };
-      const message = knownError?.message || 'No se pudo registrar el pago';
-      if (knownError?.code === 'BOOKING_PENDING_MANUAL_PAYMENT_FORBIDDEN') {
-        return res.status(409).json({ error: message, code: knownError.code });
-      }
-      return res.status(400).json({ error: message });
+      return sendAppError(res, error, 'No se pudo registrar el pago.');
     }
   };
 }

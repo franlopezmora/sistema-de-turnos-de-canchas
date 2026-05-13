@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/router';
+import AdminToast from './AdminToast';
 import {
   ChevronDown,
   ChevronLeft,
@@ -596,6 +597,7 @@ export default function AdminPlaygroundShell({
           </div>
         </div>
       )}
+      <AdminToast />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { ErrorCodes, badRequest, sendAppError } from '../errors';
 import { z } from 'zod';
 import { DiscountService } from '../services/DiscountService';
 
@@ -8,7 +9,7 @@ export class DiscountController {
   private resolveClubId(req: Request) {
     const clubId = Number((req as any).clubId);
     if (!Number.isInteger(clubId) || clubId <= 0) {
-      throw new Error('Club inválido');
+      throw badRequest('Club inválido', ErrorCodes.INVALID_INPUT);
     }
     return clubId;
   }
@@ -24,7 +25,7 @@ export class DiscountController {
       const policies = await this.discountService.listPolicies(clubId);
       return res.json(policies);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudieron listar las políticas' });
+      return sendAppError(res, error, 'No se pudieron listar las políticas');
     }
   };
 
@@ -60,7 +61,7 @@ export class DiscountController {
       });
       return res.status(201).json(created);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudo crear la política' });
+      return sendAppError(res, error, 'No se pudo crear la política');
     }
   };
 
@@ -101,7 +102,7 @@ export class DiscountController {
       });
       return res.json(updated);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudo actualizar la política' });
+      return sendAppError(res, error, 'No se pudo actualizar la política');
     }
   };
 
@@ -115,7 +116,7 @@ export class DiscountController {
       const assignments = await this.discountService.listClientAssignments(clubId, parsed.data.clientId);
       return res.json(assignments);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudieron listar las asignaciones' });
+      return sendAppError(res, error, 'No se pudieron listar las asignaciones');
     }
   };
 
@@ -145,7 +146,7 @@ export class DiscountController {
       });
       return res.status(201).json(assignment);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudo asignar la política al cliente' });
+      return sendAppError(res, error, 'No se pudo asignar la política al cliente');
     }
   };
 
@@ -166,7 +167,7 @@ export class DiscountController {
       });
       return res.json(updated);
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudo actualizar la asignación' });
+      return sendAppError(res, error, 'No se pudo actualizar la asignación');
     }
   };
   deleteAssignment = async (req: Request, res: Response) => {
@@ -182,8 +183,7 @@ export class DiscountController {
       });
       return res.status(204).send();
     } catch (error: any) {
-      return res.status(400).json({ error: error.message || 'No se pudo eliminar la asignación' });
+      return sendAppError(res, error, 'No se pudo eliminar la asignación');
     }
   };
 }
-

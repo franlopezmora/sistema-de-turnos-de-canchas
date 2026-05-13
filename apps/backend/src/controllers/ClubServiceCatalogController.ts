@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { sendAppError } from '../errors';
 import { z } from 'zod';
 import { ClubServiceCatalogService } from '../services/ClubServiceCatalogService';
 import { sanitizeString } from '../utils/sanitize';
@@ -16,7 +17,7 @@ export class ClubServiceCatalogController {
       const rows = await this.service.listByClub(clubId, includeInactive);
       return res.json(rows);
     } catch (error: any) {
-      return res.status(500).json({ error: error?.message || 'Error al listar servicios' });
+      return sendAppError(res, error, 'Error al listar servicios');
     }
   };
 
@@ -46,7 +47,7 @@ export class ClubServiceCatalogController {
       });
       return res.status(201).json(created);
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudo crear el servicio' });
+      return sendAppError(res, error, 'No se pudo crear el servicio');
     }
   };
 
@@ -89,7 +90,7 @@ export class ClubServiceCatalogController {
       if (!updated) return res.status(404).json({ error: 'Servicio no encontrado' });
       return res.json(updated);
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudo actualizar el servicio' });
+      return sendAppError(res, error, 'No se pudo actualizar el servicio');
     }
   };
 
@@ -107,7 +108,7 @@ export class ClubServiceCatalogController {
       if (!deleted) return res.status(404).json({ error: 'Servicio no encontrado' });
       return res.json({ message: 'Servicio dado de baja' });
     } catch (error: any) {
-      return res.status(500).json({ error: error?.message || 'No se pudo eliminar el servicio' });
+      return sendAppError(res, error, 'No se pudo eliminar el servicio');
     }
   };
 }

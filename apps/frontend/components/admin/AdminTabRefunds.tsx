@@ -8,6 +8,8 @@ import RefundList from './refunds/RefundList';
 import RefundLifecycleActions from './refunds/RefundLifecycleActions';
 import { formatAccountCode, formatPaymentCode, formatRefundCode } from '../../utils/displayCode';
 import { AdminPageHeader, AdminPanel } from './ui';
+import AdminAppModal from './ui/AdminAppModal';
+import { extractErrorMessage } from '../../utils/uiError';
 
 const STATUS_OPTIONS: Array<{ value: 'ALL' | RefundStatus; label: string }> = [
   { value: 'ALL', label: 'Todos' },
@@ -54,6 +56,16 @@ function DetailBlock({ label, value, mono = false }: { label: string; value?: st
   );
 }
 
+type RefundActionConfig = {
+  refundId: string;
+  title: string;
+  description: string;
+  confirmText: string;
+  successMessage: string;
+  isWarning?: boolean;
+  execute: () => Promise<unknown>;
+};
+
 export default function AdminTabRefunds() {
   const [refunds, setRefunds] = useState<RefundRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,6 +73,12 @@ export default function AdminTabRefunds() {
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
   const [selectedRefundId, setSelectedRefundId] = useState<string | null>(null);
+
+  // Confirmación modal
+  const [pendingAction, setPendingAction] = useState<RefundActionConfig | null>(null);
+  const [actionConfirming, setActionConfirming] = useState(false);
+  const [actionConfirmError, setActionConfirmError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const [statusFilter, setStatusFilter] = useState<'ALL' | RefundStatus>('ALL');
   const [paymentIdFilter, setPaymentIdFilter] = useState('');
@@ -93,8 +111,8 @@ export default function AdminTabRefunds() {
         accountId: accountIdFilter.trim() || undefined
       });
       setRefunds(data);
-    } catch (err: any) {
-      setError(err?.message || 'No se pudieron cargar devoluciones');
+    } catch (err) {
+      setError(extractErrorMessage(err, 'No se pudieron cargar las devoluciones. Recargá la página.'));
       setRefunds([]);
     } finally {
       setLoading(false);
@@ -111,43 +129,92 @@ export default function AdminTabRefunds() {
     if (!stillExists) setSelectedRefundId(null);
   }, [refunds, selectedRefundId]);
 
-  const runAction = async (refundId: string, action: () => Promise<any>) => {
+  // Ejecuta la acción pendiente confirmada por el modal
+  const handleConfirmAction = useCallback(async () => {
+    if (!pendingAction || actionConfirming) return;
+    setActionConfirming(true);
+    setActionConfirmError('');
+    setActionBusyId(pendingAction.refundId);
     try {
-      setActionBusyId(refundId);
-      await action();
+      await pendingAction.execute();
+      const msg = pendingAction.successMessage;
+      setPendingAction(null);
       await load();
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo procesar la devolucion');
+      setSuccessMessage(msg);
+      window.setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      setActionConfirmError(extractErrorMessage(err, 'No se pudo procesar la devolución. Intentá nuevamente.'));
     } finally {
+      setActionConfirming(false);
       setActionBusyId(null);
     }
-  };
+  }, [pendingAction, actionConfirming, load]);
 
-  const onApprove = (refund: RefundRecord, executeNow: boolean) => {
-    const ok = window.confirm(executeNow ? '¿Aprobar y ejecutar esta devolución?' : '¿Aprobar esta devolución?');
-    if (!ok) return;
-    runAction(refund.id, () => refundActions.approve(refund.id, executeNow));
-  };
+  const closePendingAction = useCallback(() => {
+    if (actionConfirming) return;
+    setPendingAction(null);
+    setActionConfirmError('');
+  }, [actionConfirming]);
 
-  const onExecute = (refund: RefundRecord) => {
-    if (!window.confirm('¿Ejecutar esta devolución?')) return;
-    runAction(refund.id, () => refundActions.execute(refund.id));
-  };
+  // Builders de cada acción — reemplazan los window.confirm
+  const onApprove = useCallback((refund: RefundRecord, executeNow: boolean) => {
+    setPendingAction({
+      refundId: refund.id,
+      title: '¿Aprobar esta devolución?',
+      description: executeNow
+        ? 'Vas a aprobar y ejecutar la devolución en un solo paso.'
+        : 'Vas a marcar esta solicitud como aprobada para continuar con el proceso.',
+      confirmText: executeNow ? 'Aprobar y ejecutar' : 'Aprobar devolución',
+      successMessage: 'Devolución aprobada.',
+      execute: () => refundActions.approve(refund.id, executeNow),
+    });
+  }, []);
 
-  const onRetry = (refund: RefundRecord, executeNow: boolean) => {
-    if (!window.confirm('¿Reintentar esta devolución?')) return;
-    runAction(refund.id, () => refundActions.retry(refund.id, executeNow));
-  };
+  const onExecute = useCallback((refund: RefundRecord) => {
+    setPendingAction({
+      refundId: refund.id,
+      title: '¿Registrar la devolución como ejecutada?',
+      description: 'Confirmá solo si el dinero ya fue devuelto o el ajuste fue realizado.',
+      confirmText: 'Registrar como ejecutada',
+      successMessage: 'Devolución registrada como ejecutada.',
+      execute: () => refundActions.execute(refund.id),
+    });
+  }, []);
 
-  const onFail = (refund: RefundRecord) => {
-    if (!window.confirm('¿Marcar esta devolución como fallida?')) return;
-    runAction(refund.id, () => refundActions.fail(refund.id));
-  };
+  const onRetry = useCallback((refund: RefundRecord, executeNow: boolean) => {
+    setPendingAction({
+      refundId: refund.id,
+      title: '¿Reintentar esta devolución?',
+      description: 'El sistema volverá a intentar procesar la operación.',
+      confirmText: 'Reintentar devolución',
+      successMessage: 'Devolución reintentada.',
+      execute: () => refundActions.retry(refund.id, executeNow),
+    });
+  }, []);
 
-  const onCancel = (refund: RefundRecord) => {
-    if (!window.confirm('¿Cancelar esta devolución?')) return;
-    runAction(refund.id, () => refundActions.cancel(refund.id));
-  };
+  const onFail = useCallback((refund: RefundRecord) => {
+    setPendingAction({
+      refundId: refund.id,
+      title: '¿Marcar esta devolución como fallida?',
+      description: 'Esta acción dejará registrada la devolución como no completada.',
+      confirmText: 'Marcar como fallida',
+      successMessage: 'Devolución marcada como fallida.',
+      isWarning: true,
+      execute: () => refundActions.fail(refund.id),
+    });
+  }, []);
+
+  const onCancel = useCallback((refund: RefundRecord) => {
+    setPendingAction({
+      refundId: refund.id,
+      title: '¿Cancelar esta devolución?',
+      description: 'La solicitud quedará cancelada y no se procesará.',
+      confirmText: 'Cancelar devolución',
+      successMessage: 'Devolución cancelada.',
+      isWarning: true,
+      execute: () => refundActions.cancel(refund.id),
+    });
+  }, []);
 
   return (
     <div className="mx-auto flex w-full max-w-[1380px] flex-col gap-4">
@@ -205,6 +272,12 @@ export default function AdminTabRefunds() {
           </button>
         </div>
       </AdminPanel>
+
+      {successMessage ? (
+        <div className="rounded-xl border border-p-positive bg-p-positive-bg px-3 py-2 text-sm font-bold text-p-positive">
+          {successMessage}
+        </div>
+      ) : null}
 
       {error ? <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-sm font-bold text-p-error">{error}</div> : null}
 
@@ -313,6 +386,30 @@ export default function AdminTabRefunds() {
         </div>,
         document.body
       )}
+
+      {/* Modal de confirmación para acciones de devolución */}
+      <AdminAppModal
+        show={pendingAction !== null}
+        title={pendingAction?.title ?? ''}
+        message={
+          <>
+            <p>{pendingAction?.description}</p>
+            {actionConfirmError && (
+              <p className="mt-3 rounded-lg border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error">
+                {actionConfirmError}
+              </p>
+            )}
+          </>
+        }
+        confirmText={actionConfirming ? 'Procesando...' : (pendingAction?.confirmText ?? 'Confirmar')}
+        cancelText="Cancelar"
+        confirmDisabled={actionConfirming}
+        isWarning={pendingAction?.isWarning ?? false}
+        closeOnBackdrop={!actionConfirming}
+        closeOnEscape={!actionConfirming}
+        onClose={closePendingAction}
+        onConfirm={() => { void handleConfirmAction(); }}
+      />
     </div>
   );
 }

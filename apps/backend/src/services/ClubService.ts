@@ -5,6 +5,7 @@ import type { ClubOperationalStatus, FixedBookingSettingsByActivity } from '../e
 import { Court } from '../entities/Court';
 import { Prisma } from '@prisma/client';
 import { normalizeIdentityPhone } from '../utils/phone';
+import { ErrorCodes, badRequest, conflict, forbidden, notFound } from '../errors';
 
 // 👇 1. USAMOS TUS IMPORTS CORRECTOS
 import { prisma } from '../prisma'; 
@@ -99,13 +100,13 @@ export class ClubService {
 
     async getClubById(id: number): Promise<Club> {
         const club = await this.clubRepo.findClubById(id);
-        if (!club) throw new Error("Club no encontrado");
+        if (!club) throw notFound('Club no encontrado', ErrorCodes.CLUB_NOT_FOUND);
         return club;
     }
 
     async getClubBySlug(slug: string): Promise<Club> {
         const club = await this.clubRepo.findClubBySlug(slug);
-        if (!club) throw new Error("Club no encontrado");
+        if (!club) throw notFound('Club no encontrado', ErrorCodes.CLUB_NOT_FOUND);
         return club;
     }
 
@@ -157,25 +158,25 @@ export class ClubService {
         }
     ): Promise<Club> {
         const club = await this.clubRepo.findClubById(id);
-        if (!club) throw new Error("Club no encontrado");
+        if (!club) throw notFound('Club no encontrado', ErrorCodes.CLUB_NOT_FOUND);
         return await this.clubRepo.updateClub(id, data);
     }
 
     async registerCourt(clubId: number, name: string, surface: string, activityTypeId: number | number[]) {
         const club = await this.clubRepo.findClubById(clubId);
-        if (!club) throw new Error("Club no encontrado");
+        if (!club) throw notFound('Club no encontrado', ErrorCodes.CLUB_NOT_FOUND);
 
         const normalizedActivityTypeId = Array.isArray(activityTypeId)
             ? Number(activityTypeId[0])
             : Number(activityTypeId);
         if (!Number.isInteger(normalizedActivityTypeId) || normalizedActivityTypeId <= 0) {
-            throw new Error("Actividad inválida");
+            throw badRequest('Actividad inválida', ErrorCodes.INVALID_INPUT);
         }
 
         const activity = await this.activityRepo.findById(normalizedActivityTypeId);
-        if (!activity) throw new Error("Actividad no encontrada");
+        if (!activity) throw notFound('Actividad no encontrada', ErrorCodes.ACTIVITY_NOT_FOUND);
         if (activity.clubId && Number(activity.clubId) !== Number(clubId)) {
-            throw new Error("La actividad no pertenece a este club");
+            throw forbidden('La actividad no pertenece a este club', ErrorCodes.ACTIVITY_OUT_OF_CLUB);
         }
 
         const court = new Court(0, name, false, surface, club, false, activity);
@@ -317,10 +318,10 @@ export class ClubService {
         const normalizedDni = String(input.dni || '').replace(/\D/g, '');
         const normalizedEmail = String(input.email || '').trim().toLowerCase();
 
-        if (normalizedName.length < 2) throw new Error('Nombre inválido');
-        if (!normalizedPhone) throw new Error('El teléfono es obligatorio');
+        if (normalizedName.length < 2) throw badRequest('Nombre inválido', ErrorCodes.INVALID_INPUT);
+        if (!normalizedPhone) throw badRequest('El teléfono es obligatorio', ErrorCodes.INVALID_INPUT);
         // Fase 1.2: email es opcional en CRUD admin.
-        if (normalizedDni && normalizedDni.length < 6) throw new Error('DNI inválido');
+        if (normalizedDni && normalizedDni.length < 6) throw badRequest('DNI inválido', ErrorCodes.INVALID_INPUT);
 
         try {
             return await prisma.client.create({
@@ -335,7 +336,7 @@ export class ClubService {
             });
         } catch (error: any) {
             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-                throw new Error('Ya existe un cliente con ese DNI, teléfono o email');
+                throw conflict('Ya existe un cliente con ese DNI, teléfono o email', ErrorCodes.CONFLICT);
             }
             throw error;
         }
@@ -349,7 +350,7 @@ export class ClubService {
         isProfessor?: boolean;
     }) {
         const existing = await prisma.client.findFirst({ where: { id: clientId, clubId } });
-        if (!existing) throw new Error('Cliente no encontrado');
+        if (!existing) throw notFound('Cliente no encontrado', ErrorCodes.CLIENT_NOT_FOUND);
         const club = await prisma.club.findUnique({
             where: { id: clubId },
             select: { country: true }
@@ -363,10 +364,10 @@ export class ClubService {
         const normalizedDni = String(input.dni || '').replace(/\D/g, '');
         const normalizedEmail = String(input.email || '').trim().toLowerCase();
 
-        if (normalizedName.length < 2) throw new Error('Nombre inválido');
-        if (!normalizedPhone) throw new Error('El teléfono es obligatorio');
+        if (normalizedName.length < 2) throw badRequest('Nombre inválido', ErrorCodes.INVALID_INPUT);
+        if (!normalizedPhone) throw badRequest('El teléfono es obligatorio', ErrorCodes.INVALID_INPUT);
         // Fase 1.2: email es opcional en CRUD admin.
-        if (normalizedDni && normalizedDni.length < 6) throw new Error('DNI inválido');
+        if (normalizedDni && normalizedDni.length < 6) throw badRequest('DNI inválido', ErrorCodes.INVALID_INPUT);
 
         try {
             return await prisma.client.update({
@@ -381,7 +382,7 @@ export class ClubService {
             });
         } catch (error: any) {
             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-                throw new Error('Ya existe un cliente con ese DNI, teléfono o email');
+                throw conflict('Ya existe un cliente con ese DNI, teléfono o email', ErrorCodes.CONFLICT);
             }
             throw error;
         }
@@ -389,11 +390,11 @@ export class ClubService {
 
     async deleteClient(clubId: number, clientId: string) {
         const existing = await prisma.client.findFirst({ where: { id: clientId, clubId } });
-        if (!existing) throw new Error('Cliente no encontrado');
+        if (!existing) throw notFound('Cliente no encontrado', ErrorCodes.CLIENT_NOT_FOUND);
 
         const hasLinkedBookings = await prisma.booking.count({ where: { clubId, clientId } });
         if (hasLinkedBookings > 0) {
-            throw new Error('No se puede eliminar: el cliente tiene reservas asociadas');
+            throw conflict('No se puede eliminar: el cliente tiene reservas asociadas', ErrorCodes.CONFLICT);
         }
 
         await prisma.client.delete({ where: { id: clientId } });

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { BookingController } from '../src/controllers/BookingController';
 import { CashController } from '../src/controllers/CashController';
 import { prisma } from '../src/prisma';
+import { conflict, ErrorCodes } from '../src/errors';
 
 function buildRes() {
   const payload: any = { statusCode: 200, body: null };
@@ -77,10 +78,7 @@ test('booking registra incidente cuando detecta CLIENT_POSSIBLE_DUPLICATE', asyn
 
   assert.equal(payload.statusCode, 409);
   assert.equal(payload.body?.code, 'CLIENT_POSSIBLE_DUPLICATE');
-  assert.equal(
-    String(payload.body?.error || '').toLowerCase().includes('podrian corresponder a mas de un cliente'),
-    true
-  );
+  assert.match(String(payload.body?.error || '').toLowerCase(), /podr[ií]an corresponder a m[aá]s de un cliente/);
   assert.equal(registeredPayload?.clubId, 5);
   assert.equal(registeredPayload?.sourceType, 'BOOKING');
   assert.deepEqual(registeredPayload?.candidateClientIds, ['c-1', 'c-2']);
@@ -192,15 +190,16 @@ test('booking no valida timeZone después de crear (sin error tardío post-write
 test('cash registra incidente cuando detecta CLIENT_POSSIBLE_DUPLICATE', async () => {
   const controller = new CashController({
     createProductSale: async () => {
-      const error: any = new Error('CLIENT_POSSIBLE_DUPLICATE');
-      error.code = 'CLIENT_POSSIBLE_DUPLICATE';
-      error.details = {
-        clubId: 12,
-        candidateClientIds: ['cash-1', 'cash-2'],
-        reasonType: 'PHONE',
-        signals: { phone: '+34600111222' }
-      };
-      throw error;
+      throw conflict(
+        'Se encontraron posibles clientes duplicados.',
+        ErrorCodes.CLIENT_POSSIBLE_DUPLICATE,
+        {
+          clubId: 12,
+          candidateClientIds: ['cash-1', 'cash-2'],
+          reasonType: 'PHONE',
+          signals: { phone: '+34600111222' }
+        }
+      );
     }
   } as any);
 
@@ -227,7 +226,7 @@ test('cash registra incidente cuando detecta CLIENT_POSSIBLE_DUPLICATE', async (
   await controller.createProductSale(req, res);
 
   assert.equal(payload.statusCode, 409);
-  assert.equal(payload.body?.error, 'CLIENT_POSSIBLE_DUPLICATE');
+  assert.equal(payload.body?.code, ErrorCodes.CLIENT_POSSIBLE_DUPLICATE);
   assert.equal(registeredPayload?.clubId, 12);
   assert.equal(registeredPayload?.sourceType, 'CASH');
   assert.deepEqual(registeredPayload?.candidateClientIds, ['cash-1', 'cash-2']);

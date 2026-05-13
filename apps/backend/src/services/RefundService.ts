@@ -11,6 +11,7 @@ import { AccountingService } from './AccountingService';
 import { ProjectionService } from './ProjectionService';
 import { AccountService } from './AccountService';
 import { generateDisplayCode } from '../utils/displayCode';
+import { badRequest, notFound, conflict, ErrorCodes } from '../errors';
 
 const EPSILON = 0.009;
 
@@ -187,7 +188,7 @@ export class RefundService {
       }
     });
 
-    if (!payment) throw new Error('Pago no encontrado');
+    if (!payment) throw notFound('Pago no encontrado.', ErrorCodes.ACCOUNT_NOT_FOUND);
 
     const reserved = payment.refunds
       .filter((row) => row.id !== excludeRefundId)
@@ -211,7 +212,7 @@ export class RefundService {
         }
       });
       if (!providedShift) {
-        throw new Error('El turno de caja indicado no esta abierto o no pertenece al club');
+        throw notFound('El turno de caja indicado no está abierto o no pertenece al club.', ErrorCodes.CASH_SHIFT_NOT_FOUND);
       }
       return providedShift.id;
     }
@@ -225,7 +226,7 @@ export class RefundService {
     });
 
     if (!openShift) {
-      throw new Error('No hay turno de caja abierto para registrar la devolucion');
+      throw conflict('No hay turno de caja abierto para registrar la devolución.', ErrorCodes.NO_ACTIVE_CASH_SHIFT);
     }
     return openShift.id;
   }
@@ -237,7 +238,7 @@ export class RefundService {
       WHERE "id" = ${input.refundId}
       FOR UPDATE
     `;
-    if (lockedRows.length === 0) throw new Error('Devolucion no encontrada');
+    if (lockedRows.length === 0) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     const refund = await tx.refund.findUnique({
       where: { id: input.refundId },
@@ -250,8 +251,8 @@ export class RefundService {
       }
     });
 
-    if (!refund) throw new Error('Devolucion no encontrada');
-    if (input.clubId && refund.clubId !== input.clubId) throw new Error('Devolucion no encontrada');
+    if (!refund) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
+    if (input.clubId && refund.clubId !== input.clubId) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     if (refund.status === 'EXECUTED') {
       return tx.refund.findUnique({
@@ -261,22 +262,22 @@ export class RefundService {
     }
 
     if (refund.status === 'CANCELLED') {
-      throw new Error('No se puede ejecutar una devolucion cancelada');
+      throw conflict('No se puede ejecutar una devolución cancelada.', ErrorCodes.REFUND_INVALID_STATUS);
     }
     if (refund.status === 'REQUESTED') {
-      throw new Error('La devolucion debe aprobarse antes de ejecutarse');
+      throw conflict('La devolución debe aprobarse antes de ejecutarse.', ErrorCodes.REFUND_INVALID_STATUS);
     }
     if (refund.status === 'FAILED') {
-      throw new Error('La devolucion esta fallida, reintentala antes de ejecutar');
+      throw conflict('La devolución está fallida. Reintentala antes de ejecutar.', ErrorCodes.REFUND_INVALID_STATUS);
     }
     if (refund.status !== 'APPROVED' && refund.status !== 'READY_TO_EXECUTE') {
-      throw new Error('La devolucion no esta en estado ejecutable');
+      throw conflict('La devolución no está en estado ejecutable.', ErrorCodes.REFUND_INVALID_STATUS);
     }
 
     const expectedMethod = this.mapPaymentMethodToExecutionMethod(refund.payment.method);
     const executionMethod = refund.executionMethod ?? expectedMethod;
     if (executionMethod !== expectedMethod) {
-      throw new Error('El metodo de ejecucion no coincide con el metodo de pago original');
+      throw conflict('El método de ejecución no coincide con el método de pago original.', ErrorCodes.PAYMENT_METHOD_INVALID);
     }
 
     const resolvedCashShiftId = await this.resolveOpenCashShiftTx(tx, {
@@ -361,27 +362,27 @@ export class RefundService {
 
   private async requestRefundTx(tx: TxClient, input: RequestRefundInput) {
     if (!Number.isFinite(input.amount) || input.amount <= 0) {
-      throw new Error('El monto de devolucion debe ser mayor a 0');
+      throw badRequest('El monto de devolución debe ser mayor a 0.', ErrorCodes.PAYMENT_INVALID_AMOUNT);
     }
 
     await this.lockPaymentTx(tx, input.paymentId);
     const { payment, refundable } = await this.getRefundableForPaymentTx(tx, input.paymentId);
 
-    if (input.clubId && payment.account.clubId !== input.clubId) throw new Error('Pago no encontrado');
+    if (input.clubId && payment.account.clubId !== input.clubId) throw notFound('Pago no encontrado.', ErrorCodes.ACCOUNT_NOT_FOUND);
     if (input.amount > refundable + EPSILON) {
-      throw new Error('El monto de devolucion supera el saldo refundable del pago');
+      throw conflict('El monto de devolución supera el saldo refundable del pago.', ErrorCodes.PAYMENT_OVERPAY);
     }
 
     if (payment.account.status !== 'OPEN') {
       if (payment.account.sourceType !== 'BOOKING') {
-        throw new Error('No se puede devolver un pago de una cuenta cerrada');
+        throw conflict('No se puede devolver un pago de una cuenta cerrada.', ErrorCodes.ACCOUNT_CLOSED);
       }
       const bookingForClosedAccount = await tx.booking.findUnique({
         where: { id: Number(payment.account.sourceId) },
         select: { status: true }
       });
       if (!bookingForClosedAccount || bookingForClosedAccount.status !== 'CANCELLED') {
-        throw new Error('No se puede devolver un pago de una reserva no cancelada con cuenta cerrada');
+        throw conflict('No se puede devolver un pago de una reserva no cancelada con cuenta cerrada.', ErrorCodes.ACCOUNT_CLOSED);
       }
     }
 
@@ -390,16 +391,16 @@ export class RefundService {
         where: { id: Number(payment.account.sourceId) },
         select: { status: true }
       });
-      if (!booking) throw new Error('Reserva asociada al pago no encontrada');
+      if (!booking) throw notFound('Reserva asociada al pago no encontrada.', ErrorCodes.BOOKING_NOT_FOUND);
       if (booking.status === 'COMPLETED') {
-        throw new Error('No se permiten devoluciones sobre reservas completadas');
+        throw conflict('No se permiten devoluciones sobre reservas completadas.', ErrorCodes.BOOKING_INVALID_STATUS);
       }
     }
 
     const expectedMethod = this.mapPaymentMethodToExecutionMethod(payment.method);
     const executionMethod = input.executionMethod ?? expectedMethod;
     if (executionMethod !== expectedMethod) {
-      throw new Error('El metodo de ejecucion no coincide con el metodo de pago original');
+      throw conflict('El método de ejecución no coincide con el método de pago original.', ErrorCodes.PAYMENT_METHOD_INVALID);
     }
 
     const executeNow = input.executeNow ?? false;
@@ -464,7 +465,7 @@ export class RefundService {
       WHERE "id" = ${input.refundId}
       FOR UPDATE
     `;
-    if (rows.length === 0) throw new Error('Devolucion no encontrada');
+    if (rows.length === 0) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     const refund = await tx.refund.findUnique({
       where: { id: input.refundId },
@@ -472,20 +473,20 @@ export class RefundService {
         payment: true
       }
     });
-    if (!refund) throw new Error('Devolucion no encontrada');
-    if (input.clubId && refund.clubId !== input.clubId) throw new Error('Devolucion no encontrada');
+    if (!refund) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
+    if (input.clubId && refund.clubId !== input.clubId) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     if (refund.status === 'EXECUTED') {
       return tx.refund.findUnique({ where: { id: refund.id }, include: { payment: true, cashMovement: true } });
     }
     if (refund.status === 'CANCELLED') {
-      throw new Error('No se puede aprobar una devolucion cancelada');
+      throw conflict('No se puede aprobar una devolución cancelada.', ErrorCodes.REFUND_INVALID_STATUS);
     }
 
     const expectedMethod = this.mapPaymentMethodToExecutionMethod(refund.payment.method);
     const executionMethod = refund.executionMethod ?? expectedMethod;
     if (executionMethod !== expectedMethod) {
-      throw new Error('El metodo de ejecucion no coincide con el metodo de pago original');
+      throw conflict('El método de ejecución no coincide con el método de pago original.', ErrorCodes.PAYMENT_METHOD_INVALID);
     }
 
     const now = new Date();
@@ -535,19 +536,19 @@ export class RefundService {
       WHERE "id" = ${input.refundId}
       FOR UPDATE
     `;
-    if (rows.length === 0) throw new Error('Devolucion no encontrada');
+    if (rows.length === 0) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     const refund = await tx.refund.findUnique({
       where: { id: input.refundId },
       include: { payment: true }
     });
-    if (!refund) throw new Error('Devolucion no encontrada');
-    if (input.clubId && refund.clubId !== input.clubId) throw new Error('Devolucion no encontrada');
-    if (refund.status === 'EXECUTED') throw new Error('No se puede fallar una devolucion ejecutada');
-    if (refund.status === 'CANCELLED') throw new Error('No se puede fallar una devolucion cancelada');
+    if (!refund) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
+    if (input.clubId && refund.clubId !== input.clubId) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
+    if (refund.status === 'EXECUTED') throw conflict('No se puede fallar una devolución ejecutada.', ErrorCodes.REFUND_INVALID_STATUS);
+    if (refund.status === 'CANCELLED') throw conflict('No se puede fallar una devolución cancelada.', ErrorCodes.REFUND_INVALID_STATUS);
 
     const reason = this.normalizeReason(input.reason, 500);
-    if (!reason) throw new Error('La razon de falla es obligatoria');
+    if (!reason) throw badRequest('La razón de falla es obligatoria.', ErrorCodes.INVALID_INPUT);
 
     await tx.refund.update({
       where: { id: refund.id },
@@ -579,16 +580,16 @@ export class RefundService {
       WHERE "id" = ${input.refundId}
       FOR UPDATE
     `;
-    if (rows.length === 0) throw new Error('Devolucion no encontrada');
+    if (rows.length === 0) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     const refund = await tx.refund.findUnique({
       where: { id: input.refundId },
       include: { payment: true }
     });
-    if (!refund) throw new Error('Devolucion no encontrada');
-    if (input.clubId && refund.clubId !== input.clubId) throw new Error('Devolucion no encontrada');
+    if (!refund) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
+    if (input.clubId && refund.clubId !== input.clubId) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
-    if (refund.status === 'EXECUTED') throw new Error('No se puede cancelar una devolucion ejecutada');
+    if (refund.status === 'EXECUTED') throw conflict('No se puede cancelar una devolución ejecutada.', ErrorCodes.REFUND_INVALID_STATUS);
     if (refund.status === 'CANCELLED') {
       return tx.refund.findUnique({
         where: { id: refund.id },
@@ -597,7 +598,7 @@ export class RefundService {
     }
 
     const reason = this.normalizeReason(input.reason, 300);
-    if (!reason) throw new Error('La razon de cancelacion es obligatoria');
+    if (!reason) throw badRequest('La razón de cancelación es obligatoria.', ErrorCodes.INVALID_INPUT);
 
     await tx.refund.update({
       where: { id: refund.id },
@@ -631,7 +632,7 @@ export class RefundService {
       WHERE "id" = ${input.refundId}
       FOR UPDATE
     `;
-    if (rows.length === 0) throw new Error('Devolucion no encontrada');
+    if (rows.length === 0) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     const refund = await tx.refund.findUnique({
       where: { id: input.refundId },
@@ -639,23 +640,23 @@ export class RefundService {
         payment: true
       }
     });
-    if (!refund) throw new Error('Devolucion no encontrada');
-    if (input.clubId && refund.clubId !== input.clubId) throw new Error('Devolucion no encontrada');
+    if (!refund) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
+    if (input.clubId && refund.clubId !== input.clubId) throw notFound('Devolución no encontrada.', ErrorCodes.REFUND_NOT_FOUND);
 
     if (refund.status === 'EXECUTED') {
       return tx.refund.findUnique({ where: { id: refund.id }, include: { payment: true, cashMovement: true } });
     }
     if (refund.status === 'CANCELLED') {
-      throw new Error('No se puede reintentar una devolucion cancelada');
+      throw conflict('No se puede reintentar una devolución cancelada.', ErrorCodes.REFUND_INVALID_STATUS);
     }
     if (refund.status !== 'FAILED') {
-      throw new Error('Solo se pueden reintentar devoluciones en estado FAILED');
+      throw conflict('Solo se pueden reintentar devoluciones en estado FAILED.', ErrorCodes.REFUND_INVALID_STATUS);
     }
 
     const expectedMethod = this.mapPaymentMethodToExecutionMethod(refund.payment.method);
     const executionMethod = refund.executionMethod ?? expectedMethod;
     if (executionMethod !== expectedMethod) {
-      throw new Error('El metodo de ejecucion no coincide con el metodo de pago original');
+      throw conflict('El método de ejecución no coincide con el método de pago original.', ErrorCodes.PAYMENT_METHOD_INVALID);
     }
 
     const targetStatus: RefundStatus = executionMethod === 'CASH' ? 'READY_TO_EXECUTE' : 'APPROVED';
@@ -807,7 +808,7 @@ export class RefundService {
       }
     });
 
-    if (!account) throw new Error('Cuenta de reserva no encontrada');
+    if (!account) throw notFound('Cuenta de reserva no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
 
     const refunds: any[] = [];
     const executeNow = input.executeNow ?? true;
@@ -849,7 +850,7 @@ export class RefundService {
     }
 
     if (Number.isFinite(remainingToRefund) && remainingToRefund > EPSILON) {
-      throw new Error('No hay saldo refundable suficiente para cubrir el monto solicitado');
+      throw conflict('No hay saldo refundable suficiente para cubrir el monto solicitado.', ErrorCodes.PAYMENT_OVERPAY);
     }
 
     return refunds;

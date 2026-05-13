@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { sendAppError } from '../errors';
 import { CourtRepository } from '../repositories/CourtRepository';
 import { prisma } from '../prisma';
 import { z } from 'zod';
@@ -51,7 +52,7 @@ export class CourtController {
 
             res.status(201).json(newCourt);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            return sendAppError(res, error, 'No se pudo crear la cancha');
         }
     }
 
@@ -215,7 +216,7 @@ export class CourtController {
             const deleted = await this.courtRepo.deleteCourt(id);
             return res.json({ success: true, court: deleted });
         } catch (error: any) {
-            return res.status(400).json({ error: error.message || 'No se pudo eliminar la cancha' });
+            return sendAppError(res, error, 'No se pudo eliminar la cancha');
         }
     }
 }

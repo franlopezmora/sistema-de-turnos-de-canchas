@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { sendAppError } from '../errors';
 import { ProductService } from '../services/ProductService';
 import { ClubRepository } from '../repositories/ClubRepository';
 import { sanitizeString } from '../utils/sanitize';
@@ -22,7 +23,7 @@ export class ProductController {
             const products = await this.productService.getProductsByClub(club.id);
             res.json(products);
         } catch (error) {
-            res.status(500).json({ error: 'Error al obtener productos' });
+            return sendAppError(res, error, 'Error al obtener productos');
         }
     }
 
@@ -45,9 +46,7 @@ export class ProductController {
             });
             res.status(201).json(newProduct);
         } catch (error) {
-            console.error(error);
-            const message = error instanceof Error ? error.message : 'Error al crear producto';
-            res.status(400).json({ error: message });
+            return sendAppError(res, error, 'Error al crear producto');
         }
     }
 
@@ -74,8 +73,7 @@ export class ProductController {
             if (!updatedProduct) return res.status(404).json({ error: 'Producto no encontrado' });
             res.json(updatedProduct);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Error al actualizar producto';
-            res.status(400).json({ error: message });
+            return sendAppError(res, error, 'Error al actualizar producto');
         }
     }
 
@@ -92,7 +90,7 @@ export class ProductController {
 
             res.json({ message: 'Producto eliminado' });
         } catch (error) {
-            res.status(500).json({ error: 'Error al eliminar producto' });
+            return sendAppError(res, error, 'Error al eliminar producto');
         }
     }
 }

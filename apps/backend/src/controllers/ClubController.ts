@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ClubService } from '../services/ClubService';
 import { z } from 'zod';
+import { sendAppError } from '../errors';
 import { validateOpeningDays } from '../utils/ActivityScheduleHelper';
 import { MediaStorageService } from '../services/MediaStorageService';
 import { sanitizeString } from '../utils/sanitize';
@@ -316,7 +317,7 @@ export class ClubController {
             );
             res.status(201).json(club);
         } catch (error: any) {
-            res.status(400).json({ error: error.message });
+            return sendAppError(res, error, 'No se pudo guardar el club');
         }
     }
 
@@ -329,7 +330,7 @@ export class ClubController {
             const club = await this.clubService.getClubById(id);
             res.json(club);
         } catch (error: any) {
-            res.status(404).json({ error: error.message });
+            return sendAppError(res, error, 'Club no encontrado');
         }
     }
 
@@ -342,7 +343,7 @@ export class ClubController {
             const club = await this.clubService.getClubBySlug(slug as string);
             res.json(club);
         } catch (error: any) {
-            res.status(404).json({ error: error.message });
+            return sendAppError(res, error, 'Club no encontrado');
         }
     }
 
@@ -351,7 +352,7 @@ export class ClubController {
             const clubs = await this.clubService.getAllClubs();
             res.json(clubs);
         } catch (error: any) {
-            res.status(500).json({ error: error.message });
+            return sendAppError(res, error, 'Error al obtener los clubes');
         }
     }
 
@@ -655,7 +656,7 @@ export class ClubController {
 
             res.json(club);
         } catch (error: any) {
-            res.status(400).json({ error: error.message });
+            return sendAppError(res, error, 'No se pudo guardar el club');
         }
     }
 
@@ -676,8 +677,7 @@ export class ClubController {
         res.json(filtered);
 
     } catch (error: any) {
-        console.error("Error buscando clientes:", error);
-        res.status(500).json({ error: error.message });
+        return sendAppError(res, error, 'Error al buscar clientes');
     }
 };
 
@@ -723,7 +723,7 @@ export class ClubController {
             });
             return res.status(201).json(client);
         } catch (error: any) {
-            return res.status(400).json({ error: error?.message || 'No se pudo crear el cliente' });
+            return sendAppError(res, error, 'No se pudo crear el cliente');
         }
     };
 
@@ -772,7 +772,7 @@ export class ClubController {
             });
             return res.json(client);
         } catch (error: any) {
-            return res.status(400).json({ error: error?.message || 'No se pudo actualizar el cliente' });
+            return sendAppError(res, error, 'No se pudo actualizar el cliente');
         }
     };
 
@@ -788,7 +788,7 @@ export class ClubController {
             await this.clubService.deleteClient(Number(club.id), paramsParsed.data.clientId);
             return res.status(204).send();
         } catch (error: any) {
-            return res.status(400).json({ error: error?.message || 'No se pudo eliminar el cliente' });
+            return sendAppError(res, error, 'No se pudo eliminar el cliente');
         }
     };
 }

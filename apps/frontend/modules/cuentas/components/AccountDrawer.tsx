@@ -19,6 +19,7 @@ import PaymentRegistrationDrawer from '../../../components/admin/payments/Paymen
 import { getAccountById, addAccountItem, registerPayment, closeAccount, voidPosAccount } from '../../../services/AccountService';
 import type { PaymentMethod, PaymentChannel } from '../../../services/AccountService';
 import { extractErrorMessage, reportUiError } from '../../../utils/uiError';
+import { showAdminToast } from '../../../utils/adminToast';
 import {
   ACCOUNT_PAYMENT_EPSILON,
   SYNTHETIC_ACCOUNT_TOTAL_ITEM_ID,
@@ -650,6 +651,7 @@ export default function AccountDrawer({
         await reloadDetail();
         setItemForm(createDefaultItemForm());
         setView('overview');
+        showAdminToast('Concepto agregado.');
         onSuccess?.('item_added', getSuccessMeta());
       } catch (err) {
         reportUiError({ area: 'AccountDrawer', action: 'submitAddItem' }, err);
@@ -680,6 +682,7 @@ export default function AccountDrawer({
       await closeAccount(accountId);
       await reloadDetail();
       setView('overview');
+      showAdminToast('Cuenta cerrada.');
       onSuccess?.('closed', getSuccessMeta());
       onClose();
     } catch (err) {
@@ -698,6 +701,7 @@ export default function AccountDrawer({
       setActionError('');
       setVoidConfirmOpen(false);
       await voidPosAccount(accountId);
+      showAdminToast('Venta anulada.');
       onSuccess?.('closed', getSuccessMeta());
       onClose();
     } catch (err) {

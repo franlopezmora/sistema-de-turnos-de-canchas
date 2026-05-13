@@ -5,6 +5,7 @@ import { getCourts } from '../../services/CourtService';
 import { ClubAdminService, ClubActivityType, type ActivityScheduleException, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope, type AuditLogEntry, type ClubReviewAdminItem, type ClubReviewAdminStatus } from '../../services/ClubAdminService';
 import { searchClients } from '../../services/BookingService';
 import AdminAppModal from './ui/AdminAppModal';
+import { extractErrorMessage } from '../../utils/uiError';
 import { Globe, Instagram, Facebook, Phone, Mail, Image as ImageIcon, AlertTriangle, Check, X, Search, CalendarDays, Trash2 } from 'lucide-react';
 import { AdminDateInput, AdminDrawer, AdminDrawerSection, AdminSegmentedControl } from './ui';
 import { normalizeSessionUser } from '../../utils/session';
@@ -444,8 +445,9 @@ export default function AdminTabClub({
     show: boolean; title?: string; message?: ReactNode; cancelText?: string; confirmText?: string;
     isWarning?: boolean; onConfirm?: () => Promise<void> | void; onCancel?: () => Promise<void> | void;
     closeOnBackdrop?: boolean; closeOnEscape?: boolean;
-    holdToConfirm?: boolean; holdDuration?: number;
+    holdToConfirm?: boolean; holdDuration?: number; confirmDisabled?: boolean;
   }>({ show: false });
+  const [deletingAssignment, setDeletingAssignment] = useState(false);
   const initialConfigRef = useRef<ClubConfigSnapshot | null>(null);
   const allowNavigationRef = useRef(false);
   const pendingRouteRef = useRef<string | null>(null);
@@ -507,7 +509,7 @@ export default function AdminTabClub({
   const [activeTab, setActiveTab] = useState<AdminTabClubSection>('identity');
   const effectiveTab: AdminTabClubSection = forcedTab ?? activeTab;
 
-  const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined, holdToConfirm: false, holdDuration: undefined }));
+  const closeModal = () => setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined, holdToConfirm: false, holdDuration: undefined, confirmDisabled: undefined }));
   const showInfo = (message: ReactNode, title = 'Información') => setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
   const showError = (message: ReactNode) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
 
@@ -561,7 +563,7 @@ export default function AdminTabClub({
       const rows = await ClubAdminService.listDiscountPolicies(clubSlug);
       setDiscountPolicies(Array.isArray(rows) ? rows : []);
     } catch (error: any) {
-      showError(`Error al cargar políticas de descuento: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudieron cargar las políticas de descuento.'));
     } finally {
       setLoadingDiscountPolicies(false);
     }
@@ -579,7 +581,7 @@ export default function AdminTabClub({
       });
       setClubReviews(Array.isArray(page?.items) ? page.items : []);
     } catch (error: any) {
-      showError(`Error al cargar reseñas: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudieron cargar las reseñas.'));
       setClubReviews([]);
     } finally {
       setLoadingClubReviews(false);
@@ -592,7 +594,7 @@ export default function AdminTabClub({
       const rows = await ClubAdminService.listClientDiscountAssignments(clubSlug, clientId);
       setClientAssignments(Array.isArray(rows) ? rows : []);
     } catch (error: any) {
-      showError(`Error al cargar asignaciones del cliente: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudieron cargar las asignaciones del cliente.'));
     } finally {
       setLoadingClientAssignments(false);
     }
@@ -614,7 +616,7 @@ export default function AdminTabClub({
       setExceptionModalSelectedId(null);
       setExceptionModalNewDate(getTodayDateKey());
     } catch (error: any) {
-      showError(`No se pudo cargar excepciones: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudieron cargar las excepciones.'));
       setExceptionModalItems([]);
       setExceptionModalSelectedDate('');
       setExceptionModalSelectedId(null);
@@ -769,7 +771,7 @@ export default function AdminTabClub({
         await loadPersistentConfigHistory(clubData.id);
       }
     } catch (error: any) {
-      showError('Error al cargar información del club: ' + error.message);
+      showError(extractErrorMessage(error, 'No se pudo cargar la información del club.'));
     } finally {
       setLoadingClub(false);
     }
@@ -1059,7 +1061,7 @@ export default function AdminTabClub({
       setActivityExceptionExists((prev) => ({ ...prev, [activity.id]: true }));
       if (!silent) showInfo('Excepción cargada para la fecha seleccionada.', 'Excepción cargada');
     } catch (error: any) {
-      if (!silent) showError(`No se pudo cargar la excepción: ${error.message}`);
+      if (!silent) showError(extractErrorMessage(error, 'No se pudo cargar la excepción.'));
     } finally {
       setActivityExceptionBusy((prev) => ({ ...prev, [activity.id]: false }));
     }
@@ -1143,7 +1145,7 @@ export default function AdminTabClub({
       await queueScheduleExceptionDraft(activity, form);
       showInfo('Excepción preparada. Se aplicará cuando guardes los cambios generales.', 'Pendiente de guardar');
     } catch (error: any) {
-      showError(`No se pudo guardar la excepción: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo guardar la excepción.'));
     } finally {
       setActivityExceptionBusy((prev) => ({ ...prev, [activity.id]: false }));
     }
@@ -1176,7 +1178,7 @@ export default function AdminTabClub({
       }
       showInfo('Eliminación preparada. Se aplicará cuando guardes los cambios generales.', 'Pendiente de guardar');
     } catch (error: any) {
-      showError(`No se pudo eliminar la excepción: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo eliminar la excepción.'));
     } finally {
       setActivityExceptionBusy((prev) => ({ ...prev, [activity.id]: false }));
     }
@@ -1432,7 +1434,7 @@ export default function AdminTabClub({
       await loadPersistentConfigHistory(updatedClub.id);
       showInfo('Información del club actualizada correctamente', 'Éxito');
     } catch (error: any) {
-      showError('Error al actualizar el club: ' + error.message);
+      showError(extractErrorMessage(error, 'No se pudo actualizar la información del club.'));
     }
   };
 
@@ -1521,7 +1523,7 @@ export default function AdminTabClub({
       setExceptionModalSelectedId(null);
       showInfo('Excepción en borrador guardada. Se aplica al guardar los cambios generales.');
     } catch (error: any) {
-      showError(`No se pudo preparar la excepción: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo preparar la excepción.'));
     }
   };
 
@@ -1551,7 +1553,7 @@ export default function AdminTabClub({
           : 'Excepción marcada para eliminar. Se aplica al guardar los cambios generales.'
       );
     } catch (error: any) {
-      showError(`No se pudo preparar la eliminación: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo preparar la eliminación.'));
     }
   };
 
@@ -1652,7 +1654,7 @@ export default function AdminTabClub({
       await loadDiscountPolicies(club.slug);
       showInfo('Política de descuento creada', 'Éxito');
     } catch (error: any) {
-      showError(`No se pudo crear la política: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo crear la política de descuento.'));
     }
   };
 
@@ -1715,7 +1717,7 @@ export default function AdminTabClub({
       await loadDiscountPolicies(club.slug);
       showInfo('Política actualizada', 'Éxito');
     } catch (error: any) {
-      showError(`No se pudo actualizar la política: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo actualizar la política de descuento.'));
     }
   };
 
@@ -1740,7 +1742,7 @@ export default function AdminTabClub({
       await loadClientAssignments(club.slug, resolvedClientId);
       showInfo('Política asignada al cliente', 'Éxito');
     } catch (error: any) {
-      showError(`No se pudo asignar: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo asignar la política al cliente.'));
     }
   };
 
@@ -1755,26 +1757,52 @@ export default function AdminTabClub({
       await ClubAdminService.updateDiscountAssignment(club.slug, assignmentId, nextStatus);
       await loadClientAssignments(club.slug, resolvedClientId);
     } catch (error: any) {
-      showError(`No se pudo actualizar la asignación: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo actualizar la asignación.'));
     }
   };
 
-  const handleDeleteAssignment = async (assignmentId: string) => {
+  const handleDeleteAssignment = (assignmentId: string) => {
     if (!club || !selectedDiscountClient?.id) return;
     const resolvedClientId = resolveDiscountClientId(selectedDiscountClient);
     if (!resolvedClientId) {
       showError('Selecciona un cliente del club para eliminar asignaciones.');
       return;
     }
-    const confirmed = window.confirm('¿Eliminar esta asignación de descuento? Esta acción no se puede deshacer.');
-    if (!confirmed) return;
-    try {
-      await ClubAdminService.deleteDiscountAssignment(club.slug, assignmentId);
-      await loadClientAssignments(club.slug, resolvedClientId);
-      showInfo('Asignación eliminada', 'Éxito');
-    } catch (error: any) {
-      showError(`No se pudo eliminar la asignación: ${error.message}`);
-    }
+    setModalState({
+      show: true,
+      title: 'Eliminar asignación',
+      message: '¿Querés eliminar esta asignación de descuento? Esta acción no se puede deshacer.',
+      isWarning: true,
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      closeOnBackdrop: false,
+      closeOnEscape: false,
+      confirmDisabled: deletingAssignment,
+      onConfirm: async () => {
+        if (deletingAssignment) return;
+        setDeletingAssignment(true);
+        setModalState((prev) => ({ ...prev, confirmDisabled: true }));
+        try {
+          await ClubAdminService.deleteDiscountAssignment(club.slug, assignmentId);
+          await loadClientAssignments(club.slug, resolvedClientId);
+          closeModal();
+          showInfo('Asignación eliminada', 'Éxito');
+        } catch (error: any) {
+          setModalState((prev) => ({
+            ...prev,
+            confirmDisabled: false,
+            message: (
+              <span>
+                ¿Querés eliminar esta asignación de descuento? Esta acción no se puede deshacer.
+                <span className="mt-2 block text-p-error">{extractErrorMessage(error, 'No se pudo eliminar la asignación.')}</span>
+              </span>
+            ),
+          }));
+        } finally {
+          setDeletingAssignment(false);
+        }
+      },
+    });
   };
 
   const handleUpdateReviewStatus = async (reviewId: string, status: ClubReviewAdminStatus) => {
@@ -1784,7 +1812,7 @@ export default function AdminTabClub({
       await ClubAdminService.setClubReviewStatus(club.slug, reviewId, status);
       await loadClubReviews(club.slug, reviewStatusFilter);
     } catch (error: any) {
-      showError(`No se pudo actualizar la reseña: ${error.message}`);
+      showError(extractErrorMessage(error, 'No se pudo actualizar el estado de la reseña.'));
     } finally {
       setReviewStatusUpdatingId(null);
     }
@@ -1820,7 +1848,7 @@ export default function AdminTabClub({
       } catch (error: any) {
         setClientSearchResults([]);
         setShowClientSearchDropdown(false);
-        showError(`No se pudo buscar clientes: ${error?.message || 'Error de busqueda'}`);
+        showError(extractErrorMessage(error, 'No se pudo buscar clientes.'));
       }
     }, 300);
   };
@@ -3634,6 +3662,7 @@ export default function AdminTabClub({
         closeOnEscape={modalState.closeOnEscape}
         holdToConfirm={modalState.holdToConfirm}
         holdDuration={modalState.holdDuration}
+        confirmDisabled={modalState.confirmDisabled}
       />
     </>
   );

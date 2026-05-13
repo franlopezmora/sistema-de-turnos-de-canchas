@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { ClubAdminService } from '../services/ClubAdminService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
+import { showAdminToast } from '../utils/adminToast';
 import AdminAppModal from './admin/ui/AdminAppModal';
 import { AdminFilterToolbar, MetricCard } from './admin/ui';
 import ProductsTable from '../modules/tienda/components/ProductsTable';
@@ -153,11 +154,15 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
       };
       if (editingProduct) {
         await ClubAdminService.updateProduct(slug, editingProduct.id, payload);
+        closeDrawer();
+        void loadProducts();
+        showAdminToast('Producto actualizado.');
       } else {
         await ClubAdminService.createProduct(slug, payload);
+        closeDrawer();
+        void loadProducts();
+        showAdminToast('Producto creado.');
       }
-      closeDrawer();
-      void loadProducts();
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo guardar el producto.');
       reportUiError({ area: 'ProductsPage', action: 'saveProduct' }, error);
@@ -171,8 +176,9 @@ export default function ProductsPage({ slug = '' }: ProductsPageProps) {
     setDeleting(true);
     try {
       await ClubAdminService.deleteProduct(slug, deleteTarget.id);
-      void loadProducts();
       setDeleteTarget(null);
+      void loadProducts();
+      showAdminToast('Producto dado de baja.');
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo dar de baja el producto.');
       reportUiError({ area: 'ProductsPage', action: 'deleteProduct' }, error);

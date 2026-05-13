@@ -1225,7 +1225,7 @@ export default function AdminPaymentsPlaygroundPage() {
     } finally {
       setPosLoadingProducts(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — solo setters estables, sin state leído
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Disparar carga al abrir el drawer de venta mostrador
   useEffect(() => {

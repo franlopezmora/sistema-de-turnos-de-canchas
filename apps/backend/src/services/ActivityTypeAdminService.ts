@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
+import { ErrorCodes, badRequest, forbidden, notFound } from '../errors';
 import { assertValidScheduleMode, normalizeSchedule } from '../utils/ActivityScheduleHelper';
 
 type UpdateScheduleInput = {
@@ -62,13 +63,13 @@ export class ActivityTypeAdminService {
   private assertScheduleExceptionsSupport() {
     const prismaAny = prisma as any;
     if (prismaAny?.activityScheduleException) return;
-    throw new Error('La versión actual de Prisma Client no soporta excepciones de agenda. Ejecutá "npx prisma generate" en apps/backend y reiniciá el backend.');
+    throw badRequest('La versión actual de Prisma Client no soporta excepciones de agenda. Ejecutá "npx prisma generate" en apps/backend y reiniciá el backend.', ErrorCodes.CLUB_CONFIG_INVALID);
   }
 
   private parseLocalDate(value: string) {
     const normalized = String(value || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-      throw new Error('localDate debe tener formato YYYY-MM-DD');
+      throw badRequest('localDate debe tener formato YYYY-MM-DD', ErrorCodes.INVALID_INPUT);
     }
 
     return {
@@ -80,10 +81,10 @@ export class ActivityTypeAdminService {
   private async ensureActivityOwnership(clubId: number, activityTypeId: number) {
     const activity = await prisma.activityType.findUnique({ where: { id: activityTypeId } });
     if (!activity) {
-      throw new Error('Actividad no encontrada');
+      throw notFound('Actividad no encontrada', ErrorCodes.ACTIVITY_NOT_FOUND);
     }
     if (Number(activity.clubId) !== clubId) {
-      throw new Error('La actividad no pertenece a este club');
+      throw forbidden('La actividad no pertenece a este club', ErrorCodes.ACTIVITY_OUT_OF_CLUB);
     }
 
     return activity;
@@ -182,7 +183,7 @@ export class ActivityTypeAdminService {
     const { key, dbDate } = this.parseLocalDate(input.localDate);
     const todayDateKey = await this.getClubTodayDateKey(clubId);
     if (key < todayDateKey) {
-      throw new Error(`localDate no puede ser una fecha pasada (mínimo permitido: ${todayDateKey})`);
+      throw badRequest(`localDate no puede ser una fecha pasada (mínimo permitido: ${todayDateKey})`, ErrorCodes.INVALID_INPUT);
     }
     const isClosed = Boolean(input.isClosed);
 
@@ -216,7 +217,7 @@ export class ActivityTypeAdminService {
     }
 
     if (!input.scheduleMode) {
-      throw new Error('scheduleMode es obligatorio cuando la excepción no está cerrada');
+      throw badRequest('scheduleMode es obligatorio cuando la excepción no está cerrada', ErrorCodes.INVALID_INPUT);
     }
 
     const fallbackDuration = Number(activity.defaultDurationMinutes) > 0 ? Number(activity.defaultDurationMinutes) : 60;

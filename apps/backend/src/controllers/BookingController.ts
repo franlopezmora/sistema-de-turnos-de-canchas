@@ -10,7 +10,7 @@ import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 import { sanitizeString } from '../utils/sanitize';
 import { normalizeIdentityPhone } from '../utils/phone';
 import { sendAuthError } from '../utils/authError';
-import { ApiError, sendApiError } from '../utils/apiError';
+import { AppError, ErrorCodes, badRequest, conflict, forbidden, notFound, sendAppError } from '../errors';
 
 const getErrorMessage = (error: unknown, fallback: string) =>
     error instanceof Error && String(error.message || '').trim().length > 0
@@ -30,118 +30,75 @@ const resolveOptionalAuthState = (req: Request): OptionalAuthState => {
     return 'guest';
 };
 
-const createBookingApiError = (error: unknown): ApiError => {
+const sendControllerAppError = (
+    res: Response,
+    params: { statusCode: number; code: string; message: string; meta?: Record<string, unknown>; [key: string]: unknown }
+) => sendAppError(res, new AppError(params));
+
+const createBookingAppError = (error: unknown, fallback = 'No se pudo crear la reserva.'): AppError => {
+    if (error instanceof AppError) return error;
     const known = (error || {}) as any;
     const rawCode = String(known?.code || '').trim();
-    const message = getErrorMessage(error, 'No se pudo crear la reserva.');
+    const message = getErrorMessage(error, fallback);
     const normalizedMessage = message
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase();
 
-    if (rawCode === 'CLIENT_POSSIBLE_DUPLICATE' || message === 'CLIENT_POSSIBLE_DUPLICATE') {
-        const details = (known?.details && typeof known.details === 'object') ? known.details : {};
+    if (rawCode === 'CLIENT_POSSIBLE_DUPLICATE') {
+        const details = (known?.meta && typeof known.meta === 'object')
+            ? known.meta
+            : (known?.details && typeof known.details === 'object') ? known.details : {};
         const candidateClientIds = Array.isArray((details as any)?.candidateClientIds)
             ? (details as any).candidateClientIds
             : [];
         const candidates = Array.isArray((details as any)?.candidates)
             ? (details as any).candidates
             : [];
-        return new ApiError({
-            statusCode: 409,
-            code: 'CLIENT_POSSIBLE_DUPLICATE',
-            field: 'owner',
-            blocking: true,
-            message: 'Se detectaron datos que podrian corresponder a mas de un cliente. Revisa y selecciona el cliente correcto.',
-            meta: {
+        return conflict(
+            'Se detectaron datos que podrían corresponder a más de un cliente. Revisá y seleccioná el cliente correcto.',
+            ErrorCodes.CLIENT_POSSIBLE_DUPLICATE,
+            {
+                ...(details as Record<string, unknown>),
                 candidateClientIds,
                 candidates
             }
-        });
+        );
     }
 
     if (rawCode === 'BOOKING_OVERLAP') {
-        const overlaps = Array.isArray(known?.overlaps) ? known.overlaps : [];
-        return new ApiError({
-            statusCode: 409,
-            code: 'BOOKING_OVERLAP',
-            field: 'time',
-            blocking: true,
-            message: 'El horario se superpone con reservas existentes.',
-            meta: { overlaps }
-        });
-    }
-
-    if (message === 'SLOT_ALREADY_BOOKED') {
-        return new ApiError({
-            statusCode: 409,
-            code: 'SLOT_ALREADY_BOOKED',
-            field: 'time',
-            blocking: true,
-            message: 'No se pudo confirmar la disponibilidad del horario. Reintentá.'
-        });
+        const meta = (known?.meta && typeof known.meta === 'object') ? known.meta : {};
+        const overlaps = Array.isArray((meta as any)?.overlaps)
+            ? (meta as any).overlaps
+            : Array.isArray(known?.overlaps) ? known.overlaps : [];
+        return conflict('El horario se superpone con reservas existentes.', ErrorCodes.BOOKING_OVERLAP, { overlaps });
     }
 
     if (message.includes('pasado')) {
-        return new ApiError({
-            statusCode: 400,
-            code: 'BOOKING_IN_PAST',
-            field: 'time',
-            blocking: true,
-            message
-        });
+        return badRequest(message, ErrorCodes.INVALID_INPUT);
     }
 
     if (normalizedMessage.includes('duracion no permitida')) {
-        return new ApiError({
-            statusCode: 400,
-            code: 'DURATION_NOT_ALLOWED',
-            field: 'duration',
-            blocking: true,
-            message
-        });
+        return conflict(message, ErrorCodes.BOOKING_SLOT_UNAVAILABLE);
     }
 
     if (normalizedMessage.includes('horario no permitido')) {
-        return new ApiError({
-            statusCode: 400,
-            code: 'SLOT_NOT_ALLOWED',
-            field: 'time',
-            blocking: true,
-            message
-        });
+        return conflict(message, ErrorCodes.BOOKING_SLOT_UNAVAILABLE);
     }
 
     if (normalizedMessage.includes('club esta cerrado')) {
-        return new ApiError({
-            statusCode: 400,
-            code: 'CLUB_CLOSED',
-            field: 'date',
-            blocking: true,
-            message
-        });
+        return conflict(message, ErrorCodes.BOOKING_SLOT_UNAVAILABLE);
     }
 
     if (normalizedMessage.includes('limite de anticipacion')) {
-        return new ApiError({
-            statusCode: 400,
-            code: 'ADVANCE_LIMIT_EXCEEDED',
-            field: 'date',
-            blocking: true,
-            message
-        });
+        return badRequest(message, ErrorCodes.INVALID_INPUT);
     }
 
-    return new ApiError({
-        statusCode: 400,
-        code: rawCode || 'BOOKING_CREATE_FAILED',
-        field: 'general',
-        blocking: true,
-        message
-    });
+    return badRequest(message, rawCode || ErrorCodes.INVALID_INPUT);
 };
 
-const createBillingConfigApiError = (error: unknown): ApiError => {
+const createBillingConfigAppError = (error: unknown): AppError => {
+    if (error instanceof AppError) return error;
     const known = (error || {}) as any;
     const rawCode = String(known?.code || '').trim();
     const message = getErrorMessage(error, 'No se pudo guardar la configuración de cobro.');
@@ -150,77 +107,14 @@ const createBillingConfigApiError = (error: unknown): ApiError => {
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase();
 
-    if (lower.includes('chargeresponsibleref')) {
-        return new ApiError({
-            statusCode: 400,
-            code: rawCode || 'BILLING_MISSING_RESPONSIBLE',
-            field: 'payment',
-            blocking: true,
-            message
-        });
-    }
-    if (lower.includes('exactamente una asignación cobrable')) {
-        return new ApiError({
-            statusCode: 400,
-            code: rawCode || 'BILLING_INVALID_ASSIGNMENTS',
-            field: 'payment',
-            blocking: true,
-            message
-        });
-    }
-    if (lower.includes('debe enviar al menos una asignación')) {
-        return new ApiError({
-            statusCode: 400,
-            code: rawCode || 'BILLING_ASSIGNMENTS_REQUIRED',
-            field: 'participants',
-            blocking: true,
-            message
-        });
-    }
-    if (lower.includes('ya tiene pagos registrados')) {
-        return new ApiError({
-            statusCode: 400,
-            code: rawCode || 'BILLING_CONFIG_LOCKED_BY_PAYMENTS',
-            field: 'payment',
-            blocking: true,
-            message
-        });
-    }
-    if (lower.includes('reserva completada') && lower.includes('participantes')) {
-        return new ApiError({
-            statusCode: 400,
-            code: rawCode || 'BOOKING_COMPLETED_PARTICIPANTS_LOCKED',
-            field: 'participants',
-            blocking: true,
-            message
-        });
-    }
     if (lower.includes('reserva no encontrada')) {
-        return new ApiError({
-            statusCode: 404,
-            code: rawCode || 'BOOKING_NOT_FOUND',
-            field: 'general',
-            blocking: true,
-            message
-        });
+        return notFound(message, ErrorCodes.BOOKING_NOT_FOUND);
     }
     if (lower.includes('club invalido')) {
-        return new ApiError({
-            statusCode: 400,
-            code: rawCode || 'CLUB_INVALID',
-            field: 'general',
-            blocking: true,
-            message
-        });
+        return badRequest(message, ErrorCodes.INVALID_INPUT);
     }
 
-    return new ApiError({
-        statusCode: 400,
-        code: rawCode || 'BILLING_CONFIG_UPDATE_FAILED',
-        field: 'payment',
-        blocking: true,
-        message
-    });
+    return badRequest(message, rawCode || ErrorCodes.INVALID_INPUT);
 };
 
 export class BookingController {
@@ -259,7 +153,7 @@ export class BookingController {
 
     private async registerDuplicateIncidentFromBookingError(req: Request, sourceType: 'BOOKING' | 'FIXED_BOOKING', error: any) {
         try {
-            const details = (error && typeof error === 'object') ? (error.details || {}) : {};
+            const details = (error && typeof error === 'object') ? (error.meta || error.details || {}) : {};
             let clubId = Number((req as any).clubId || details?.clubId || 0);
             if ((!Number.isInteger(clubId) || clubId <= 0) && Number.isInteger(Number(req.body?.courtId))) {
                 const court = await prisma.court.findUnique({
@@ -386,7 +280,7 @@ export class BookingController {
             const parsed = createSchema.safeParse(dataToValidate);
 
             if (!parsed.success) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'VALIDATION_ERROR',
                     field: 'general',
@@ -412,7 +306,7 @@ export class BookingController {
 
             const courtContext = await this.resolveCourtBookingContext(Number(courtId));
             if (!courtContext.exists) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 404,
                     code: 'COURT_NOT_FOUND',
                     field: 'court',
@@ -422,7 +316,7 @@ export class BookingController {
             }
             const clubTimeZone = String(courtContext.timeZone || '').trim();
             if (!clubTimeZone) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'CLUB_CONFIG_INVALID',
                     field: 'general',
@@ -437,7 +331,7 @@ export class BookingController {
                 try {
                     startDate = TimeHelper.localSlotToUtc(dateStr, slotTime, clubTimeZone);
                 } catch (e) {
-                    return sendApiError(res, {
+                    return sendControllerAppError(res, {
                         statusCode: 400,
                         code: 'INVALID_DATE_TIME',
                         field: 'time',
@@ -448,7 +342,7 @@ export class BookingController {
             } else if (startDateTime) {
                 startDate = new Date(String(startDateTime));
                 if (Number.isNaN(startDate.getTime())) {
-                    return sendApiError(res, {
+                    return sendControllerAppError(res, {
                         statusCode: 400,
                         code: 'INVALID_DATE_TIME',
                         field: 'time',
@@ -457,7 +351,7 @@ export class BookingController {
                     });
                 }
             } else {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'MISSING_DATE_TIME',
                     field: 'time',
@@ -471,7 +365,7 @@ export class BookingController {
             const tokenUserId = userIdFromToken ? Number(userIdFromToken) : null;
             const now = new Date();
             if (startDate.getTime() < now.getTime()) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'BOOKING_IN_PAST',
                     field: 'time',
@@ -534,11 +428,11 @@ export class BookingController {
             res.status(201).json(payload);
 
         } catch (error: any) {
-            if (error?.code === 'CLIENT_POSSIBLE_DUPLICATE' || error?.message === 'CLIENT_POSSIBLE_DUPLICATE') {
+            if ((error instanceof AppError && error.code === ErrorCodes.CLIENT_POSSIBLE_DUPLICATE) || error?.code === ErrorCodes.CLIENT_POSSIBLE_DUPLICATE) {
                 await this.registerDuplicateIncidentFromBookingError(req, 'BOOKING', error);
             }
-            const mapped = createBookingApiError(error);
-            return sendApiError(res, mapped);
+            const mapped = createBookingAppError(error);
+            return sendAppError(res, mapped);
         }
     }
 
@@ -579,7 +473,7 @@ export class BookingController {
 
             const parsed = quoteSchema.safeParse(req.body ?? {});
             if (!parsed.success) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'VALIDATION_ERROR',
                     field: 'general',
@@ -621,7 +515,7 @@ export class BookingController {
                 Boolean(String(clientPhone || '').trim()) ||
                 Boolean(String(clientPhoneNumberLocal || '').trim());
             if (hasAnyClientPhoneInput && !normalizedClientPhone) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'INVALID_CLIENT_PHONE',
                     field: 'owner',
@@ -635,7 +529,7 @@ export class BookingController {
                 const court = await prisma.court.findUnique({ where: { id: Number(courtId) }, include: { club: { include: { settings: true } } } });
                 const tz = String(court?.club?.settings?.timeZone || '').trim();
                 if (!tz) {
-                    return sendApiError(res, {
+                    return sendControllerAppError(res, {
                         statusCode: 400,
                         code: 'CLUB_CONFIG_INVALID',
                         field: 'general',
@@ -647,7 +541,7 @@ export class BookingController {
             } else if (startDateTime) {
                 resolvedStart = new Date(String(startDateTime));
                 if (Number.isNaN(resolvedStart.getTime())) {
-                    return sendApiError(res, {
+                    return sendControllerAppError(res, {
                         statusCode: 400,
                         code: 'INVALID_DATE_TIME',
                         field: 'time',
@@ -656,7 +550,7 @@ export class BookingController {
                     });
                 }
             } else {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'MISSING_DATE_TIME',
                     field: 'time',
@@ -688,16 +582,7 @@ export class BookingController {
                 authState: resolveOptionalAuthState(req)
             });
         } catch (error: any) {
-            const mapped = createBookingApiError(error);
-            return sendApiError(res, new ApiError({
-                statusCode: mapped.statusCode,
-                code: mapped.code === 'BOOKING_CREATE_FAILED' ? 'BOOKING_QUOTE_FAILED' : mapped.code,
-                field: mapped.field,
-                blocking: mapped.blocking,
-                message: getErrorMessage(error, 'No se pudo cotizar la reserva.'),
-                meta: mapped.meta,
-                retryable: mapped.retryable
-            }));
+            return sendAppError(res, createBookingAppError(error, 'No se pudo cotizar la reserva.'));
         }
     }
 
@@ -734,7 +619,7 @@ export class BookingController {
 
         res.json({ date: date, availableSlots: slots });
     } catch (error: any) {
-        res.status(400).json({ error: error.message });
+        return sendAppError(res, error, 'No pudimos completar la acción. Intentá nuevamente.');
     }
 }
 
@@ -768,13 +653,10 @@ export class BookingController {
             });
             res.json({ message: "Reserva cancelada", booking: result });
         } catch (error: any) {
-            if (error.message === "No tienes acceso a esta reserva") {
-                return sendAuthError(res, 403, 'AUTH_FORBIDDEN', error.message);
-            }
             if (isIntegrityInconsistencyError(error)) {
                 return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en reserva') });
             }
-            res.status(400).json({ error: error.message });
+            return sendAppError(res, error, 'No pudimos completar la acción. Intentá nuevamente.');
         }
     }
 
@@ -793,7 +675,7 @@ export class BookingController {
             const booking = await this.bookingService.confirmBooking(bookingId, actorUserId, clubId);
             return res.json({ message: 'Reserva confirmada', booking });
         } catch (error: any) {
-            return res.status(400).json({ error: error.message || 'No se pudo confirmar la reserva' });
+            return sendAppError(res, error, 'No se pudo confirmar la reserva');
         }
     }
 
@@ -815,7 +697,7 @@ export class BookingController {
             if (isIntegrityInconsistencyError(error)) {
                 return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en reserva') });
             }
-            return res.status(400).json({ error: error.message || 'No se pudo completar la reserva' });
+            return sendAppError(res, error, 'No se pudo completar la reserva');
         }
     }
 
@@ -837,7 +719,7 @@ export class BookingController {
             try {
                 preferredClubId = getPreferredClubIdFromRequest(req);
             } catch (error: any) {
-                return res.status(400).json({ error: error?.message || 'Contexto de club inválido' });
+                return sendAppError(res, error, 'Contexto de club inválido');
             }
             let clubContext: { clubId: number; role: string } | null = null;
             try {
@@ -881,10 +763,7 @@ export class BookingController {
             }));
             res.json(payload);
         } catch (error: any) {
-            if (error.message === "No tienes permiso para ver el historial de otro usuario") {
-                return sendAuthError(res, 403, 'AUTH_FORBIDDEN', error.message);
-            }
-            res.status(400).json({ error: error.message });
+            return sendAppError(res, error, 'No pudimos completar la acción. Intentá nuevamente.');
         }
     }
 
@@ -911,7 +790,7 @@ export class BookingController {
 
             return res.json({ booking, financialSummary });
         } catch (error: any) {
-            return res.status(404).json({ error: error.message || 'Reserva no encontrada' });
+            return sendAppError(res, error, 'Reserva no encontrada');
         }
     }
 
@@ -973,7 +852,7 @@ export class BookingController {
                 authState: resolveOptionalAuthState(req)
             });
         } catch (error: any) {
-            res.status(400).json({ error: error.message });
+            return sendAppError(res, error, 'No pudimos completar la acción. Intentá nuevamente.');
         }
     }
 
@@ -994,11 +873,10 @@ export class BookingController {
             const bookings = await this.bookingService.getDaySchedule(searchDate, clubId);
             res.json(bookings);
         } catch (error: any) {
-            console.error('Error en getAdminSchedule:', error);
             if (isIntegrityInconsistencyError(error)) {
                 return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en agenda') });
             }
-            res.status(500).json({ error: getErrorMessage(error, 'Error interno al cargar agenda') });
+            return sendAppError(res, error, 'Error interno al cargar agenda');
         }
     }
 
@@ -1016,7 +894,7 @@ export class BookingController {
             const p = paramsSchema.safeParse(req.params);
             const b = bodySchema.safeParse(req.body || {});
             if (!p.success) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'VALIDATION_ERROR',
                     field: 'general',
@@ -1026,7 +904,7 @@ export class BookingController {
                 });
             }
             if (!b.success) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'VALIDATION_ERROR',
                     field: 'time',
@@ -1038,7 +916,7 @@ export class BookingController {
 
             const clubId = Number((req as any).clubId);
             if (!Number.isInteger(clubId) || clubId <= 0) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'CLUB_INVALID',
                     field: 'general',
@@ -1057,23 +935,7 @@ export class BookingController {
             });
             return res.json({ booking: updated });
         } catch (error: any) {
-            if (error?.code === 'BOOKING_OVERLAP') {
-                return sendApiError(res, new ApiError({
-                    statusCode: 409,
-                    code: 'BOOKING_OVERLAP',
-                    field: 'time',
-                    blocking: true,
-                    message: getErrorMessage(error, 'Superposicion detectada'),
-                    meta: Array.isArray(error?.overlaps) ? { overlaps: error.overlaps } : undefined
-                }));
-            }
-            return sendApiError(res, new ApiError({
-                statusCode: 400,
-                code: 'BOOKING_RESCHEDULE_FAILED',
-                field: 'general',
-                blocking: true,
-                message: getErrorMessage(error, 'No se pudo mover la reserva.')
-            }));
+            return sendAppError(res, createBookingAppError(error, 'No se pudo mover la reserva.'));
         }
     }
 
@@ -1084,7 +946,7 @@ export class BookingController {
             });
             const parsed = paramsSchema.safeParse(req.params);
             if (!parsed.success) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'VALIDATION_ERROR',
                     field: 'general',
@@ -1096,7 +958,7 @@ export class BookingController {
 
             const clubId = Number((req as any).clubId);
             if (!Number.isInteger(clubId) || clubId <= 0) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'CLUB_INVALID',
                     field: 'general',
@@ -1108,13 +970,7 @@ export class BookingController {
             const config = await this.bookingService.getBookingBillingConfig(parsed.data.id, clubId);
             return res.json(config);
         } catch (error: any) {
-            return sendApiError(res, new ApiError({
-                statusCode: 400,
-                code: 'BILLING_CONFIG_FETCH_FAILED',
-                field: 'payment',
-                blocking: true,
-                message: getErrorMessage(error, 'No se pudo obtener la configuración de cobro.')
-            }));
+            return sendAppError(res, createBillingConfigAppError(error));
         }
     }
 
@@ -1176,7 +1032,7 @@ export class BookingController {
             const p = paramsSchema.safeParse(req.params);
             const b = bodySchema.safeParse(req.body || {});
             if (!p.success) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'VALIDATION_ERROR',
                     field: 'general',
@@ -1186,7 +1042,7 @@ export class BookingController {
                 });
             }
             if (!b.success) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'VALIDATION_ERROR',
                     field: 'payment',
@@ -1198,7 +1054,7 @@ export class BookingController {
 
             const clubId = Number((req as any).clubId);
             if (!Number.isInteger(clubId) || clubId <= 0) {
-                return sendApiError(res, {
+                return sendControllerAppError(res, {
                     statusCode: 400,
                     code: 'CLUB_INVALID',
                     field: 'general',
@@ -1225,7 +1081,7 @@ export class BookingController {
             });
             return res.json(config);
         } catch (error: any) {
-            return sendApiError(res, createBillingConfigApiError(error));
+            return sendAppError(res, createBillingConfigAppError(error));
         }
     }
     
@@ -1320,11 +1176,9 @@ export class BookingController {
             
             res.status(201).json(result);
         } catch (error: any) {
-            if (error?.code === 'CLIENT_POSSIBLE_DUPLICATE' || error?.message === 'CLIENT_POSSIBLE_DUPLICATE') {
+            if ((error instanceof AppError && error.code === ErrorCodes.CLIENT_POSSIBLE_DUPLICATE) || error?.code === ErrorCodes.CLIENT_POSSIBLE_DUPLICATE) {
                 await this.registerDuplicateIncidentFromBookingError(req, 'FIXED_BOOKING', error);
-                return res.status(409).json({
-                    error: 'Se detectaron datos que podrían corresponder a más de un cliente. Revisá y seleccioná el cliente correcto.'
-                });
+                return sendAppError(res, error);
             }
             if (error?.code === 'FIXED_BOOKING_OVERLAP') {
                 return res.status(409).json({
@@ -1335,11 +1189,11 @@ export class BookingController {
             }
             if (error?.code === 'FIXED_BOOKING_NO_OCCURRENCES') {
                 return res.status(409).json({
-                    error: error.message || 'No se pudo crear ningún turno fijo por superposición.',
+                    error: 'No se pudo crear ningún turno fijo por superposición.',
                     overlaps: Array.isArray(error?.overlaps) ? error.overlaps : []
                 });
             }
-            res.status(400).json({ error: error.message });
+            return sendAppError(res, error, 'No pudimos completar la acción. Intentá nuevamente.');
         }
     }
 
@@ -1381,7 +1235,7 @@ export class BookingController {
             });
             res.json(result);
         } catch (error: any) {
-            res.status(400).json({ error: error.message });
+            return sendAppError(res, error, 'No pudimos completar la acción. Intentá nuevamente.');
         }
     }
 
@@ -1434,11 +1288,11 @@ export class BookingController {
         } catch (error: any) {
             if (error?.code === 'BOOKING_OVERLAP') {
                 return res.status(409).json({
-                    error: String(error?.message || 'Superposición detectada'),
+                    error: 'Superposición detectada',
                     overlaps: Array.isArray(error?.overlaps) ? error.overlaps : []
                 });
             }
-            return res.status(400).json({ error: error?.message || 'No se pudo editar la serie.' });
+            return sendAppError(res, error, 'No se pudo editar la serie.');
         }
     }
 
@@ -1455,11 +1309,10 @@ export class BookingController {
             
             res.json(items);
         } catch (error) {
-            console.error(error);
             if (isIntegrityInconsistencyError(error)) {
                 return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en consumos') });
             }
-            res.status(500).json({ error: getErrorMessage(error, 'Error al obtener los consumos') });
+            return sendAppError(res, error, 'Error al obtener los consumos');
         }
     }
 
@@ -1502,12 +1355,8 @@ export class BookingController {
 
             return res.json(newItem);
 
-    } catch (error: any) { // Le ponemos 'any' para poder leer el mensaje
-        console.error("Error en addItem:", error);
-        // Devolvemos el error real para verlo en el frontend
-        return res.status(500).json({ 
-            error: "Error al agregar item: " + (error.message || "Desconocido") 
-        });
+    } catch (error: any) {
+        return sendAppError(res, error, 'Error al agregar item');
     }
 }
 
@@ -1543,8 +1392,7 @@ export class BookingController {
             );
             return res.json(result);
         } catch (error: any) {
-            const message = String(error?.message || 'Error al cotizar consumo');
-            return res.status(400).json({ error: message });
+            return sendAppError(res, error, 'Error al cotizar consumo');
         }
     }
 
@@ -1561,16 +1409,7 @@ export class BookingController {
             
             res.json({ message: 'Consumo eliminado y stock devuelto' });
         } catch (error: any) {
-            console.error(error);
-            const message = String(error?.message || '');
-            const known =
-                message.includes('Item no encontrado') ||
-                message.includes('No tienes acceso') ||
-                message.includes('cuentas abiertas') ||
-                message.includes('cancha no se puede eliminar') ||
-                message.includes('pagos asociados') ||
-                message.includes('sobrepagada');
-            res.status(known ? 400 : 500).json({ error: message || 'Error al eliminar el consumo' });
+            return sendAppError(res, error, 'Error al eliminar el consumo');
         }
     }
 
@@ -1852,7 +1691,7 @@ export class BookingController {
                 booking: updated
             });
         } catch (error: any) {
-            return res.status(400).json({ error: error.message || 'No se pudo cambiar el titular' });
+            return sendAppError(res, error, 'No se pudo cambiar el titular');
         }
     }
 }

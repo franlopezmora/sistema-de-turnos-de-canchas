@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../prisma';
 import { ClubReviewService } from '../services/ClubReviewService';
 import { sendAuthError } from '../utils/authError';
+import { sendAppError } from '../errors';
 
 const listQuerySchema = z.object({
   take: z.preprocess(
@@ -94,7 +95,7 @@ export class ClubReviewController {
         nextCursor: rows.length >= take ? rows[rows.length - 1]?.id ?? null : null
       });
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudieron listar reseñas' });
+      return sendAppError(res, error, 'No se pudieron listar reseñas');
     }
   };
 
@@ -109,7 +110,7 @@ export class ClubReviewController {
       const summary = await this.service.getSummaryByClub(clubId);
       return res.json(summary);
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudo obtener el resumen de reseñas' });
+      return sendAppError(res, error, 'No se pudo obtener el resumen de reseñas');
     }
   };
 
@@ -139,7 +140,7 @@ export class ClubReviewController {
 
       return res.status(200).json(review);
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudo guardar la reseña' });
+      return sendAppError(res, error, 'No se pudo guardar la reseña');
     }
   };
 
@@ -165,7 +166,7 @@ export class ClubReviewController {
       });
       return res.status(200).json(review);
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudo obtener la reseña' });
+      return sendAppError(res, error, 'No se pudo obtener la reseña');
     }
   };
 
@@ -190,7 +191,7 @@ export class ClubReviewController {
 
       return res.status(200).json(review);
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudo actualizar la reseña' });
+      return sendAppError(res, error, 'No se pudo actualizar la reseña');
     }
   };
 
@@ -237,7 +238,7 @@ export class ClubReviewController {
         nextCursor: rows.length >= take ? rows[rows.length - 1]?.id ?? null : null
       });
     } catch (error: any) {
-      return res.status(400).json({ error: error?.message || 'No se pudieron listar reseñas admin' });
+      return sendAppError(res, error, 'No se pudieron listar reseñas admin');
     }
   };
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { ClubAdminService, type ClubCatalogService } from '../services/ClubAdminService';
 import { extractErrorMessage, reportUiError } from '../utils/uiError';
+import { showAdminToast } from '../utils/adminToast';
 import AdminAppModal from './admin/ui/AdminAppModal';
 import { AdminFilterToolbar, MetricCard } from './admin/ui';
 import ServicesTable from '../modules/tienda/components/ServicesTable';
@@ -100,11 +101,15 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
       };
       if (editing) {
         await ClubAdminService.updateService(slug, editing.id, payload);
+        closeDrawer();
+        await loadServices();
+        showAdminToast('Servicio actualizado.');
       } else {
         await ClubAdminService.createService(slug, payload);
+        closeDrawer();
+        await loadServices();
+        showAdminToast('Servicio creado.');
       }
-      closeDrawer();
-      await loadServices();
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo guardar el servicio.');
       reportUiError({ area: 'ServicesPage', action: 'submitForm' }, error);
@@ -120,6 +125,7 @@ export default function ServicesPage({ slug }: ServicesPageProps) {
       await ClubAdminService.deleteService(slug, deleteTarget.id);
       setDeleteTarget(null);
       await loadServices();
+      showAdminToast('Servicio dado de baja.');
     } catch (error) {
       const message = extractErrorMessage(error, 'No se pudo eliminar el servicio.');
       reportUiError({ area: 'ServicesPage', action: 'confirmDelete' }, error);

@@ -30,6 +30,7 @@ import { DiscountService } from './DiscountService';
 import { generateDisplayCode } from '../utils/displayCode';
 import { getPhoneIdentityVariants, normalizeIdentityPhone, toDialablePhoneNumber } from '../utils/phone';
 import { recordUserClientLinkAuditTx } from './UserClientLinkAudit';
+import { AppError, ErrorCodes, badRequest, conflict, forbidden, notFound } from '../errors';
 
 type CancelBookingReason = 'MANUAL' | 'AUTO_CANCEL_UNCONFIRMED';
 type CancelBookingOptions = {
@@ -166,6 +167,50 @@ export class BookingService {
         private productRepository: ProductRepository
     ) {}
 
+    private bookingNotFound(message = 'Reserva no encontrada') {
+        return notFound(message, ErrorCodes.BOOKING_NOT_FOUND);
+    }
+
+    private bookingInvalidStatus(message: string) {
+        return conflict(message, ErrorCodes.BOOKING_INVALID_STATUS);
+    }
+
+    private bookingSlotUnavailable(message: string) {
+        return conflict(message, ErrorCodes.BOOKING_SLOT_UNAVAILABLE);
+    }
+
+    private bookingOverlap(message: string, overlaps?: unknown[]) {
+        return conflict(message, ErrorCodes.BOOKING_OVERLAP, Array.isArray(overlaps) ? { overlaps } : undefined);
+    }
+
+    private courtNotFound(message = 'Cancha no encontrada') {
+        return notFound(message, ErrorCodes.COURT_NOT_FOUND);
+    }
+
+    private activityNotFound(message = 'Actividad no encontrada') {
+        return notFound(message, ErrorCodes.ACTIVITY_NOT_FOUND);
+    }
+
+    private clientNotFound(message = 'Cliente no encontrado') {
+        return notFound(message, ErrorCodes.CLIENT_NOT_FOUND);
+    }
+
+    private invalidInput(message: string, meta?: Record<string, unknown>) {
+        return badRequest(message, ErrorCodes.INVALID_INPUT, meta);
+    }
+
+    private clubConfigInvalid(message: string) {
+        return badRequest(message, ErrorCodes.CLUB_CONFIG_INVALID);
+    }
+
+    private clientPossibleDuplicate(details: Record<string, unknown>) {
+        return conflict(
+            'Se detectaron datos que podrían corresponder a más de un cliente. Revisá y seleccioná el cliente correcto.',
+            ErrorCodes.CLIENT_POSSIBLE_DUPLICATE,
+            details
+        );
+    }
+
     async resolveClubIdForUser(userId: number, preferredClubId?: number) {
         const context = await getUserClubContext(userId, preferredClubId);
         return context.clubId;
@@ -184,16 +229,16 @@ export class BookingService {
             include: { activity: true }
         });
         if (!booking) {
-            throw new Error('Reserva no encontrada');
+            throw this.bookingNotFound();
         }
         if (booking.status === 'CANCELLED') {
-            throw new Error('No se puede mover una reserva cancelada');
+            throw this.bookingInvalidStatus('No se puede mover una reserva cancelada');
         }
         if (booking.status === 'COMPLETED') {
-            throw new Error('No se puede reprogramar una reserva completada.');
+            throw this.bookingInvalidStatus('No se puede reprogramar una reserva completada.');
         }
         if (new Date(input.startDateTime).getTime() < Date.now()) {
-            throw new Error('No se pueden reservar turnos en el pasado.');
+            throw this.invalidInput('No se pueden reservar turnos en el pasado.');
         }
 
         const targetCourt = await prisma.court.findFirst({
@@ -201,7 +246,7 @@ export class BookingService {
             include: { activityType: true }
         });
         if (!targetCourt) {
-            throw new Error('Cancha destino inválida');
+            throw this.courtNotFound('Cancha destino inválida');
         }
 
         const durationFromRange = booking.endDateTime && booking.startDateTime
@@ -247,9 +292,7 @@ export class BookingService {
             return updated;
         } catch (error: unknown) {
             if (this.isOverlapConstraintError(error)) {
-                const e: any = new Error('El nuevo horario se superpone con otra reserva.');
-                e.code = 'BOOKING_OVERLAP';
-                throw e;
+                throw this.bookingOverlap('El nuevo horario se superpone con otra reserva.');
             }
             throw error;
         }
@@ -398,20 +441,20 @@ export class BookingService {
         chargeableTotal: number;
     }) {
         if (!Array.isArray(input.assignments) || input.assignments.length === 0) {
-            throw new Error('Debe enviar al menos una asignación.');
+            throw this.invalidInput('Debe enviar al menos una asignación.');
         }
 
         const seenIds = new Set<string>();
         for (const assignment of input.assignments) {
             if (!assignment.id || !assignment.participantRef) {
-                throw new Error('Asignación inválida: id y participantRef son obligatorios.');
+                throw this.invalidInput('Asignación inválida: id y participantRef son obligatorios.');
             }
             if (seenIds.has(assignment.id)) {
-                throw new Error('Asignación inválida: hay ids duplicados.');
+                throw this.invalidInput('Asignación inválida: hay ids duplicados.');
             }
             seenIds.add(assignment.id);
             if (Number(assignment.assignedAmount) < 0) {
-                throw new Error('Asignación inválida: assignedAmount no puede ser negativo.');
+                throw this.invalidInput('Asignación inválida: assignedAmount no puede ser negativo.');
             }
         }
 
@@ -419,17 +462,17 @@ export class BookingService {
         if (input.chargeMode === 'INDIVIDUAL') {
             const responsible = String(input.chargeResponsibleRef || '').trim();
             if (!responsible) {
-                throw new Error('En modo INDIVIDUAL falta chargeResponsibleRef.');
+                throw this.invalidInput('En modo INDIVIDUAL falta chargeResponsibleRef.');
             }
             if (chargeableAssignments.length !== 1) {
-                throw new Error('En modo INDIVIDUAL debe existir exactamente una asignación cobrable.');
+                throw this.invalidInput('En modo INDIVIDUAL debe existir exactamente una asignación cobrable.');
             }
             if (chargeableAssignments[0].participantRef !== responsible) {
-                throw new Error('En modo INDIVIDUAL la asignación cobrable debe coincidir con chargeResponsibleRef.');
+                throw this.invalidInput('En modo INDIVIDUAL la asignación cobrable debe coincidir con chargeResponsibleRef.');
             }
         } else {
             if (chargeableAssignments.length === 0) {
-                throw new Error('En modo SHARED debe existir al menos una asignación cobrable.');
+                throw this.invalidInput('En modo SHARED debe existir al menos una asignación cobrable.');
             }
         }
 
@@ -441,7 +484,7 @@ export class BookingService {
         );
         const expected = this.roundCurrency(input.chargeableTotal);
         if (Math.abs(sumAssigned - expected) > 0.01) {
-            throw new Error('La suma de asignaciones cobrables no coincide con el monto cobrable actual de la reserva.');
+            throw this.invalidInput('La suma de asignaciones cobrables no coincide con el monto cobrable actual de la reserva.');
         }
     }
 
@@ -493,7 +536,7 @@ export class BookingService {
             },
         });
         if (!booking) {
-            throw new Error('Reserva no encontrada');
+            throw this.bookingNotFound();
         }
 
         const persisted = await prisma.bookingBillingConfig.findUnique({
@@ -613,7 +656,7 @@ export class BookingService {
                 },
             });
             if (!booking) {
-                throw new Error('Reserva no encontrada');
+                throw this.bookingNotFound();
             }
 
             const summary = await this.bookingDomainService.getBookingFinancialSummaryTx(tx as any, booking.id, input.clubId);
@@ -1127,16 +1170,16 @@ export class BookingService {
     private resolveClubConfig(club: any) {
         const settings = club?.settings ?? null;
         if (!settings) {
-            throw new Error('Configuración de club incompleta: faltan ClubSettings');
+            throw this.clubConfigInvalid('Configuración de club incompleta: faltan ClubSettings');
         }
 
         const timeZone = String(settings.timeZone || '').trim();
         if (!timeZone) {
-            throw new Error('Configuración de club inválida: timeZone es obligatorio');
+            throw this.clubConfigInvalid('Configuración de club inválida: timeZone es obligatorio');
         }
 
         if (!Array.isArray(settings.openingDays) || settings.openingDays.length === 0) {
-            throw new Error('Configuración de club inválida: openingDays es obligatorio');
+            throw this.clubConfigInvalid('Configuración de club inválida: openingDays es obligatorio');
         }
 
         const closureDates = Array.isArray(settings.closureDates)
@@ -1148,24 +1191,24 @@ export class BookingService {
         const bookingSimpleAdvanceDaysUser = Number(settings.bookingSimpleAdvanceDaysUser);
         const bookingSimpleAdvanceDaysAdmin = Number(settings.bookingSimpleAdvanceDaysAdmin);
         if (!Number.isFinite(bookingSimpleAdvanceDaysUser) || bookingSimpleAdvanceDaysUser < 0) {
-            throw new Error('Configuración de club inválida: bookingSimpleAdvanceDaysUser es obligatorio y debe ser >= 0');
+            throw this.clubConfigInvalid('Configuración de club inválida: bookingSimpleAdvanceDaysUser es obligatorio y debe ser >= 0');
         }
         if (!Number.isFinite(bookingSimpleAdvanceDaysAdmin) || bookingSimpleAdvanceDaysAdmin < 0) {
-            throw new Error('Configuración de club inválida: bookingSimpleAdvanceDaysAdmin es obligatorio y debe ser >= 0');
+            throw this.clubConfigInvalid('Configuración de club inválida: bookingSimpleAdvanceDaysAdmin es obligatorio y debe ser >= 0');
         }
 
         const professorDurationOverrideEnabled = settings.professorDurationOverrideEnabled;
         const professorDurationOverrideMinutes = Number(settings.professorDurationOverrideMinutes);
         if (typeof professorDurationOverrideEnabled !== 'boolean') {
-            throw new Error('Configuración de club inválida: professorDurationOverrideEnabled es obligatorio');
+            throw this.clubConfigInvalid('Configuración de club inválida: professorDurationOverrideEnabled es obligatorio');
         }
         if (!Number.isFinite(professorDurationOverrideMinutes) || professorDurationOverrideMinutes <= 0) {
-            throw new Error('Configuración de club inválida: professorDurationOverrideMinutes es obligatorio y debe ser > 0');
+            throw this.clubConfigInvalid('Configuración de club inválida: professorDurationOverrideMinutes es obligatorio y debe ser > 0');
         }
 
         const allowManualConfirmationOverride = settings.allowManualConfirmationOverride;
         if (typeof allowManualConfirmationOverride !== 'boolean') {
-            throw new Error('Configuración de club inválida: allowManualConfirmationOverride es obligatorio');
+            throw this.clubConfigInvalid('Configuración de club inválida: allowManualConfirmationOverride es obligatorio');
         }
 
         const bookingConfirmationMode = settings.bookingConfirmationMode;
@@ -1174,12 +1217,12 @@ export class BookingService {
             bookingConfirmationMode !== 'MANUAL' &&
             bookingConfirmationMode !== 'DEPOSIT_REQUIRED'
         ) {
-            throw new Error('Configuración de club inválida: bookingConfirmationMode es obligatorio');
+            throw this.clubConfigInvalid('Configuración de club inválida: bookingConfirmationMode es obligatorio');
         }
 
         const lightsEnabled = settings.lightsEnabled;
         if (typeof lightsEnabled !== 'boolean') {
-            throw new Error('Configuración de club inválida: lightsEnabled es obligatorio');
+            throw this.clubConfigInvalid('Configuración de club inválida: lightsEnabled es obligatorio');
         }
 
         const lightsFromHourRaw = settings?.lightsFromHour;
@@ -1193,10 +1236,10 @@ export class BookingService {
         const lightsExtraAmount = settings?.lightsExtraAmount != null ? Number(settings.lightsExtraAmount) : null;
         if (lightsEnabled) {
             if (!Number.isFinite(lightsExtraAmount) || Number(lightsExtraAmount) <= 0) {
-                throw new Error('Configuración de club inválida: lightsExtraAmount es obligatorio cuando lightsEnabled=true');
+                throw this.clubConfigInvalid('Configuración de club inválida: lightsExtraAmount es obligatorio cuando lightsEnabled=true');
             }
             if (!normalizedLightsFromHour || !/^\d{2}:\d{2}$/.test(String(normalizedLightsFromHour))) {
-                throw new Error('Configuración de club inválida: lightsFromHour debe tener formato HH:MM cuando lightsEnabled=true');
+                throw this.clubConfigInvalid('Configuración de club inválida: lightsFromHour debe tener formato HH:MM cuando lightsEnabled=true');
             }
         }
 
@@ -1245,7 +1288,7 @@ export class BookingService {
     private resolveFixedBookingConfig(clubConfig: any, activity: ActivityType | null | undefined) {
         const raw = clubConfig?.fixedBookingSettingsByActivity;
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-            throw new Error('Configuración de club inválida: fixedBookingSettingsByActivity es obligatorio');
+            throw this.clubConfigInvalid('Configuración de club inválida: fixedBookingSettingsByActivity es obligatorio');
         }
 
         const byActivity = raw as Record<string, any>;
@@ -1253,16 +1296,16 @@ export class BookingService {
         const selected = activityKey ? byActivity[activityKey] : undefined;
 
         if (!selected || typeof selected !== 'object') {
-            throw new Error(`Configuración de club inválida: faltan reglas de turnos fijos para la actividad ${activity?.name || 'desconocida'}`);
+            throw this.clubConfigInvalid(`Configuración de club inválida: faltan reglas de turnos fijos para la actividad ${activity?.name || 'desconocida'}`);
         }
 
         const daysAhead = Number(selected.fixedBookingDaysAhead);
         const generationFrequencyDays = Number(selected.fixedBookingGenerationFrequencyDays);
         if (!Number.isFinite(daysAhead) || daysAhead <= 0) {
-            throw new Error('Configuración de club inválida: fixedBookingDaysAhead debe ser > 0');
+            throw this.clubConfigInvalid('Configuración de club inválida: fixedBookingDaysAhead debe ser > 0');
         }
         if (!Number.isFinite(generationFrequencyDays) || generationFrequencyDays <= 0) {
-            throw new Error('Configuración de club inválida: fixedBookingGenerationFrequencyDays debe ser > 0');
+            throw this.clubConfigInvalid('Configuración de club inválida: fixedBookingGenerationFrequencyDays debe ser > 0');
         }
 
         return {
@@ -1348,16 +1391,16 @@ export class BookingService {
 
     private assertValidDuration(durationMinutes: number) {
         if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-            throw new Error('La duración del turno debe ser mayor a 0');
+            throw this.invalidInput('La duración del turno debe ser mayor a 0');
         }
     }
 
     private assertValidRange(startDateTime: Date, endDateTime: Date) {
         if (Number.isNaN(startDateTime.getTime()) || Number.isNaN(endDateTime.getTime())) {
-            throw new Error('Fecha/hora inválida para la reserva');
+            throw this.invalidInput('Fecha/hora inválida para la reserva');
         }
         if (startDateTime.getTime() >= endDateTime.getTime()) {
-            throw new Error('La fecha/hora de inicio debe ser menor a la de fin');
+            throw this.invalidInput('La fecha/hora de inicio debe ser menor a la de fin');
         }
     }
 
@@ -1584,19 +1627,19 @@ export class BookingService {
 
     async quoteBookingPrice(input: BookingPriceQuoteInput): Promise<BookingPriceQuote> {
         const court = await this.courtRepo.findById(input.courtId);
-        if (!court) throw new Error('Cancha no encontrada');
+        if (!court) throw this.courtNotFound();
 
         const activity = await this.activityRepo.findById(input.activityId);
-        if (!activity) throw new Error('Actividad no existe');
+        if (!activity) throw this.activityNotFound('Actividad no existe');
         if (activity.clubId !== (court as any).club.id) {
-            throw new Error('La actividad no pertenece al club de la cancha');
+            throw forbidden('La actividad no pertenece al club de la cancha', ErrorCodes.ACTIVITY_OUT_OF_CLUB);
         }
 
         const clubConfig = this.resolveClubConfig((court as any)?.club);
         const clubTimeZone = clubConfig?.timeZone ?? 'America/Argentina/Buenos_Aires';
         const resolvedSchedule = await this.resolveActivityScheduleForDate(activity, input.startDateTime, clubTimeZone);
         if (resolvedSchedule.isClosed) {
-            throw new Error('La actividad está cerrada para la fecha solicitada');
+            throw this.bookingSlotUnavailable('La actividad está cerrada para la fecha solicitada');
         }
         const activitySchedule = resolvedSchedule.schedule;
         const canUseAdminBenefits = Boolean(input.allowAdminBenefits);
@@ -1621,7 +1664,7 @@ export class BookingService {
         this.assertValidDuration(effectiveDuration);
         if (!allowedDurations.includes(effectiveDuration)) {
             if (!(canProfessorDurationOverride && effectiveDuration === professorOverrideMinutes)) {
-                throw new Error('Duración no permitida por el club');
+                throw this.bookingSlotUnavailable('Duración no permitida por el club');
             }
         }
 
@@ -1651,7 +1694,7 @@ export class BookingService {
                 activitySchedule.fixedSlots.some((slot: any) => String(slot?.start) === slotTime);
 
             if (!canUseProfessorFixedSlotFallback) {
-                throw new Error('Horario no permitido por el club');
+                throw this.bookingSlotUnavailable('Horario no permitido por el club');
             }
         }
 
@@ -1660,7 +1703,7 @@ export class BookingService {
 
         // Mantener coherencia con createBooking: si el club está cerrado ese día, la cotización debe bloquear.
         if (!this.isClubOpenOnLocalDate(clubConfig, input.startDateTime, clubTimeZone)) {
-            throw new Error('El club está cerrado ese día');
+            throw this.bookingSlotUnavailable('El club está cerrado ese día');
         }
 
         // Si el modo es rango continuo (sin ventanas partidas), validar que la reserva no exceda apertura/cierre.
@@ -1678,13 +1721,13 @@ export class BookingService {
             const startNorm = startMinutes < openMinutes ? startMinutes + 24 * 60 : startMinutes;
             const endNorm = endMinutes < openMinutes ? endMinutes + 24 * 60 : endMinutes;
             if (startNorm < openMinutes || endNorm > closeMinutes) {
-                throw new Error('La reserva excede el horario de apertura del club');
+                throw this.bookingSlotUnavailable('La reserva excede el horario de apertura del club');
             }
         }
 
         const basePrice = await this.pricingService.calculateCourtPrice(input.courtId, input.startDateTime);
         if (!Number.isFinite(basePrice) || basePrice <= 0) {
-            throw new Error('Precio de cancha no configurado.');
+            throw this.clubConfigInvalid('Precio de cancha no configurado.');
         }
 
         const referenceDuration = this.resolvePriceReferenceDuration(activity, allowedDurations, effectiveDuration);
@@ -1692,7 +1735,7 @@ export class BookingService {
         if (clubConfig && clubConfig.lightsEnabled && clubConfig.lightsExtraAmount && clubConfig.lightsFromHour) {
             const [lh, lm] = String(clubConfig.lightsFromHour).split(':').map((n: string) => parseInt(n, 10));
             if (Number.isNaN(lh) || Number.isNaN(lm)) {
-                throw new Error('Configuración de club inválida: lightsFromHour debe tener formato HH:MM');
+                throw this.clubConfigInvalid('Configuración de club inválida: lightsFromHour debe tener formato HH:MM');
             }
             const localStart = TimeHelper.utcToLocal(input.startDateTime, clubTimeZone);
             const bookingTotalMinutes = localStart.getHours() * 60 + localStart.getMinutes();
@@ -1770,7 +1813,7 @@ export class BookingService {
     }) {
         const safeName = String(input.name ?? '').trim();
         if (!safeName) {
-            throw new Error('El nombre del cliente es obligatorio');
+            throw this.invalidInput('El nombre del cliente es obligatorio');
         }
 
         const safePhone = this.normalizePhone(input.phone);
@@ -1782,7 +1825,7 @@ export class BookingService {
             // Fase 1.2: email es opcional en alta rápida admin.
             // Solo phone es obligatorio para garantizar contactabilidad mínima.
             if (!safePhone) {
-                throw new Error('El teléfono es obligatorio para crear un nuevo cliente.');
+                throw this.invalidInput('El teléfono es obligatorio para crear un nuevo cliente.');
             }
         }
 
@@ -1878,13 +1921,11 @@ export class BookingService {
             pushCandidate(existingByDni);
             pushCandidate(existingByPhone);
             pushCandidate(existingByEmail);
-            const conflictError: any = new Error('CLIENT_POSSIBLE_DUPLICATE');
-            conflictError.code = 'CLIENT_POSSIBLE_DUPLICATE';
             const reasonSignals = new Set<string>();
             if (existingByDni?.id) reasonSignals.add('DNI');
             if (existingByPhone?.id) reasonSignals.add('PHONE');
             if (existingByEmail?.id) reasonSignals.add('EMAIL');
-            conflictError.details = {
+            throw this.clientPossibleDuplicate({
                 clubId: input.clubId,
                 userId: safeUserId,
                 candidateClientIds: candidateIds,
@@ -1895,8 +1936,7 @@ export class BookingService {
                     email: safeEmail || null
                 },
                 candidates: Array.from(candidateMap.values())
-            };
-            throw conflictError;
+            });
         }
 
         // Si hay exactamente un candidato, cargarlo para incluirlo en el error.
@@ -1915,9 +1955,7 @@ export class BookingService {
             if (existingByDni?.id) reasonSignals.add('DNI');
             if (existingByPhone?.id) reasonSignals.add('PHONE');
             if (existingByEmail?.id) reasonSignals.add('EMAIL');
-            const conflictError: any = new Error('CLIENT_POSSIBLE_DUPLICATE');
-            conflictError.code = 'CLIENT_POSSIBLE_DUPLICATE';
-            conflictError.details = {
+            throw this.clientPossibleDuplicate({
                 clubId: input.clubId,
                 candidateClientIds: [existingByIdentity.id],
                 reasonType: reasonSignals.size === 1 ? Array.from(reasonSignals)[0] : 'IDENTITY_MATCH_REQUIRES_SELECTION',
@@ -1934,8 +1972,7 @@ export class BookingService {
                         email: existingByIdentity.email ?? null
                     }
                 ]
-            };
-            throw conflictError;
+            });
         }
 
         // Sin candidatos, o forceCreateNew confirmado: crear nuevo cliente.
@@ -2402,25 +2439,25 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         if (userId) {
             user = await this.userRepo.findById(userId);
-            if (!user) throw new Error("Usuario no encontrado");
+            if (!user) throw this.clientNotFound('Usuario no encontrado');
         } else {
             if (!requestedClientId && requestedClientDraftName.length < 2) {
-                throw new Error("Debes seleccionar un cliente o cargar un alta rápida válida.");
+                throw this.invalidInput('Debes seleccionar un cliente o cargar un alta rápida válida.');
             }
             // Fase 1.2: email es opcional. Solo phone es obligatorio.
             if (!requestedClientId && !requestedClientDraftPhone) {
-                throw new Error("El teléfono es obligatorio para el alta rápida de cliente.");
+                throw this.invalidInput('El teléfono es obligatorio para el alta rápida de cliente.');
             }
         }
 
         const court = await this.courtRepo.findById(courtId);
-        if (!court) throw new Error("Cancha no encontrada");
-        if (court.isUnderMaintenance) throw new Error("Cancha en mantenimiento");
+        if (!court) throw this.courtNotFound();
+        if (court.isUnderMaintenance) throw this.bookingSlotUnavailable('Cancha en mantenimiento');
 
         const activity = await this.activityRepo.findById(activityId);
-        if (!activity) throw new Error("Actividad no existe");
+        if (!activity) throw this.activityNotFound('Actividad no existe');
         if (activity.clubId !== (court as any).club.id) {
-            throw new Error('La actividad no pertenece al club de la cancha');
+            throw forbidden('La actividad no pertenece al club de la cancha', ErrorCodes.ACTIVITY_OUT_OF_CLUB);
         }
         const bookingClubId = (court as any).club.id;
         const isProfessorClient = await this.resolveClientProfessorStatus({
@@ -2435,7 +2472,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const clubTimeZone = (clubConfig && clubConfig.timeZone) ? clubConfig.timeZone : 'America/Argentina/Buenos_Aires';
         const resolvedSchedule = await this.resolveActivityScheduleForDate(activity, startDateTime, clubTimeZone);
         if (resolvedSchedule.isClosed) {
-            throw new Error('La actividad está cerrada para la fecha seleccionada');
+            throw this.bookingSlotUnavailable('La actividad está cerrada para la fecha seleccionada');
         }
         const activitySchedule = resolvedSchedule.schedule;
         const professorOverrideMinutes = Number(clubConfig?.professorDurationOverrideMinutes ?? 60);
@@ -2449,7 +2486,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             clubConfig?.bookingConfirmationMode === 'DEPOSIT_REQUIRED' &&
             (!Number.isFinite(Number(clubConfig?.bookingDepositPercent)) || Number(clubConfig?.bookingDepositPercent) <= 0)
         ) {
-            throw new Error('El club requiere una seña pero no tiene bookingDepositPercent válido');
+            throw this.clubConfigInvalid('El club requiere una seña pero no tiene bookingDepositPercent válido');
         }
         const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
@@ -2457,7 +2494,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         // Regla operativa explícita: permitir duración especial profesor aunque no esté en scheduleDurations
         if (!allowedDurations.includes(effectiveDuration)) {
             if (!(canProfessorDurationOverride && effectiveDuration === professorOverrideMinutes)) {
-                throw new Error("Duración no permitida por el club");
+                throw this.bookingSlotUnavailable('Duración no permitida por el club');
             }
         }
 
@@ -2489,13 +2526,13 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 activitySchedule.fixedSlots.some((slot: any) => String(slot?.start) === slotTime);
 
             if (!canUseProfessorFixedSlotFallback) {
-                throw new Error("Horario no permitido por el club");
+                throw this.bookingSlotUnavailable('Horario no permitido por el club');
             }
         }
 
         // Verificar días de apertura del club (en la zona horaria del club)
         if (!this.isClubOpenOnLocalDate(clubConfig, startDateTime, clubTimeZone)) {
-            throw new Error('El club está cerrado ese día');
+            throw this.bookingSlotUnavailable('El club está cerrado ese día');
         }
 
         // Política de anticipación para reservas simples.
@@ -2512,7 +2549,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
             if (diffDays > safeMaxAdvanceDays) {
                 const actorLabel = createdByAdmin ? 'administradores' : 'usuarios';
-                throw new Error(`Límite de anticipación excedido para ${actorLabel}: máximo ${safeMaxAdvanceDays} días`);
+                throw this.invalidInput(`Límite de anticipación excedido para ${actorLabel}: máximo ${safeMaxAdvanceDays} días`);
             }
         }
 
@@ -2535,7 +2572,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 const startNorm = startMinutes < openMinutes ? startMinutes + 24 * 60 : startMinutes;
                 const endNorm = endMinutes < openMinutes ? endMinutes + 24 * 60 : endMinutes;
                 if (startNorm < openMinutes || endNorm > closeMinutes) {
-                    throw new Error('La reserva excede el horario de apertura del club');
+                    throw this.bookingSlotUnavailable('La reserva excede el horario de apertura del club');
                 }
             }
         } catch (err) {
@@ -2545,7 +2582,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
     // Calcular precio base dinámico por reglas horarias y extra por luces según configuración del club
         const BASE_PRICE = await this.pricingService.calculateCourtPrice(courtId, startDateTime);
         if (!Number.isFinite(BASE_PRICE) || BASE_PRICE <= 0) {
-            throw new Error('Precio de cancha no configurado.');
+            throw this.clubConfigInvalid('Precio de cancha no configurado.');
         }
         const clubPricingConfig = this.resolveClubConfig((court as any)?.club);
         const referenceDuration = this.resolvePriceReferenceDuration(activity, allowedDurations, effectiveDuration);
@@ -2583,9 +2620,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             });
 
             if (overlapping.length > 0) {
-                const error: any = new Error('El horario se superpone con reservas existentes.');
-                error.code = 'BOOKING_OVERLAP';
-                error.overlaps = overlapping.map((item: any) => ({
+                const overlaps = overlapping.map((item: any) => ({
                     bookingId: item.id,
                     startDateTime: item.startDateTime,
                     endDateTime: item.endDateTime,
@@ -2596,7 +2631,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         || `${item?.user?.firstName || ''} ${item?.user?.lastName || ''}`.trim()
                         || 'Cliente'
                 }));
-                throw error;
+                throw this.bookingOverlap('El horario se superpone con reservas existentes.', overlaps);
             }
 
             let saved;
@@ -2611,7 +2646,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         }
                     });
                     if (!resolvedClient) {
-                        throw new Error('Cliente no encontrado para el club seleccionado');
+                        throw this.clientNotFound('Cliente no encontrado para el club seleccionado');
                     }
                 }
 
@@ -2642,7 +2677,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 }
 
                 if (!resolvedClient?.id) {
-                    throw new Error('No se pudo resolver un cliente para la reserva');
+                    throw this.clientNotFound('No se pudo resolver un cliente para la reserva');
                 }
 
                 const initialStatus = resolveInitialBookingStatus(
@@ -2785,7 +2820,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 await this.outboxService.enqueueMany(outboxMessages, tx);
             } catch (error) {
                 if (this.isOverlapConstraintError(error)) {
-                    throw new Error('SLOT_ALREADY_BOOKED');
+                    throw this.bookingSlotUnavailable('No se pudo confirmar la disponibilidad del horario. Reintentá.');
                 }
                 throw error;
             }
@@ -2825,10 +2860,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
     async getAvailableSlots(courtId: number, date: Date, activityId: number, durationMinutes?: number): Promise<string[]> {
         const court = await this.courtRepo.findById(courtId);
-        if (!court) throw new Error("Cancha no encontrada");
+        if (!court) throw this.courtNotFound();
 
         const activity = await this.activityRepo.findById(activityId);
-        if (!activity) throw new Error("Actividad no encontrada");
+        if (!activity) throw this.activityNotFound();
 
         const clubConfig = this.resolveClubConfig((court as any)?.club);
         const clubTimeZone = clubConfig.timeZone ?? 'America/Argentina/Buenos_Aires';
@@ -2856,7 +2891,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const allowedDurations = activitySchedule.durations;
         const effectiveDuration = durationMinutes ?? allowedDurations[0] ?? activity.defaultDurationMinutes;
         if (!allowedDurations.includes(effectiveDuration)) {
-            throw new Error("Duración no permitida por el club");
+            throw this.bookingSlotUnavailable('Duración no permitida por el club');
         }
 
         const possibleSlots = buildSlotsFromSchedule(
@@ -2931,21 +2966,21 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         const booking = await this.bookingRepo.findById(bookingId);
         if (!booking) {
-            throw new Error("La reserva no existe.");
+            throw this.bookingNotFound('La reserva no existe.');
         }
         if (!skipAccessValidation) {
             if (clubId != null) {
                 if (booking.court.club.id !== clubId) {
-                    throw new Error("No tienes acceso a esta reserva");
+                    throw forbidden('No tenés acceso a esta reserva.');
                 }
             } else {
                 if (!booking.user || booking.user.id !== cancelledByUserId) {
-                    throw new Error("No tienes acceso a esta reserva");
+                    throw forbidden('No tenés acceso a esta reserva.');
                 }
             }
         }
         if (!isAutoCancel && !isBookingTransitionAllowed(booking.status as any, 'CANCELLED')) {
-            throw new Error('Solo se pueden cancelar reservas pendientes o confirmadas');
+            throw this.bookingInvalidStatus('Solo se pueden cancelar reservas pendientes o confirmadas');
         }
 
         let wasCancelled = false;
@@ -2967,7 +3002,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 }
             });
             if (!currentBooking) {
-                throw new Error('La reserva no existe.');
+                throw this.bookingNotFound('La reserva no existe.');
             }
 
             if (isAutoCancel) {
@@ -2999,7 +3034,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     }
                 }
             } else if (!isBookingTransitionAllowed(currentBooking.status as any, 'CANCELLED')) {
-                throw new Error('Solo se pueden cancelar reservas pendientes o confirmadas');
+                throw this.bookingInvalidStatus('Solo se pueden cancelar reservas pendientes o confirmadas');
             }
 
             const account = await tx.account.findFirst({
@@ -3039,10 +3074,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 : Number(paidAmount.toFixed(2));
 
             if (paidAmount > 0.009 && targetRefundAmount <= 0.009) {
-                throw new Error('Para cancelar una reserva con pagos, debes devolver al menos una parte del monto pagado.');
+                throw this.invalidInput('Para cancelar una reserva con pagos, debes devolver al menos una parte del monto pagado.');
             }
             if (!shouldExecuteRefundNow && targetRefundAmount + 0.009 < paidAmount) {
-                throw new Error('No se permite cancelar con devolucion parcial pendiente. Ejecuta la devolucion parcial ahora o devuelve el total.');
+                throw this.invalidInput('No se permite cancelar con devolución parcial pendiente. Ejecutá la devolución parcial ahora o devolvé el total.');
             }
 
             let refundedAmount = 0;
@@ -3061,7 +3096,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 refundedAmount = Number(refunds.reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(2));
 
                 if (refundedAmount + 0.009 < targetRefundAmount) {
-                    throw new Error('No se pudo cubrir el monto de devolucion solicitado');
+                    throw conflict('No se pudo cubrir el monto de devolución solicitado', ErrorCodes.PAYMENT_OVERPAY);
                 }
 
                 const reconciliation = await this.accountService.reconcilePaidAmountTx(tx, account.id, {
@@ -3215,16 +3250,16 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 select: { id: true, clubId: true, clientId: true, status: true }
             });
             if (!booking) {
-                throw new Error('Reserva no encontrada o no pertenece al club');
+                throw this.bookingNotFound('Reserva no encontrada o no pertenece al club');
             }
 
             const oldClientId = booking.clientId;
 
             if (oldClientId === newClientId) {
-                throw new Error('El nuevo titular es el mismo que el actual');
+                throw badRequest('El nuevo titular es el mismo que el actual', ErrorCodes.INVALID_INPUT);
             }
             if (!['PENDING', 'CONFIRMED'].includes(String(booking.status || ''))) {
-                throw new Error('No se puede cambiar el titular en el estado actual de la reserva.');
+                throw this.bookingInvalidStatus('No se puede cambiar el titular en el estado actual de la reserva.');
             }
 
             // 2. Validar que el nuevo cliente pertenece al mismo club
@@ -3233,7 +3268,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 select: { id: true, name: true }
             });
             if (!newClient) {
-                throw new Error('El cliente seleccionado no existe en este club');
+                throw this.clientNotFound('El cliente seleccionado no existe en este club');
             }
 
             // 3. Bloquear si la cuenta tiene pagos o devoluciones
@@ -3253,8 +3288,9 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             const hasPayments = (account?._count?.payments ?? 0) > 0;
             const hasRefunds = (account?._count?.refunds ?? 0) > 0;
             if (hasPayments || hasRefunds || isClosedAccount) {
-                throw new Error(
-                    'No se puede cambiar el titular: la reserva ya tiene pagos/devoluciones registrados o la cuenta está cerrada.'
+                throw conflict(
+                    'No se puede cambiar el titular: la reserva ya tiene pagos/devoluciones registrados o la cuenta está cerrada.',
+                    ErrorCodes.BOOKING_TITULAR_CHANGE_BLOCKED
                 );
             }
 
@@ -3387,10 +3423,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 select: { id: true, clubId: true, price: true, activityId: true, clientId: true, status: true }
             });
             if (!booking) {
-                throw new Error('Reserva no encontrada');
+                throw this.bookingNotFound();
             }
             if (!isBookingTransitionAllowed(booking.status as any, 'CONFIRMED')) {
-                throw new Error('Solo se puede confirmar una reserva pendiente');
+                throw this.bookingInvalidStatus('Solo se puede confirmar una reserva pendiente');
             }
 
             await this.ensureBookingAccountWithChargeTx(tx, {
@@ -3431,12 +3467,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 where: { id: bookingId, clubId },
                 include: { court: true, activity: true }
             });
-            if (!booking) throw new Error('Reserva no encontrada');
+            if (!booking) throw this.bookingNotFound();
             if (!isBookingTransitionAllowed(booking.status as any, 'COMPLETED')) {
-                throw new Error('Solo se puede completar una reserva confirmada');
+                throw this.bookingInvalidStatus('Solo se puede completar una reserva confirmada');
             }
             if (booking.endDateTime.getTime() > Date.now()) {
-                throw new Error('No se puede completar una reserva antes de su horario de finalización');
+                throw this.bookingInvalidStatus('No se puede completar una reserva antes de su horario de finalización');
             }
 
             const account = await tx.account.findFirst({
@@ -3524,7 +3560,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
     ) {
         if (requestedUserId !== requestUser.userId) {
             if ((requestUser.role !== 'ADMIN' && requestUser.role !== 'OWNER') || requestUser.clubId == null) {
-                throw new Error("No tienes permiso para ver el historial de otro usuario");
+                throw forbidden('No tenés permiso para ver el historial de otro usuario.');
             }
 
             let requestedUserContext: { clubId: number } | null = null;
@@ -3535,7 +3571,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
 
             if (!requestedUserContext || requestedUserContext.clubId !== requestUser.clubId) {
-                throw new Error("No tienes permiso para ver el historial de otro usuario");
+                throw forbidden('No tenés permiso para ver el historial de otro usuario.');
             }
         }
         const bookings = await prisma.booking.findMany({
@@ -3568,7 +3604,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
         });
         if (!booking) {
-            throw new Error('Reserva no encontrada');
+            throw this.bookingNotFound();
         }
         return this.bookingRepo.mapToEntity(booking as any);
     }
@@ -4192,7 +4228,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
 
         const activity = this.mapActivityType((activityCourts[0] as any).activityType)
             ?? await this.activityRepo.findById(activityId);
-        if (!activity) throw new Error("Actividad no encontrada");
+        if (!activity) throw this.activityNotFound();
 
         // Si el club (si se indicó) está cerrado ese día, no devolvemos horarios
         if (clubId && !this.isClubOpenOnLocalDate(normalizedClubConfig, date, timeZone)) {
@@ -4234,7 +4270,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const referenceDuration = this.resolvePriceReferenceDuration(activity, allowedDurations, effectiveDuration);
         if (!allowedDurations.includes(effectiveDuration)) {
             if (!(canProfessorDurationOverride && effectiveDuration === professorOverrideMinutes)) {
-                throw new Error("Duración no permitida por el club");
+                throw this.bookingSlotUnavailable('Duración no permitida por el club');
             }
         }
 
@@ -4404,31 +4440,31 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         // requestedClientDraftEmail eliminado (Fase 1.2): email ya no es obligatorio en alta rápida admin.
 
         if (!requestedClientId && !requestedUserId && requestedClientDraftName.length < 2) {
-            throw new Error('Debes seleccionar un cliente o cargar un alta rápida válida.');
+            throw this.invalidInput('Debes seleccionar un cliente o cargar un alta rápida válida.');
         }
         // Fase 1.2: email es opcional. Solo phone es obligatorio.
         if (!requestedClientId && !requestedUserId && !requestedClientDraftPhone) {
-            throw new Error('El teléfono es obligatorio para el alta rápida de cliente.');
+            throw this.invalidInput('El teléfono es obligatorio para el alta rápida de cliente.');
         }
 
         let user: User | null = null;
         if (requestedUserId) {
             user = await this.userRepo.findById(requestedUserId);
-            if (!user) throw new Error('Usuario no encontrado');
+            if (!user) throw this.clientNotFound('Usuario no encontrado');
         }
 
         const court = await this.courtRepo.findById(courtId);
-        if (!court) throw new Error("Cancha no encontrada");
+        if (!court) throw this.courtNotFound();
 
         const courtClubId = (court as any)?.club?.id;
         if (options?.clubId && courtClubId !== options.clubId) {
-            throw new Error("No tienes acceso a esta cancha");
+            throw forbidden('No tenés acceso a esta cancha.');
         }
 
         const activity = await this.activityRepo.findById(activityId);
-        if (!activity) throw new Error("Actividad no encontrada");
+        if (!activity) throw this.activityNotFound();
         if ((activity.clubId ?? null) !== ((court as any)?.club?.id ?? null)) {
-            throw new Error("ACTIVITY_CLUB_MISMATCH");
+            throw forbidden('La actividad no pertenece al club de la cancha', ErrorCodes.ACTIVITY_OUT_OF_CLUB);
         }
 
         const fixedClubId = (court as any)?.club?.id;
@@ -4478,12 +4514,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         const startTimeMinutes = TimeHelper.timeToMinutes(startTime);
         const endTimeMinutes = TimeHelper.timeToMinutes(endTime);
         if (startTimeMinutes >= endTimeMinutes) {
-            throw new Error('Horario inválido para turno fijo: start debe ser menor a end');
+            throw this.invalidInput('Horario inválido para turno fijo: start debe ser menor a end');
         }
         const dayOfWeek = localStart.getDay();
 
         if (!this.isClubOpenOnLocalDate(clubConfigForFixed, startDateTime, clubTimeZone)) {
-            throw new Error('El club está cerrado ese día');
+            throw this.bookingSlotUnavailable('El club está cerrado ese día');
         }
 
         // Importante: no bloquear por "plantillas" de turnos fijos.
@@ -4583,7 +4619,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     phone: existingClient.phone ?? null
                 };
             } else if (!requestedUserId && requestedClientDraftName.length < 2) {
-                throw new Error('Cliente no encontrado para el club seleccionado');
+                throw this.clientNotFound('Cliente no encontrado para el club seleccionado');
             }
         }
 
@@ -4623,10 +4659,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         }
 
         if (!resolvedFixedClient?.id) {
-            throw new Error('No se pudo resolver un cliente para el turno fijo');
+            throw this.clientNotFound('No se pudo resolver un cliente para el turno fijo');
         }
         if (!this.normalizePhone(resolvedFixedClient.phone || null)) {
-            throw new Error('El cliente del turno fijo debe tener teléfono válido.');
+            throw this.invalidInput('El cliente del turno fijo debe tener teléfono válido.');
         }
 
         console.info('[FIXED_BOOKING] Inicio de generación', {
@@ -4811,10 +4847,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             include: { court: { include: { club: true } } }
         });
         if (!fixedBooking) {
-            throw new Error('Turno fijo no encontrado');
+            throw this.bookingNotFound('Turno fijo no encontrado');
         }
         if (Number(fixedBooking.court?.club?.id || 0) !== Number(input.clubId)) {
-            throw new Error('No tienes acceso a este turno fijo');
+            throw forbidden('No tenés acceso a este turno fijo.');
         }
 
         const now = new Date();
@@ -4832,7 +4868,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         if (scope === 'THIS_OCCURRENCE') {
             const occurrenceBookingId = Number(input.occurrenceBookingId || 0);
             if (!Number.isFinite(occurrenceBookingId) || occurrenceBookingId <= 0) {
-                throw new Error('Debes indicar la ocurrencia a cancelar.');
+                throw this.invalidInput('Debes indicar la ocurrencia a cancelar.');
             }
 
             const occurrence = await prisma.booking.findFirst({
@@ -4851,7 +4887,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 }
             });
             if (!occurrence) {
-                throw new Error('La ocurrencia seleccionada no pertenece a la serie.');
+                throw this.bookingNotFound('La ocurrencia seleccionada no pertenece a la serie.');
             }
 
             const isPast = new Date(occurrence.startDateTime).getTime() < now.getTime();
@@ -4905,7 +4941,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             })
             : null;
         if (scope === 'NEXT_OCCURRENCES' && !occurrence) {
-            throw new Error('La ocurrencia seleccionada no pertenece a la serie.');
+            throw this.bookingNotFound('La ocurrencia seleccionada no pertenece a la serie.');
         }
 
         const pivotDate = scope === 'NEXT_OCCURRENCES'
@@ -5008,10 +5044,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
         });
         if (!fixedBooking) {
-            throw new Error('Turno fijo no encontrado');
+            throw this.bookingNotFound('Turno fijo no encontrado');
         }
         if (Number(fixedBooking.court?.club?.id || 0) !== Number(input.clubId)) {
-            throw new Error('No tienes acceso a este turno fijo');
+            throw forbidden('No tenés acceso a este turno fijo.');
         }
 
         const previewOnly = Boolean(input.previewOnly);
@@ -5060,7 +5096,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         if (input.scope === 'THIS_OCCURRENCE') {
             const occurrenceBookingId = Number(input.occurrenceBookingId || 0);
             if (!Number.isFinite(occurrenceBookingId) || occurrenceBookingId <= 0) {
-                throw new Error('Debes indicar la ocurrencia a editar.');
+                throw this.invalidInput('Debes indicar la ocurrencia a editar.');
             }
             const occurrence = await prisma.booking.findFirst({
                 where: {
@@ -5071,7 +5107,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 select: { id: true }
             });
             if (!occurrence) {
-                throw new Error('La ocurrencia seleccionada no pertenece a la serie.');
+                throw this.bookingNotFound('La ocurrencia seleccionada no pertenece a la serie.');
             }
 
             const currentBooking = await prisma.booking.findFirst({
@@ -5086,7 +5122,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 }
             });
             if (!currentBooking) {
-                throw new Error('Reserva no encontrada');
+                throw this.bookingNotFound();
             }
             const targetCourtForOccurrence = await prisma.court.findFirst({
                 where: { id: input.courtId, clubId: input.clubId },
@@ -5097,7 +5133,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 }
             });
             if (!targetCourtForOccurrence) {
-                throw new Error('Cancha destino inválida');
+                throw this.courtNotFound('Cancha destino inválida');
             }
             const currentDurationMinutes = Math.max(
                 15,
@@ -5147,10 +5183,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         failures: [] as Array<{ bookingId: number; reason: string }>
                     };
                 }
-                const overlapError: any = new Error('El nuevo horario se superpone con otra reserva.');
-                overlapError.code = 'BOOKING_OVERLAP';
-                overlapError.overlaps = overlaps;
-                throw overlapError;
+                throw this.bookingOverlap('El nuevo horario se superpone con otra reserva.', overlaps);
             }
 
             if (previewOnly) {
@@ -5220,7 +5253,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             }
         });
         if (!targetCourt) {
-            throw new Error('Cancha destino inválida');
+            throw this.courtNotFound('Cancha destino inválida');
         }
 
         const occurrenceBookingId = Number(input.occurrenceBookingId || 0);
@@ -5235,7 +5268,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             })
             : null;
         if (input.scope === 'NEXT_OCCURRENCES' && !occurrence) {
-            throw new Error('La ocurrencia seleccionada no pertenece a la serie.');
+            throw this.bookingNotFound('La ocurrencia seleccionada no pertenece a la serie.');
         }
 
         const now = new Date();
@@ -5441,7 +5474,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             select: { id: true, status: true }
         });
         if (!booking) {
-            throw new Error('Reserva no encontrada para el club indicado');
+            throw this.bookingNotFound('Reserva no encontrada para el club indicado');
         }
 
         const account = await prisma.account.findFirst({
@@ -5521,22 +5554,22 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
     ) {
         const booking = await prisma.booking.findFirst({ where: { id: bookingId, clubId } });
         const product = await prisma.product.findFirst({ where: { id: productId, clubId } });
-        if (!booking || !product) throw new Error('Datos no encontrados');
-        if (booking.status === 'CANCELLED') throw new Error('No se pueden agregar consumos a una reserva cancelada');
+        if (!booking || !product) throw notFound('Datos no encontrados', ErrorCodes.NOT_FOUND);
+        if (booking.status === 'CANCELLED') throw this.bookingInvalidStatus('No se pueden agregar consumos a una reserva cancelada');
         if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
-            throw new Error('Solo se pueden agregar consumos a reservas confirmadas o finalizadas');
+            throw this.bookingInvalidStatus('Solo se pueden agregar consumos a reservas confirmadas o finalizadas');
         }
 
         const normalizedQty = Math.floor(Number(quantity));
-        if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) throw new Error('Cantidad inválida');
+        if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) throw this.invalidInput('Cantidad inválida');
 
         const result = await prisma.$transaction(async (tx) => {
             const txProduct = await tx.product.findFirst({
                 where: { id: productId, clubId },
                 select: { id: true, name: true, price: true, stock: true, category: true }
             });
-            if (!txProduct) throw new Error('Producto no encontrado');
-            if (Number(txProduct.stock) < normalizedQty) throw new Error('Stock insuficiente');
+            if (!txProduct) throw notFound('Producto no encontrado', ErrorCodes.PRODUCT_NOT_FOUND);
+            if (Number(txProduct.stock) < normalizedQty) throw conflict('No hay stock suficiente para completar la venta.', ErrorCodes.STOCK_INSUFFICIENT);
 
             let account = await tx.account.findFirst({
                 where: { clubId, sourceType: 'BOOKING', sourceId: String(bookingId) }
@@ -5552,7 +5585,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     actorUserId: options?.actorUserId ?? null
                 });
             }
-            if (account.status !== 'OPEN') throw new Error('No se pueden agregar consumos a una cuenta cerrada');
+            if (account.status !== 'OPEN') throw conflict('No se pueden agregar consumos a una cuenta cerrada', ErrorCodes.ACCOUNT_CLOSED);
 
             const discountDraft = options?.applyDiscount === false
                 ? {
@@ -5627,7 +5660,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 where: { id: productId, clubId, stock: { gte: normalizedQty } },
                 data: { stock: { decrement: normalizedQty } }
             });
-            if (stockUpdate.count !== 1) throw new Error('Stock insuficiente');
+            if (stockUpdate.count !== 1) throw conflict('No hay stock suficiente para completar la venta.', ErrorCodes.STOCK_INSUFFICIENT);
 
             await this.projectionService.refreshAccountSummary(account.id, tx);
 
@@ -5652,21 +5685,21 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
     ) {
         const booking = await prisma.booking.findFirst({ where: { id: bookingId, clubId } });
         const product = await prisma.product.findFirst({ where: { id: productId, clubId } });
-        if (!booking || !product) throw new Error('Datos no encontrados');
-        if (booking.status === 'CANCELLED') throw new Error('Reserva cancelada');
+        if (!booking || !product) throw notFound('Datos no encontrados', ErrorCodes.NOT_FOUND);
+        if (booking.status === 'CANCELLED') throw this.bookingInvalidStatus('Reserva cancelada');
         if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
-            throw new Error('Solo se pueden cotizar consumos para reservas confirmadas o finalizadas');
+            throw this.bookingInvalidStatus('Solo se pueden cotizar consumos para reservas confirmadas o finalizadas');
         }
 
         const normalizedQty = Math.floor(Number(quantity));
-        if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) throw new Error('Cantidad inválida');
+        if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) throw this.invalidInput('Cantidad inválida');
 
         const quote = await prisma.$transaction(async (tx) => {
             const txProduct = await tx.product.findFirst({
                 where: { id: productId, clubId },
                 select: { id: true, name: true, price: true, category: true }
             });
-            if (!txProduct) throw new Error('Producto no encontrado');
+            if (!txProduct) throw notFound('Producto no encontrado', ErrorCodes.PRODUCT_NOT_FOUND);
 
             const unitListPrice = Number(Number(txProduct.price || 0).toFixed(2));
             const discountDraft = options?.applyDiscount === false
@@ -5720,15 +5753,15 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     account: true
                 }
             });
-            if (!item) throw new Error('Item no encontrado');
+            if (!item) throw notFound('Item no encontrado', ErrorCodes.NOT_FOUND);
             if (item.account.clubId !== clubId) {
-                throw new Error('No tienes acceso a este consumo');
+                throw forbidden('No tenés acceso a este consumo.');
             }
             if (item.account.status !== 'OPEN') {
-                throw new Error('Solo se pueden eliminar consumos de cuentas abiertas');
+                throw conflict('Solo se pueden eliminar consumos de cuentas abiertas', ErrorCodes.ACCOUNT_CLOSED);
             }
             if (item.type === 'BOOKING') {
-                throw new Error('El concepto de cancha no se puede eliminar desde consumos');
+                throw conflict('El concepto de cancha no se puede eliminar desde consumos', ErrorCodes.BOOKING_INVALID_STATUS);
             }
 
             const allocated = await tx.paymentAllocation.aggregate({
@@ -5737,7 +5770,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             });
             const allocatedAmount = Number(allocated._sum.amount || 0);
             if (allocatedAmount > 0.009) {
-                throw new Error('No se puede eliminar el consumo porque tiene pagos asociados');
+                throw conflict('No se puede eliminar el consumo porque tiene pagos asociados', ErrorCodes.CONFLICT);
             }
 
             const itemTotal = Number(item.total || 0);
@@ -5746,7 +5779,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             const nextTotal = Number((currentTotal - itemTotal).toFixed(2));
 
             if (paidAmount > nextTotal + 0.009) {
-                throw new Error('No se puede eliminar el consumo porque dejaría la cuenta sobrepagada');
+                throw conflict('No se puede eliminar el consumo porque dejaría la cuenta sobrepagada', ErrorCodes.PAYMENT_OVERPAY);
             }
 
             await tx.account.update({

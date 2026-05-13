@@ -1,5 +1,6 @@
 import { BookingStatus, ClubReviewStatus, Prisma } from '@prisma/client';
 import { prisma, prismaRead } from '../prisma';
+import { ErrorCodes, badRequest, conflict, forbidden, notFound } from '../errors';
 
 type CreateOrUpdateMyReviewInput = {
   clubId: number;
@@ -17,14 +18,14 @@ export class ClubReviewService {
     const trimmed = String(value).trim();
     if (!trimmed) return null;
     if (trimmed.length > MAX_COMMENT_LENGTH) {
-      throw new Error(`El comentario no puede superar ${MAX_COMMENT_LENGTH} caracteres`);
+      throw badRequest(`El comentario no puede superar ${MAX_COMMENT_LENGTH} caracteres`, ErrorCodes.INVALID_INPUT);
     }
     return trimmed;
   }
 
   private validateRating(value: number): number {
     if (!Number.isInteger(value) || value < 1 || value > 5) {
-      throw new Error('La calificación debe ser un entero entre 1 y 5');
+      throw badRequest('La calificación debe ser un entero entre 1 y 5', ErrorCodes.INVALID_INPUT);
     }
     return value;
   }
@@ -68,26 +69,26 @@ export class ClubReviewService {
       });
 
     if (!booking) {
-      throw new Error('Necesitás una reserva finalizada en este club para dejar una reseña');
+      throw conflict('Necesitás una reserva finalizada en este club para dejar una reseña', ErrorCodes.BOOKING_INVALID_STATUS);
     }
 
     if (input.bookingId) {
       const ownerUserId = booking.userId ?? booking.client?.userId ?? null;
       if (!ownerUserId || Number(ownerUserId) !== Number(input.userId)) {
-        throw new Error('No puedes reseñar una reserva de otro usuario');
+        throw forbidden('No podés reseñar una reserva de otro usuario');
       }
     }
 
     const bookingStatus = String(booking.status || '').toUpperCase();
     if (booking.endDateTime.getTime() > now.getTime()) {
-      throw new Error('No se puede reseñar una reserva que aún no finalizó');
+      throw conflict('No se puede reseñar una reserva que aún no finalizó', ErrorCodes.BOOKING_INVALID_STATUS);
     }
 
     if (bookingStatus !== BookingStatus.COMPLETED) {
       if (bookingStatus === BookingStatus.CANCELLED) {
-        throw new Error('No se puede reseñar una reserva cancelada');
+        throw conflict('No se puede reseñar una reserva cancelada', ErrorCodes.BOOKING_INVALID_STATUS);
       }
-      throw new Error('Solo se pueden reseñar reservas completadas');
+      throw conflict('Solo se pueden reseñar reservas completadas', ErrorCodes.BOOKING_INVALID_STATUS);
     }
 
     return booking;
@@ -119,7 +120,7 @@ export class ClubReviewService {
       }
 
       if (!reviewBookingId) {
-        throw new Error('Necesitás una reserva finalizada en este club para dejar una reseña');
+        throw conflict('Necesitás una reserva finalizada en este club para dejar una reseña', ErrorCodes.BOOKING_INVALID_STATUS);
       }
 
       const review = await tx.clubReview.upsert({
@@ -268,7 +269,7 @@ export class ClubReviewService {
     });
 
     if (!review) {
-      throw new Error('Reseña no encontrada para el club indicado');
+      throw notFound('Reseña no encontrada para el club indicado', ErrorCodes.NOT_FOUND);
     }
 
     return prisma.clubReview.update({

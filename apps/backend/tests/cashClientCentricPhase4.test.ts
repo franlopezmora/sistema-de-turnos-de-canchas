@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CashService } from '../src/services/CashService';
+import { AppError, ErrorCodes } from '../src/errors';
 import { prisma } from '../src/prisma';
 
 function buildServiceHarness() {
@@ -262,7 +263,11 @@ test('no permite resolver cliente por nombre solo', async () => {
           phone: ''
         }
       } as any),
-      /CLIENT_DRAFT_INVALID/
+      (err: unknown) => {
+        assert.ok(err instanceof AppError, 'debe ser AppError');
+        assert.equal(err.code, ErrorCodes.INVALID_INPUT);
+        return true;
+      }
     );
   });
 });
@@ -287,7 +292,12 @@ test('duplicado posible devuelve error prudente', async () => {
           email: 'dup@example.com'
         }
       } as any),
-      /CLIENT_POSSIBLE_DUPLICATE/
+      (err: unknown) => {
+        assert.ok(err instanceof AppError, 'debe ser AppError');
+        assert.equal(err.code, ErrorCodes.CLIENT_POSSIBLE_DUPLICATE);
+        assert.ok(Array.isArray((err.meta as any)?.candidateClientIds), 'debe incluir candidateClientIds en meta');
+        return true;
+      }
     );
   });
 });

@@ -18,6 +18,7 @@ import {
     normalizeEmail
 } from '../utils/magicLink';
 import { sendAuthError } from '../utils/authError';
+import { ErrorCodes, notFound } from '../errors';
 const MAGIC_LINK_NEUTRAL_MESSAGE = 'Si el email es válido, te enviamos un enlace para ingresar.';
 const DEFAULT_MAGIC_LINK_USER_FIRST_NAME = 'Nuevo';
 const DEFAULT_MAGIC_LINK_USER_LAST_NAME = 'Usuario';
@@ -175,7 +176,7 @@ export class AuthController {
         });
 
         if (!user) {
-            throw new Error('Usuario no encontrado');
+            throw notFound('Usuario no encontrado', ErrorCodes.AUTH_INVALID);
         }
 
         const memberships = await getMembershipsForUser(user.id);
@@ -538,8 +539,8 @@ export class AuthController {
             let preferredClubId: number | undefined;
             try {
                 preferredClubId = getPreferredClubIdFromRequest(req);
-            } catch (error: any) {
-                return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', error?.message || 'Contexto de club inválido');
+            } catch {
+                return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', 'Contexto de club inválido');
             }
             const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
             const clubId = activeMembership?.clubId ?? null;
@@ -629,8 +630,8 @@ export class AuthController {
             let preferredClubId: number | undefined;
             try {
                 preferredClubId = getPreferredClubIdFromRequest(req);
-            } catch (error: any) {
-                return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', error?.message || 'Contexto de club inválido');
+            } catch {
+                return sendAuthError(res, 400, 'AUTH_CONTEXT_INVALID', 'Contexto de club inválido');
             }
             const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
             const clubId = activeMembership?.clubId ?? null;

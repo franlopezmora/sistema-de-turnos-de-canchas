@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
+import { ErrorCodes, badRequest, conflict, notFound } from '../errors';
 import { recordUserClientLinkAuditTx } from './UserClientLinkAudit';
 
 type IncidentStatus = 'OPEN' | 'RESOLVED' | 'DISMISSED';
@@ -49,7 +50,7 @@ export class ClientDuplicateIncidentService {
   async createOrReuseIncidentTx(tx: any, input: RegisterIncidentInput) {
     const candidateClientIds = normalizeIds(input.candidateClientIds);
     if (candidateClientIds.length === 0) {
-      throw new Error('candidateClientIds is required');
+      throw badRequest('candidateClientIds is required', ErrorCodes.INVALID_INPUT);
     }
 
     const dedupeKey = buildDedupeKey(input);
@@ -159,13 +160,13 @@ export class ClientDuplicateIncidentService {
       const incident = await txAny.clientDuplicateIncident.findFirst({
         where: { id: input.incidentId, clubId: input.clubId }
       });
-      if (!incident) throw new Error('Incidente no encontrado');
-      if (incident.status !== 'OPEN') throw new Error('El incidente ya no está abierto');
-      if (!incident.userId) throw new Error('El incidente no tiene usuario asociado para vincular');
+      if (!incident) throw notFound('Incidente no encontrado', ErrorCodes.NOT_FOUND);
+      if (incident.status !== 'OPEN') throw conflict('El incidente ya no está abierto', ErrorCodes.CONFLICT);
+      if (!incident.userId) throw badRequest('El incidente no tiene usuario asociado para vincular', ErrorCodes.INVALID_INPUT);
 
       const candidateClientIds = normalizeIds(incident.candidateClientIds);
       if (!candidateClientIds.includes(String(input.clientId))) {
-        throw new Error('El cliente seleccionado no pertenece a los candidatos del incidente');
+        throw conflict('El cliente seleccionado no pertenece a los candidatos del incidente', ErrorCodes.CLIENT_OUT_OF_CLUB);
       }
 
       const targetClient = await tx.client.findFirst({
@@ -178,9 +179,9 @@ export class ClientDuplicateIncidentService {
           userId: true
         }
       });
-      if (!targetClient?.id) throw new Error('Cliente no encontrado');
+      if (!targetClient?.id) throw notFound('Cliente no encontrado', ErrorCodes.CLIENT_NOT_FOUND);
       if (targetClient.userId && Number(targetClient.userId) !== Number(incident.userId)) {
-        throw new Error('El cliente seleccionado ya está vinculado a otro usuario');
+        throw conflict('El cliente seleccionado ya está vinculado a otro usuario', ErrorCodes.CONFLICT);
       }
 
       await tx.client.update({
@@ -222,8 +223,8 @@ export class ClientDuplicateIncidentService {
     const existing = await txAny.clientDuplicateIncident.findFirst({
       where: { id: input.incidentId, clubId: input.clubId }
     });
-    if (!existing) throw new Error('Incidente no encontrado');
-    if (existing.status !== 'OPEN') throw new Error('El incidente ya no está abierto');
+    if (!existing) throw notFound('Incidente no encontrado', ErrorCodes.NOT_FOUND);
+    if (existing.status !== 'OPEN') throw conflict('El incidente ya no está abierto', ErrorCodes.CONFLICT);
 
     return txAny.clientDuplicateIncident.update({
       where: { id: existing.id },

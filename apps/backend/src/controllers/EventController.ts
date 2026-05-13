@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../prisma';
 import { EventService } from '../services/EventService';
+import { sendAppError } from '../errors';
 
 export class EventController {
   private readonly eventService = new EventService();
@@ -75,7 +76,7 @@ export class EventController {
 
       return res.json(events);
     } catch (error: any) {
-      return res.status(500).json({ error: error.message || 'Error al listar eventos' });
+      return sendAppError(res, error, 'Error al listar eventos');
     }
   };
 
@@ -92,7 +93,7 @@ export class EventController {
       const event = await this.eventService.createEvent(clubId, parsed.data.type, parsed.data.payload);
       return res.status(201).json(event);
     } catch (error: any) {
-      return res.status(500).json({ error: error.message || 'Error al crear evento' });
+      return sendAppError(res, error, 'Error al crear evento');
     }
   };
 

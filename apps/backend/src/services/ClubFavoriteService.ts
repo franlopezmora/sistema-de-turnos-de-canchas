@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
+import { ErrorCodes, conflict, notFound } from '../errors';
 
 const isMissingFavoritesTableError = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -77,7 +78,7 @@ export class ClubFavoriteService {
       SELECT "id" FROM "Club" WHERE "id" = ${clubId} LIMIT 1
     `;
     if (!Array.isArray(clubRows) || clubRows.length === 0) {
-      throw new Error('Club no encontrado');
+      throw notFound('Club no encontrado', ErrorCodes.CLUB_NOT_FOUND);
     }
 
     const favoriteId =
@@ -99,7 +100,7 @@ export class ClubFavoriteService {
     `;
     const favorite = favoriteRows?.[0];
     if (!favorite) {
-      throw new Error('No se pudo marcar favorito');
+      throw conflict('No se pudo marcar favorito', ErrorCodes.CONFLICT);
     }
 
     return {
@@ -137,7 +138,7 @@ export class ClubFavoriteService {
         club: favorite.club
       }));
     } catch (error) {
-      if (isMissingFavoritesTableError(error)) throw new Error(missingFavoritesTableMessage);
+      if (isMissingFavoritesTableError(error)) throw conflict(missingFavoritesTableMessage, ErrorCodes.CLUB_CONFIG_INVALID);
       throw error;
     }
   }
@@ -157,7 +158,7 @@ export class ClubFavoriteService {
       });
       return { removed: true };
     } catch (error) {
-      if (isMissingFavoritesTableError(error)) throw new Error(missingFavoritesTableMessage);
+      if (isMissingFavoritesTableError(error)) throw conflict(missingFavoritesTableMessage, ErrorCodes.CLUB_CONFIG_INVALID);
       throw error;
     }
   }
@@ -174,7 +175,7 @@ export class ClubFavoriteService {
           select: { id: true }
         });
         if (!club?.id) {
-          throw new Error('Club no encontrado');
+          throw notFound('Club no encontrado', ErrorCodes.CLUB_NOT_FOUND);
         }
 
         if (!txAny?.clubFavorite?.upsert) {
@@ -212,7 +213,7 @@ export class ClubFavoriteService {
         };
       });
     } catch (error) {
-      if (isMissingFavoritesTableError(error)) throw new Error(missingFavoritesTableMessage);
+      if (isMissingFavoritesTableError(error)) throw conflict(missingFavoritesTableMessage, ErrorCodes.CLUB_CONFIG_INVALID);
       throw error;
     }
   }

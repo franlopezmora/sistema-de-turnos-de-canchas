@@ -11,6 +11,7 @@ import { ProjectionService } from './ProjectionService';
 import { generateDisplayCode } from '../utils/displayCode';
 import { DiscountService } from './DiscountService';
 import { getPhoneIdentityVariants, normalizeIdentityPhone } from '../utils/phone';
+import { AppError, badRequest, notFound, conflict, unprocessable, ErrorCodes } from '../errors';
 
 type ProductSaleItemInput = {
     itemKey?: string;
@@ -78,12 +79,12 @@ export class CashService {
     async getSummaryByDate(clubId: number | undefined, dateStr: string, userId?: number, preferredClubId?: number) {
         const resolvedClubId = await this.resolveClubId(clubId, userId, preferredClubId);
         if (!resolvedClubId) {
-            throw new Error('Club inválido para resumen de caja');
+            throw badRequest('Club inválido para resumen de caja.', ErrorCodes.INVALID_INPUT);
         }
         const club = await prisma.club.findUnique({ where: { id: resolvedClubId }, include: { settings: true } });
         const timeZone = String(club?.settings?.timeZone || '').trim();
         if (!timeZone) {
-            throw new Error('Configuración de club inválida: timeZone es obligatorio para caja');
+            throw badRequest('Configuración de club inválida: timeZone es obligatorio para caja.', ErrorCodes.CLUB_CONFIG_INVALID);
         }
 
         const [y, m, d] = String(dateStr).split('-').map((part) => Number(part));
@@ -262,15 +263,15 @@ export class CashService {
         const end = new Date(endYear, endMonth - 1, endDay);
 
         if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-            throw new Error('Rango de fechas inválido');
+            throw badRequest('Rango de fechas inválido.', ErrorCodes.INVALID_INPUT);
         }
         if (start.getTime() > end.getTime()) {
-            throw new Error('La fecha inicial debe ser menor o igual a la fecha final');
+            throw badRequest('La fecha inicial debe ser menor o igual a la fecha final.', ErrorCodes.INVALID_INPUT);
         }
 
         const totalDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
         if (totalDays > 62) {
-            throw new Error('El rango máximo permitido es de 62 días');
+            throw badRequest('El rango máximo permitido es de 62 días.', ErrorCodes.INVALID_INPUT);
         }
 
         let totalCash = 0;
@@ -558,7 +559,7 @@ export class CashService {
                 where: { id: safeClientId, clubId: input.clubId },
                 select: { id: true }
             });
-            if (!existingClient) throw new Error('Cliente no encontrado para el club');
+            if (!existingClient) throw notFound('Cliente no encontrado para el club.', ErrorCodes.CLIENT_NOT_FOUND);
             resolvedClientId = existingClient.id;
             return resolvedClientId;
         }
@@ -583,7 +584,7 @@ export class CashService {
         const normalizedEmail = String(draft.email || '').trim().toLowerCase();
 
         if (normalizedName.length < 2 || !normalizedPhone) {
-            throw new Error('CLIENT_DRAFT_INVALID');
+            throw badRequest('El draft de cliente es inválido.', ErrorCodes.INVALID_INPUT);
         }
 
         const candidateIds = new Set<string>();
@@ -611,23 +612,24 @@ export class CashService {
         }
 
         if (candidateIds.size > 1) {
-            const conflictError: any = new Error('CLIENT_POSSIBLE_DUPLICATE');
-            conflictError.code = 'CLIENT_POSSIBLE_DUPLICATE';
             const reasonSignals = new Set<string>();
             if (normalizedDni.length >= 6) reasonSignals.add('DNI');
             if (normalizedPhone) reasonSignals.add('PHONE');
             if (normalizedEmail.length > 3) reasonSignals.add('EMAIL');
-            conflictError.details = {
-                clubId: input.clubId,
-                candidateClientIds: Array.from(candidateIds),
-                reasonType: reasonSignals.size === 1 ? Array.from(reasonSignals)[0] : 'MULTI_SIGNAL_CONFLICT',
-                signals: {
-                    dni: normalizedDni || null,
-                    phone: normalizedPhone || null,
-                    email: normalizedEmail || null
+            throw conflict(
+                'Se detectaron posibles duplicados de cliente.',
+                ErrorCodes.CLIENT_POSSIBLE_DUPLICATE,
+                {
+                    clubId: input.clubId,
+                    candidateClientIds: Array.from(candidateIds),
+                    reasonType: reasonSignals.size === 1 ? Array.from(reasonSignals)[0] : 'MULTI_SIGNAL_CONFLICT',
+                    signals: {
+                        dni: normalizedDni || null,
+                        phone: normalizedPhone || null,
+                        email: normalizedEmail || null
+                    }
                 }
-            };
-            throw conflictError;
+            );
         }
         if (candidateIds.size === 1) {
             return Array.from(candidateIds)[0];
@@ -658,7 +660,7 @@ export class CashService {
             ? input.items
             : (input.productId && input.quantity ? [{ productId: input.productId, quantity: input.quantity }] : []);
 
-        if (rawItems.length === 0) throw new Error('Seleccioná al menos un producto');
+        if (rawItems.length === 0) throw badRequest('Seleccioná al menos un producto.', ErrorCodes.INVALID_INPUT);
 
         const normalizedItems: NormalizedProductSaleItem[] = rawItems.map((item, index) => {
             const quantity = Math.floor(Number(item.quantity));
@@ -667,7 +669,7 @@ export class CashService {
             const customName = String(item.customName || '').trim();
 
             if (!Number.isFinite(quantity) || quantity <= 0) {
-                throw new Error('Cantidad inválida');
+                throw badRequest('Cantidad inválida.', ErrorCodes.INVALID_INPUT);
             }
 
             if (Number.isInteger(productId) && productId > 0) {
@@ -680,7 +682,7 @@ export class CashService {
 
             const unitPrice = this.roundMoney(Number(item.unitPrice || 0));
             if (customName.length < 2 || unitPrice <= 0) {
-                throw new Error('Item de venta inválido');
+                throw badRequest('Ítem de venta inválido.', ErrorCodes.INVALID_INPUT);
             }
 
             const slugBase = customName
@@ -701,7 +703,7 @@ export class CashService {
         const seenKeys = new Set<string>();
         for (const item of normalizedItems) {
             if (seenKeys.has(item.itemKey)) {
-                throw new Error('Hay items duplicados en la venta');
+                throw badRequest('Hay ítems duplicados en la venta.', ErrorCodes.INVALID_INPUT);
             }
             seenKeys.add(item.itemKey);
         }
@@ -739,9 +741,9 @@ export class CashService {
                         where: { id: Number(entry.productId), clubId: input.clubId },
                         select: { id: true, name: true, price: true, category: true, stock: true, isActive: true }
                     });
-                    if (!product) throw new Error('Producto no encontrado');
-                    if (!product.isActive) throw new Error('Producto inactivo');
-                    if (Number(product.stock) < qty) throw new Error('Stock insuficiente');
+                    if (!product) throw notFound('Producto no encontrado.', ErrorCodes.PRODUCT_NOT_FOUND);
+                    if (!product.isActive) throw conflict('Producto inactivo.', ErrorCodes.PRODUCT_INACTIVE);
+                    if (Number(product.stock) < qty) throw conflict('Stock insuficiente.', ErrorCodes.STOCK_INSUFFICIENT);
 
                     const listUnitPrice = Number(Number(product.price || 0).toFixed(2));
                     const listItemTotal = Number((listUnitPrice * qty).toFixed(2));
@@ -839,7 +841,7 @@ export class CashService {
             orderBy: { openedAt: 'desc' }
         });
         if (!openShift) {
-            throw new Error('Abrí una caja antes de registrar ventas de mostrador.');
+            throw unprocessable('Abrí una caja antes de registrar ventas de mostrador.', ErrorCodes.NO_ACTIVE_CASH_SHIFT);
         }
 
         const quote = await this.quoteProductSale({
@@ -896,9 +898,9 @@ export class CashService {
                         select: { id: true, stock: true, category: true, isActive: true }
                     })
                     : null;
-                if (productId > 0 && !product) throw new Error('Producto no encontrado');
-                if (product && !product.isActive) throw new Error('Producto inactivo');
-                if (product && Number(product.stock) < Number(qi.quantity)) throw new Error('Stock insuficiente');
+                if (productId > 0 && !product) throw notFound('Producto no encontrado.', ErrorCodes.PRODUCT_NOT_FOUND);
+                if (product && !product.isActive) throw conflict('Producto inactivo.', ErrorCodes.PRODUCT_INACTIVE);
+                if (product && Number(product.stock) < Number(qi.quantity)) throw conflict('Stock insuficiente.', ErrorCodes.STOCK_INSUFFICIENT);
 
                 const item = await tx.accountItem.create({
                     data: {
@@ -941,7 +943,7 @@ export class CashService {
                         },
                         data: { stock: { decrement: Number(qi.quantity) } }
                     });
-                    if (stockUpdate.count !== 1) throw new Error('Stock insuficiente');
+                    if (stockUpdate.count !== 1) throw conflict('Stock insuficiente.', ErrorCodes.STOCK_INSUFFICIENT);
                 }
 
                 await this.accountingService.createAccountItemTransaction(tx, {
@@ -1025,12 +1027,12 @@ export class CashService {
             .filter((payment) => Number.isFinite(payment.amount) && payment.amount > 0);
 
         if (paymentPlan.length === 0) {
-            throw new Error('Debe existir al menos un pago válido');
+            throw badRequest('Debe existir al menos un pago válido.', ErrorCodes.INVALID_INPUT);
         }
 
         const paymentTotal = paymentPlan.reduce((sum, payment) => sum + payment.amount, 0);
         if (Math.abs(paymentTotal - total) > 0.01) {
-            throw new Error('La suma de pagos debe coincidir con el total de la venta');
+            throw badRequest('La suma de pagos debe coincidir con el total de la venta.', ErrorCodes.INVALID_INPUT);
         }
 
         const quoteItemTotalByKey = new Map<string, number>(
@@ -1063,7 +1065,7 @@ export class CashService {
                     .map((allocation) => {
                         const resolvedItemKey = resolveAllocationItemKey(allocation);
                         if (!resolvedItemKey) {
-                            throw new Error('Una asignación hace referencia a un item inexistente o ambiguo en la venta.');
+                            throw badRequest('Una asignación hace referencia a un ítem inexistente o ambiguo en la venta.', ErrorCodes.INVALID_INPUT);
                         }
                         return {
                             itemKey: resolvedItemKey,
@@ -1077,14 +1079,14 @@ export class CashService {
         if (hasExplicitAllocations) {
             const everyPaymentHasAllocations = resolvedPaymentPlan.every((payment) => Array.isArray(payment.allocations) && payment.allocations.length > 0);
             if (!everyPaymentHasAllocations) {
-                throw new Error('Si configurás pagos por item, todos los pagos deben indicar sus items.');
+                throw badRequest('Si configurás pagos por ítem, todos los pagos deben indicar sus ítems.', ErrorCodes.INVALID_INPUT);
             }
 
             const allocatedByItemKey = new Map<string, number>();
             for (const payment of resolvedPaymentPlan) {
                 const allocationTotal = (payment.allocations || []).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
                 if (Math.abs(allocationTotal - Number(payment.amount || 0)) > 0.01) {
-                    throw new Error('Las asignaciones del pago no coinciden con el monto cargado.');
+                    throw badRequest('Las asignaciones del pago no coinciden con el monto cargado.', ErrorCodes.INVALID_INPUT);
                 }
 
                 for (const allocation of payment.allocations || []) {
@@ -1092,7 +1094,7 @@ export class CashService {
                     const nextAllocated = Number(((allocatedByItemKey.get(itemKey) || 0) + Number(allocation.amount || 0)).toFixed(2));
                     const itemTotal = Number(quoteItemTotalByKey.get(itemKey) || 0);
                     if (nextAllocated - itemTotal > 0.01) {
-                        throw new Error('Un item quedó sobreasignado en los pagos configurados.');
+                        throw conflict('Un ítem quedó sobreasignado en los pagos configurados.', ErrorCodes.PAYMENT_OVERPAY);
                     }
                     allocatedByItemKey.set(itemKey, nextAllocated);
                 }
@@ -1179,9 +1181,9 @@ export class CashService {
                         select: { id: true, stock: true, category: true, isActive: true }
                     })
                     : null;
-                if (productId > 0 && !product) throw new Error('Producto no encontrado');
-                if (product && !product.isActive) throw new Error('Producto inactivo');
-                if (product && Number(product.stock) < Number(qi.quantity)) throw new Error('Stock insuficiente');
+                if (productId > 0 && !product) throw notFound('Producto no encontrado.', ErrorCodes.PRODUCT_NOT_FOUND);
+                if (product && !product.isActive) throw conflict('Producto inactivo.', ErrorCodes.PRODUCT_INACTIVE);
+                if (product && Number(product.stock) < Number(qi.quantity)) throw conflict('Stock insuficiente.', ErrorCodes.STOCK_INSUFFICIENT);
 
                 const item = await tx.accountItem.create({
                     data: {
@@ -1225,7 +1227,7 @@ export class CashService {
                         },
                         data: { stock: { decrement: Number(qi.quantity) } }
                     });
-                    if (stockUpdate.count !== 1) throw new Error('Stock insuficiente');
+                    if (stockUpdate.count !== 1) throw conflict('Stock insuficiente.', ErrorCodes.STOCK_INSUFFICIENT);
                 }
 
                 await this.accountingService.createAccountItemTransaction(tx, {

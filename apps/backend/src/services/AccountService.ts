@@ -6,6 +6,7 @@ import { ProjectionService } from './ProjectionService';
 import { getDerivedPaymentStatus } from '../domain/bookingDomain';
 import { DiscountService } from './DiscountService';
 import { generateDisplayCode } from '../utils/displayCode';
+import { AppError, badRequest, notFound, conflict, ErrorCodes } from '../errors';
 
 const USE_PROJECTION_READ_MODELS = String(process.env.READ_MODEL_SOURCE || '').toLowerCase() === 'projection';
 const EPSILON = 0.009;
@@ -60,7 +61,7 @@ export class AccountService {
     reopenIfRemaining?: boolean;
   }) {
     const account = await tx.account.findUnique({ where: { id: accountId } });
-    if (!account) throw new Error('Cuenta no encontrada');
+    if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
 
     const netPaid = await this.calculateNetPaidAmountTx(tx, accountId);
     const currentPaid = Number(account.paidAmount || 0);
@@ -221,9 +222,9 @@ export class AccountService {
           where: { id: Number(input.sourceId), clubId: input.clubId },
           select: { id: true, status: true, price: true, clientId: true, activityId: true }
         });
-        if (!booking) throw new Error('No se puede abrir cuenta: la reserva no existe');
+        if (!booking) throw notFound('La reserva no existe.', ErrorCodes.BOOKING_NOT_FOUND);
         if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') {
-          throw new Error('No se puede abrir cuenta para una reserva terminal');
+          throw conflict('No se puede abrir cuenta para una reserva en estado terminal.', ErrorCodes.BOOKING_INVALID_STATUS);
         }
         bookingForAccount = booking as {
           id: number;
@@ -351,7 +352,7 @@ export class AccountService {
       }
     } as any);
 
-    if (!account) throw new Error('Cuenta no encontrada');
+    if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
 
     const total = Number(account.totalAmount || 0);
     const paid = await this.calculateNetPaidAmount(account.id);
@@ -391,7 +392,7 @@ export class AccountService {
       include: { items: true, payments: true }
     });
 
-    if (!account) throw new Error('Cuenta no encontrada');
+    if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
 
     const balance = await this.getBalance(clubId, accountId);
 
@@ -422,7 +423,7 @@ export class AccountService {
     }
 
     const account = await prismaRead.account.findFirst({ where: { id: accountId, clubId } });
-    if (!account) throw new Error('Cuenta no encontrada');
+    if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
 
     const total = Number(account.totalAmount || 0);
     const paid = await this.calculateNetPaidAmount(account.id);
@@ -437,7 +438,7 @@ export class AccountService {
 
   async getLedger(clubId: number, accountId: string) {
     const account = await prismaRead.account.findFirst({ where: { id: accountId, clubId } });
-    if (!account) throw new Error('Cuenta no encontrada');
+    if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
 
     return prismaRead.ledgerEntry.findMany({
       where: { clubId, accountId },
@@ -452,20 +453,18 @@ export class AccountService {
         include: { items: true, payments: true }
       });
 
-      if (!account) throw new Error('Cuenta no encontrada');
-      if (account.status !== 'OPEN') throw new Error('La cuenta no está abierta');
+      if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
+      if (account.status !== 'OPEN') throw conflict('La cuenta no está abierta.', ErrorCodes.ACCOUNT_CLOSED);
 
       const netPaid = await this.calculateNetPaidAmountTx(tx, account.id);
       const remaining = Number((Number(account.totalAmount || 0) - netPaid).toFixed(2));
 
       if (remaining > EPSILON) {
-        const closeError = new Error('No se puede cerrar la cuenta: aun hay saldo pendiente') as Error & {
-          code?: string;
-          remaining?: number;
-        };
-        closeError.code = 'ACCOUNT_HAS_PENDING_BALANCE';
-        closeError.remaining = Number(remaining.toFixed(2));
-        throw closeError;
+        throw conflict(
+          'No se puede cerrar la cuenta: aún hay saldo pendiente.',
+          ErrorCodes.ACCOUNT_HAS_PENDING_BALANCE,
+          { remaining: Number(remaining.toFixed(2)) }
+        );
       }
 
       const closed = await tx.account.update({
@@ -493,8 +492,8 @@ export class AccountService {
   }) {
     return prisma.$transaction(async (tx) => {
       const account = await tx.account.findFirst({ where: { id: accountId, clubId } });
-      if (!account) throw new Error('Cuenta no encontrada');
-      if (account.status !== 'OPEN') throw new Error('Solo se pueden agregar consumos a cuentas abiertas');
+      if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
+      if (account.status !== 'OPEN') throw conflict('La cuenta no está abierta.', ErrorCodes.ACCOUNT_CLOSED);
 
       let bookingContext: { status: string; clientId: string; activityId: number } | null = null;
       if (account.sourceType === 'BOOKING') {
@@ -502,12 +501,12 @@ export class AccountService {
           where: { id: Number(account.sourceId), clubId },
           select: { status: true, clientId: true, activityId: true }
         });
-        if (!booking) throw new Error('Reserva asociada a la cuenta no encontrada');
+        if (!booking) throw notFound('Reserva asociada a la cuenta no encontrada.', ErrorCodes.BOOKING_NOT_FOUND);
         if (booking.status === 'CANCELLED') {
-          throw new Error('No se pueden agregar consumos a una reserva cancelada');
+          throw conflict('No se pueden agregar consumos a una reserva cancelada.', ErrorCodes.BOOKING_INVALID_STATUS);
         }
         if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
-          throw new Error('Solo se pueden agregar consumos a reservas confirmadas o finalizadas');
+          throw conflict('Solo se pueden agregar consumos a reservas confirmadas o finalizadas.', ErrorCodes.BOOKING_INVALID_STATUS);
         }
         bookingContext = booking;
       }
@@ -515,8 +514,8 @@ export class AccountService {
       const quantity = Math.floor(Number(input.quantity));
       const unitPrice = Number(input.unitPrice);
 
-      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Cantidad inválida');
-      if (!Number.isFinite(unitPrice) || unitPrice <= 0) throw new Error('Precio unitario inválido');
+      if (!Number.isFinite(quantity) || quantity <= 0) throw badRequest('Cantidad inválida.', ErrorCodes.INVALID_INPUT);
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) throw badRequest('Precio unitario inválido.', ErrorCodes.INVALID_INPUT);
 
       const itemType = input.type ?? 'PRODUCT';
       let linkedProduct: { id: number; category: string | null } | null = null;
@@ -525,8 +524,8 @@ export class AccountService {
           where: { id: Number(input.productId), clubId },
           select: { id: true, category: true, stock: true }
         });
-        if (!product) throw new Error('Producto no encontrado para el club');
-        if (Number(product.stock || 0) < quantity) throw new Error('Stock insuficiente');
+        if (!product) throw notFound('Producto no encontrado.', ErrorCodes.PRODUCT_NOT_FOUND);
+        if (Number(product.stock || 0) < quantity) throw conflict('Stock insuficiente.', ErrorCodes.STOCK_INSUFFICIENT);
         linkedProduct = {
           id: product.id,
           category: product.category ?? null
@@ -598,7 +597,7 @@ export class AccountService {
           data: { stock: { decrement: quantity } }
         });
         if (stockUpdate.count !== 1) {
-          throw new Error('Stock insuficiente');
+          throw conflict('Stock insuficiente.', ErrorCodes.STOCK_INSUFFICIENT);
         }
       }
 
@@ -623,18 +622,18 @@ export class AccountService {
         }
       } as any);
 
-      if (!account) throw new Error('Cuenta no encontrada');
+      if (!account) throw notFound('Cuenta no encontrada.', ErrorCodes.ACCOUNT_NOT_FOUND);
       if ((account as any).sourceType !== 'BAR' && (account as any).sourceType !== 'POS') {
-        throw new Error('Solo se pueden anular cuentas de venta de mostrador (BAR/POS)');
+        throw badRequest('Solo se pueden anular cuentas de venta de mostrador (BAR/POS).', ErrorCodes.INVALID_INPUT);
       }
       if ((account as any).status !== 'OPEN') {
-        throw new Error('La cuenta ya fue cerrada o anulada');
+        throw conflict('La cuenta ya fue cerrada o anulada.', ErrorCodes.ACCOUNT_CLOSED);
       }
 
       // Validar: sin pagos activos netos
       const netPaid = await this.calculateNetPaidAmountTx(tx, accountId);
       if (netPaid > EPSILON) {
-        throw new Error('No se puede anular: la cuenta tiene pagos registrados. Realizá una devolución primero.');
+        throw conflict('No se puede anular: la cuenta tiene pagos registrados. Realizá una devolución primero.', ErrorCodes.ACCOUNT_CLOSED);
       }
 
       // Restaurar stock para cada ítem PRODUCT
