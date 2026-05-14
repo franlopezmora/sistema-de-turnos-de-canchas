@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Package, Plus, Search } from 'lucide-react';
+import { ADMIN_Z_INDEX } from '../../utils/adminZIndex';
 
 export type ProductSearchItem = {
   id: number;
@@ -156,7 +157,10 @@ export default function ProductSearch({
       </div>
 
       {open && !disabled && normalizedQuery.length >= minQueryLength && (
-        <div className="absolute z-[110] w-full mt-2 bg-p-surface border-2 border-lima-900/10 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div
+          className="absolute w-full mt-2 bg-p-surface border-2 border-lima-900/10 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
+          style={{ zIndex: ADMIN_Z_INDEX.dropdown }}
+        >
           {results.length > 0 ? (
             <ul className="py-2">
               {results.map((product, idx) => {

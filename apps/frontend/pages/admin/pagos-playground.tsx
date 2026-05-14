@@ -28,7 +28,7 @@ import AccountDrawer, {
   type AccountDrawerInitialView,
   type AccountDrawerSuccessMeta,
 } from '../../modules/cuentas/components/AccountDrawer';
-import { AdminDrawer, AdminDrawerSection, AdminFilterToolbar, AdminPanel, AdminSegmentedControl } from '../../components/admin/ui';
+import { AdminDrawer, AdminDrawerSection, AdminFeedbackBanner, AdminFilterToolbar, AdminPanel, AdminSegmentedControl } from '../../components/admin/ui';
 import AdminAppModal from '../../components/admin/ui/AdminAppModal';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
@@ -58,6 +58,8 @@ import {
 } from '../../services/PaymentService';
 import { formatDateTime24 } from '../../utils/dateTime';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
+import { showAdminToast } from '../../utils/adminToast';
+import { ADMIN_Z_INDEX } from '../../utils/adminZIndex';
 import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 
 type PaymentsTab = 'SUMMARY' | 'ACCOUNTS' | 'MOVEMENTS' | 'CLOSURE' | 'REFUNDS' | 'REPORTS';
@@ -582,9 +584,6 @@ export default function AdminPaymentsPlaygroundPage() {
   const [posReportLoading, setPosReportLoading] = useState(false);
   const [posReportError, setPosReportError] = useState('');
 
-  const [adminToasts, setAdminToasts] = useState<Array<{ id: number; message: string }>>([]);
-  const adminToastIdRef = useRef(1);
-  const adminToastTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const paymentsContentScrollRef = useRef<HTMLElement | null>(null);
   const selectedAccountDetailFocusRef = useRef<HTMLDivElement | null>(null);
   const accountDetailRequestSeqRef = useRef<Record<string, number>>({});
@@ -612,29 +611,11 @@ export default function AdminPaymentsPlaygroundPage() {
     });
   }, []);
 
-  const showAdminToast = useCallback((message: string) => {
-    const text = String(message || '').trim();
-    if (!text) return;
-    const id = adminToastIdRef.current++;
-    setAdminToasts((prev) => [...prev, { id, message: text }].slice(-4));
-    const timeout = setTimeout(() => {
-      setAdminToasts((prev) => prev.filter((item) => item.id !== id));
-    }, 2400);
-    adminToastTimeoutsRef.current.push(timeout);
-  }, []);
-
   useEffect(() => {
     if (!authChecked || user) return;
     if (getPendingLogoutRedirect()) return;
     void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/admin/pagos-playground')}`);
   }, [authChecked, router, user]);
-
-  useEffect(() => {
-    return () => {
-      adminToastTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
-      adminToastTimeoutsRef.current = [];
-    };
-  }, []);
 
   useEffect(() => {
     const nextTab = parsePaymentsTab(router.query.tab);
@@ -789,7 +770,7 @@ export default function AdminPaymentsPlaygroundPage() {
     } finally {
       setOpeningAccount(false);
     }
-  }, [openAccountDrawer, refresh, showAdminToast]);
+  }, [openAccountDrawer, refresh]);
 
   const loadCashSummary = useCallback(async () => {
     setCashSummaryError('');
@@ -1060,7 +1041,7 @@ export default function AdminPaymentsPlaygroundPage() {
     setCashShiftError('');
 
     if (shouldBlockCloseShiftWithOpenAccounts) {
-      showAdminToast(closeShiftBlockedMessage);
+      showAdminToast(closeShiftBlockedMessage, 'warning');
       return;
     }
 
@@ -1580,7 +1561,7 @@ export default function AdminPaymentsPlaygroundPage() {
   const openRefundRequestForAccount = useCallback(async (accountId: string, options?: { lockAccount?: boolean }) => {
     const key = String(accountId || '').trim();
     if (!key) {
-      showAdminToast('Seleccioná una cuenta con pagos para solicitar una devolución.');
+      showAdminToast('Seleccioná una cuenta con pagos para solicitar una devolución.', 'warning');
       return;
     }
 
@@ -1623,7 +1604,7 @@ export default function AdminPaymentsPlaygroundPage() {
     } else {
       setRefundRequestError('Esta cuenta no tiene pagos registrados para devolver.');
     }
-  }, [ensureAccountDetail, ensureAccountRefunds, showAdminToast]);
+  }, [ensureAccountDetail, ensureAccountRefunds]);
 
   const submitRefundRequest = useCallback(async () => {
     if (!refundRequestAccountId || !refundRequestSelectedPayment) return;
@@ -1681,7 +1662,6 @@ export default function AdminPaymentsPlaygroundPage() {
     refundRequestNotes,
     refundRequestReasonType,
     refundRequestSelectedPayment,
-    showAdminToast,
   ]);
 
   const closeRefundDetailDrawer = useCallback(() => {
@@ -1750,7 +1730,6 @@ export default function AdminPaymentsPlaygroundPage() {
     refundActionConfirm,
     refundActionReason,
     selectedRefund?.accountId,
-    showAdminToast,
   ]);
 
 
@@ -1784,9 +1763,9 @@ export default function AdminPaymentsPlaygroundPage() {
           />
 
           {error && (
-            <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error">
+            <AdminFeedbackBanner tone="error" compact>
               {error}
-            </div>
+            </AdminFeedbackBanner>
           )}
 
           <section ref={paymentsContentScrollRef} className="min-h-0 flex-1 overflow-auto">
@@ -2054,7 +2033,7 @@ export default function AdminPaymentsPlaygroundPage() {
                     loading={loadingCashShift}
                     onToggleShift={() => {
                       if (cashCurrentShift && shouldBlockCloseShiftWithOpenAccounts) {
-                        showAdminToast(closeShiftBlockedMessage);
+                        showAdminToast(closeShiftBlockedMessage, 'warning');
                         return;
                       }
                       setCashSidebarView(cashCurrentShift ? 'close_shift' : 'open_shift');
@@ -2189,7 +2168,7 @@ export default function AdminPaymentsPlaygroundPage() {
                     lastReport={cashLastCloseReport}
                     onCloseShift={() => {
                       if (shouldBlockCloseShiftWithOpenAccounts) {
-                        showAdminToast(closeShiftBlockedMessage);
+                        showAdminToast(closeShiftBlockedMessage, 'warning');
                         return;
                       }
                       setCashCloseShiftForm({ countedCash: '' });
@@ -2546,19 +2525,6 @@ export default function AdminPaymentsPlaygroundPage() {
               </div>
             )}
           </section>
-
-          {adminToasts.length > 0 && (
-            <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] flex w-full max-w-[360px] flex-col gap-2">
-              {adminToasts.map((toast) => (
-                <div
-                  key={toast.id}
-                  className="rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[12px] font-semibold text-p-text shadow-lg"
-                >
-                  {toast.message}
-                </div>
-              ))}
-            </div>
-          )}
 
         </div>
       </AdminPlaygroundShell>
@@ -3307,7 +3273,10 @@ export default function AdminPaymentsPlaygroundPage() {
                     className="h-9 w-full rounded-xl border border-p-border bg-p-surface pl-8 pr-3 text-[13px] text-p-text outline-none focus:border-p-accent disabled:opacity-60"
                   />
                   {posClientDropdownOpen && posClientResults.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full z-[120] mt-1 max-h-52 overflow-y-auto rounded-xl border border-p-border bg-p-surface shadow-lg">
+                    <div
+                      className="absolute left-0 right-0 top-full mt-1 max-h-52 overflow-y-auto rounded-xl border border-p-border bg-p-surface shadow-lg"
+                      style={{ zIndex: ADMIN_Z_INDEX.dropdown }}
+                    >
                       {posClientResults.map((client) => (
                         <button
                           key={client.id}

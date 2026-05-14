@@ -1,5 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import { ADMIN_Z_INDEX } from '../../../utils/adminZIndex';
 
 type PaymentQuickPreset = 'FULL' | 'COURT_ONLY' | 'CUSTOM_ITEMS' | 'MY_SHARE';
 
@@ -79,7 +80,8 @@ export default function PlaytomicPaymentModal({
 
   return (
     <div
-      className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[var(--overlay)] p-4"
+      className="fixed inset-0 flex items-center justify-center bg-[var(--overlay)] p-4"
+      style={{ zIndex: ADMIN_Z_INDEX.modal }}
       role="presentation"
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}

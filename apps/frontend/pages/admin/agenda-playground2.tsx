@@ -13,6 +13,8 @@ import AgendaSlotLayer from '../../components/admin/agenda/AgendaSlotLayer';
 import AgendaTimeGutter from '../../components/admin/agenda/AgendaTimeGutter';
 import AgendaToolbar from '../../components/admin/agenda/AgendaToolbar';
 import BookingHoverCard from '../../components/admin/agenda/BookingHoverCard';
+import ChangeTitularModal from '../../components/admin/agenda/ChangeTitularModal';
+import DuplicateClientDecisionModal from '../../components/admin/agenda/DuplicateClientDecisionModal';
 import PlaytomicPaymentModal from '../../components/admin/payments/PlaytomicPaymentModal';
 import PaymentRegistrationDrawer from '../../components/admin/payments/PaymentRegistrationDrawer';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
@@ -20,6 +22,9 @@ import { ClubAdminService, type BookingBillingConfig } from '../../services/Club
 import { cancelBooking, cancelFixedBooking, changeBookingClient, confirmBooking, createBooking, createFixedBooking, getAdminSchedule, getBookingBillingConfig, getBookingById, getBookingFinancialSummary, getBookingQuote, getBookingTimelineEvents, registerBookingPartialPayment, rescheduleFixedBooking, updateBookingBillingConfig, type BookingDomainEvent } from '../../services/BookingService';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import { reportUiError } from '../../utils/uiError';
+import { ADMIN_Z_INDEX_CLASS } from '../../utils/adminZIndex';
+import { AdminFeedbackBanner } from '../../components/admin/ui/AdminFeedback';
+import { showAdminToast } from '../../utils/adminToast';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
 import { normalizeApiError } from '../../utils/apiError';
 import { resolveBookingErrorBehavior } from '../../utils/bookingErrorMap';
@@ -2061,10 +2066,6 @@ export default function AdminAgendaPlaygroundPage() {
     x: number;
     y: number;
   } | null>(null);
-  const [calendarNotice, setCalendarNotice] = useState<{
-    message: string;
-    tone: 'info' | 'success' | 'warning' | 'error';
-  } | null>(null);
   const [participantLabelByRefCache, setParticipantLabelByRefCache] = useState<Record<string, string>>({});
   const [isQuickDatePickerOpen, setIsQuickDatePickerOpen] = useState(false);
   const participantSearchSeqRef = useRef(0);
@@ -2078,7 +2079,6 @@ export default function AdminAgendaPlaygroundPage() {
   const agendaScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastAutoScrollDateKeyRef = useRef<string | null>(null);
   const drawerScrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const calendarNoticeTimerRef = useRef<number | null>(null);
   const drawerCloseCleanupTimerRef = useRef<number | null>(null);
   const bookingFinancialRequestSeqRef = useRef(0);
   const bookingTimelineRequestSeqRef = useRef(0);
@@ -2147,20 +2147,13 @@ export default function AdminAgendaPlaygroundPage() {
   }, [normalizedUser, selectedClubIdState]);
   const canChangeTitularFromUi = activeTenantRole === 'OWNER' || activeTenantRole === 'ADMIN';
 
-  const showCalendarNotice = useCallback((
+  const showAgendaToast = useCallback((
     message: string,
     tone: 'info' | 'success' | 'warning' | 'error' = 'error'
   ) => {
     const next = toUserSafeMessage(message, '');
     if (!next) return;
-    setCalendarNotice({ message: next, tone });
-    if (calendarNoticeTimerRef.current) {
-      window.clearTimeout(calendarNoticeTimerRef.current);
-    }
-    calendarNoticeTimerRef.current = window.setTimeout(() => {
-      setCalendarNotice(null);
-      calendarNoticeTimerRef.current = null;
-    }, 3600);
+    showAdminToast(next, tone);
   }, []);
 
   const applyBookingError = useCallback(
@@ -2183,11 +2176,11 @@ export default function AdminAgendaPlaygroundPage() {
       }));
       setFormError(safeMessage);
       if (options?.forceNotice || behavior.channel === 'banner') {
-        showCalendarNotice(safeMessage);
+        showAgendaToast(safeMessage);
       }
       return { normalized, behavior, message: safeMessage };
     },
-    [showCalendarNotice]
+    [showAgendaToast]
   );
 
   const setBlockingFieldError = useCallback(
@@ -2205,10 +2198,10 @@ export default function AdminAgendaPlaygroundPage() {
       }));
       setFormError(safeMessage);
       if (options?.forceNotice) {
-        showCalendarNotice(safeMessage);
+        showAgendaToast(safeMessage);
       }
     },
-    [showCalendarNotice]
+    [showAgendaToast]
   );
 
   const closeDuplicateDecisionModal = useCallback(() => {
@@ -2318,7 +2311,7 @@ export default function AdminAgendaPlaygroundPage() {
       closeDuplicateDecisionModal();
       setFormError('');
       setDrawerOpen(false);
-      showCalendarNotice(
+      showAgendaToast(
         mode === 'USE_EXISTING'
           ? 'Reserva creada con el cliente existente seleccionado.'
           : 'Reserva creada como cliente nuevo (duplicado permitido).',
@@ -2394,9 +2387,6 @@ export default function AdminAgendaPlaygroundPage() {
 
   useEffect(() => {
     return () => {
-      if (calendarNoticeTimerRef.current) {
-        window.clearTimeout(calendarNoticeTimerRef.current);
-      }
       if (drawerCloseCleanupTimerRef.current) {
         window.clearTimeout(drawerCloseCleanupTimerRef.current);
       }
@@ -2622,7 +2612,8 @@ export default function AdminAgendaPlaygroundPage() {
       } catch (error: any) {
         if (cancelled) return;
         setChangeTitularCandidates([]);
-        setChangeTitularError(toUserSafeMessage(error?.message, 'No se pudo buscar clientes.'));
+        const normalized = normalizeApiError(error, 'No se pudo buscar clientes.');
+        setChangeTitularError(toUserSafeMessage(normalized.message, 'No se pudo buscar clientes.'));
       } finally {
         if (!cancelled) setChangeTitularLoading(false);
       }
@@ -2653,7 +2644,16 @@ export default function AdminAgendaPlaygroundPage() {
     setChangeTitularSelectedClientId('');
   }, [changeTitularSubmitting]);
 
+  const changeTitularSelectedCandidate = useMemo(
+    () =>
+      changeTitularCandidates.find(
+        (candidate) => String(candidate.id) === String(changeTitularSelectedClientId)
+      ) || null,
+    [changeTitularCandidates, changeTitularSelectedClientId]
+  );
+
   const submitChangeTitular = useCallback(async () => {
+    if (changeTitularSubmitting) return;
     const bookingId = Number(editingBookingId || 0);
     const newClientId = String(changeTitularSelectedClientId || '').trim();
     if (!Number.isFinite(bookingId) || bookingId <= 0) {
@@ -2680,7 +2680,7 @@ export default function AdminAgendaPlaygroundPage() {
       await reloadSchedule();
       closeChangeTitularModal();
       setEditingBookingId(String(bookingId));
-      showCalendarNotice('Titular actualizado correctamente.', 'success');
+      showAgendaToast('Titular actualizado correctamente.', 'success');
     } catch (error: any) {
       const normalized = normalizeApiError(error, 'No se pudo cambiar el titular.');
       setChangeTitularError(toUserSafeMessage(normalized.message, 'No se pudo cambiar el titular.'));
@@ -2689,12 +2689,13 @@ export default function AdminAgendaPlaygroundPage() {
     }
   }, [
     changeTitularReason,
+    changeTitularSubmitting,
     changeTitularSelectedClientId,
     closeChangeTitularModal,
     editingBooking?.clientId,
     editingBookingId,
     reloadSchedule,
-    showCalendarNotice,
+    showAgendaToast,
   ]);
 
   const loadConsumptionProducts = useCallback(async () => {
@@ -2717,7 +2718,8 @@ export default function AdminAgendaPlaygroundPage() {
     } catch (error: any) {
       reportUiError({ area: 'AgendaPlayground', action: 'loadConsumptionProducts' }, error);
       setConsumptionProducts([]);
-      setConsumptionProductsError(error?.message || 'No se pudieron cargar los productos del club.');
+      const normalized = normalizeApiError(error, 'No se pudieron cargar los productos del club.');
+      setConsumptionProductsError(toUserSafeMessage(normalized.message, 'No se pudieron cargar los productos del club.'));
       return [];
     } finally {
       setConsumptionProductsLoading(false);
@@ -2744,7 +2746,8 @@ export default function AdminAgendaPlaygroundPage() {
       if (bookingConsumptionRequestSeqRef.current === requestSeq) {
         setBookingAccountItems([]);
         setBookingConsumptionItems([]);
-        setBookingConsumptionError(error?.message || 'No se pudieron cargar los consumos.');
+        const normalized = normalizeApiError(error, 'No se pudieron cargar los consumos.');
+        setBookingConsumptionError(toUserSafeMessage(normalized.message, 'No se pudieron cargar los consumos.'));
       }
       return [];
     } finally {
@@ -2991,7 +2994,8 @@ export default function AdminAgendaPlaygroundPage() {
       } catch (error: any) {
         if (cancelled || consumptionQuoteRequestSeqRef.current !== requestSeq) return;
         setConsumptionQuote(null);
-        setConsumptionQuoteError(error?.message || 'No se pudo cotizar el consumo.');
+        const normalized = normalizeApiError(error, 'No se pudo cotizar el consumo.');
+        setConsumptionQuoteError(toUserSafeMessage(normalized.message, 'No se pudo cotizar el consumo.'));
       } finally {
         if (!cancelled && consumptionQuoteRequestSeqRef.current === requestSeq) {
           setConsumptionQuoteLoading(false);
@@ -3156,7 +3160,8 @@ export default function AdminAgendaPlaygroundPage() {
         if (cancelled) return;
         if (bookingTimelineRequestSeqRef.current !== requestSeq) return;
         setBookingTimelineEvents([]);
-        setBookingTimelineError(toUserSafeMessage(error?.message, 'No se pudo cargar el historial de la reserva.'));
+        const normalized = normalizeApiError(error, 'No se pudo cargar el historial de la reserva.');
+        setBookingTimelineError(toUserSafeMessage(normalized.message, 'No se pudo cargar el historial de la reserva.'));
       } finally {
         if (cancelled) return;
         if (bookingTimelineRequestSeqRef.current === requestSeq) {
@@ -3236,7 +3241,7 @@ export default function AdminAgendaPlaygroundPage() {
         if (dropHasConflict) {
           const message = 'Ya existe una reserva en ese rango horario para la cancha seleccionada.';
           setFormError(message);
-          showCalendarNotice(message);
+          showAgendaToast(message);
           setDraggingBookingId(null);
           setDraggingBookingMeta(null);
           draggingBookingMetaRef.current = null;
@@ -3250,7 +3255,7 @@ export default function AdminAgendaPlaygroundPage() {
         if (candidateStartDateTime.getTime() < Date.now()) {
           const message = 'No se pueden reservar turnos en el pasado.';
           setFormError(message);
-          showCalendarNotice(message);
+          showAgendaToast(message);
           setDraggingBookingId(null);
           setDraggingBookingMeta(null);
           draggingBookingMetaRef.current = null;
@@ -3358,7 +3363,7 @@ export default function AdminAgendaPlaygroundPage() {
     persistBookingMove,
     reloadSchedule,
     selectedDate,
-    showCalendarNotice,
+    showAgendaToast,
   ]);
 
   const visibleCourts = useMemo(() => {
@@ -3381,7 +3386,7 @@ export default function AdminAgendaPlaygroundPage() {
         '';
 
       if (!fallbackCourtId) {
-        showCalendarNotice('Primero cargá al menos una cancha para crear una reserva.');
+        showAgendaToast('Primero cargá al menos una cancha para crear una reserva.');
         return;
       }
 
@@ -3443,7 +3448,7 @@ export default function AdminAgendaPlaygroundPage() {
       selectedDate,
       selectedEndSlot,
       selectedStartSlot,
-      showCalendarNotice,
+      showAgendaToast,
       resetRecurringDraft,
       resetConsumptionsDraft,
     ]
@@ -4530,17 +4535,17 @@ export default function AdminAgendaPlaygroundPage() {
       editingBooking?.state === 'pending'
     );
     if (lockPaymentsNow) {
-      showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
+      showAgendaToast('Primero confirmá la reserva para poder registrar pagos.');
       return false;
     }
     if (!persistedEditingBookingId || bookingKind === 'block') {
-      showCalendarNotice('Primero creá/abrí una reserva válida.');
+      showAgendaToast('Primero creá/abrí una reserva válida.');
       return false;
     }
 
     const amount = Number(Number(input.amount || 0).toFixed(2));
     if (!Number.isFinite(amount) || amount <= 0.009) {
-      showCalendarNotice('Ingresá un monto mayor a 0.');
+      showAgendaToast('Ingresá un monto mayor a 0.');
       return false;
     }
 
@@ -4700,9 +4705,10 @@ export default function AdminAgendaPlaygroundPage() {
       } catch (timelineError: any) {
         if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
           setBookingTimelineEvents([]);
+          const normalized = normalizeApiError(timelineError, 'No se pudo cargar el historial de la reserva.');
           setBookingTimelineError(
             toUserSafeMessage(
-              timelineError?.message,
+              normalized.message,
               'No se pudo cargar el historial de la reserva.'
             )
           );
@@ -4714,7 +4720,7 @@ export default function AdminAgendaPlaygroundPage() {
       }
 
       if (!input.silentSuccessNotice) {
-        showCalendarNotice(input.successMessage || `Pago registrado: ${amount.toFixed(2)} $.`, 'success');
+        showAgendaToast(input.successMessage || `Pago registrado: ${amount.toFixed(2)} $.`, 'success');
       }
       if (paymentMode === 'Único' && effectiveParticipantId) {
         const currentResponsibleId = String(
@@ -4801,9 +4807,10 @@ export default function AdminAgendaPlaygroundPage() {
       }
       return true;
     } catch (error: any) {
-      const message = toUserSafeMessage(error?.message, 'No se pudo registrar el pago.');
+      const normalized = normalizeApiError(error, 'No se pudo registrar el pago.');
+      const message = toUserSafeMessage(normalized.message, 'No se pudo registrar el pago.');
       setFormError(message);
-      showCalendarNotice(message);
+      showAgendaToast(message);
       return false;
     } finally {
       if (effectiveParticipantId) {
@@ -4826,7 +4833,7 @@ export default function AdminAgendaPlaygroundPage() {
     refreshBookingFinancial,
     reloadSchedule,
     singleChargeParticipantId,
-    showCalendarNotice,
+    showAgendaToast,
     applyOptimisticBookingPaymentUpdate,
   ]);
 
@@ -4858,7 +4865,7 @@ export default function AdminAgendaPlaygroundPage() {
 
   const addParticipantRow = () => {
     if (!persistedEditingBookingId && bookingKind !== 'block') {
-      showCalendarNotice('Primero creá la reserva. Después podés agregar más participantes.');
+      showAgendaToast('Primero creá la reserva. Después podés agregar más participantes.');
       return;
     }
     setParticipants((previous) => [
@@ -4997,6 +5004,7 @@ export default function AdminAgendaPlaygroundPage() {
 
   const handleConfirmPendingBooking = useCallback(async () => {
     if (!persistedEditingBookingId) return;
+    if (confirmingBooking || isSubmittingBooking || isDeletingBooking) return;
     try {
       setConfirmingBooking(true);
       setFormError('');
@@ -5017,14 +5025,15 @@ export default function AdminAgendaPlaygroundPage() {
         }
       } catch (timelineError: any) {
         if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-          setBookingTimelineError(toUserSafeMessage(timelineError?.message, 'No se pudo cargar el historial de la reserva.'));
+          const normalized = normalizeApiError(timelineError, 'No se pudo cargar el historial de la reserva.');
+          setBookingTimelineError(toUserSafeMessage(normalized.message, 'No se pudo cargar el historial de la reserva.'));
         }
       } finally {
         if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
           setBookingTimelineLoading(false);
         }
       }
-      showCalendarNotice('Reserva confirmada. Ya podés registrar pagos.', 'success');
+      showAgendaToast('Reserva confirmada. Ya podés registrar pagos.', 'success');
     } catch (error: any) {
       applyBookingError(error, 'No se pudo confirmar la reserva.');
     } finally {
@@ -5032,11 +5041,14 @@ export default function AdminAgendaPlaygroundPage() {
     }
   }, [
     applyBookingError,
+    confirmingBooking,
+    isDeletingBooking,
+    isSubmittingBooking,
     loadBookingConsumptions,
     persistedEditingBookingId,
     refreshBookingFinancial,
     reloadSchedule,
-    showCalendarNotice,
+    showAgendaToast,
   ]);
 
   const mapSeriesImpactItem = useCallback((item: any, fallbackCourtName: string): RecurringOverlapItem => {
@@ -5394,6 +5406,11 @@ export default function AdminAgendaPlaygroundPage() {
       await reloadSchedule();
       setDeleteBookingConfirmOpen(false);
       setDeleteBookingFinalConfirmOpen(false);
+      if (isEditingRecurringSeries && seriesScope) {
+        showAgendaToast('Serie cancelada.', 'success');
+      } else {
+        showAgendaToast('Reserva cancelada.', 'success');
+      }
       if (!shouldDeferDrawerCloseForSeriesResult) {
         setDrawerOpen(false);
         setEditingBookingId(null);
@@ -5404,7 +5421,7 @@ export default function AdminAgendaPlaygroundPage() {
     } finally {
       setIsDeletingBooking(false);
     }
-  }, [applyBookingError, editingBooking?.fixedBookingId, editingBookingId, mapSeriesAppliedItem, mapSeriesImpactItem, reloadSchedule, selectedCourt?.name]);
+  }, [applyBookingError, editingBooking?.fixedBookingId, editingBookingId, mapSeriesAppliedItem, mapSeriesImpactItem, reloadSchedule, selectedCourt?.name, showAgendaToast]);
 
   const confirmCancelBookingFromDrawer = useCallback(async () => {
     const result = buildCancelBookingOptions();
@@ -6374,7 +6391,7 @@ export default function AdminAgendaPlaygroundPage() {
     const amountToRegister = Number(remainingAmount.toFixed(2));
     if (amountToRegister <= 0.009) {
       setBillingHubTab('PAYMENTS');
-      showCalendarNotice('El saldo ya está cubierto por pagos registrados.');
+      showAgendaToast('El saldo ya está cubierto por pagos registrados.');
       return;
     }
     void registerPaymentNow({
@@ -6382,48 +6399,48 @@ export default function AdminAgendaPlaygroundPage() {
       method: 'CASH',
       successMessage: `Pago registrado: ${amountToRegister.toFixed(2)} $.`,
     });
-  }, [bookingDrawerState.draft, registerPaymentNow, showCalendarNotice]);
+  }, [bookingDrawerState.draft, registerPaymentNow, showAgendaToast]);
 
   const handleBillingModeChange = useCallback((mode: 'INDIVIDUAL' | 'SHARED') => {
     if (editingBookingId && (isRemoteBillingConfigLoading || !isBillingConfigHydrated)) {
       return;
     }
     if (isBillingConfigLockedByPayments) {
-      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
       return;
     }
     const nextPaymentMode: PaymentMode = mode === 'SHARED' ? 'Dividido' : 'Único';
     setBillingConfigTouchedByUser(true);
     setPaymentMode(nextPaymentMode);
     bookingDrawerDispatch({ type: 'SET_CHARGE_MODE', payload: { mode } });
-  }, [editingBookingId, isBillingConfigHydrated, isBillingConfigLockedByPayments, isRemoteBillingConfigLoading, showCalendarNotice]);
+  }, [editingBookingId, isBillingConfigHydrated, isBillingConfigLockedByPayments, isRemoteBillingConfigLoading, showAgendaToast]);
 
   const handleBillingResponsibleChange = useCallback((participantId: string) => {
     if (isBillingConfigLockedByPayments) {
-      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
       return;
     }
     setBillingConfigTouchedByUser(true);
     bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId } });
-  }, [isBillingConfigLockedByPayments, showCalendarNotice]);
+  }, [isBillingConfigLockedByPayments, showAgendaToast]);
 
   const handleBillingAssignmentAmountChange = useCallback((assignmentId: string, amount: number) => {
     if (isBillingConfigLockedByPayments) {
-      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
       return;
     }
     setBillingConfigTouchedByUser(true);
     bookingDrawerDispatch({ type: 'SET_ASSIGNMENT_AMOUNT', payload: { assignmentId, amount } });
-  }, [isBillingConfigLockedByPayments, showCalendarNotice]);
+  }, [isBillingConfigLockedByPayments, showAgendaToast]);
 
   const handleBillingToggleChargeable = useCallback((assignmentId: string, isChargeable: boolean) => {
     if (isBillingConfigLockedByPayments) {
-      showCalendarNotice('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
+      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
       return;
     }
     setBillingConfigTouchedByUser(true);
     bookingDrawerDispatch({ type: 'TOGGLE_ASSIGNMENT_CHARGEABLE', payload: { assignmentId, isChargeable } });
-  }, [isBillingConfigLockedByPayments, showCalendarNotice]);
+  }, [isBillingConfigLockedByPayments, showAgendaToast]);
 
   const closeSimplifiedPaymentModal = useCallback(() => {
     setActivePaymentModal(null);
@@ -6470,25 +6487,25 @@ export default function AdminAgendaPlaygroundPage() {
 
   const openSimplifiedPaymentModal = useCallback(async () => {
     if (!persistedEditingBookingId) {
-      showCalendarNotice('Primero creá la reserva. Después podés registrar cobros.');
+      showAgendaToast('Primero creá la reserva. Después podés registrar cobros.');
       return;
     }
     if (isRemoteBillingConfigLoading) {
       return;
     }
     if (isPaymentLockedByManualPending) {
-      showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
+      showAgendaToast('Primero confirmá la reserva para poder registrar pagos.');
       return;
     }
 
     const draft = bookingDrawerState.draft;
     if (!draft) {
-      showCalendarNotice('No se pudo preparar el cobro. Reabrí la reserva e intentá de nuevo.');
+      showAgendaToast('No se pudo preparar el cobro. Reabrí la reserva e intentá de nuevo.');
       return;
     }
 
     if (participants.length === 0) {
-      showCalendarNotice('Primero agregá al menos un participante.');
+      showAgendaToast('Primero agregá al menos un participante.');
       return;
     }
 
@@ -6514,10 +6531,11 @@ export default function AdminAgendaPlaygroundPage() {
       }
     } catch (error: any) {
       if (remoteBillingConfigRequestSeqRef.current !== requestSeq) return;
-      const message = toUserSafeMessage(error?.message, 'No se pudo cargar la configuración de cobro.');
+      const normalized = normalizeApiError(error, 'No se pudo cargar la configuración de cobro.');
+      const message = toUserSafeMessage(normalized.message, 'No se pudo cargar la configuración de cobro.');
       setIsBillingConfigHydrated(false);
       setBillingConfigLoadError(message);
-      showCalendarNotice(message);
+      showAgendaToast(message);
       return;
     } finally {
       if (remoteBillingConfigRequestSeqRef.current === requestSeq) {
@@ -6593,7 +6611,7 @@ export default function AdminAgendaPlaygroundPage() {
     participants,
     persistedEditingBookingId,
     refreshBookingFinancial,
-    showCalendarNotice,
+    showAgendaToast,
     simplifiedRemainingAfterQueue,
     singleChargeParticipantId,
     latestPaymentPayerRef,
@@ -6602,7 +6620,7 @@ export default function AdminAgendaPlaygroundPage() {
 
   const queueSimplifiedPaymentFromModal = useCallback((options?: { skipPlaytomicPreconfirm?: boolean }) => {
     if (isPaymentLockedByManualPending) {
-      showCalendarNotice('Primero confirmá la reserva para poder registrar pagos.');
+      showAgendaToast('Primero confirmá la reserva para poder registrar pagos.');
       return;
     }
 
@@ -6615,7 +6633,7 @@ export default function AdminAgendaPlaygroundPage() {
       return String(ownerPayerId).trim();
     })();
     if (!payerId) {
-      showCalendarNotice('Seleccioná quién paga esta reserva.');
+      showAgendaToast('Seleccioná quién paga esta reserva.');
       return;
     }
     const isPlaytomicFlow = simplifiedPaymentModalVariant === 'PLAYTOMIC';
@@ -6671,7 +6689,7 @@ export default function AdminAgendaPlaygroundPage() {
       return firstWithDebt?.id ? [firstWithDebt.id] : [];
     })();
     if (!isPlaytomicFlow && !isByConcept && coveredIds.length === 0) {
-      showCalendarNotice('Seleccioná por quién se imputa el pago.');
+      showAgendaToast('Seleccioná por quién se imputa el pago.');
       return;
     }
     if (!isPlaytomicFlow && paymentMode === 'Único') {
@@ -6686,7 +6704,7 @@ export default function AdminAgendaPlaygroundPage() {
         participants.find((participant) => participant.isOwner)?.id ||
         '';
       if (hasConfirmedPayments && allowedPayerId && payerId !== allowedPayerId) {
-        showCalendarNotice('En pago único, solo puede pagar el responsable de cobro.');
+        showAgendaToast('En pago único, solo puede pagar el responsable de cobro.');
         return;
       }
       if (!hasConfirmedPayments && payerId !== allowedPayerId) {
@@ -6695,7 +6713,7 @@ export default function AdminAgendaPlaygroundPage() {
       }
     }
     if (!isParticipantPaymentMethod(simplifiedPaymentMethodDraft)) {
-      showCalendarNotice('Seleccioná un método de pago.');
+      showAgendaToast('Seleccioná un método de pago.');
       return;
     }
     const selectedMethod = simplifiedPaymentMethodDraft as Participant['paymentMethod'];
@@ -6710,7 +6728,7 @@ export default function AdminAgendaPlaygroundPage() {
 
     const amount = Number(String(simplifiedPaymentAmountDraft || '').replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0.009) {
-      showCalendarNotice('Ingresá un monto mayor a 0.');
+      showAgendaToast('Ingresá un monto mayor a 0.');
       return;
     }
     const roundedAmount = Number(amount.toFixed(2));
@@ -6721,12 +6739,12 @@ export default function AdminAgendaPlaygroundPage() {
         coveredIds.reduce((sum, participantId) => sum + Number(participantDebtAmountById.get(participantId) || 0), 0).toFixed(2)
       );
       if (coveredDebtTotal <= 0.009) {
-        showCalendarNotice('Los participantes seleccionados no tienen deuda pendiente.');
+        showAgendaToast('Los participantes seleccionados no tienen deuda pendiente.');
         return;
       }
       if (effectiveAmount > coveredDebtTotal + 0.009) {
         if (!isPlaytomicFlow) {
-          showCalendarNotice(`El monto supera la deuda de los participantes seleccionados (${coveredDebtTotal.toFixed(2)} $).`);
+          showAgendaToast(`El monto supera la deuda de los participantes seleccionados (${coveredDebtTotal.toFixed(2)} $).`);
           return;
         }
         effectiveAmount = coveredDebtTotal;
@@ -6735,7 +6753,7 @@ export default function AdminAgendaPlaygroundPage() {
     }
     if (effectiveAmount > simplifiedRemainingAfterQueue + 0.009) {
       if (!isPlaytomicFlow) {
-        showCalendarNotice(`El monto supera la deuda pendiente (${simplifiedRemainingAfterQueue.toFixed(2)} $).`);
+        showAgendaToast(`El monto supera la deuda pendiente (${simplifiedRemainingAfterQueue.toFixed(2)} $).`);
         return;
       }
       effectiveAmount = simplifiedRemainingAfterQueue;
@@ -6764,7 +6782,7 @@ export default function AdminAgendaPlaygroundPage() {
       });
     })();
     if (paymentAllocations.length === 0) {
-      showCalendarNotice('No se pudo distribuir el pago entre los participantes seleccionados.');
+      showAgendaToast('No se pudo distribuir el pago entre los participantes seleccionados.');
       return;
     }
     const selectedConceptItems = (() => {
@@ -6791,7 +6809,7 @@ export default function AdminAgendaPlaygroundPage() {
       return pendingAccountItems.filter((item) => selectedSet.has(String(item.id)));
     })();
     if (isByConcept && simplifiedPaymentConceptMode !== 'AUTO' && selectedConceptItems.length === 0) {
-      showCalendarNotice('Seleccioná al menos un concepto para imputar este pago.');
+      showAgendaToast('Seleccioná al menos un concepto para imputar este pago.');
       return;
     }
     const selectedConceptDebt = Number(
@@ -6806,7 +6824,7 @@ export default function AdminAgendaPlaygroundPage() {
     );
     if (isByConcept && simplifiedPaymentConceptMode !== 'AUTO' && effectiveAmount > selectedConceptDebt + 0.009) {
       if (!isPlaytomicFlow) {
-        showCalendarNotice(
+        showAgendaToast(
           `El monto supera la deuda de los conceptos seleccionados (${selectedConceptDebt.toFixed(2)} $).`
         );
         return;
@@ -6814,12 +6832,12 @@ export default function AdminAgendaPlaygroundPage() {
       effectiveAmount = selectedConceptDebt;
       appliedClampReason = 'conceptos';
       if (effectiveAmount <= 0.009) {
-        showCalendarNotice('Los conceptos seleccionados no tienen deuda pendiente.');
+        showAgendaToast('Los conceptos seleccionados no tienen deuda pendiente.');
         return;
       }
     }
     if (effectiveAmount <= 0.009) {
-      showCalendarNotice('No hay deuda pendiente para el alcance seleccionado.');
+      showAgendaToast('No hay deuda pendiente para el alcance seleccionado.');
       return;
     }
     const remainingByItemId = new Map<string, number>();
@@ -6877,7 +6895,7 @@ export default function AdminAgendaPlaygroundPage() {
         appliedClampReason === 'conceptos'
             ? 'la deuda de los conceptos seleccionados'
             : 'la deuda pendiente';
-      showCalendarNotice(`El monto se ajustó automáticamente al máximo permitido por ${reasonLabel}.`, 'warning');
+      showAgendaToast(`El monto se ajustó automáticamente al máximo permitido por ${reasonLabel}.`, 'warning');
     }
     const openPlaytomicResult = (result: PlaytomicPaymentResultModal) => {
       setActivePaymentModal({ flow: 'playtomicPayment', step: 'result' });
@@ -6915,11 +6933,11 @@ export default function AdminAgendaPlaygroundPage() {
               appliedItems,
             });
           } else if (registeredAmount > 0.009) {
-            showCalendarNotice(
+            showAgendaToast(
               `Pago parcial registrado: ${registeredAmount.toFixed(2)} $. Faltó imputar parte del pago a conceptos.`
             );
           } else {
-            showCalendarNotice('No se pudo imputar el pago a los conceptos seleccionados.');
+            showAgendaToast('No se pudo imputar el pago a los conceptos seleccionados.');
           }
           return;
         }
@@ -6951,7 +6969,7 @@ export default function AdminAgendaPlaygroundPage() {
               appliedItems,
             });
           } else if (registeredAmount > 0.009) {
-            showCalendarNotice(
+            showAgendaToast(
               `Pago parcial registrado: ${registeredAmount.toFixed(2)} $. Revisá el resto e intentá nuevamente.`
             );
           }
@@ -6984,7 +7002,7 @@ export default function AdminAgendaPlaygroundPage() {
       }
       closeSimplifiedPaymentModal();
       setFormError('');
-      showCalendarNotice(
+      showAgendaToast(
         !isPlaytomicFlow && paymentAllocations.length > 1
           ? `Pago registrado: ${registeredAmount.toFixed(2)} $ imputado a ${paymentAllocations.length} participantes.`
           : `Pago registrado: ${registeredAmount.toFixed(2)} $.`,
@@ -6997,7 +7015,7 @@ export default function AdminAgendaPlaygroundPage() {
     bookingFinancial?.paid,
     isPaymentLockedByManualPending,
     registerPaymentNow,
-    showCalendarNotice,
+    showAgendaToast,
     simplifiedPaymentAmountDraft,
     simplifiedPaymentMethodDraft,
     simplifiedPaymentImputationMode,
@@ -7312,8 +7330,9 @@ export default function AdminAgendaPlaygroundPage() {
         backendPersisted = true;
       } catch (error: any) {
         reportUiError({ area: 'AgendaPlayground', action: 'updateBillingConfig' }, error);
-        const message = toUserSafeMessage(error?.message, 'No se pudo guardar la configuración de cobro.');
-        showCalendarNotice(message);
+        const normalized = normalizeApiError(error, 'No se pudo guardar la configuración de cobro.');
+        const message = toUserSafeMessage(normalized.message, 'No se pudo guardar la configuración de cobro.');
+        showAgendaToast(message);
       }
 
       setPaymentMode(nextMode);
@@ -7330,7 +7349,7 @@ export default function AdminAgendaPlaygroundPage() {
     editingBooking?.userId,
     participants,
     resolveParticipantPrice,
-    showCalendarNotice,
+    showAgendaToast,
     totalPrice,
   ]);
 
@@ -7395,10 +7414,11 @@ export default function AdminAgendaPlaygroundPage() {
       setConsumptionQuantityDraft('1');
       setConsumptionQuote(null);
       setConsumptionQuoteError('');
-      showCalendarNotice('Consumo agregado correctamente.', 'success');
+      showAgendaToast('Consumo agregado correctamente.', 'success');
     } catch (error: any) {
       reportUiError({ area: 'AgendaPlayground', action: 'handleAddConsumption' }, error);
-      setBookingConsumptionError(error?.message || 'No se pudo agregar el consumo.');
+      const normalized = normalizeApiError(error, 'No se pudo agregar el consumo.');
+      setBookingConsumptionError(toUserSafeMessage(normalized.message, 'No se pudo agregar el consumo.'));
     } finally {
       setConsumptionAddInFlight(false);
     }
@@ -7411,7 +7431,7 @@ export default function AdminAgendaPlaygroundPage() {
     persistedEditingBookingId,
     refreshBookingFinancial,
     reloadSchedule,
-    showCalendarNotice,
+    showAgendaToast,
   ]);
 
   const handleRemoveConsumption = useCallback(async (itemId: string) => {
@@ -7425,16 +7445,18 @@ export default function AdminAgendaPlaygroundPage() {
         refreshBookingFinancial(persistedEditingBookingId),
         reloadSchedule(),
       ]);
-      showCalendarNotice('Consumo eliminado.', 'success');
+      showAgendaToast('Consumo eliminado.', 'success');
     } catch (error: any) {
       reportUiError({ area: 'AgendaPlayground', action: 'handleRemoveConsumption' }, error);
-      setBookingConsumptionError(error?.message || 'No se pudo eliminar el consumo.');
+      const normalized = normalizeApiError(error, 'No se pudo eliminar el consumo.');
+      setBookingConsumptionError(toUserSafeMessage(normalized.message, 'No se pudo eliminar el consumo.'));
     } finally {
       setConsumptionRemovingId((previous) => (previous === itemId ? null : previous));
     }
-  }, [loadBookingConsumptions, persistedEditingBookingId, refreshBookingFinancial, reloadSchedule, showCalendarNotice]);
+  }, [loadBookingConsumptions, persistedEditingBookingId, refreshBookingFinancial, reloadSchedule, showAgendaToast]);
 
   const handleCreateBooking = async (forceCreateRecurring = false, editSeriesScope?: EditSeriesScope) => {
+    if (isSubmittingBooking || isDeletingBooking || confirmingBooking) return;
     let recurringSummaryError = '';
     let recurringResultModalShouldOpen = false;
     let createdBookingId: string | null = null;
@@ -7517,6 +7539,7 @@ export default function AdminAgendaPlaygroundPage() {
           setFormError('');
           setEditingBookingId(null);
           setEditingBaseline(null);
+          showAgendaToast('Bloqueo actualizado.', 'success');
           return;
         } catch (error: any) {
           applyBookingError(error, 'No se pudo actualizar el bloqueo.');
@@ -7538,6 +7561,7 @@ export default function AdminAgendaPlaygroundPage() {
       setDrawerOpen(false);
       setFormError('');
       setBlockingTitle('');
+      showAgendaToast('Bloqueo creado.', 'success');
       return;
     }
 
@@ -7633,7 +7657,7 @@ export default function AdminAgendaPlaygroundPage() {
               ? 'Guardado parcial: no se pudo persistir toda la configuración de cobro.'
               : 'Guardado parcial.'
           );
-          showCalendarNotice(
+          showAgendaToast(
             !billingSaved
               ? 'Guardado parcial: configuración de cobro pendiente'
               : 'Guardado parcial'
@@ -7654,9 +7678,10 @@ export default function AdminAgendaPlaygroundPage() {
           } catch (timelineError: any) {
             if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
               setBookingTimelineEvents([]);
+              const normalized = normalizeApiError(timelineError, 'No se pudo cargar el historial de la reserva.');
               setBookingTimelineError(
                 toUserSafeMessage(
-                  timelineError?.message,
+                  normalized.message,
                   'No se pudo cargar el historial de la reserva.'
                 )
               );
@@ -7692,7 +7717,7 @@ export default function AdminAgendaPlaygroundPage() {
         }
         setFormError('');
         const baseSuccessMessage = shouldClose ? 'Reserva actualizada correctamente.' : 'Cambios guardados.';
-        showCalendarNotice(
+        showAgendaToast(
           pendingParticipantNotice ? `${baseSuccessMessage} ${pendingParticipantNotice}` : baseSuccessMessage
         );
         if (isEditingRecurringSeries && editSeriesScope && recurringRescheduleResult) {
@@ -7858,7 +7883,8 @@ export default function AdminAgendaPlaygroundPage() {
                   });
                   continue;
                 }
-                previewErrors.push(`${court.name}: ${toUserSafeMessage(error?.message, 'Error al previsualizar la serie')}`);
+                const normalized = normalizeApiError(error, 'Error al previsualizar la serie');
+                previewErrors.push(`${court.name}: ${toUserSafeMessage(normalized.message, 'Error al previsualizar la serie')}`);
               }
             }
           }
@@ -8053,13 +8079,15 @@ export default function AdminAgendaPlaygroundPage() {
                 overlaps.forEach((item: any) => {
                   pushOverlapDetail(item, court.name);
                 });
-                const recurringMessage = toUserSafeMessage(error?.message, '');
+                const normalized = normalizeApiError(error, '');
+                const recurringMessage = toUserSafeMessage(normalized.message, '');
                 if (recurringMessage.length > 0) {
                   recurringOverlapOnlyMessage = recurringMessage;
                 }
                 continue;
               }
-              hardErrors.push(`${court.name}: ${toUserSafeMessage(error?.message, 'Error al crear serie')}`);
+              const normalized = normalizeApiError(error, 'Error al crear serie');
+              hardErrors.push(`${court.name}: ${toUserSafeMessage(normalized.message, 'Error al crear serie')}`);
             }
           }
         }
@@ -8096,6 +8124,9 @@ export default function AdminAgendaPlaygroundPage() {
           })
         );
         setRecurringOverlapModalOpen(shouldOpenRecurringResultModal);
+        if (generatedCount > 0) {
+          showAgendaToast(`Reserva fija creada: ${generatedCount} turnos.`, 'success');
+        }
       } else {
         const selectedActivityId = Number(selectedCourt?.activityTypeId || 0);
         if (!Number.isFinite(selectedActivityId) || selectedActivityId <= 0) {
@@ -8178,6 +8209,7 @@ export default function AdminAgendaPlaygroundPage() {
         if (createdBooking) {
           openBookingInDrawer(createdBooking);
           setBookingCreatedModalOpen(true);
+          showAgendaToast('Reserva creada.', 'success');
           return;
         }
       }
@@ -8187,6 +8219,7 @@ export default function AdminAgendaPlaygroundPage() {
       setParticipantPriceDraftById({});
       setEditingBookingId(null);
       setEditingBaseline(null);
+      showAgendaToast('Reserva creada.', 'success');
     } catch (error: any) {
       setPendingSeriesScopeSave(null);
       const normalized = normalizeApiError(error, 'No se pudo crear la reserva.');
@@ -8634,7 +8667,7 @@ export default function AdminAgendaPlaygroundPage() {
       nextParticipantId &&
       nextParticipantId !== simplifiedLockedSinglePayerId
     ) {
-      showCalendarNotice('En pago único, después del primer pago queda fijo el pagador.');
+      showAgendaToast('En pago único, después del primer pago queda fijo el pagador.');
       return;
     }
     setSimplifiedPaymentPayerParticipantIdDraft(nextParticipantId);
@@ -9270,15 +9303,6 @@ export default function AdminAgendaPlaygroundPage() {
     seriesDeleteHasPaidItems && seriesDeletePreviewSummary?.scope !== 'THIS_OCCURRENCE';
   const seriesDeleteUsesIndividualRefund =
     seriesDeleteHasPaidItems && seriesDeletePreviewSummary?.scope === 'THIS_OCCURRENCE';
-  const calendarNoticeToneClassName = calendarNotice
-    ? {
-        error: 'border-p-error bg-p-error-bg text-p-error',
-        success: 'border-emerald-300 bg-emerald-50 text-emerald-700',
-        warning: 'border-amber-300 bg-amber-50 text-amber-700',
-        info: 'border-sky-300 bg-sky-50 text-sky-700',
-      }[calendarNotice.tone]
-    : '';
-
   return (
     <>
       <Head>
@@ -9298,13 +9322,6 @@ export default function AdminAgendaPlaygroundPage() {
       <AdminPlaygroundShell activeItem="Calendario" user={user}>
 
           <section ref={agendaSurfaceRef} className="relative flex-1 h-full min-w-0 rounded-tl-[12px] overflow-hidden bg-p-surface-2">
-            {calendarNotice && (
-              <div
-                className={`pointer-events-none fixed right-5 top-[84px] z-[2147483600] max-w-[420px] rounded-xl border px-3 py-2 text-[12px] font-semibold shadow-sm ${calendarNoticeToneClassName}`}
-              >
-                {calendarNotice.message}
-              </div>
-            )}
             <div className="h-full min-w-0">
               <div className="h-full flex flex-col p-4 lg:p-6 gap-4">
                 <AgendaToolbar
@@ -9509,7 +9526,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {customRecurrenceModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => setCustomRecurrenceModalOpen(false))
@@ -9707,7 +9724,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {recurringCreateConfirmOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -9809,7 +9826,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {recurringOverlapModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, closeRecurringResultModal)
@@ -9922,7 +9939,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {editSeriesScopeModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -10090,7 +10107,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteSeriesScopeModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -10294,7 +10311,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteBookingConfirmOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex justify-end p-3"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex justify-end p-3`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, closeDeleteBookingFlow)
@@ -10477,7 +10494,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteBookingFinalConfirmOpen && (
               <div
-                className="fixed inset-0 z-[2147483300] flex items-center justify-center bg-[var(--overlay)] p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modalStacked} flex items-center justify-center bg-[var(--overlay)] p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => {
@@ -10524,7 +10541,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {seriesOperationResultOpen && seriesOperationResult && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, closeSeriesOperationResult)
@@ -10600,7 +10617,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {deleteParticipantConfirm.open && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () =>
@@ -10661,7 +10678,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {blockingErrorModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => setBlockingErrorModalOpen(false))
@@ -10704,7 +10721,7 @@ export default function AdminAgendaPlaygroundPage() {
 
             {bookingCreatedModalOpen && (
               <div
-                className="fixed inset-0 z-[2147483200] bg-[var(--overlay)] flex items-center justify-center p-4"
+                className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} bg-[var(--overlay)] flex items-center justify-center p-4`}
                 onPointerDown={handleModalBackdropPointerDown}
                 onPointerUp={(event) =>
                   handleModalBackdropPointerUp(event, () => setBookingCreatedModalOpen(false))
@@ -11519,7 +11536,9 @@ export default function AdminAgendaPlaygroundPage() {
                           </div>
 
                           {bookingConsumptionError && (
-                            <p className="mt-3 text-[12px] font-medium text-p-error">{bookingConsumptionError}</p>
+                            <AdminFeedbackBanner tone="error" compact className="mt-3">
+                              {bookingConsumptionError}
+                            </AdminFeedbackBanner>
                           )}
 
                           <div className="mt-4 rounded-xl border border-p-border bg-p-surface">
@@ -11691,7 +11710,9 @@ export default function AdminAgendaPlaygroundPage() {
                             {!persistedEditingBookingId ? (
                               <p className="text-[12px] text-p-text-muted">Primero creá la reserva.</p>
                             ) : billingConfigLoadError ? (
-                              <p className="text-[12px] text-p-error">{billingConfigLoadError}</p>
+                              <AdminFeedbackBanner tone="error" compact>
+                                {billingConfigLoadError}
+                              </AdminFeedbackBanner>
                             ) : isPaymentLockedByManualPending ? (
                               <p className="text-[12px] text-p-text-muted">Confirmá la reserva para habilitar pagos.</p>
                             ) : null}
@@ -11760,6 +11781,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   (participantHasPaymentControls ? participantAssignedAmount : participantPayerAmount).toFixed(2)
                                 );
                                 const shouldShowParticipantAmount = participantHasPaymentControls;
+                                const showParticipantActions = !(participant.isOwner && (participantIsLinkedRecord || !persistedEditingBookingId));
                                 return (
                                   <div
                                     key={`simplified-participant-${participant.id}`}
@@ -11811,23 +11833,25 @@ export default function AdminAgendaPlaygroundPage() {
                                           </p>
                                         </div>
                                       )}
-                                      <button
-                                        type="button"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          if (expandedParticipantId === participant.id) {
-                                            setExpandedParticipantId(null);
-                                            return;
-                                          }
-                                          setParticipantMenuId((previous) =>
-                                            previous === participant.id ? null : participant.id
-                                          );
-                                        }}
-                                        className="h-8 w-8 justify-self-end rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
-                                        title="Acciones del participante"
-                                      >
-                                        <MoreVertical size={15} />
-                                      </button>
+                                      {showParticipantActions && (
+                                        <button
+                                          type="button"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            if (expandedParticipantId === participant.id) {
+                                              setExpandedParticipantId(null);
+                                              return;
+                                            }
+                                            setParticipantMenuId((previous) =>
+                                              previous === participant.id ? null : participant.id
+                                            );
+                                          }}
+                                          className="h-8 w-8 justify-self-end rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
+                                          title="Acciones del participante"
+                                        >
+                                          <MoreVertical size={15} />
+                                        </button>
+                                      )}
                                     </div>
                                     {expandedParticipantId === participant.id && (
                                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -12157,7 +12181,7 @@ export default function AdminAgendaPlaygroundPage() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    showCalendarNotice(
+                                    showAgendaToast(
                                       'Este total es estimado para crear la reserva. El registro de pagos se habilita al editar la reserva creada.'
                                     )
                                   }
@@ -12604,7 +12628,9 @@ export default function AdminAgendaPlaygroundPage() {
                           {!persistedEditingBookingId ? (
                             <p className="text-[12px] text-p-text-muted">Primero creá la reserva.</p>
                           ) : billingConfigLoadError ? (
-                            <p className="text-[12px] text-p-error">{billingConfigLoadError}</p>
+                            <AdminFeedbackBanner tone="error" compact>
+                              {billingConfigLoadError}
+                            </AdminFeedbackBanner>
                           ) : isPaymentLockedByManualPending ? (
                             <p className="text-[12px] text-p-text-muted">Confirmá la reserva para habilitar pagos.</p>
                           ) : null}
@@ -12679,6 +12705,12 @@ export default function AdminAgendaPlaygroundPage() {
                         const participantPaidComputed = participantPaidComputedIdSet.has(participant.id);
                         const displayPrice = participantIsCharged ? resolveParticipantPrice(participant) : 0;
                         const isDuplicateParticipant = duplicateParticipantIds.has(participant.id);
+                        const normalizedParticipantRef = String((participant as any).entityRef || '').trim().toLowerCase();
+                        const participantIsLinkedRecord =
+                          participant.sourceType !== 'guest' ||
+                          normalizedParticipantRef.startsWith('client:') ||
+                          normalizedParticipantRef.startsWith('user:');
+                        const showParticipantActions = !(participant.isOwner && (participantIsLinkedRecord || !persistedEditingBookingId));
                         return (
                           <div
                             key={participant.id}
@@ -12824,22 +12856,24 @@ export default function AdminAgendaPlaygroundPage() {
                                     : 'Pagar su parte'}
                               </button>
                               )}
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  if (expandedParticipantId === participant.id) {
-                                    setExpandedParticipantId(null);
-                                    return;
-                                  }
-                                  setParticipantMenuId((previous) =>
-                                    previous === participant.id ? null : participant.id
-                                  );
-                                }}
-                                className="h-11 w-5 text-p-text-muted grid place-items-center"
-                              >
-                                <MoreVertical size={16} />
-                              </button>
+                              {showParticipantActions && (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    if (expandedParticipantId === participant.id) {
+                                      setExpandedParticipantId(null);
+                                      return;
+                                    }
+                                    setParticipantMenuId((previous) =>
+                                      previous === participant.id ? null : participant.id
+                                    );
+                                  }}
+                                  className="h-11 w-5 text-p-text-muted grid place-items-center"
+                                >
+                                  <MoreVertical size={16} />
+                                </button>
+                              )}
                             </div>
                             {expandedParticipantId === participant.id ? (
                               <div className="mt-2">
@@ -13171,159 +13205,35 @@ export default function AdminAgendaPlaygroundPage() {
             </section>
           </AdminPlaygroundShell>
 
-      {duplicateDecisionOpen && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink-950/45 px-4">
-          <div className="w-full max-w-[560px] rounded-2xl border border-p-border bg-p-surface shadow-xl">
-            <div className="border-b border-p-border px-5 py-4">
-              <p className="text-[16px] font-semibold text-p-text">Ya existe un cliente parecido en este club</p>
-              <p className="mt-1 text-[13px] text-p-text-muted">
-                Elegí cómo continuar. No se va a vincular ni fusionar automáticamente.
-              </p>
-            </div>
-            <div className="max-h-[46vh] overflow-y-auto px-5 py-4 space-y-2">
-              {duplicateDecisionCandidates.map((candidate) => {
-                const isSelected = String(duplicateDecisionSelectedClientId) === String(candidate.id);
-                return (
-                  <button
-                    key={`duplicate-candidate-${candidate.id}`}
-                    type="button"
-                    onClick={() => setDuplicateDecisionSelectedClientId(String(candidate.id))}
-                    className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                      isSelected
-                        ? 'border-p-accent bg-p-positive-bg'
-                        : 'border-p-border bg-p-surface hover:bg-p-surface-2'
-                    }`}
-                  >
-                    <p className="text-[13px] font-semibold text-p-text">{candidate.name}</p>
-                    <p className="mt-0.5 text-[12px] text-p-text-muted">
-                      {[candidate.phone, candidate.email].filter(Boolean).join(' · ') || 'Sin contacto visible'}
-                    </p>
-                  </button>
-                );
-              })}
-              {duplicateDecisionCandidates.length === 0 && (
-                <p className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2 text-[12px] text-p-text-muted">
-                  No llegaron candidatos detallados en la respuesta.
-                </p>
-              )}
-            </div>
-            {duplicateDecisionError && (
-              <div className="px-5 pb-2">
-                <p className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">
-                  {duplicateDecisionError}
-                </p>
-              </div>
-            )}
-            <div className="flex items-center justify-end gap-2 border-t border-p-border px-5 py-4">
-              <button
-                type="button"
-                onClick={closeDuplicateDecisionModal}
-                disabled={duplicateDecisionLoading}
-                className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary disabled:opacity-40"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void runDuplicateDecisionRetry('USE_EXISTING')}
-                disabled={duplicateDecisionLoading || !duplicateDecisionSelectedClientId}
-                className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text disabled:opacity-40"
-              >
-                Usar cliente existente
-              </button>
-              <button
-                type="button"
-                onClick={() => void runDuplicateDecisionRetry('CREATE_NEW')}
-                disabled={duplicateDecisionLoading}
-                className="h-10 rounded-xl bg-ink-900 px-4 text-[13px] font-semibold text-ink-50 disabled:opacity-40"
-              >
-                {duplicateDecisionLoading ? 'Creando...' : 'Crear cliente nuevo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DuplicateClientDecisionModal
+        open={duplicateDecisionOpen}
+        candidates={duplicateDecisionCandidates}
+        selectedClientId={duplicateDecisionSelectedClientId}
+        loading={duplicateDecisionLoading}
+        error={duplicateDecisionError}
+        onSelectClient={setDuplicateDecisionSelectedClientId}
+        onClose={closeDuplicateDecisionModal}
+        onUseExisting={() => void runDuplicateDecisionRetry('USE_EXISTING')}
+        onCreateNew={() => void runDuplicateDecisionRetry('CREATE_NEW')}
+      />
 
-      {changeTitularModalOpen && (
-        <div className="fixed inset-0 z-[92] flex items-center justify-center bg-ink-950/45 px-4">
-          <div className="w-full max-w-[560px] rounded-2xl border border-p-border bg-p-surface shadow-xl">
-            <div className="border-b border-p-border px-5 py-4">
-              <p className="text-[16px] font-semibold text-p-text">Cambiar titular</p>
-              <p className="mt-1 text-[13px] text-p-text-muted">
-                Seleccioná manualmente un cliente del club para esta reserva.
-              </p>
-            </div>
-            <div className="px-5 py-4 space-y-3">
-              <input
-                value={changeTitularSearch}
-                onChange={(event) => setChangeTitularSearch(event.target.value)}
-                placeholder="Buscar por nombre, teléfono o email"
-                className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none"
-              />
-              <div className="max-h-[34vh] overflow-y-auto space-y-2">
-                {changeTitularLoading && (
-                  <p className="text-[12px] text-p-text-muted">Buscando clientes...</p>
-                )}
-                {!changeTitularLoading && changeTitularCandidates.length === 0 && (
-                  <p className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2 text-[12px] text-p-text-muted">
-                    Escribí al menos 2 caracteres para buscar.
-                  </p>
-                )}
-                {changeTitularCandidates.map((candidate) => {
-                  const isSelected = String(changeTitularSelectedClientId) === String(candidate.id);
-                  return (
-                    <button
-                      key={`change-titular-candidate-${candidate.id}`}
-                      type="button"
-                      onClick={() => setChangeTitularSelectedClientId(String(candidate.id))}
-                      className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                        isSelected
-                          ? 'border-p-accent bg-p-positive-bg'
-                          : 'border-p-border bg-p-surface hover:bg-p-surface-2'
-                      }`}
-                    >
-                      <p className="text-[13px] font-semibold text-p-text">{candidate.name}</p>
-                      <p className="mt-0.5 text-[12px] text-p-text-muted">
-                        {[candidate.phone, candidate.email].filter(Boolean).join(' · ') || 'Sin contacto visible'}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-              <textarea
-                value={changeTitularReason}
-                onChange={(event) => setChangeTitularReason(event.target.value)}
-                placeholder="Motivo (opcional)"
-                rows={2}
-                className="w-full rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[13px] text-p-text outline-none"
-              />
-              {changeTitularError && (
-                <p className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">
-                  {changeTitularError}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-p-border px-5 py-4">
-              <button
-                type="button"
-                onClick={closeChangeTitularModal}
-                disabled={changeTitularSubmitting}
-                className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary disabled:opacity-40"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitChangeTitular()}
-                disabled={changeTitularSubmitting || !changeTitularSelectedClientId}
-                className="h-10 rounded-xl bg-ink-900 px-4 text-[13px] font-semibold text-ink-50 disabled:opacity-40"
-              >
-                {changeTitularSubmitting ? 'Guardando...' : 'Confirmar cambio'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ChangeTitularModal
+        open={changeTitularModalOpen}
+        currentTitle={String(editingBooking?.title || '').trim()}
+        search={changeTitularSearch}
+        reason={changeTitularReason}
+        candidates={changeTitularCandidates}
+        selectedClientId={changeTitularSelectedClientId}
+        selectedCandidate={changeTitularSelectedCandidate}
+        loading={changeTitularLoading}
+        submitting={changeTitularSubmitting}
+        error={changeTitularError}
+        onSearchChange={setChangeTitularSearch}
+        onReasonChange={setChangeTitularReason}
+        onSelectClient={setChangeTitularSelectedClientId}
+        onClose={closeChangeTitularModal}
+        onSubmit={() => void submitChangeTitular()}
+      />
 
       {activePaymentModal?.flow === 'playtomicPayment' &&
         activePaymentModal.step === 'form' &&
@@ -13456,7 +13366,7 @@ export default function AdminAgendaPlaygroundPage() {
         activePaymentModal.step === 'form' &&
         !isPlaytomicPaymentModal && (
         <div
-          className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[var(--overlay)] p-4"
+          className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} flex items-center justify-center bg-[var(--overlay)] p-4`}
           role="presentation"
           onPointerDown={handleModalBackdropPointerDown}
           onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}

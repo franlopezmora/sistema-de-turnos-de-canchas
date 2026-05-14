@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ClientService } from '../../../services/ClientService';
 import { getActiveClubSlug, normalizeSessionUser } from '../../../utils/session';
+import { extractErrorMessage } from '../../../utils/uiError';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,8 +73,8 @@ export function useClients(options: UseClientsOptions = {}): UseClientsReturn {
       setError('');
       const data = await ClientService.listDebtors(resolvedSlug, { scope });
       setClients(data as AdminClient[]);
-    } catch (err: any) {
-      setError(err?.message ?? 'No se pudo cargar la lista de clientes.');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'No se pudo cargar la lista de clientes.'));
     } finally {
       setLoading(false);
     }

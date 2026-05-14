@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import type { PointerEvent, ReactNode } from 'react';
+import { ADMIN_Z_INDEX } from '../../../utils/adminZIndex';
 
 type PaymentSummaryRow = {
   label: string;
@@ -75,7 +76,8 @@ export function AdminPaymentFormModal({
 }: AdminPaymentFormModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[2147483200] flex items-center justify-center p-4 bg-[var(--overlay)]"
+      className="fixed inset-0 flex items-center justify-center p-4 bg-[var(--overlay)]"
+      style={{ zIndex: ADMIN_Z_INDEX.modal }}
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}
     >
@@ -128,7 +130,8 @@ export function AdminPaymentPreconfirmModal({
 }: AdminPaymentPreconfirmModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[2147483250] bg-[var(--overlay)] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4"
+      style={{ zIndex: ADMIN_Z_INDEX.modalStacked }}
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}
     >
@@ -225,7 +228,8 @@ export function AdminPaymentResultModal({
 }: AdminPaymentResultModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[2147483250] bg-[var(--overlay)] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-[var(--overlay)] flex items-center justify-center p-4"
+      style={{ zIndex: ADMIN_Z_INDEX.modalStacked }}
       onPointerDown={onBackdropPointerDown}
       onPointerUp={onBackdropPointerUp}
     >

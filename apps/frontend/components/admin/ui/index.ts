@@ -6,6 +6,8 @@ export type { AdminDataTableColumn } from './AdminDataTable';
 export { default as AdminDateInput } from './AdminDateInput';
 export { default as AdminEmptyState } from './AdminEmptyState';
 export { default as AdminFilterToolbar } from './AdminFilterToolbar';
+export { AdminFeedbackBanner, AdminInlineError, AdminNotice } from './AdminFeedback';
+export type { AdminFeedbackTone } from './AdminFeedback';
 export { default as AdminModal } from './AdminModal';
 export { default as AdminPageHeader } from './AdminPageHeader';
 export { default as AdminPanel } from './AdminPanel';

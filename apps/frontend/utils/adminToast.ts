@@ -12,7 +12,7 @@
 
 export const ADMIN_TOAST_EVENT = 'pique-admin-toast' as const;
 
-export type AdminToastType = 'success' | 'error' | 'info';
+export type AdminToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface AdminToastPayload {
   message: string;

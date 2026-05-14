@@ -15,6 +15,7 @@ import {
 import { logout } from '../../services/AuthService';
 import { useUserTheme } from '../../contexts/UserThemeContext';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser, setActiveClubId } from '../../utils/session';
+import { ADMIN_Z_INDEX } from '../../utils/adminZIndex';
 import { PLAYGROUND_SIDEBAR_ITEMS } from './playgroundNavigation';
 import PiqueLogo from '../PiqueLogo';
 
@@ -203,7 +204,7 @@ export default function AdminPlaygroundShell({
   return (
     <div className="h-screen w-full overflow-hidden bg-p-bg text-p-text pique-root">
       <div className="flex h-full w-full flex-col">
-        <header className="relative z-50 flex h-16 items-center overflow-visible bg-p-surface border-b border-p-border px-4 lg:px-6">
+        <header className="relative flex h-16 items-center overflow-visible bg-p-surface border-b border-p-border px-4 lg:px-6" style={{ zIndex: ADMIN_Z_INDEX.shellHeader }}>
           <div className="hidden w-[168px] items-center gap-2 overflow-hidden transition-[width] duration-200 ease-out lg:flex">
             <PiqueLogo
               variant={isSidebarCollapsed ? (isLight ? 'isotipo' : 'isotipoDark') : (isLight ? 'horizontal' : 'horizontalDark')}
@@ -255,7 +256,7 @@ export default function AdminPlaygroundShell({
               </button>
 
               {clubMenuOpen && (
-                <div className="absolute right-0 z-50 mt-2 w-[240px] rounded-xl border border-p-border bg-p-surface p-1 shadow-p-lg">
+                <div className="absolute right-0 mt-2 w-[240px] rounded-xl border border-p-border bg-p-surface p-1 shadow-p-lg" style={{ zIndex: ADMIN_Z_INDEX.dropdown }}>
                   {clubOptions.length === 0 ? (
                     <div className="px-3 py-2 text-[13px] text-p-text-muted">Sin clubes disponibles</div>
                   ) : (
@@ -308,7 +309,8 @@ export default function AdminPlaygroundShell({
               {profileMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 z-50 mt-2 w-[220px] rounded-xl border border-p-border bg-p-surface p-1 shadow-p-lg"
+                  className="absolute right-0 mt-2 w-[220px] rounded-xl border border-p-border bg-p-surface p-1 shadow-p-lg"
+                  style={{ zIndex: ADMIN_Z_INDEX.dropdown }}
                 >
                   {isAdmin && (
                     <button
@@ -387,12 +389,14 @@ export default function AdminPlaygroundShell({
 
         <div className="flex min-h-0 flex-1 bg-p-surface">
           <aside
-            className={`relative z-[120] hidden h-full ${sidebarWidthClass} flex-col items-center overflow-visible bg-p-surface py-4 transition-[width,opacity] duration-200 ease-out will-change-[width] opacity-100 lg:flex`}
+            className={`relative hidden h-full ${sidebarWidthClass} flex-col items-center overflow-visible bg-p-surface py-4 transition-[width,opacity] duration-200 ease-out will-change-[width] opacity-100 lg:flex`}
+            style={{ zIndex: ADMIN_Z_INDEX.shellSidebar }}
           >
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed((previous) => !previous)}
-              className="absolute -right-3 top-1/2 z-[130] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-p-border bg-p-surface text-p-text-muted shadow-sm transition-transform duration-200 hover:bg-p-surface-2"
+              className="absolute -right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-p-border bg-p-surface text-p-text-muted shadow-sm transition-transform duration-200 hover:bg-p-surface-2"
+              style={{ zIndex: ADMIN_Z_INDEX.shellSidebar + 1 }}
               title={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
               aria-label={isSidebarCollapsed ? 'Expandir panel lateral' : 'Colapsar panel lateral'}
             >
@@ -479,7 +483,8 @@ export default function AdminPlaygroundShell({
       </div>
       {helpOpen && (
         <div
-          className="fixed inset-0 z-[2147483200] bg-ink-900/55 backdrop-blur-[1px] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-ink-900/55 backdrop-blur-[1px] flex items-center justify-center p-4"
+          style={{ zIndex: ADMIN_Z_INDEX.modal }}
           onClick={() => setHelpOpen(false)}
           role="presentation"
         >
@@ -551,7 +556,8 @@ export default function AdminPlaygroundShell({
       )}
       {logoutConfirmOpen && (
         <div
-          className="fixed inset-0 z-[2147483200] bg-ink-900/55 backdrop-blur-[1px] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-ink-900/55 backdrop-blur-[1px] flex items-center justify-center p-4"
+          style={{ zIndex: ADMIN_Z_INDEX.modal }}
           onClick={() => setLogoutConfirmOpen(false)}
           role="presentation"
         >

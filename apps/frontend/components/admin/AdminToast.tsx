@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { ADMIN_TOAST_EVENT } from '../../utils/adminToast';
 import type { AdminToastPayload, AdminToastType } from '../../utils/adminToast';
+import { ADMIN_Z_INDEX } from '../../utils/adminZIndex';
 
 interface ToastItem {
   id: number;
@@ -28,9 +29,10 @@ export default function AdminToast() {
   }, []);
 
   useEffect(() => {
+    const timers = timersRef.current;
     const dismiss = (id: number) => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-      timersRef.current.delete(id);
+      timers.delete(id);
     };
 
     const onEvent = (e: Event) => {
@@ -38,14 +40,14 @@ export default function AdminToast() {
       const id = idRef.current++;
       setToasts((prev) => [...prev, { id, message, type }].slice(-MAX_TOASTS));
       const timer = setTimeout(() => dismiss(id), DISMISS_MS);
-      timersRef.current.set(id, timer);
+      timers.set(id, timer);
     };
 
     window.addEventListener(ADMIN_TOAST_EVENT, onEvent);
     return () => {
       window.removeEventListener(ADMIN_TOAST_EVENT, onEvent);
-      timersRef.current.forEach((t) => clearTimeout(t));
-      timersRef.current.clear();
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
     };
   }, []);
 
@@ -59,7 +61,7 @@ export default function AdminToast() {
         position: 'fixed',
         bottom: 24,
         right: 24,
-        zIndex: 2147483100,
+        zIndex: ADMIN_Z_INDEX.toast,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
@@ -75,7 +77,13 @@ export default function AdminToast() {
       {toasts.map((toast) => {
         const isError = toast.type === 'error';
         const isInfo = toast.type === 'info';
-        const Icon = isError ? AlertTriangle : isInfo ? Info : CheckCircle2;
+        const isWarning = toast.type === 'warning';
+        const Icon = isError || isWarning ? AlertTriangle : isInfo ? Info : CheckCircle2;
+        const background = isError
+          ? 'var(--p-error, #dc2626)'
+          : isWarning
+            ? 'var(--p-warning, #b45309)'
+            : '#111827';
         return (
           <div
             key={toast.id}
@@ -86,19 +94,18 @@ export default function AdminToast() {
               gap: 8,
               padding: '10px 14px',
               borderRadius: 10,
-              background: isError ? 'var(--p-error, #dc2626)' : '#111827',
+              background,
               color: '#fff',
               fontSize: 12,
               fontWeight: 600,
               boxShadow: '0 4px 16px rgba(0,0,0,0.28)',
               fontFamily: "'Geist',system-ui,sans-serif",
-              letterSpacing: '.01em',
-              maxWidth: 320,
+              maxWidth: 360,
               pointerEvents: 'auto',
               animation: 'pique-toast-in .18s ease',
             }}
           >
-            <Icon size={14} style={{ flexShrink: 0, opacity: 0.85 }} />
+            <Icon size={14} style={{ flexShrink: 0, opacity: 0.9 }} />
             {toast.message}
           </div>
         );

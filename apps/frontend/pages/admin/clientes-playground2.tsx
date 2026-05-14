@@ -1,6 +1,6 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DollarSign,
   Pencil,
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
 import ClientsTable from '../../modules/clientes/components/ClientsTable';
-import { AdminDrawer, AdminDrawerSection, AdminFilterToolbar, AdminSegmentedControl } from '../../components/admin/ui';
+import { AdminDrawer, AdminDrawerSection, AdminFeedbackBanner, AdminFilterToolbar, AdminSegmentedControl } from '../../components/admin/ui';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
@@ -21,8 +21,9 @@ import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { ClientService } from '../../services/ClientService';
 import { ClubAdminService } from '../../services/ClubAdminService';
 import { formatDateTime24 } from '../../utils/dateTime';
+import { showAdminToast } from '../../utils/adminToast';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
-import { reportUiError } from '../../utils/uiError';
+import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 import AccountDrawer, {
   type AccountDrawerContext,
   type AccountDrawerInitialView,
@@ -45,12 +46,7 @@ const drawerSectionCardClass = 'rounded-2xl border border-p-border bg-p-surface-
 const drawerListClass = 'divide-y divide-p-border rounded-xl border border-p-border bg-p-surface px-3 text-[13px]';
 
 const normalizeClientFormError = (error: unknown) => {
-  const raw =
-    error instanceof Error
-      ? error.message
-      : error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string'
-        ? String((error as { message?: unknown }).message)
-        : '';
+  const raw = extractErrorMessage(error, '');
   const message = raw.trim();
   if (/ya existe un cliente/i.test(message)) {
     return 'Ya existe un cliente con ese DNI, teléfono o email. Buscalo en la lista y seleccioná el cliente existente.';
@@ -188,42 +184,21 @@ export default function AdminClientesPlayground2Page() {
 
   const [selectedClientDiscountAssignments, setSelectedClientDiscountAssignments] = useState<any[]>([]);
   const [loadingDiscountAssignments, setLoadingDiscountAssignments] = useState(false);
-  const [adminToasts, setAdminToasts] = useState<Array<{ id: number; message: string }>>([]);
-  const adminToastIdRef = useRef(1);
-  const adminToastTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-
-  const showAdminToast = useCallback((message: string) => {
-    const text = String(message || '').trim();
-    if (!text) return;
-    const id = adminToastIdRef.current++;
-    setAdminToasts((prev) => [...prev, { id, message: text }].slice(-4));
-    const timeout = setTimeout(() => {
-      setAdminToasts((prev) => prev.filter((item) => item.id !== id));
-    }, 3200);
-    adminToastTimeoutsRef.current.push(timeout);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      adminToastTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
-      adminToastTimeoutsRef.current = [];
-    };
-  }, []);
 
   useEffect(() => {
     const text = String(successMessage || '').trim();
     if (!text) return;
     showAdminToast(text);
     setSuccessMessage('');
-  }, [showAdminToast, successMessage]);
+  }, [successMessage]);
 
   useEffect(() => {
     const text = String(errorMessage || '').trim();
     if (!text) return;
     if (sidebarView === 'client_create' || sidebarView === 'client_edit') return;
-    showAdminToast(text);
+    showAdminToast(text, 'error');
     setErrorMessage('');
-  }, [errorMessage, showAdminToast, sidebarView]);
+  }, [errorMessage, sidebarView]);
 
   const resolveClubSlug = useCallback(() => {
     try {
@@ -1039,19 +1014,6 @@ export default function AdminClientesPlayground2Page() {
         </div>
       </AdminPlaygroundShell>
 
-      {adminToasts.length > 0 && (
-        <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] flex w-full max-w-[360px] flex-col gap-2">
-          {adminToasts.map((toast) => (
-            <div
-              key={toast.id}
-              className="rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[12px] font-semibold text-p-text shadow-lg"
-            >
-              {toast.message}
-            </div>
-          ))}
-        </div>
-      )}
-
       <AdminDrawer
         open={sidebarOpen}
         onClose={closeActionSidebar}
@@ -1174,12 +1136,9 @@ export default function AdminClientesPlayground2Page() {
           <AdminDrawerSection title="Datos basicos" className={drawerSectionCardClass}>
             <div className="space-y-3">
               {errorMessage && (
-                <div
-                  role="alert"
-                  className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error"
-                >
+                <AdminFeedbackBanner tone="error" compact>
                   {errorMessage}
-                </div>
+                </AdminFeedbackBanner>
               )}
 
               <label className="block">
@@ -1308,9 +1267,9 @@ export default function AdminClientesPlayground2Page() {
 
         {sidebarView === 'client_delete' && (
           <AdminDrawerSection title="Confirmacion" className={drawerSectionCardClass}>
-            <div className="rounded-xl border border-p-error bg-p-error-bg p-3 text-[13px] text-p-error">
+            <AdminFeedbackBanner tone="error">
               Vas a eliminar a {selectedClient ? getClientName(selectedClient) : 'este cliente'}. Esta accion no se puede deshacer.
-            </div>
+            </AdminFeedbackBanner>
             <div className="rounded-xl border border-p-border bg-p-surface p-3">
               <p className="text-[12px] uppercase tracking-wide text-p-text-muted">Cliente seleccionado</p>
               <p className="mt-1 text-[13px] font-semibold text-p-text">{selectedClient ? getClientName(selectedClient) : '-'}</p>

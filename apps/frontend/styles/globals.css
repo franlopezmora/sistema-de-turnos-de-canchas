@@ -305,5 +305,8 @@
 .react-datepicker,
 .react-datepicker__triangle,
 .react-datepicker-popper[data-placement],
-.react-datepicker-popper[data-placement] > div { z-index: 9000 !important; }
-#datepicker-portal { z-index: 9000; }
+.react-datepicker-popper[data-placement] > div {
+  /* Mirrors ADMIN_Z_INDEX.datepickerInOverlay. CSS cannot import TS tokens. */
+  z-index: 2147483500 !important;
+}
+#datepicker-portal { z-index: 2147483500; }

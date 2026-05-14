@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import type { RefundDraft, RefundReasonType } from '../../../modules/refunds/refund.types';
 import { REFUND_REASON_OPTIONS } from '../../../modules/refunds/refund.constants';
 import { formatPaymentCode } from '../../../utils/displayCode';
+import { ADMIN_Z_INDEX_CLASS } from '../../../utils/adminZIndex';
 
 type RefundRequestModalProps = {
   show: boolean;
@@ -29,7 +30,7 @@ export default function RefundRequestModal({
   submitting = false,
   closeLabel = 'Cancelar',
   submitLabel = 'Confirmar devolucion',
-  zIndexClass = 'z-[2147483400]',
+  zIndexClass = ADMIN_Z_INDEX_CLASS.modalCritical,
   onClose,
   onSubmit,
   onChangeDraft

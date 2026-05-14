@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { ADMIN_Z_INDEX } from '../../../utils/adminZIndex';
 
 // ---------------------------------------------------------------------------
 // Terminología del proyecto
@@ -61,7 +62,7 @@ type AdminDrawerProps = {
    */
   footer?: ReactNode;
 
-  /** z-index CSS. Default 2147483150 para quedar sobre modales de la app. */
+  /** z-index CSS. Default centralizado para quedar sobre el shell admin. */
   zIndex?: number;
 };
 
@@ -163,7 +164,7 @@ export default function AdminDrawer({
   onTabChange,
   children,
   footer,
-  zIndex = 2147483150,
+  zIndex = ADMIN_Z_INDEX.drawer,
 }: AdminDrawerProps) {
   // Escape key handler
   useEffect(() => {

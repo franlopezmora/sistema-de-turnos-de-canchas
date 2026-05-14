@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { Activity, Ban, Power, Save } from 'lucide-react';
 import { getCourts, reactivateCourt, suspendCourt, updateCourtPrice } from '../../services/CourtService';
 import { isAuthSessionInvalidatedError } from '../../utils/apiClient';
+import { extractErrorMessage } from '../../utils/uiError';
+import { showAdminToast } from '../../utils/adminToast';
 import AdminAppModal from './ui/AdminAppModal';
 import { MetricCard } from './ui';
 import SettingsSection from '../../modules/ajustes/components/SettingsSection';
@@ -184,23 +186,36 @@ export default function AdminTabCourts() {
   const [courts, setCourts] = useState<Court[]>([]);
   const [priceEdits, setPriceEdits] = useState<Record<number, string>>({});
   const [modalState, setModalState] = useState<ModalState>({ show: false });
+  const [modalConfirming, setModalConfirming] = useState(false);
 
   // ── Modal helpers ──
   const closeModal = useCallback(() => {
+    if (modalConfirming) return;
     setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
-  }, []);
+  }, [modalConfirming]);
 
   const wrapAction = useCallback(
     (action?: () => Promise<void> | void) => async () => {
-      closeModal();
-      await action?.();
+      if (modalConfirming) return;
+      setModalConfirming(true);
+      try {
+        await action?.();
+        setModalConfirming(false);
+        setModalState((prev) => ({ ...prev, show: false, onConfirm: undefined, onCancel: undefined }));
+      } catch (error) {
+        setModalConfirming(false);
+        setModalState({
+          show: true,
+          title: 'Error',
+          message: extractErrorMessage(error, 'No se pudo completar la acción.'),
+          isWarning: true,
+          cancelText: '',
+          confirmText: 'Aceptar',
+        });
+      }
     },
-    [closeModal],
+    [modalConfirming],
   );
-
-  const showInfo = useCallback((message: ReactNode, title = 'Información') => {
-    setModalState({ show: true, title, message, cancelText: '', confirmText: 'OK' });
-  }, []);
 
   const showError = useCallback((message: ReactNode) => {
     setModalState({
@@ -253,7 +268,7 @@ export default function AdminTabCourts() {
       });
     } catch (error: unknown) {
       if (isAuthSessionInvalidatedError(error)) return;
-      showError(`Error: ${(error as Error).message}`);
+      showError(extractErrorMessage(error, 'No se pudieron cargar las canchas.'));
     }
   }, [showError]);
 
@@ -268,12 +283,9 @@ export default function AdminTabCourts() {
       message: '¿Seguro que querés poner esta cancha en mantenimiento?',
       confirmText: 'Suspender',
       onConfirm: async () => {
-        try {
-          await suspendCourt(id);
-          await loadCourts();
-        } catch (error: unknown) {
-          showError(`Error: ${(error as Error).message}`);
-        }
+        await suspendCourt(id);
+        await loadCourts();
+        showAdminToast('Cancha puesta en mantenimiento.');
       },
     });
   };
@@ -285,12 +297,9 @@ export default function AdminTabCourts() {
       confirmText: 'Reactivar',
       isWarning: false,
       onConfirm: async () => {
-        try {
-          await reactivateCourt(id);
-          await loadCourts();
-        } catch (error: unknown) {
-          showError(`Error: ${(error as Error).message}`);
-        }
+        await reactivateCourt(id);
+        await loadCourts();
+        showAdminToast('Cancha reactivada.');
       },
     });
   };
@@ -304,10 +313,10 @@ export default function AdminTabCourts() {
         return;
       }
       await updateCourtPrice(id, parsed);
-      showInfo('Precio actualizado', 'Listo');
+      showAdminToast('Precio actualizado.');
       await loadCourts();
     } catch (error: unknown) {
-      showError(`Error: ${(error as Error).message}`);
+      showError(extractErrorMessage(error, 'No se pudo actualizar el precio.'));
     }
   };
 
@@ -397,11 +406,12 @@ export default function AdminTabCourts() {
         title={modalState.title}
         message={modalState.message}
         cancelText={modalState.cancelText}
-        confirmText={modalState.confirmText}
+        confirmText={modalConfirming ? 'Procesando...' : modalState.confirmText}
         isWarning={modalState.isWarning}
         onConfirm={modalState.onConfirm}
-        closeOnBackdrop={modalState.closeOnBackdrop}
-        closeOnEscape={modalState.closeOnEscape}
+        confirmDisabled={modalConfirming}
+        closeOnBackdrop={!modalConfirming && modalState.closeOnBackdrop}
+        closeOnEscape={!modalConfirming && modalState.closeOnEscape}
       />
     </div>
   );

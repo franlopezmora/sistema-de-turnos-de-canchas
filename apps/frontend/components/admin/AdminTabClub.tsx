@@ -5,10 +5,13 @@ import { getCourts } from '../../services/CourtService';
 import { ClubAdminService, ClubActivityType, type ActivityScheduleException, type DiscountApplyMode, type DiscountAmountType, type DiscountPolicyScope, type AuditLogEntry, type ClubReviewAdminItem, type ClubReviewAdminStatus } from '../../services/ClubAdminService';
 import { searchClients } from '../../services/BookingService';
 import AdminAppModal from './ui/AdminAppModal';
+import { AdminFeedbackBanner } from './ui/AdminFeedback';
 import { extractErrorMessage } from '../../utils/uiError';
+import { showAdminToast } from '../../utils/adminToast';
 import { Globe, Instagram, Facebook, Phone, Mail, Image as ImageIcon, AlertTriangle, Check, X, Search, CalendarDays, Trash2 } from 'lucide-react';
 import { AdminDateInput, AdminDrawer, AdminDrawerSection, AdminSegmentedControl } from './ui';
 import { normalizeSessionUser } from '../../utils/session';
+import { ADMIN_Z_INDEX } from '../../utils/adminZIndex';
 import { useRouter } from 'next/router';
 import { lockBodyScroll } from '../../utils/bodyScrollLock';
 
@@ -1432,7 +1435,7 @@ export default function AdminTabClub({
         activityScheduleForm
       });
       await loadPersistentConfigHistory(updatedClub.id);
-      showInfo('Información del club actualizada correctamente', 'Éxito');
+      showAdminToast('Información del club actualizada correctamente.');
     } catch (error: any) {
       showError(extractErrorMessage(error, 'No se pudo actualizar la información del club.'));
     }
@@ -1652,7 +1655,7 @@ export default function AdminTabClub({
       }));
       setDiscountDrawerOpen(false);
       await loadDiscountPolicies(club.slug);
-      showInfo('Política de descuento creada', 'Éxito');
+      showAdminToast('Política de descuento creada.');
     } catch (error: any) {
       showError(extractErrorMessage(error, 'No se pudo crear la política de descuento.'));
     }
@@ -1715,7 +1718,7 @@ export default function AdminTabClub({
       setEditingDiscountPolicyId(null);
       setDiscountDrawerOpen(false);
       await loadDiscountPolicies(club.slug);
-      showInfo('Política actualizada', 'Éxito');
+      showAdminToast('Política actualizada.');
     } catch (error: any) {
       showError(extractErrorMessage(error, 'No se pudo actualizar la política de descuento.'));
     }
@@ -1740,7 +1743,7 @@ export default function AdminTabClub({
       setSelectedPolicyIdForAssignment('');
       setAssignmentNotes('');
       await loadClientAssignments(club.slug, resolvedClientId);
-      showInfo('Política asignada al cliente', 'Éxito');
+      showAdminToast('Política asignada al cliente.');
     } catch (error: any) {
       showError(extractErrorMessage(error, 'No se pudo asignar la política al cliente.'));
     }
@@ -1786,7 +1789,7 @@ export default function AdminTabClub({
           await ClubAdminService.deleteDiscountAssignment(club.slug, assignmentId);
           await loadClientAssignments(club.slug, resolvedClientId);
           closeModal();
-          showInfo('Asignación eliminada', 'Éxito');
+          showAdminToast('Asignación eliminada.');
         } catch (error: any) {
           setModalState((prev) => ({
             ...prev,
@@ -1794,7 +1797,9 @@ export default function AdminTabClub({
             message: (
               <span>
                 ¿Querés eliminar esta asignación de descuento? Esta acción no se puede deshacer.
-                <span className="mt-2 block text-p-error">{extractErrorMessage(error, 'No se pudo eliminar la asignación.')}</span>
+                <AdminFeedbackBanner tone="error" compact className="mt-3">
+                  {extractErrorMessage(error, 'No se pudo eliminar la asignación.')}
+                </AdminFeedbackBanner>
               </span>
             ),
           }));
@@ -2020,9 +2025,10 @@ export default function AdminTabClub({
     <>
       {/* ── Fixed unsaved-changes bar ── Oculta mientras el drawer de excepciones está abierto para evitar confusión con el footer del drawer */}
       <div
-        className={`fixed bottom-0 left-0 right-0 z-[2000] transition-transform duration-200 ease-out lg:left-[var(--admin-shell-sidebar-left,168px)] ${
+        className={`fixed bottom-0 left-0 right-0 transition-transform duration-200 ease-out lg:left-[var(--admin-shell-sidebar-left,168px)] ${
           hasUnsavedChanges && !Boolean(exceptionModalActivity) ? 'translate-y-0' : 'translate-y-full'
         }`}
+        style={{ zIndex: ADMIN_Z_INDEX.stickyBar }}
         aria-hidden={!hasUnsavedChanges || Boolean(exceptionModalActivity)}
       >
         <div className="flex items-center gap-3 border-t border-p-border bg-p-surface px-5 py-3 shadow-p-lg">
@@ -2960,7 +2966,10 @@ export default function AdminTabClub({
                           placeholder="Nombre o email..."
                         />
                         {showClientSearchDropdown && clientSearchResults.length > 0 && (
-                          <div className="absolute left-0 right-0 top-full z-[120] mt-1 max-h-56 overflow-y-auto rounded-xl border border-p-border bg-p-surface shadow-lg">
+                          <div
+                            className="absolute left-0 right-0 top-full mt-1 max-h-56 overflow-y-auto rounded-xl border border-p-border bg-p-surface shadow-lg"
+                            style={{ zIndex: ADMIN_Z_INDEX.dropdown }}
+                          >
                             {clientSearchResults.map((client) => (
                               <button
                                 key={client.id}

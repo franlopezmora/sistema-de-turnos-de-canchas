@@ -9,7 +9,10 @@ import RefundLifecycleActions from './refunds/RefundLifecycleActions';
 import { formatAccountCode, formatPaymentCode, formatRefundCode } from '../../utils/displayCode';
 import { AdminPageHeader, AdminPanel } from './ui';
 import AdminAppModal from './ui/AdminAppModal';
+import { AdminFeedbackBanner } from './ui/AdminFeedback';
 import { extractErrorMessage } from '../../utils/uiError';
+import { showAdminToast } from '../../utils/adminToast';
+import { ADMIN_Z_INDEX } from '../../utils/adminZIndex';
 
 const STATUS_OPTIONS: Array<{ value: 'ALL' | RefundStatus; label: string }> = [
   { value: 'ALL', label: 'Todos' },
@@ -78,7 +81,6 @@ export default function AdminTabRefunds() {
   const [pendingAction, setPendingAction] = useState<RefundActionConfig | null>(null);
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionConfirmError, setActionConfirmError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
 
   const [statusFilter, setStatusFilter] = useState<'ALL' | RefundStatus>('ALL');
   const [paymentIdFilter, setPaymentIdFilter] = useState('');
@@ -140,8 +142,7 @@ export default function AdminTabRefunds() {
       const msg = pendingAction.successMessage;
       setPendingAction(null);
       await load();
-      setSuccessMessage(msg);
-      window.setTimeout(() => setSuccessMessage(''), 4000);
+      showAdminToast(msg);
     } catch (err) {
       setActionConfirmError(extractErrorMessage(err, 'No se pudo procesar la devolución. Intentá nuevamente.'));
     } finally {
@@ -156,7 +157,7 @@ export default function AdminTabRefunds() {
     setActionConfirmError('');
   }, [actionConfirming]);
 
-  // Builders de cada acción — reemplazan los window.confirm
+  // Builders de cada acción — usan el modal del sistema.
   const onApprove = useCallback((refund: RefundRecord, executeNow: boolean) => {
     setPendingAction({
       refundId: refund.id,
@@ -273,13 +274,7 @@ export default function AdminTabRefunds() {
         </div>
       </AdminPanel>
 
-      {successMessage ? (
-        <div className="rounded-xl border border-p-positive bg-p-positive-bg px-3 py-2 text-sm font-bold text-p-positive">
-          {successMessage}
-        </div>
-      ) : null}
-
-      {error ? <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-sm font-bold text-p-error">{error}</div> : null}
+      {error ? <AdminFeedbackBanner tone="error">{error}</AdminFeedbackBanner> : null}
 
       <AdminPanel title="Bandeja" description={`${refunds.length} devoluciones encontradas.`}>
         <RefundList
@@ -308,7 +303,8 @@ export default function AdminTabRefunds() {
 
       {mounted && selectedRefund && createPortal(
         <div
-          className="fixed inset-0 z-[2147483400] flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 flex items-center justify-center bg-black/60 p-4"
+          style={{ zIndex: ADMIN_Z_INDEX.modalCritical }}
           onMouseDown={(event) => {
             detailBackdropMouseDownRef.current = event.target === event.currentTarget;
           }}
@@ -395,9 +391,9 @@ export default function AdminTabRefunds() {
           <>
             <p>{pendingAction?.description}</p>
             {actionConfirmError && (
-              <p className="mt-3 rounded-lg border border-p-error bg-p-error-bg px-3 py-2 text-[12px] font-semibold text-p-error">
+              <AdminFeedbackBanner tone="error" compact className="mt-3">
                 {actionConfirmError}
-              </p>
+              </AdminFeedbackBanner>
             )}
           </>
         }

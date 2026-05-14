@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, Wrench } from 'lucide-react';
+import { ADMIN_Z_INDEX } from '../../utils/adminZIndex';
 
 export type ClubServiceSearchItem = {
   id: number;
@@ -133,7 +134,10 @@ export default function ClubServiceSearch({
       </div>
 
       {open && !disabled && (
-        <div className="absolute z-[120] w-full mt-2 bg-p-surface border-2 border-lima-900/10 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-hidden">
+        <div
+          className="absolute w-full mt-2 bg-p-surface border-2 border-lima-900/10 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-hidden"
+          style={{ zIndex: ADMIN_Z_INDEX.dropdown }}
+        >
           {results.length > 0 ? (
             <ul className="py-2">
               {results.map((service, idx) => {

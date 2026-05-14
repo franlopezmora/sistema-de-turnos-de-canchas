@@ -4,6 +4,8 @@ import {
   type ClientDuplicateIncident
 } from '../../services/ClubAdminService';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
+import { extractErrorMessage } from '../../utils/uiError';
+import { AdminFeedbackBanner } from './ui/AdminFeedback';
 
 const formatUserName = (user?: { firstName?: string | null; lastName?: string | null } | null) => {
   const first = String(user?.firstName || '').trim();
@@ -38,8 +40,8 @@ export default function AdminDuplicateIncidents() {
       } else if (!rows.some((row) => row.id === selectedId)) {
         setSelectedId(rows[0].id);
       }
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo cargar la bandeja');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'No se pudo cargar la bandeja'));
     } finally {
       setLoading(false);
     }
@@ -63,8 +65,8 @@ export default function AdminDuplicateIncidents() {
       .then((row) => {
         if (!cancelled) setDetail(row);
       })
-      .catch((err) => {
-        if (!cancelled) setError(err?.message || 'No se pudo cargar el detalle');
+      .catch((err: unknown) => {
+        if (!cancelled) setError(extractErrorMessage(err, 'No se pudo cargar el detalle'));
       })
       .finally(() => {
         if (!cancelled) setBusy(false);
@@ -88,8 +90,8 @@ export default function AdminDuplicateIncidents() {
       await ClubAdminService.resolveClientDuplicateIncidentLink(clubSlug, detail.id, clientId);
       setFeedback('Incidente resuelto y vínculo aplicado.');
       await loadIncidents(clubSlug);
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo resolver el incidente');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'No se pudo resolver el incidente'));
     } finally {
       setBusy(false);
     }
@@ -104,34 +106,38 @@ export default function AdminDuplicateIncidents() {
       await ClubAdminService.dismissClientDuplicateIncident(clubSlug, detail.id);
       setFeedback('Incidente descartado.');
       await loadIncidents(clubSlug);
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo descartar el incidente');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'No se pudo descartar el incidente'));
     } finally {
       setBusy(false);
     }
   };
 
   if (!clubSlug) {
-    return <div className="text-sm text-ink-50/80">No se pudo resolver el club activo para mostrar la bandeja.</div>;
+    return (
+      <AdminFeedbackBanner tone="error">
+        No se pudo resolver el club activo para mostrar la bandeja.
+      </AdminFeedbackBanner>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-white/20 bg-p-surface p-5">
-        <h1 className="text-xl font-black tracking-wide uppercase">Posibles clientes duplicados</h1>
-        <p className="mt-1 text-sm text-ink-50/80">
+      <div className="rounded-2xl border border-p-border bg-p-surface p-5 shadow-p-card">
+        <h1 className="text-[18px] font-semibold tracking-tight text-p-text">Posibles clientes duplicados</h1>
+        <p className="mt-1 text-[13px] text-p-text-muted">
           Incidentes abiertos: <span className="font-bold">{openCount}</span>
         </p>
       </div>
 
-      {error ? <div className="rounded-xl border border-p-error bg-p-error-bg p-3 text-sm">{error}</div> : null}
-      {feedback ? <div className="rounded-xl border border-p-accent bg-p-positive-bg p-3 text-sm text-p-positive">{feedback}</div> : null}
+      {error ? <AdminFeedbackBanner tone="error">{error}</AdminFeedbackBanner> : null}
+      {feedback ? <AdminFeedbackBanner tone="success">{feedback}</AdminFeedbackBanner> : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-white/20 bg-p-surface p-4 lg:col-span-1">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Bandeja</h2>
-          {loading ? <p className="text-sm text-ink-50/80">Cargando...</p> : null}
-          {!loading && incidents.length === 0 ? <p className="text-sm text-ink-50/80">No hay incidentes abiertos.</p> : null}
+        <div className="rounded-2xl border border-p-border bg-p-surface p-4 shadow-p-card lg:col-span-1">
+          <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-p-text-muted">Bandeja</h2>
+          {loading ? <p className="text-[13px] text-p-text-muted">Cargando...</p> : null}
+          {!loading && incidents.length === 0 ? <p className="text-[13px] text-p-text-muted">No hay incidentes abiertos.</p> : null}
           <div className="space-y-2">
             {incidents.map((incident) => (
               <button
@@ -139,16 +145,16 @@ export default function AdminDuplicateIncidents() {
                 type="button"
                 onClick={() => setSelectedId(incident.id)}
                 className={`w-full rounded-lg border p-3 text-left transition ${
-                  selectedId === incident.id ? 'border-p-accent bg-p-positive-bg' : 'border-p-border bg-p-surface-2 hover:bg-p-positive-bg'
+                  selectedId === incident.id ? 'border-p-accent bg-p-positive-bg' : 'border-p-border bg-p-surface-2 hover:bg-p-surface'
                 }`}
               >
-                <div className="text-xs font-bold uppercase tracking-wide opacity-80">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">
                   {incident.sourceType} · {incident.reasonType}
                 </div>
-                <div className="mt-1 text-sm">
+                <div className="mt-1 text-[13px] font-semibold text-p-text">
                   Usuario: {formatUserName(incident.user)}
                 </div>
-                <div className="text-xs opacity-70">
+                <div className="text-[12px] text-p-text-muted">
                   {Array.isArray(incident.candidateClientIds) ? incident.candidateClientIds.length : 0} candidatos
                 </div>
               </button>
@@ -156,13 +162,13 @@ export default function AdminDuplicateIncidents() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/20 bg-p-surface p-4 lg:col-span-2">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide">Detalle</h2>
-          {!selectedId ? <p className="text-sm text-ink-50/80">Seleccioná un incidente.</p> : null}
-          {selectedId && busy && !detail ? <p className="text-sm text-ink-50/80">Cargando detalle...</p> : null}
+        <div className="rounded-2xl border border-p-border bg-p-surface p-4 shadow-p-card lg:col-span-2">
+          <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-p-text-muted">Detalle</h2>
+          {!selectedId ? <p className="text-[13px] text-p-text-muted">Seleccioná un incidente.</p> : null}
+          {selectedId && busy && !detail ? <p className="text-[13px] text-p-text-muted">Cargando detalle...</p> : null}
           {detail ? (
             <div className="space-y-4">
-              <div className="rounded-lg border border-white/20 bg-black/10 p-3 text-sm">
+              <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[13px] text-p-text-secondary">
                 <p><span className="font-bold">Origen:</span> {detail.sourceType}</p>
                 <p><span className="font-bold">Motivo:</span> {detail.reasonType}</p>
                 <p><span className="font-bold">Usuario:</span> {formatUserName(detail.user)}</p>
@@ -170,8 +176,8 @@ export default function AdminDuplicateIncidents() {
 
               <div className="space-y-2">
                 {(detail.candidateClients || []).map((client) => (
-                  <div key={client.id} className="rounded-lg border border-white/20 bg-black/10 p-3 text-sm">
-                    <p className="font-bold">{client.name || 'Sin nombre'}</p>
+                  <div key={client.id} className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[13px] text-p-text-secondary">
+                    <p className="font-semibold text-p-text">{client.name || 'Sin nombre'}</p>
                     <p>Tel: {client.phone || '—'}</p>
                     <p>Email: {client.email || '—'}</p>
                     <p>DNI: {client.dni || '—'}</p>
@@ -181,7 +187,7 @@ export default function AdminDuplicateIncidents() {
                         type="button"
                         disabled={busy}
                         onClick={() => handleResolve(client.id)}
-                        className="mt-2 rounded bg-p-brand px-3 py-1 text-xs font-black text-p-brand-on disabled:opacity-50"
+                        className="mt-2 h-9 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 disabled:opacity-50"
                       >
                         Vincular usuario a este cliente
                       </button>
@@ -195,7 +201,7 @@ export default function AdminDuplicateIncidents() {
                   type="button"
                   disabled={busy}
                   onClick={handleDismiss}
-                  className="rounded border border-white/30 px-3 py-2 text-xs font-bold uppercase tracking-wide disabled:opacity-50"
+                  className="h-9 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2 disabled:opacity-50"
                 >
                   Descartar incidente
                 </button>

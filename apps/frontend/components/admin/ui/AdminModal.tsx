@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { ADMIN_Z_INDEX } from '../../../utils/adminZIndex';
 
 type AdminModalProps = {
   open: boolean;
@@ -35,7 +36,8 @@ export default function AdminModal({
 
   return (
     <div
-      className="fixed inset-0 z-[2147483200] flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-[1px]"
+      className="fixed inset-0 flex items-center justify-center bg-[var(--overlay)] p-4 backdrop-blur-[1px]"
+      style={{ zIndex: ADMIN_Z_INDEX.modal }}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();

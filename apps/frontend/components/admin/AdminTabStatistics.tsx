@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CalendarCheck,
   DollarSign,
@@ -8,6 +8,7 @@ import {
 import { fetchWithAuth } from '../../utils/apiClient';
 import { getApiUrl } from '../../utils/apiUrl';
 import { reportUiError } from '../../utils/uiError';
+import { showAdminToast } from '../../utils/adminToast';
 import { AdminPanel } from './ui';
 import ReportsEmptyState from '../../modules/informes/components/ReportsEmptyState';
 import ReportsMetricGrid, { type ReportsMetric } from '../../modules/informes/components/ReportsMetricGrid';
@@ -111,27 +112,6 @@ export default function AdminTabStatistics({ slugProp }: Props) {
   const [errorMessage, setErrorMessage] = useState('');
   const [activePeriod, setActivePeriod] = useState<Period>('hoy');
   const [periodOffset, setPeriodOffset] = useState(0);
-  const [adminToasts, setAdminToasts] = useState<Array<{ id: number; message: string }>>([]);
-  const adminToastIdRef = useRef(1);
-  const adminToastTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-
-  const showAdminToast = useCallback((message: string) => {
-    const text = String(message || '').trim();
-    if (!text) return;
-    const id = adminToastIdRef.current++;
-    setAdminToasts((prev) => [...prev, { id, message: text }].slice(-4));
-    const timeout = setTimeout(() => {
-      setAdminToasts((prev) => prev.filter((item) => item.id !== id));
-    }, 3200);
-    adminToastTimeoutsRef.current.push(timeout);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      adminToastTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
-      adminToastTimeoutsRef.current = [];
-    };
-  }, []);
 
   const handlePeriodChange = (newPeriod: Period) => {
     setActivePeriod(newPeriod);
@@ -181,17 +161,17 @@ export default function AdminTabStatistics({ slugProp }: Props) {
         reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, new Error(`Error del servidor: ${response.status}`));
         const message = 'No se pudieron cargar las estadisticas para este periodo.';
         setErrorMessage(message);
-        showAdminToast(message);
+        showAdminToast(message, 'error');
       }
     } catch (error) {
       reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, error);
       const message = 'No se pudo conectar para traer estadisticas.';
       setErrorMessage(message);
-      showAdminToast(message);
+      showAdminToast(message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [activePeriod, finalSlug, periodOffset, showAdminToast]);
+  }, [activePeriod, finalSlug, periodOffset]);
 
   useEffect(() => {
     void loadStats();
@@ -430,19 +410,6 @@ export default function AdminTabStatistics({ slugProp }: Props) {
           showRevenue={false}
         />
       </div>
-
-      {adminToasts.length > 0 && (
-        <div className="pointer-events-none fixed right-5 top-[84px] z-[2147483600] flex w-full max-w-[360px] flex-col gap-2">
-          {adminToasts.map((toast) => (
-            <div
-              key={toast.id}
-              className="rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[12px] font-semibold text-p-text shadow-lg"
-            >
-              {toast.message}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

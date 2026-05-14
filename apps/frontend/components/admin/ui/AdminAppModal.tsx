@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { lockBodyScroll } from '../../../utils/bodyScrollLock';
+import { ADMIN_Z_INDEX_CLASS } from '../../../utils/adminZIndex';
 
 type AdminAppModalProps = {
   show: boolean;
@@ -45,7 +46,7 @@ export default function AdminAppModal({
   confirmDisabled = false,
   closeOnBackdrop = true,
   closeOnEscape = true,
-  zIndexClass = 'z-[2147483200]',
+  zIndexClass = ADMIN_Z_INDEX_CLASS.modal,
   hideCloseButton = false
 }: AdminAppModalProps) {
   const [mounted, setMounted] = useState(false);
