@@ -1500,6 +1500,26 @@ export default function AdminPaymentsPlaygroundPage() {
       };
     });
   }, [refundRequestAccountDetail, refundRequestAccountRefunds]);
+
+  const accountsWithRefundablePayments = useMemo(() => {
+    return allAccounts.filter((account) => {
+      const detail = accountDetailById[account.id];
+      // If detail is not yet loaded, include the account so the user can select it
+      // and we will fetch its detail when opening the refund flow.
+      if (!detail) return true;
+      if (!Array.isArray(detail.payments) || detail.payments.length === 0) return false;
+      const refunds = refundsByAccountId[account.id] || [];
+      for (const payment of detail.payments) {
+        const reserved = refunds
+          .filter((refund) => String(refund.paymentId) === String(payment.id))
+          .filter((refund) => reservedRefundStatuses.has(String(refund.status || '').toUpperCase()))
+          .reduce((sum, refund) => sum + Number(refund.amount || 0), 0);
+        const available = Number(Math.max(0, Number(payment.amount || 0) - reserved).toFixed(2));
+        if (available > ACCOUNT_PAYMENT_EPSILON) return true;
+      }
+      return false;
+    });
+  }, [allAccounts, accountDetailById, refundsByAccountId]);
   const refundRequestSelectedPayment = useMemo(
     () => refundRequestPaymentOptions.find((payment) => payment.id === refundRequestPaymentId) || null,
     [refundRequestPaymentId, refundRequestPaymentOptions]
@@ -1557,6 +1577,16 @@ export default function AdminPaymentsPlaygroundPage() {
     setRefundRequestError('');
     setRefundRequestOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (!refundRequestOpen) return;
+    if (allAccounts.length === 0) return;
+    const missingIds = allAccounts
+      .map((account) => account.id)
+      .filter((id) => !accountDetailById[id] && !loadingAccountDetailById[id]);
+    if (missingIds.length === 0) return;
+    void Promise.allSettled(missingIds.map((id) => ensureAccountDetail(id)));
+  }, [refundRequestOpen, allAccounts, accountDetailById, ensureAccountDetail, loadingAccountDetailById]);
 
   const openRefundRequestForAccount = useCallback(async (accountId: string, options?: { lockAccount?: boolean }) => {
     const key = String(accountId || '').trim();
@@ -2369,9 +2399,9 @@ export default function AdminPaymentsPlaygroundPage() {
                       <button
                         type="button"
                         onClick={openRefundRequestSelector}
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-900"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 shadow-p-md transition hover:bg-ink-800"
                       >
-                        <Plus size={14} strokeWidth={2.4} />
+                        <Plus size={14} strokeWidth={2.5} />
                         Nueva devolución
                       </button>
 
@@ -2627,7 +2657,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   className="mt-1 h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent disabled:opacity-60"
                 >
                   <option value="">Seleccionar cuenta</option>
-                  {allAccounts.map((account) => (
+                  {accountsWithRefundablePayments.map((account) => (
                     <option key={`refund-account-option-${account.id}`} value={account.id}>
                       {accountDisplayLabel(account)} · #{shortCode(account.id)} · {account.status === 'OPEN' ? 'Abierta' : 'Cerrada'}
                     </option>

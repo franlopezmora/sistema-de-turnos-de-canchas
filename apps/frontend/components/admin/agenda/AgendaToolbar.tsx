@@ -76,19 +76,19 @@ export default function AgendaToolbar({
 
       <div className="shrink-0">
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onMoveDate(-1)}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-p-border text-p-text-muted hover:bg-p-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
-            aria-label="Dia anterior"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <div className="relative h-9 w-[170px]">
+          <div className="relative inline-flex h-8 items-center rounded-lg border border-p-border bg-p-surface overflow-hidden">
+            <button
+              type="button"
+              onClick={() => onMoveDate(-1)}
+              className="grid h-8 w-8 place-items-center text-p-text-muted hover:bg-p-surface-2 transition"
+              aria-label="Dia anterior"
+            >
+              <ChevronLeft size={16} />
+            </button>
             <button
               type="button"
               onClick={openNativeDatePicker}
-              className="inline-flex h-9 w-full items-center gap-2 rounded-lg border border-p-border bg-p-surface px-3 text-sm font-medium text-p-text hover:bg-p-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
+              className="inline-flex h-8 flex-1 items-center gap-1.5 px-2 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2 transition"
               aria-label="Seleccionar fecha"
             >
               <CalendarDays size={14} className="text-p-text-muted" />
@@ -99,6 +99,14 @@ export default function AgendaToolbar({
                   month: 'short',
                 })}
               </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onMoveDate(1)}
+              className="grid h-8 w-8 place-items-center text-p-text-muted hover:bg-p-surface-2 transition"
+              aria-label="Dia siguiente"
+            >
+              <ChevronRight size={16} />
             </button>
             <input
               ref={quickDateInputRef}
@@ -119,18 +127,10 @@ export default function AgendaToolbar({
           </div>
           <button
             type="button"
-            onClick={() => onMoveDate(1)}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-p-border text-p-text-muted hover:bg-p-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
-            aria-label="Dia siguiente"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            type="button"
             onClick={onCreateBooking}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--accent-fg)] px-3 text-sm font-semibold text-ink-900 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 shadow-p-md transition hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lima-300/40"
           >
-            <Plus size={14} />
+            <Plus size={14} strokeWidth={2.5} />
             Crear reserva
           </button>
         </div>

@@ -598,9 +598,10 @@ export default function AdminClientesPlayground2Page() {
                             <button
                               type="button"
                               onClick={openCreateClient}
-                              className="h-8 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 transition hover:bg-ink-900"
+                              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink-900 px-2.5 text-[11px] font-semibold text-ink-50 shadow-p-md transition hover:bg-ink-800"
                             >
-                              <span className="inline-flex items-center gap-1"><Plus size={14} /> Nuevo cliente</span>
+                              <Plus size={14} strokeWidth={2.5} />
+                              Nuevo cliente
                             </button>
                           </AdminFilterToolbar>
                         </div>

@@ -59,7 +59,7 @@ export default function AdminToast() {
       aria-label="Notificaciones"
       style={{
         position: 'fixed',
-        bottom: 24,
+        top: 100,
         right: 24,
         zIndex: ADMIN_Z_INDEX.toast,
         display: 'flex',
