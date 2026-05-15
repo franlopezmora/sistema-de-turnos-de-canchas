@@ -1,6 +1,6 @@
 import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { ErrorCodes, conflict, forbidden, notFound, sendAppError } from '../src/errors';
+import { ErrorCodes, badRequest, conflict, forbidden, notFound, sendAppError } from '../src/errors';
 
 class MockResponse {
   statusCode = 200;
@@ -96,5 +96,35 @@ describe('Booking AppError — contratos críticos', () => {
     sendAppError(res, conflict('Solo se puede confirmar una reserva pendiente', ErrorCodes.BOOKING_INVALID_STATUS));
     assert.equal(res.statusCode, 409);
     assert.equal((res.body as any).code, ErrorCodes.BOOKING_INVALID_STATUS);
+  });
+
+  test('BOOKING_SLOT_UNAVAILABLE → 409', () => {
+    const res = response();
+    sendAppError(
+      res,
+      conflict('Ese horario no está disponible para esta cancha.', ErrorCodes.BOOKING_SLOT_UNAVAILABLE)
+    );
+    assert.equal(res.statusCode, 409);
+    assert.equal((res.body as any).code, ErrorCodes.BOOKING_SLOT_UNAVAILABLE);
+  });
+
+  test('ACTIVITY_OUT_OF_CLUB → 403', () => {
+    const res = response();
+    sendAppError(
+      res,
+      forbidden('La actividad no pertenece al club de la cancha.', ErrorCodes.ACTIVITY_OUT_OF_CLUB)
+    );
+    assert.equal(res.statusCode, 403);
+    assert.equal((res.body as any).code, ErrorCodes.ACTIVITY_OUT_OF_CLUB);
+  });
+
+  test('CLUB_CONFIG_INVALID → 400', () => {
+    const res = response();
+    sendAppError(
+      res,
+      badRequest('Configuración de club inválida: timeZone es obligatorio.', ErrorCodes.CLUB_CONFIG_INVALID)
+    );
+    assert.equal(res.statusCode, 400);
+    assert.equal((res.body as any).code, ErrorCodes.CLUB_CONFIG_INVALID);
   });
 });

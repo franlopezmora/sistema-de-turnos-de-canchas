@@ -653,9 +653,6 @@ export class BookingController {
             });
             res.json({ message: "Reserva cancelada", booking: result });
         } catch (error: any) {
-            if (isIntegrityInconsistencyError(error)) {
-                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en reserva') });
-            }
             return sendAppError(res, error, 'No pudimos completar la acción. Intentá nuevamente.');
         }
     }
@@ -694,9 +691,6 @@ export class BookingController {
             const booking = await this.bookingService.completeBooking(bookingId, actorUserId, clubId);
             return res.json({ message: 'Reserva completada', booking });
         } catch (error: any) {
-            if (isIntegrityInconsistencyError(error)) {
-                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en reserva') });
-            }
             return sendAppError(res, error, 'No se pudo completar la reserva');
         }
     }
@@ -873,9 +867,6 @@ export class BookingController {
             const bookings = await this.bookingService.getDaySchedule(searchDate, clubId);
             res.json(bookings);
         } catch (error: any) {
-            if (isIntegrityInconsistencyError(error)) {
-                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en agenda') });
-            }
             return sendAppError(res, error, 'Error interno al cargar agenda');
         }
     }
@@ -1309,9 +1300,6 @@ export class BookingController {
             
             res.json(items);
         } catch (error) {
-            if (isIntegrityInconsistencyError(error)) {
-                return res.status(409).json({ error: getErrorMessage(error, 'Inconsistencia de integridad en consumos') });
-            }
             return sendAppError(res, error, 'Error al obtener los consumos');
         }
     }
