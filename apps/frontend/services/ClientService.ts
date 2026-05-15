@@ -53,6 +53,8 @@ export class ClientService {
       phone: client.phoneNumber || '',
       dni: client.dni || '-',
       email: client.email || '',
+      userId: Number(client.userId || 0) || null,
+      linkedUser: client.linkedUser || null,
       isProfessor: Boolean(client.isProfessor),
       totalBookings: Number(client.totalBookings || 0),
       totalDebt: Number(client.totalDebt || 0),
@@ -116,5 +118,61 @@ export class ClientService {
       throw new Error(error.error || 'No se pudo eliminar el cliente');
     }
     return true;
+  }
+
+  static async linkUserByClubSlug(slug: string, clientId: string, userId: number) {
+    const res = await fetchWithAuth(
+      `${apiBase()}/clubs/${slug}/admin/clients/${encodeURIComponent(clientId)}/link-user`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      }
+    );
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'No se pudo vincular el cliente al usuario');
+    }
+    return res.json();
+  }
+
+  static async unlinkUserByClubSlug(slug: string, clientId: string) {
+    const res = await fetchWithAuth(
+      `${apiBase()}/clubs/${slug}/admin/clients/${encodeURIComponent(clientId)}/unlink-user`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'No se pudo desvincular el cliente del usuario');
+    }
+    return res.json();
+  }
+
+  static async mergeByClubSlug(
+    slug: string,
+    sourceClientId: string,
+    targetClientId: string,
+    options?: { incidentId?: string; resolutionNotes?: string }
+  ) {
+    const res = await fetchWithAuth(
+      `${apiBase()}/clubs/${slug}/admin/clients/${encodeURIComponent(sourceClientId)}/merge`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetClientId,
+          ...(options?.incidentId ? { incidentId: options.incidentId } : {}),
+          ...(options?.resolutionNotes ? { resolutionNotes: options.resolutionNotes } : {}),
+        }),
+      }
+    );
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error || 'No se pudo fusionar el cliente');
+    }
+    return res.json();
   }
 }

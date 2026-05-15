@@ -3,9 +3,12 @@ import {
   ClubAdminService,
   type ClientDuplicateIncident
 } from '../../services/ClubAdminService';
+import { ClientService } from '../../services/ClientService';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
+import { showAdminToast } from '../../utils/adminToast';
 import { extractErrorMessage } from '../../utils/uiError';
 import { AdminFeedbackBanner } from './ui/AdminFeedback';
+import AdminAppModal from './ui/AdminAppModal';
 
 const formatUserName = (user?: { firstName?: string | null; lastName?: string | null } | null) => {
   const first = String(user?.firstName || '').trim();
@@ -18,10 +21,20 @@ export default function AdminDuplicateIncidents() {
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [feedback, setFeedback] = useState<string>('');
   const [incidents, setIncidents] = useState<ClientDuplicateIncident[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [detail, setDetail] = useState<ClientDuplicateIncident | null>(null);
+  const [linkState, setLinkState] = useState<{
+    clientId: string;
+    clientName: string;
+  } | null>(null);
+  const [mergeState, setMergeState] = useState<{
+    sourceClientId: string;
+    sourceClientName: string;
+    targetClientId: string;
+  } | null>(null);
+  const [mergeNotes, setMergeNotes] = useState('');
+  const [dismissConfirmOpen, setDismissConfirmOpen] = useState(false);
 
   useEffect(() => {
     const resolvedSlug = getActiveClubSlug(normalizeSessionUser(null));
@@ -81,17 +94,19 @@ export default function AdminDuplicateIncidents() {
     [incidents]
   );
 
-  const handleResolve = async (clientId: string) => {
-    if (!clubSlug || !detail?.id || !clientId) return;
+  const handleResolve = async () => {
+    if (!clubSlug || !detail?.id || !linkState?.clientId) return;
     setBusy(true);
-    setFeedback('');
     setError('');
     try {
-      await ClubAdminService.resolveClientDuplicateIncidentLink(clubSlug, detail.id, clientId);
-      setFeedback('Incidente resuelto y vínculo aplicado.');
+      await ClubAdminService.resolveClientDuplicateIncidentLink(clubSlug, detail.id, linkState.clientId);
+      setLinkState(null);
+      showAdminToast('Incidente resuelto y vínculo aplicado.');
       await loadIncidents(clubSlug);
     } catch (err: unknown) {
-      setError(extractErrorMessage(err, 'No se pudo resolver el incidente'));
+      const message = extractErrorMessage(err, 'No se pudo resolver el incidente');
+      setError(message);
+      showAdminToast(message, 'error');
     } finally {
       setBusy(false);
     }
@@ -100,14 +115,61 @@ export default function AdminDuplicateIncidents() {
   const handleDismiss = async () => {
     if (!clubSlug || !detail?.id) return;
     setBusy(true);
-    setFeedback('');
     setError('');
     try {
       await ClubAdminService.dismissClientDuplicateIncident(clubSlug, detail.id);
-      setFeedback('Incidente descartado.');
+      showAdminToast('Incidente descartado.');
+      await loadIncidents(clubSlug);
+      setDismissConfirmOpen(false);
+    } catch (err: unknown) {
+      const message = extractErrorMessage(err, 'No se pudo descartar el incidente');
+      setError(message);
+      showAdminToast(message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openResolveLink = (clientId: string, clientName: string) => {
+    setLinkState({
+      clientId: String(clientId),
+      clientName: String(clientName || 'Cliente seleccionado'),
+    });
+  };
+
+  const openMerge = (sourceClientId: string) => {
+    const candidates = detail?.candidateClients || [];
+    const source = candidates.find((client) => String(client.id) === String(sourceClientId));
+    if (!source) return;
+    const preferredTargetId =
+      String(detail?.primaryClientId || '').trim() ||
+      String(candidates.find((client) => String(client.id) !== String(source.id))?.id || '').trim();
+    if (!preferredTargetId || preferredTargetId === String(source.id)) return;
+    setMergeNotes('');
+    setMergeState({
+      sourceClientId: String(source.id),
+      sourceClientName: String(source.name || 'Cliente origen'),
+      targetClientId: preferredTargetId,
+    });
+  };
+
+  const handleMerge = async () => {
+    if (!clubSlug || !detail?.id || !mergeState?.sourceClientId || !mergeState?.targetClientId) return;
+    setBusy(true);
+    setError('');
+    try {
+      await ClientService.mergeByClubSlug(clubSlug, mergeState.sourceClientId, mergeState.targetClientId, {
+        incidentId: detail.id,
+        resolutionNotes: mergeNotes.trim() || undefined,
+      });
+      setMergeState(null);
+      setMergeNotes('');
+      showAdminToast('Incidente resuelto mediante fusión manual.');
       await loadIncidents(clubSlug);
     } catch (err: unknown) {
-      setError(extractErrorMessage(err, 'No se pudo descartar el incidente'));
+      const message = extractErrorMessage(err, 'No se pudo fusionar el cliente');
+      setError(message);
+      showAdminToast(message, 'error');
     } finally {
       setBusy(false);
     }
@@ -131,8 +193,6 @@ export default function AdminDuplicateIncidents() {
       </div>
 
       {error ? <AdminFeedbackBanner tone="error">{error}</AdminFeedbackBanner> : null}
-      {feedback ? <AdminFeedbackBanner tone="success">{feedback}</AdminFeedbackBanner> : null}
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-p-border bg-p-surface p-4 shadow-p-card lg:col-span-1">
           <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-widest text-p-text-muted">Bandeja</h2>
@@ -186,10 +246,20 @@ export default function AdminDuplicateIncidents() {
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => handleResolve(client.id)}
+                        onClick={() => openResolveLink(client.id, client.name || 'Sin nombre')}
                         className="mt-2 h-9 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 disabled:opacity-50"
                       >
                         Vincular usuario a este cliente
+                      </button>
+                    ) : null}
+                    {(detail.candidateClients || []).length > 1 ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => openMerge(client.id)}
+                        className="mt-2 ml-2 h-9 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary disabled:opacity-50"
+                      >
+                        Fusionar manualmente
                       </button>
                     ) : null}
                   </div>
@@ -200,7 +270,7 @@ export default function AdminDuplicateIncidents() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={handleDismiss}
+                  onClick={() => setDismissConfirmOpen(true)}
                   className="h-9 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2 disabled:opacity-50"
                 >
                   Descartar incidente
@@ -210,6 +280,94 @@ export default function AdminDuplicateIncidents() {
           ) : null}
         </div>
       </div>
+      <AdminAppModal
+        show={dismissConfirmOpen}
+        onClose={() => {
+          if (busy) return;
+          setDismissConfirmOpen(false);
+        }}
+        title="Descartar incidente"
+        isWarning
+        confirmText={busy ? 'Descartando...' : 'Descartar incidente'}
+        confirmDisabled={busy}
+        onConfirm={() => {
+          void handleDismiss();
+        }}
+        message="Vas a cerrar este incidente sin vincular ni fusionar clientes. Esta acción queda como decisión manual del equipo."
+      />
+      <AdminAppModal
+        show={Boolean(linkState)}
+        onClose={() => {
+          if (busy) return;
+          setLinkState(null);
+        }}
+        title="Confirmar vínculo manual"
+        confirmText={busy ? 'Vinculando...' : 'Confirmar vínculo'}
+        confirmDisabled={busy || !linkState?.clientId}
+        onConfirm={() => {
+          void handleResolve();
+        }}
+        message={
+          <div className="space-y-4">
+            <p>Vas a vincular manualmente el usuario del incidente con este cliente. Esta acción no se resuelve nunca de forma automática.</p>
+            <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[13px] text-p-text-secondary">
+              <p><span className="font-semibold text-p-text">Cliente destino:</span> {linkState?.clientName || '-'}</p>
+              <p className="mt-1"><span className="font-semibold text-p-text">Usuario del incidente:</span> {formatUserName(detail?.user)}</p>
+            </div>
+          </div>
+        }
+      />
+      <AdminAppModal
+        show={Boolean(mergeState)}
+        onClose={() => {
+          if (busy) return;
+          setMergeState(null);
+          setMergeNotes('');
+        }}
+        title="Fusionar cliente desde incidente"
+        isWarning
+        confirmText={busy ? 'Fusionando...' : 'Confirmar fusión'}
+        confirmDisabled={busy || !mergeState?.sourceClientId || !mergeState?.targetClientId}
+        onConfirm={() => {
+          void handleMerge();
+        }}
+        message={
+          <div className="space-y-4">
+            <p>Esta acción mueve reservas, cuentas y referencias del cliente origen al cliente destino. No hay merge automático.</p>
+            <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[13px] text-p-text-secondary">
+              <p><span className="font-semibold text-p-text">Origen:</span> {mergeState?.sourceClientName || '-'}</p>
+              <label className="mt-3 block">
+                <span className="mb-1 block text-[12px] font-medium text-p-text-secondary">Cliente destino</span>
+                <select
+                  value={mergeState?.targetClientId || ''}
+                  onChange={(event) =>
+                    setMergeState((prev) => prev ? { ...prev, targetClientId: event.target.value } : prev)
+                  }
+                  className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
+                >
+                  {(detail?.candidateClients || [])
+                    .filter((client) => String(client.id) !== String(mergeState?.sourceClientId || ''))
+                    .map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name || 'Sin nombre'} · {client.phone || client.email || client.id}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="mt-3 block">
+                <span className="mb-1 block text-[12px] font-medium text-p-text-secondary">Nota interna (opcional)</span>
+                <textarea
+                  value={mergeNotes}
+                  onChange={(event) => setMergeNotes(event.target.value)}
+                  rows={3}
+                  className="w-full rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[13px] text-p-text outline-none focus:border-p-accent"
+                  placeholder="Qué revisaste antes de fusionar"
+                />
+              </label>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 }

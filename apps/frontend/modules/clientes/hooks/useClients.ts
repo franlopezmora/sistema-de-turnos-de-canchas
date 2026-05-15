@@ -14,6 +14,12 @@ export type AdminClient = {
   phone: string;
   dni: string;
   email: string;
+  userId?: number | null;
+  linkedUser?: {
+    id: number;
+    name: string;
+    email?: string | null;
+  } | null;
   isProfessor: boolean;
   totalBookings: number;
   totalDebt: number;

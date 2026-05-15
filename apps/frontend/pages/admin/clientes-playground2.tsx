@@ -2,6 +2,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Link2,
   DollarSign,
   Pencil,
   Plus,
@@ -9,11 +10,14 @@ import {
   Save,
   Search,
   Trash2,
+  Unlink2,
   UserPlus,
 } from 'lucide-react';
 import AdminPlaygroundShell from '../../components/admin/AdminPlaygroundShell';
+import AdminAppModal from '../../components/admin/ui/AdminAppModal';
+import AdminDuplicateIncidents from '../../components/admin/AdminDuplicateIncidents';
 import ClientsTable from '../../modules/clientes/components/ClientsTable';
-import { AdminDrawer, AdminDrawerSection, AdminFeedbackBanner, AdminFilterToolbar, AdminSegmentedControl } from '../../components/admin/ui';
+import { AdminDrawer, AdminDrawerSection, AdminFeedbackBanner, AdminFilterToolbar, AdminInlineError, AdminSegmentedControl } from '../../components/admin/ui';
 import NotFound from '../../components/NotFound';
 import RouteTransitionScreen from '../../components/RouteTransitionScreen';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
@@ -21,6 +25,7 @@ import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { ClientService } from '../../services/ClientService';
 import { ClubAdminService } from '../../services/ClubAdminService';
 import { formatDateTime24 } from '../../utils/dateTime';
+import { getApiErrorMeta, getApiFieldErrors } from '../../utils/apiError';
 import { showAdminToast } from '../../utils/adminToast';
 import { getActiveClubSlug, hasAdminAccess, normalizeSessionUser } from '../../utils/session';
 import { extractErrorMessage, reportUiError } from '../../utils/uiError';
@@ -37,7 +42,7 @@ import {
   splitCanonicalPhone,
 } from '../../utils/phone';
 
-type ClientsView = 'directory' | 'debt' | 'history';
+type ClientsView = 'directory' | 'debt' | 'history' | 'incidents';
 type ClientActionSidebarView = 'none' | 'client_create' | 'client_edit' | 'client_profile' | 'client_delete';
 
 
@@ -57,6 +62,24 @@ const normalizeClientFormError = (error: unknown) => {
 const isExpectedClientFormError = (message: string) =>
   /ya existe un cliente/i.test(message) ||
   /obligatorio|inv[aá]lido|ingresa|dni/i.test(message);
+
+const resolveClientIdentityError = (error: unknown, fallback: string) => {
+  const meta = getApiErrorMeta(error);
+  const base = extractErrorMessage(error, fallback);
+  const conflictingPolicies = Array.isArray(meta?.conflictingPolicyIds) ? meta.conflictingPolicyIds : [];
+  if (conflictingPolicies.length > 0) {
+    return `${base} Políticas en conflicto: ${conflictingPolicies.join(', ')}.`;
+  }
+  const linkedClientName = String(meta?.linkedClientName || '').trim();
+  if (linkedClientName) {
+    return `${base} Cliente ya vinculado: ${linkedClientName}.`;
+  }
+  const linkedUserId = Number(meta?.linkedUserId || 0);
+  if (Number.isInteger(linkedUserId) && linkedUserId > 0) {
+    return `${base} Usuario vinculado actual: #${linkedUserId}.`;
+  }
+  return base;
+};
 
 const formatDate = (dateInput: any) => {
   if (!dateInput) return '-';
@@ -165,6 +188,7 @@ export default function AdminClientesPlayground2Page() {
   const [editingClientId, setEditingClientId] = useState<string>('');
   const [submittingClient, setSubmittingClient] = useState(false);
   const [clubPhoneCountryIso2, setClubPhoneCountryIso2] = useState(DEFAULT_PHONE_COUNTRY_ISO2);
+  const [clientFieldErrors, setClientFieldErrors] = useState<Record<string, string>>({});
   const [clientForm, setClientForm] = useState({
     name: '',
     phoneCountryIso2: DEFAULT_PHONE_COUNTRY_ISO2,
@@ -181,6 +205,24 @@ export default function AdminClientesPlayground2Page() {
   const [accountDrawerInitialView, setAccountDrawerInitialView] =
     useState<AccountDrawerInitialView>('overview');
   const [debtSearchTerm, setDebtSearchTerm] = useState('');
+
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkSearchTerm, setLinkSearchTerm] = useState('');
+  const [linkSearchResults, setLinkSearchResults] = useState<any[]>([]);
+  const [linkSearchLoading, setLinkSearchLoading] = useState(false);
+  const [linkSelectedUser, setLinkSelectedUser] = useState<any | null>(null);
+  const [linkError, setLinkError] = useState('');
+  const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
+  const [unlinkBusy, setUnlinkBusy] = useState(false);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeSearchTerm, setMergeSearchTerm] = useState('');
+  const [mergeSearchResults, setMergeSearchResults] = useState<any[]>([]);
+  const [mergeSearchLoading, setMergeSearchLoading] = useState(false);
+  const [mergeSelectedTarget, setMergeSelectedTarget] = useState<any | null>(null);
+  const [mergeNotes, setMergeNotes] = useState('');
+  const [mergeError, setMergeError] = useState('');
 
   const [selectedClientDiscountAssignments, setSelectedClientDiscountAssignments] = useState<any[]>([]);
   const [loadingDiscountAssignments, setLoadingDiscountAssignments] = useState(false);
@@ -202,21 +244,131 @@ export default function AdminClientesPlayground2Page() {
 
   const resolveClubSlug = useCallback(() => {
     try {
-      if (typeof window === 'undefined') return '';
-      const raw = localStorage.getItem('user');
-      if (!raw) return '';
-      const normalized = normalizeSessionUser(JSON.parse(raw));
-      return getActiveClubSlug(normalized) || '';
+      return getActiveClubSlug(normalizeSessionUser(null)) || '';
     } catch {
       return '';
     }
   }, []);
+
+  const resetLinkModal = useCallback(() => {
+    setLinkSearchTerm('');
+    setLinkSearchResults([]);
+    setLinkSelectedUser(null);
+    setLinkError('');
+    setLinkBusy(false);
+  }, []);
+
+  const openLinkModal = useCallback(() => {
+    resetLinkModal();
+    setLinkModalOpen(true);
+  }, [resetLinkModal]);
+
+  const resetMergeModal = useCallback(() => {
+    setMergeSearchTerm('');
+    setMergeSearchResults([]);
+    setMergeSelectedTarget(null);
+    setMergeNotes('');
+    setMergeError('');
+    setMergeBusy(false);
+  }, []);
+
+  const openMergeModal = useCallback(() => {
+    resetMergeModal();
+    setMergeModalOpen(true);
+  }, [resetMergeModal]);
 
   useEffect(() => {
     if (!authChecked || user) return;
     if (getPendingLogoutRedirect()) return;
     void router.replace(`/login?from=${encodeURIComponent(router.asPath || '/admin/clientes-playground2')}`);
   }, [authChecked, user, router]);
+
+  useEffect(() => {
+    if (!linkModalOpen) {
+      setLinkSearchResults([]);
+      setLinkSelectedUser(null);
+      return;
+    }
+    const slug = resolveClubSlug();
+    const query = linkSearchTerm.trim();
+    if (!slug || query.length < 2) {
+      setLinkSearchResults([]);
+      setLinkSelectedUser(null);
+      return;
+    }
+    let cancelled = false;
+    setLinkSearchLoading(true);
+    const timeout = window.setTimeout(() => {
+      ClientService.searchByClubSlug(slug, query)
+        .then((rows) => {
+          if (cancelled) return;
+          const systemUsers = (Array.isArray(rows) ? rows : []).filter(
+            (row: any) => row?.sourceType === 'systemUser' && Number(row?.userId || 0) > 0
+          );
+          setLinkSearchResults(systemUsers);
+          setLinkSelectedUser((prev) =>
+            prev && systemUsers.some((row: any) => Number(row.userId) === Number(prev.userId)) ? prev : null
+          );
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setLinkError(extractErrorMessage(error, 'No se pudo buscar usuarios.'));
+        })
+        .finally(() => {
+          if (!cancelled) setLinkSearchLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      setLinkSearchLoading(false);
+    };
+  }, [linkModalOpen, linkSearchTerm, resolveClubSlug]);
+
+  useEffect(() => {
+    if (!mergeModalOpen) {
+      setMergeSearchResults([]);
+      setMergeSelectedTarget(null);
+      return;
+    }
+    const slug = resolveClubSlug();
+    const query = mergeSearchTerm.trim();
+    if (!slug || query.length < 2 || !selectedClientId) {
+      setMergeSearchResults([]);
+      setMergeSelectedTarget(null);
+      return;
+    }
+    let cancelled = false;
+    setMergeSearchLoading(true);
+    const timeout = window.setTimeout(() => {
+      ClientService.searchByClubSlug(slug, query)
+        .then((rows) => {
+          if (cancelled) return;
+          const candidates = (Array.isArray(rows) ? rows : []).filter(
+            (row: any) =>
+              row?.sourceType === 'clubClient' && String(row?.id || '') !== `client-${String(selectedClientId)}`
+          );
+          setMergeSearchResults(candidates);
+          setMergeSelectedTarget((prev) =>
+            prev && candidates.some((row: any) => String(row.id) === String(prev.id)) ? prev : null
+          );
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setMergeError(extractErrorMessage(error, 'No se pudo buscar clientes para fusionar.'));
+        })
+        .finally(() => {
+          if (!cancelled) setMergeSearchLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      setMergeSearchLoading(false);
+    };
+  }, [mergeModalOpen, mergeSearchTerm, resolveClubSlug, selectedClientId]);
 
   useEffect(() => {
     const run = async () => {
@@ -316,6 +468,7 @@ export default function AdminClientesPlayground2Page() {
 
   const openCreateClient = () => {
     setErrorMessage('');
+    setClientFieldErrors({});
     setEditingClientId('');
     setClientForm({
       name: '',
@@ -330,6 +483,7 @@ export default function AdminClientesPlayground2Page() {
 
   const openEditClient = (client: any) => {
     setErrorMessage('');
+    setClientFieldErrors({});
     const splitPhone = splitCanonicalPhone(String(client?.phone || ''), clubPhoneCountryIso2);
     setEditingClientId(String(client?.id || ''));
     setClientForm({
@@ -359,6 +513,7 @@ export default function AdminClientesPlayground2Page() {
       setErrorMessage('No se pudo resolver el club activo.');
       return;
     }
+    if (submittingClient) return;
 
     const name = String(clientForm.name || '').trim();
     const phoneLocal = String(clientForm.phone || '').trim();
@@ -369,27 +524,29 @@ export default function AdminClientesPlayground2Page() {
     const dni = String(clientForm.dni || '').trim();
     const email = String(clientForm.email || '').trim();
 
+    const nextFieldErrors: Record<string, string> = {};
     if (name.length < 2) {
-      setErrorMessage('Ingresa un nombre valido.');
-      return;
+      nextFieldErrors.name = 'Ingresá un nombre válido.';
     }
     if (!phoneLocal || !canonicalPhone) {
-      setErrorMessage('Ingresá un teléfono válido.');
-      return;
+      nextFieldErrors.phone = 'Ingresá un teléfono válido.';
     }
-    // Fase 1.2: email es opcional. Solo validar formato si viene cargado.
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrorMessage('El email ingresado no es válido.');
-      return;
+      nextFieldErrors.email = 'Ingresá un email válido o dejalo vacío.';
     }
     if (dni.length > 0 && dni.length < 6) {
-      setErrorMessage('Si cargas DNI, debe tener al menos 6 digitos.');
+      nextFieldErrors.dni = 'Si cargás DNI, debe tener al menos 6 dígitos.';
+    }
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setClientFieldErrors(nextFieldErrors);
+      setErrorMessage('Revisá los campos marcados.');
       return;
     }
 
     try {
       setSubmittingClient(true);
       setErrorMessage('');
+      setClientFieldErrors({});
       const payload = {
         name,
         phone: canonicalPhone || undefined,
@@ -415,9 +572,17 @@ export default function AdminClientesPlayground2Page() {
         if (found) setSelectedClientId(String(found.id));
       }
     } catch (error: any) {
+      const apiFieldErrors = getApiFieldErrors(error);
+      const apiMeta = getApiErrorMeta(error);
       const message = normalizeClientFormError(error);
       if (!isExpectedClientFormError(message)) {
         reportUiError({ area: 'ClientesPlayground', action: 'submitClient' }, error);
+      }
+      if (Object.keys(apiFieldErrors).length > 0) {
+        setClientFieldErrors(apiFieldErrors);
+      }
+      if ((apiMeta?.phone as string | undefined)?.trim() && !apiFieldErrors.phone) {
+        setClientFieldErrors((prev) => ({ ...prev, phone: String(apiMeta.phone) }));
       }
       setErrorMessage(message);
     } finally {
@@ -442,6 +607,69 @@ export default function AdminClientesPlayground2Page() {
       setErrorMessage(String(error?.message || 'No se pudo eliminar el cliente.'));
     } finally {
       setDeletingClient(false);
+    }
+  };
+
+  const submitLinkUser = async () => {
+    const slug = resolveClubSlug();
+    if (!slug || !selectedClient?.id || !linkSelectedUser?.userId) {
+      setLinkError('Seleccioná un usuario para vincular.');
+      return;
+    }
+    try {
+      setLinkBusy(true);
+      setLinkError('');
+      await ClientService.linkUserByClubSlug(slug, String(selectedClient.id), Number(linkSelectedUser.userId));
+      setLinkModalOpen(false);
+      resetLinkModal();
+      setSuccessMessage('Cliente vinculado al usuario.');
+      await loadClients();
+    } catch (error: any) {
+      setLinkError(resolveClientIdentityError(error, 'No se pudo vincular el cliente al usuario.'));
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  const submitUnlinkUser = async () => {
+    const slug = resolveClubSlug();
+    if (!slug || !selectedClient?.id) return;
+    try {
+      setUnlinkBusy(true);
+      await ClientService.unlinkUserByClubSlug(slug, String(selectedClient.id));
+      setUnlinkConfirmOpen(false);
+      setSuccessMessage('Cliente desvinculado del usuario.');
+      await loadClients();
+    } catch (error: any) {
+      setErrorMessage(resolveClientIdentityError(error, 'No se pudo desvincular el cliente del usuario.'));
+    } finally {
+      setUnlinkBusy(false);
+    }
+  };
+
+  const submitMergeClient = async () => {
+    const slug = resolveClubSlug();
+    const targetRawId = String(mergeSelectedTarget?.id || '').trim();
+    const targetClientId = targetRawId.startsWith('client-') ? targetRawId.slice('client-'.length) : targetRawId;
+    if (!slug || !selectedClient?.id || !targetClientId) {
+      setMergeError('Seleccioná el cliente destino para continuar.');
+      return;
+    }
+    try {
+      setMergeBusy(true);
+      setMergeError('');
+      await ClientService.mergeByClubSlug(slug, String(selectedClient.id), targetClientId, {
+        resolutionNotes: mergeNotes.trim() || undefined,
+      });
+      setMergeModalOpen(false);
+      resetMergeModal();
+      setSelectedClientId(String(targetClientId));
+      setSuccessMessage('Clientes fusionados correctamente.');
+      await loadClients();
+    } catch (error: any) {
+      setMergeError(resolveClientIdentityError(error, 'No se pudo fusionar el cliente.'));
+    } finally {
+      setMergeBusy(false);
     }
   };
 
@@ -557,6 +785,7 @@ export default function AdminClientesPlayground2Page() {
                   { value: 'directory', label: 'Directorio' },
                   { value: 'debt', label: 'Cuentas y deuda' },
                   { value: 'history', label: 'Perfil' },
+                  { value: 'incidents', label: 'Incidentes' },
                 ]}
                 className="w-fit"
               />
@@ -826,6 +1055,13 @@ export default function AdminClientesPlayground2Page() {
                             >
                               <span className="inline-flex items-center gap-1.5"><Pencil size={13} /> Editar</span>
                             </button>
+                            <button
+                              type="button"
+                              onClick={openMergeModal}
+                              className="h-8 flex-none rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
+                            >
+                              Fusionar
+                            </button>
                           </div>
 
                           {/* Debt banner */}
@@ -884,6 +1120,50 @@ export default function AdminClientesPlayground2Page() {
                                   <span className="text-p-text-muted">Email</span>
                                   <span className="break-all font-semibold text-p-text">{String(selectedClient.email || '-')}</span>
                                 </div>
+                              </div>
+                            </div>
+
+                            <div>
+                              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-p-text-muted">
+                                Vinculación con usuario
+                              </h3>
+                              <div className="rounded-xl border border-p-border bg-p-surface p-3">
+                                {selectedClient.linkedUser ? (
+                                  <>
+                                    <p className="text-[13px] font-semibold text-p-text">
+                                      {selectedClient.linkedUser.name || `Usuario ${selectedClient.linkedUser.id}`}
+                                    </p>
+                                    <p className="mt-0.5 text-[12px] text-p-text-muted">
+                                      {selectedClient.linkedUser.email || `ID usuario #${selectedClient.linkedUser.id}`}
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setUnlinkConfirmOpen(true)}
+                                        className="inline-flex h-8 items-center gap-1 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
+                                      >
+                                        <Unlink2 size={12} />
+                                        Desvincular
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-[13px] text-p-text-secondary">
+                                      Este cliente todavía no está vinculado a un usuario del sistema.
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={openLinkModal}
+                                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 hover:bg-ink-900"
+                                      >
+                                        <Link2 size={12} />
+                                        Vincular usuario
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </div>
 
@@ -1011,6 +1291,12 @@ export default function AdminClientesPlayground2Page() {
                     </article>
                   </div>
                 )}
+
+                {activeView === 'incidents' && (
+                  <div className="h-full overflow-auto">
+                    <AdminDuplicateIncidents />
+                  </div>
+                )}
               </div>
         </div>
       </AdminPlaygroundShell>
@@ -1070,6 +1356,7 @@ export default function AdminClientesPlayground2Page() {
                   type="button"
                   onClick={() => {
                     setErrorMessage('');
+                    setClientFieldErrors({});
                     setEditingClientId('');
                     setClientForm({
                       name: '',
@@ -1080,7 +1367,8 @@ export default function AdminClientesPlayground2Page() {
                       isProfessor: false,
                     });
                   }}
-                  className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
+                  disabled={submittingClient}
+                  className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span className="inline-flex items-center gap-1.5">
                     <RotateCcw size={14} />
@@ -1102,16 +1390,42 @@ export default function AdminClientesPlayground2Page() {
             )}
 
             {sidebarView === 'client_profile' && selectedClient && (
-              <button
-                type="button"
-                onClick={() => openEditClient(selectedClient)}
-                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900"
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <Pencil size={14} />
-                  Editar cliente
-                </span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={openMergeModal}
+                  className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
+                >
+                  Fusionar
+                </button>
+                {selectedClient.linkedUser ? (
+                  <button
+                    type="button"
+                    onClick={() => setUnlinkConfirmOpen(true)}
+                    className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
+                  >
+                    Desvincular usuario
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={openLinkModal}
+                    className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
+                  >
+                    Vincular usuario
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => openEditClient(selectedClient)}
+                  className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 hover:bg-ink-900"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Pencil size={14} />
+                    Editar cliente
+                  </span>
+                </button>
+              </>
             )}
 
             {sidebarView === 'client_delete' && (
@@ -1147,10 +1461,14 @@ export default function AdminClientesPlayground2Page() {
                 <input
                   type="text"
                   value={clientForm.name}
-                  onChange={(event) => setClientForm((prev) => ({ ...prev, name: event.target.value }))}
+                  onChange={(event) => {
+                    setClientFieldErrors((prev) => ({ ...prev, name: '' }));
+                    setClientForm((prev) => ({ ...prev, name: event.target.value }));
+                  }}
                   className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   placeholder="Ej: Juan Perez"
                 />
+                <AdminInlineError>{clientFieldErrors.name}</AdminInlineError>
               </label>
 
               <div className="grid grid-cols-[110px_1fr] gap-2">
@@ -1158,7 +1476,10 @@ export default function AdminClientesPlayground2Page() {
                   <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Pais</span>
                   <select
                     value={clientForm.phoneCountryIso2}
-                    onChange={(event) => setClientForm((prev) => ({ ...prev, phoneCountryIso2: normalizePhoneCountryIso2(event.target.value) }))}
+                    onChange={(event) => {
+                      setClientFieldErrors((prev) => ({ ...prev, phone: '' }));
+                      setClientForm((prev) => ({ ...prev, phoneCountryIso2: normalizePhoneCountryIso2(event.target.value) }));
+                    }}
                     className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-2 text-[12px] font-semibold text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   >
                     {PHONE_COUNTRY_OPTIONS.map((option) => (
@@ -1174,23 +1495,31 @@ export default function AdminClientesPlayground2Page() {
                     type="text"
                     value={clientForm.phone}
                     onChange={(event) =>
-                      setClientForm((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, '') }))
+                      {
+                        setClientFieldErrors((prev) => ({ ...prev, phone: '' }));
+                        setClientForm((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, '') }));
+                      }
                     }
                     className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                     placeholder="351..."
                   />
                 </label>
               </div>
+              <AdminInlineError>{clientFieldErrors.phone}</AdminInlineError>
 
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">DNI</span>
                 <input
                   type="text"
                   value={clientForm.dni}
-                  onChange={(event) => setClientForm((prev) => ({ ...prev, dni: event.target.value }))}
+                  onChange={(event) => {
+                    setClientFieldErrors((prev) => ({ ...prev, dni: '' }));
+                    setClientForm((prev) => ({ ...prev, dni: event.target.value }));
+                  }}
                   className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   placeholder="Documento"
                 />
+                <AdminInlineError>{clientFieldErrors.dni}</AdminInlineError>
               </label>
 
               <label className="block">
@@ -1198,10 +1527,14 @@ export default function AdminClientesPlayground2Page() {
                 <input
                   type="email"
                   value={clientForm.email}
-                  onChange={(event) => setClientForm((prev) => ({ ...prev, email: event.target.value }))}
+                  onChange={(event) => {
+                    setClientFieldErrors((prev) => ({ ...prev, email: '' }));
+                    setClientForm((prev) => ({ ...prev, email: event.target.value }));
+                  }}
                   className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text shadow-p-card outline-none transition focus:border-p-accent focus:ring-2 focus:ring-lima-300/30"
                   placeholder="cliente@email.com"
                 />
+                <AdminInlineError>{clientFieldErrors.email}</AdminInlineError>
               </label>
 
               <label className="flex min-h-10 items-center gap-2 rounded-xl border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-secondary">
@@ -1262,6 +1595,23 @@ export default function AdminClientesPlayground2Page() {
                   </div>
                 </div>
               </AdminDrawerSection>
+
+              <AdminDrawerSection title="Vinculación con usuario" className={drawerSectionCardClass}>
+                <div className="rounded-xl border border-p-border bg-p-surface p-3 text-[13px]">
+                  {selectedClient.linkedUser ? (
+                    <>
+                      <p className="font-semibold text-p-text">
+                        {selectedClient.linkedUser.name || `Usuario ${selectedClient.linkedUser.id}`}
+                      </p>
+                      <p className="mt-1 text-p-text-muted">
+                        {selectedClient.linkedUser.email || `ID usuario #${selectedClient.linkedUser.id}`}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-p-text-muted">No hay usuario vinculado manualmente.</p>
+                  )}
+                </div>
+              </AdminDrawerSection>
             </>
           )
         )}
@@ -1278,6 +1628,156 @@ export default function AdminClientesPlayground2Page() {
           </AdminDrawerSection>
         )}
       </AdminDrawer>
+      <AdminAppModal
+        show={linkModalOpen}
+        onClose={() => {
+          if (linkBusy) return;
+          setLinkModalOpen(false);
+          resetLinkModal();
+        }}
+        title="Vincular cliente con usuario"
+        confirmText={linkBusy ? 'Vinculando...' : 'Confirmar vínculo'}
+        confirmDisabled={linkBusy || !linkSelectedUser?.userId}
+        onConfirm={() => {
+          void submitLinkUser();
+        }}
+        message={
+          <div className="space-y-4">
+            {linkError ? <AdminFeedbackBanner tone="error" compact>{linkError}</AdminFeedbackBanner> : null}
+            <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[13px] text-p-text-secondary">
+              <p><span className="font-semibold text-p-text">Cliente:</span> {selectedClient ? getClientName(selectedClient) : '-'}</p>
+              <p className="mt-1"><span className="font-semibold text-p-text">Política:</span> el vínculo es manual y no se reemplaza automáticamente.</p>
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Buscar usuario</span>
+              <input
+                type="text"
+                value={linkSearchTerm}
+                onChange={(event) => {
+                  setLinkSearchTerm(event.target.value);
+                  setLinkError('');
+                }}
+                className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
+                placeholder="Nombre, email o teléfono"
+              />
+            </label>
+            <div className="max-h-64 space-y-2 overflow-auto">
+              {linkSearchLoading ? <p className="text-[12px] text-p-text-muted">Buscando usuarios...</p> : null}
+              {!linkSearchLoading && linkSearchTerm.trim().length >= 2 && linkSearchResults.length === 0 ? (
+                <p className="text-[12px] text-p-text-muted">No se encontraron usuarios del club para vincular.</p>
+              ) : null}
+              {linkSearchResults.map((row: any) => {
+                const selected = Number(linkSelectedUser?.userId || 0) === Number(row?.userId || 0);
+                return (
+                  <button
+                    key={String(row?.id || row?.userId)}
+                    type="button"
+                    onClick={() => setLinkSelectedUser(row)}
+                    className={`w-full rounded-xl border p-3 text-left text-[13px] transition ${
+                      selected ? 'border-p-accent bg-p-positive-bg' : 'border-p-border bg-p-surface-2 hover:bg-p-surface'
+                    }`}
+                  >
+                    <p className="font-semibold text-p-text">{String(row?.name || `Usuario ${row?.userId || ''}`)}</p>
+                    <p className="mt-0.5 text-p-text-muted">{String(row?.email || row?.phone || '-')}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        }
+      />
+      <AdminAppModal
+        show={unlinkConfirmOpen}
+        onClose={() => {
+          if (unlinkBusy) return;
+          setUnlinkConfirmOpen(false);
+        }}
+        title="¿Desvincular usuario?"
+        message={
+          <div className="space-y-3">
+            <p>Vas a quitar la vinculación manual entre este cliente y el usuario asociado.</p>
+            <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[13px] text-p-text-secondary">
+              <p><span className="font-semibold text-p-text">Cliente:</span> {selectedClient ? getClientName(selectedClient) : '-'}</p>
+              <p className="mt-1"><span className="font-semibold text-p-text">Usuario:</span> {selectedClient?.linkedUser?.name || selectedClient?.linkedUser?.email || '-'}</p>
+            </div>
+          </div>
+        }
+        confirmText={unlinkBusy ? 'Desvinculando...' : 'Desvincular'}
+        confirmDisabled={unlinkBusy}
+        isWarning
+        onConfirm={() => {
+          void submitUnlinkUser();
+        }}
+      />
+      <AdminAppModal
+        show={mergeModalOpen}
+        onClose={() => {
+          if (mergeBusy) return;
+          setMergeModalOpen(false);
+          resetMergeModal();
+        }}
+        title="Fusionar cliente manualmente"
+        message={
+          <div className="space-y-4">
+            {mergeError ? <AdminFeedbackBanner tone="error" compact>{mergeError}</AdminFeedbackBanner> : null}
+            <div className="rounded-xl border border-p-border bg-p-surface-2 p-3 text-[13px] text-p-text-secondary">
+              <p><span className="font-semibold text-p-text">Origen:</span> {selectedClient ? getClientName(selectedClient) : '-'}</p>
+              <p className="mt-1">Se van a mover reservas, cuentas y referencias operativas al cliente destino. No hay merge automático.</p>
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Buscar cliente destino</span>
+              <input
+                type="text"
+                value={mergeSearchTerm}
+                onChange={(event) => {
+                  setMergeSearchTerm(event.target.value);
+                  setMergeError('');
+                }}
+                className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none focus:border-p-accent"
+                placeholder="Nombre, DNI, email o teléfono"
+              />
+            </label>
+            <div className="max-h-64 space-y-2 overflow-auto">
+              {mergeSearchLoading ? <p className="text-[12px] text-p-text-muted">Buscando clientes...</p> : null}
+              {!mergeSearchLoading && mergeSearchTerm.trim().length >= 2 && mergeSearchResults.length === 0 ? (
+                <p className="text-[12px] text-p-text-muted">No se encontraron clientes destino.</p>
+              ) : null}
+              {mergeSearchResults.map((row: any) => {
+                const selected = String(mergeSelectedTarget?.id || '') === String(row?.id || '');
+                return (
+                  <button
+                    key={String(row?.id || '')}
+                    type="button"
+                    onClick={() => setMergeSelectedTarget(row)}
+                    className={`w-full rounded-xl border p-3 text-left text-[13px] transition ${
+                      selected ? 'border-p-accent bg-p-positive-bg' : 'border-p-border bg-p-surface-2 hover:bg-p-surface'
+                    }`}
+                  >
+                    <p className="font-semibold text-p-text">{String(row?.name || 'Sin nombre')}</p>
+                    <p className="mt-0.5 text-p-text-muted">{String(row?.phone || row?.email || '-')}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] font-medium text-p-text-secondary">Nota interna (opcional)</span>
+              <textarea
+                value={mergeNotes}
+                onChange={(event) => setMergeNotes(event.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[13px] text-p-text outline-none focus:border-p-accent"
+                placeholder="Qué revisaste antes de fusionar"
+              />
+            </label>
+          </div>
+        }
+        confirmText={mergeBusy ? 'Fusionando...' : 'Confirmar fusión'}
+        confirmDisabled={mergeBusy || !mergeSelectedTarget?.id}
+        isWarning
+        onConfirm={() => {
+          void submitMergeClient();
+        }}
+      />
       <AccountDrawer
         accountId={accountDrawerAccountId || null}
         open={accountDrawerOpen}
