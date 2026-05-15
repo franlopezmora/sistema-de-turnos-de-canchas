@@ -5,6 +5,7 @@ import { prisma } from '../prisma';
 import { TimeHelper } from '../utils/TimeHelper';
 import { ProductService } from '../services/ProductService';
 import { ClientDuplicateIncidentService } from '../services/ClientDuplicateIncidentService';
+import { ReportsService } from '../services/ReportsService';
 import { getUserClubContext } from '../utils/getUserClubContext';
 import { getPreferredClubIdFromRequest } from '../utils/clubContext';
 import { sanitizeString } from '../utils/sanitize';
@@ -132,6 +133,7 @@ const createBillingConfigAppError = (error: unknown): AppError => {
 export class BookingController {
     private productService = new ProductService();
     private duplicateIncidentService = new ClientDuplicateIncidentService();
+    private reportsService = new ReportsService();
 
     constructor(private bookingService: BookingService) {}
 
@@ -1364,7 +1366,7 @@ export class BookingController {
             const paramId = req.params.id || req.params.bookingId;
             const bodyParsed = schema.safeParse(req.body);
             if (!bodyParsed.success) {
-                return res.status(400).json({ error: bodyParsed.error.format() });
+                return sendZodControllerError(res, bodyParsed.error, 'Revisá los campos marcados.');
             }
             const rawBookingId = paramId;
             const bookingId = Number(rawBookingId);
@@ -1407,242 +1409,28 @@ export class BookingController {
     }
 
     getDashboardStats = async (req: Request, res: Response) => {
-    try {
-        const clubId = Number((req as any).clubId);
-        const { startDate, endDate } = req.query;
-
-        const club = await prisma.club.findUnique({ where: { id: clubId }, include: { settings: true } });
-        const timeZone = String(club?.settings?.timeZone || '').trim();
-        if (!timeZone) {
-            return res.status(400).json({ error: 'Configuración de club inválida: timeZone es obligatorio' });
-        }
-
-        const parseLocalDate = (value: string) => {
-            const [y, m, d] = String(value).split('-').map(Number);
-            if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
-            return new Date(y, m - 1, d);
-        };
-
-        const nowLocal = TimeHelper.utcToLocal(new Date(), timeZone);
-        let startLocal = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), 1);
-        let endLocal = new Date(nowLocal.getFullYear(), nowLocal.getMonth() + 1, 0);
-
-        let start: Date;
-        let end: Date;
-
-        if (startDate && endDate) {
-            const asDateStart = new Date(String(startDate));
-            const asDateEnd = new Date(String(endDate));
-            if (!Number.isNaN(asDateStart.getTime()) && !Number.isNaN(asDateEnd.getTime())) {
-                start = asDateStart;
-                end = asDateEnd;
-            } else {
-                const parsedStart = parseLocalDate(String(startDate));
-                const parsedEnd = parseLocalDate(String(endDate));
-                if (parsedStart && parsedEnd) {
-                    startLocal = parsedStart;
-                    endLocal = parsedEnd;
-                }
-                const rangeStart = TimeHelper.getUtcRangeForLocalDate(startLocal, timeZone);
-                const rangeEnd = TimeHelper.getUtcRangeForLocalDate(endLocal, timeZone);
-                start = rangeStart.startUtc;
-                end = rangeEnd.endUtc;
-            }
-        } else {
-            const rangeStart = TimeHelper.getUtcRangeForLocalDate(startLocal, timeZone);
-            const rangeEnd = TimeHelper.getUtcRangeForLocalDate(endLocal, timeZone);
-            start = rangeStart.startUtc;
-            end = rangeEnd.endUtc;
-        }
-
-        let dailyRows: Array<{ day: string; turnos: number; bar: number }> = [];
         try {
-            dailyRows = await prisma.$queryRaw<Array<{ day: string; turnos: number; bar: number }>>`
-                WITH payments AS (
-                    SELECT p."id",
-                           p."createdAt",
-                           p."amount",
-                           a."sourceType"::text AS "sourceType"
-                    FROM "Payment" p
-                    JOIN "Account" a ON a."id" = p."accountId"
-                    WHERE a."clubId" = ${clubId}
-                      AND p."createdAt" >= ${start}
-                      AND p."createdAt" <= ${end}
-                ),
-                alloc AS (
-                    SELECT pa."paymentId",
-                           COALESCE(SUM(CASE WHEN ai."type" = 'BOOKING' THEN pa."amount" ELSE 0 END), 0)::float8 AS booking_amount,
-                           COALESCE(SUM(CASE WHEN ai."type" = 'BOOKING' THEN 0 ELSE pa."amount" END), 0)::float8 AS bar_amount
-                    FROM "PaymentAllocation" pa
-                    JOIN "AccountItem" ai ON ai."id" = pa."accountItemId"
-                    GROUP BY pa."paymentId"
-                )
-                SELECT
-                  to_char(day, 'DD/MM') AS day,
-                  COALESCE(SUM(COALESCE(booking_amount, CASE WHEN "sourceType" = 'BOOKING' THEN amount ELSE 0 END)), 0)::float8 AS turnos,
-                  COALESCE(SUM(COALESCE(bar_amount, CASE WHEN "sourceType" = 'BAR' THEN amount ELSE 0 END)), 0)::float8 AS bar
-                FROM (
-                  SELECT
-                    DATE(timezone(${timeZone}::text, p."createdAt")) AS day,
-                    p."amount" AS amount,
-                    p."sourceType" AS "sourceType",
-                    a.booking_amount,
-                    a.bar_amount
-                  FROM payments p
-                  LEFT JOIN alloc a ON a."paymentId" = p."id"
-                ) t
-                GROUP BY day
-                ORDER BY day ASC
-            `;
-        } catch (error: any) {
-            const message = String(error?.message || '');
-            if (!message.includes('PaymentAllocation') && !message.includes('42P01')) {
-                throw error;
+            const clubId = Number((req as any).clubId);
+            const schema = z.object({
+                startDate: z.string().trim().optional(),
+                endDate: z.string().trim().optional()
+            });
+            const parsed = schema.safeParse(req.query);
+            if (!parsed.success) {
+                return sendAppError(res, zodValidationAppError(parsed.error, 'Revisá los campos marcados.'));
             }
-            dailyRows = await prisma.$queryRaw<Array<{ day: string; turnos: number; bar: number }>>`
-                SELECT
-                  to_char(day, 'DD/MM') AS day,
-                  COALESCE(SUM(CASE WHEN LOWER(concept) LIKE '%producto%' THEN 0 ELSE amount END), 0)::float8 AS turnos,
-                  COALESCE(SUM(CASE WHEN LOWER(concept) LIKE '%producto%' THEN amount ELSE 0 END), 0)::float8 AS bar
-                FROM (
-                  SELECT
-                    DATE(timezone(${timeZone}::text, "createdAt")) AS day,
-                    "amount" AS amount,
-                    "concept" AS concept
-                  FROM "CashMovement"
-                  WHERE "clubId" = ${clubId}
-                    AND "type" = 'PAYMENT_IN'::"CashMovementPosType"
-                    AND "createdAt" >= ${start}
-                    AND "createdAt" <= ${end}
-                ) t
-                GROUP BY day
-                ORDER BY day ASC
-            `;
+
+            const report = await this.reportsService.getAdminDashboardReport(
+                clubId,
+                parsed.data.startDate,
+                parsed.data.endDate
+            );
+
+            return res.json(report);
+        } catch (error) {
+            return sendAppError(res, error, 'No se pudieron cargar los informes.');
         }
-
-        const [methodRows, playedBookings] = await Promise.all([
-            prisma.$queryRaw<Array<{ method: string; value: number }>>`
-                SELECT
-                  "method"::text AS method,
-                  COALESCE(SUM("amount"), 0)::float8 AS value
-                FROM "CashMovement"
-                WHERE "clubId" = ${clubId}
-                  AND "type" = 'PAYMENT_IN'::"CashMovementPosType"
-                  AND "createdAt" >= ${start}
-                  AND "createdAt" <= ${end}
-                GROUP BY "method"
-            `,
-            prisma.booking.count({
-                where: {
-                    clubId,
-                    startDateTime: { gte: start, lte: end },
-                    status: 'COMPLETED' 
-                }
-            })
-        ]);
-
-        const productAllRows = await prisma.$queryRaw<Array<{
-            productId: number;
-            name: string | null;
-            quantity: number;
-            revenue: number;
-        }>>`
-            WITH sales AS (
-              SELECT
-                ai."productId"::int AS "productId",
-                COALESCE(SUM(ai."quantity"), 0)::int AS quantity,
-                COALESCE(SUM(ai."total"), 0)::float8 AS revenue
-              FROM "AccountItem" ai
-              JOIN "Account" a ON a."id" = ai."accountId"
-              WHERE a."clubId" = ${clubId}
-                AND ai."type" = 'PRODUCT'::"AccountItemType"
-                AND ai."createdAt" >= ${start}
-                AND ai."createdAt" <= ${end}
-                AND ai."productId" IS NOT NULL
-              GROUP BY ai."productId"
-            )
-            SELECT
-              p."id"::int AS "productId",
-              p."name"::text AS name,
-              COALESCE(s.quantity, 0)::int AS quantity,
-              COALESCE(s.revenue, 0)::float8 AS revenue
-            FROM "Product" p
-            LEFT JOIN sales s ON s."productId" = p."id"
-            WHERE p."clubId" = ${clubId}
-              AND p."isActive" = true
-            ORDER BY quantity DESC, revenue DESC, p."name" ASC
-        `;
-
-        const productsTop = productAllRows.slice(0, 12);
-        const productsBottom = [...productAllRows]
-            .sort((a, b) => {
-                const qa = Number(a.quantity || 0);
-                const qb = Number(b.quantity || 0);
-                if (qa !== qb) return qa - qb;
-                const ra = Number(a.revenue || 0);
-                const rb = Number(b.revenue || 0);
-                if (ra !== rb) return ra - rb;
-                return String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' });
-            })
-            .slice(0, 12);
-        const productsUnsold = productAllRows.filter((row) => Number(row.quantity || 0) <= 0);
-        const productsUnsoldTop = productsUnsold
-            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' }))
-            .slice(0, 12);
-
-        const dailyEvolution = dailyRows.map((row) => ({
-            day: String(row.day || ''),
-            turnos: Number(row.turnos || 0),
-            bar: Number(row.bar || 0)
-        }));
-
-        const totalTurnos = dailyEvolution.reduce((sum, row) => sum + Number(row.turnos || 0), 0);
-        const totalBar = dailyEvolution.reduce((sum, row) => sum + Number(row.bar || 0), 0);
-        const productsRevenueAll = productAllRows.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
-        const productsQuantityAll = productAllRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-        const productsRevenueTop = productsTop.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
-        const productsQuantityTop = productsTop.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-
-        res.json({
-            totalRevenue: totalTurnos + totalBar,
-            totalBookings: playedBookings,
-            dailyEvolution: dailyEvolution,
-            paymentMethods: methodRows.map((row) => ({
-                name: row.method,
-                value: Number(row.value || 0)
-            })),
-            products: {
-                totals: {
-                    quantityAll: productsQuantityAll,
-                    revenueAll: productsRevenueAll,
-                    quantityTop: productsQuantityTop,
-                    revenueTop: productsRevenueTop,
-                    unsoldCount: productsUnsold.length
-                },
-                top: productsTop.map((row) => ({
-                    productId: row.productId,
-                    name: row.name || 'Producto',
-                    quantity: Number(row.quantity || 0),
-                    revenue: Number(row.revenue || 0)
-                })),
-                bottom: productsBottom.map((row) => ({
-                    productId: row.productId,
-                    name: row.name || 'Producto',
-                    quantity: Number(row.quantity || 0),
-                    revenue: Number(row.revenue || 0)
-                })),
-                unsold: productsUnsoldTop.map((row) => ({
-                    productId: row.productId,
-                    name: row.name || 'Producto'
-                }))
-            }
-        });
-
-    } catch (error) {
-        console.error("Error:", error);
-        res.status(500).json({ error: "Error al calcular estadísticas" });
     }
-}
 
     // Commit 3 — PATCH /admin/bookings/:id/client
     // Cambia el titular (clientId) de una reserva de forma explícita.
