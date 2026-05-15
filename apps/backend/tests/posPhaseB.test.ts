@@ -479,10 +479,15 @@ async function withPosReportMocks(
   run: (service: CashService) => Promise<void>
 ) {
   const service = new CashService({} as any);
+  const originalClubFindUnique = (prisma.club as any).findUnique;
   const originalShiftFindFirst = (prisma.cashShift as any).findFirst;
   const originalAccountFindMany = (prisma.account as any).findMany;
   const originalPaymentFindMany = (prisma.payment as any).findMany;
 
+  (prisma.club as any).findUnique = async () => ({
+    id: 7,
+    settings: { timeZone: 'America/Argentina/Cordoba' }
+  });
   (prisma.cashShift as any).findFirst = async () => setup.shift || null;
   (prisma.account as any).findMany = async () => setup.accounts;
   (prisma.payment as any).findMany = async () => setup.payments;
@@ -490,6 +495,7 @@ async function withPosReportMocks(
   try {
     await run(service);
   } finally {
+    (prisma.club as any).findUnique = originalClubFindUnique;
     (prisma.cashShift as any).findFirst = originalShiftFindFirst;
     (prisma.account as any).findMany = originalAccountFindMany;
     (prisma.payment as any).findMany = originalPaymentFindMany;

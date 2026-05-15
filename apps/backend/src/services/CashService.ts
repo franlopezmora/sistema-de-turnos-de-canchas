@@ -474,8 +474,8 @@ export class CashService {
 
     // P2-D/E-3: Reporte POS operativo — cuentas BAR, productos, servicios y cobros.
     async getPosReport(clubId: number, startDate?: string, endDate?: string, shiftId?: string) {
-        let start = startDate ? new Date(startDate) : new Date(new Date().setHours(0, 0, 0, 0));
-        let end = endDate ? new Date(endDate) : new Date();
+        let start = new Date(new Date().setHours(0, 0, 0, 0));
+        let end = new Date();
 
         if (shiftId) {
             const shift = await prisma.cashShift.findFirst({
@@ -485,6 +485,19 @@ export class CashService {
             if (!shift) throw notFound('Turno de caja no encontrado.', ErrorCodes.CASH_SHIFT_NOT_FOUND);
             start = new Date(shift.openedAt);
             end = shift.closedAt ? new Date(shift.closedAt) : new Date();
+        } else if (startDate && endDate) {
+            const club = await prisma.club.findUnique({
+                where: { id: clubId },
+                include: { settings: true }
+            });
+            const timeZone = String(club?.settings?.timeZone || '').trim() || TimeHelper.getDefaultTimeZone();
+            const parsedStart = new Date(startDate);
+            const parsedEnd = new Date(endDate);
+            if (!Number.isFinite(parsedStart.getTime()) || !Number.isFinite(parsedEnd.getTime())) {
+                throw badRequest('Rango de fechas inválido.', ErrorCodes.INVALID_INPUT);
+            }
+            start = TimeHelper.getUtcRangeForLocalDate(parsedStart, timeZone).startUtc;
+            end = TimeHelper.getUtcRangeForLocalDate(parsedEnd, timeZone).endUtc;
         }
 
         const accounts = await prisma.account.findMany({
@@ -523,7 +536,6 @@ export class CashService {
             : await prisma.payment.findMany({
                 where: {
                     accountId: { in: accountIds },
-                    status: 'COMPLETED',
                     ...(shiftId
                         ? { cashShiftId: shiftId }
                         : { createdAt: { gte: start, lte: end } })

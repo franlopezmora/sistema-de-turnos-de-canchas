@@ -1,5 +1,6 @@
 import { fetchWithAuth } from '../utils/apiClient';
 import { getApiUrl } from '../utils/apiUrl';
+import { throwApiErrorFromResponse } from '../utils/apiError';
 
 const apiBase = () => `${getApiUrl()}/api`;
 
@@ -214,7 +215,9 @@ export class CashService {
     if (params?.endDate) query.set('endDate', params.endDate);
     if (params?.shiftId) query.set('shiftId', params.shiftId);
     const res = await fetchWithAuth(`${apiBase()}/cash/pos-report${query.toString() ? `?${query}` : ''}`, { method: 'GET' });
-    if (!res.ok) throw new Error('Error al cargar reporte POS');
+    if (!res.ok) {
+      await throwApiErrorFromResponse(res, 'No se pudo cargar el reporte POS.');
+    }
     return res.json();
   }
 

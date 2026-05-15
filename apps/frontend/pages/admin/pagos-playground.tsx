@@ -64,6 +64,7 @@ import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 
 type PaymentsTab = 'SUMMARY' | 'ACCOUNTS' | 'MOVEMENTS' | 'CLOSURE' | 'REFUNDS' | 'REPORTS';
 type CashPeriod = 'hoy' | 'semana' | 'mes';
+type PosReportScope = 'shift' | 'period';
 type MovementTypeFilter = 'ALL' | 'INCOME' | 'EXPENSE';
 type MovementMethodFilter = 'ALL' | 'CASH' | 'TRANSFER' | 'CARD';
 type RefundStatusFilter = 'ALL' | 'REQUESTED' | 'APPROVED' | 'READY_TO_EXECUTE' | 'EXECUTED' | 'FAILED' | 'CANCELLED';
@@ -536,6 +537,7 @@ export default function AdminPaymentsPlaygroundPage() {
 
   const [cashActivePeriod, setCashActivePeriod] = useState<CashPeriod>('hoy');
   const [cashPeriodOffset, setCashPeriodOffset] = useState(0);
+  const [posReportScope, setPosReportScope] = useState<PosReportScope>('shift');
   const [loadingCashSummary, setLoadingCashSummary] = useState(false);
   const [loadingCashShift, setLoadingCashShift] = useState(false);
   const [submittingCashMovement, setSubmittingCashMovement] = useState(false);
@@ -948,7 +950,7 @@ export default function AdminPaymentsPlaygroundPage() {
       const data = await CashService.getPosReport({
         startDate,
         endDate,
-        shiftId: cashCurrentShift?.id || undefined
+        shiftId: posReportScope === 'shift' ? (cashCurrentShift?.id || undefined) : undefined
       });
       setPosReport(data);
     } catch (err) {
@@ -957,12 +959,20 @@ export default function AdminPaymentsPlaygroundPage() {
     } finally {
       setPosReportLoading(false);
     }
-  }, [authChecked, cashActivePeriod, cashCurrentShift?.id, cashPeriodOffset, user]);
+  }, [authChecked, cashActivePeriod, cashCurrentShift?.id, cashPeriodOffset, posReportScope, user]);
 
   useEffect(() => {
     if (activeTab !== 'REPORTS') return;
     void loadPosReport();
   }, [activeTab, loadPosReport]);
+
+  useEffect(() => {
+    if (activeTab !== 'REPORTS') return;
+    if (cashCurrentShift?.id) return;
+    setPosReportScope('period');
+    if (cashActivePeriod !== 'hoy' || cashPeriodOffset !== 0) return;
+    setCashActivePeriod('mes');
+  }, [activeTab, cashActivePeriod, cashCurrentShift?.id, cashPeriodOffset]);
 
   const cashPeriodLabel = useMemo(() => {
     const { rawStart, rawEnd } = getCashDateRange(cashActivePeriod, cashPeriodOffset);
@@ -2235,6 +2245,78 @@ export default function AdminPaymentsPlaygroundPage() {
               </div>
             ) : activeTab === 'REPORTS' ? (
               <div className="space-y-5">
+                <div className="w-full rounded-2xl border border-p-border bg-p-surface p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {cashCurrentShift?.id ? (
+                        <AdminSegmentedControl
+                          ariaLabel="Alcance del reporte POS"
+                          value={posReportScope}
+                          onChange={(nextValue) => setPosReportScope(nextValue as PosReportScope)}
+                          options={[
+                            { value: 'shift', label: 'Turno actual' },
+                            { value: 'period', label: 'Período' },
+                          ]}
+                          className="w-fit"
+                        />
+                      ) : (
+                        <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2 text-[12px] font-semibold text-p-text-secondary">
+                          Reporte por período
+                        </div>
+                      )}
+
+                      <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2 text-[12px] text-p-text-muted">
+                        {posReportScope === 'shift' && cashCurrentShift
+                          ? `Caja ${cashCurrentShift.cashRegister?.name || '-'} · Turno abierto`
+                          : `Período ${cashPeriodLabel}`}
+                      </div>
+                    </div>
+
+                    {posReportScope === 'period' ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface-2 p-1">
+                          {(['hoy', 'semana', 'mes'] as CashPeriod[]).map((period) => (
+                            <button
+                              key={`reports-${period}`}
+                              type="button"
+                              onClick={() => {
+                                setCashActivePeriod(period);
+                                setCashPeriodOffset(0);
+                              }}
+                              className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
+                                cashActivePeriod === period
+                                  ? 'bg-p-surface text-p-accent shadow-sm'
+                                  : 'text-p-text-muted hover:text-p-text-secondary'
+                              }`}
+                            >
+                              {period === 'hoy' ? 'Hoy' : period === 'semana' ? 'Semana' : 'Mes'}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-1 rounded-xl border border-p-border bg-p-surface px-1 py-1">
+                          <button
+                            type="button"
+                            onClick={() => setCashPeriodOffset((prev) => prev - 1)}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <span className="min-w-[120px] text-center text-[12px] font-semibold text-p-text-secondary">{cashPeriodLabel}</span>
+                          <button
+                            type="button"
+                            onClick={() => setCashPeriodOffset((prev) => Math.min(0, prev + 1))}
+                            disabled={cashPeriodOffset === 0}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-p-text-muted transition hover:bg-p-surface-2 disabled:cursor-not-allowed disabled:text-p-text-muted disabled:hover:bg-transparent"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
                 {posReportError && (
                   <div className="rounded-xl border border-p-error bg-p-error-bg px-3 py-2 text-[12px] text-p-error">
                     {posReportError}
@@ -2251,7 +2333,7 @@ export default function AdminPaymentsPlaygroundPage() {
                   <>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {[
-                        { label: 'Ventas POS', value: formatMoney(posReport?.totals.salesTotal || 0), help: cashCurrentShift ? 'Turno actual' : `Período ${cashPeriodLabel}` },
+                        { label: 'Ventas POS', value: formatMoney(posReport?.totals.salesTotal || 0), help: posReportScope === 'shift' && cashCurrentShift ? 'Turno actual' : `Período ${cashPeriodLabel}` },
                         { label: 'Cobrado', value: formatMoney(posReport?.totals.paidTotal || 0), help: 'Pagos registrados en el alcance actual' },
                         { label: 'Pendiente', value: formatMoney(posReport?.totals.pendingTotal || 0), help: 'Saldo abierto de cuentas POS' },
                         { label: 'Anulado', value: formatMoney(posReport?.totals.voidedTotal || 0), help: 'Ventas anuladas sin cobro' },
