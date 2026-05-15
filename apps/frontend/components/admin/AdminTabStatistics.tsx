@@ -1,63 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  CalendarCheck,
-  DollarSign,
-  ShoppingBag,
-  TrendingUp,
-} from 'lucide-react';
-import { fetchWithAuth } from '../../utils/apiClient';
-import { getApiUrl } from '../../utils/apiUrl';
+import { CalendarCheck, Clock3, DollarSign, Receipt, ShoppingBag, Wallet } from 'lucide-react';
+import { useRouter } from 'next/router';
 import { reportUiError } from '../../utils/uiError';
-import { showAdminToast } from '../../utils/adminToast';
-import { AdminPanel } from './ui';
+import { getApiFieldErrors, normalizeApiError } from '../../utils/apiError';
+import { ReportsService, type AdminDashboardReport } from '../../services/ReportsService';
+import {
+  AdminDataTable,
+  AdminDateInput,
+  AdminFeedbackBanner,
+  AdminPanel,
+} from './ui';
 import ReportsEmptyState from '../../modules/informes/components/ReportsEmptyState';
 import ReportsMetricGrid, { type ReportsMetric } from '../../modules/informes/components/ReportsMetricGrid';
 import ReportsPeriodToolbar, { type ReportsPeriod } from '../../modules/informes/components/ReportsPeriodToolbar';
-import RevenueChart, { type RevenueEvolutionPoint } from '../../modules/informes/components/RevenueChart';
-import PaymentMethodsDonut, { type PaymentMethodDatum } from '../../modules/informes/components/PaymentMethodsDonut';
-import ProductsRankingChart, { type ProductRankingDatum } from '../../modules/informes/components/ProductsRankingChart';
-import ReportsRankingList from '../../modules/informes/components/ReportsRankingList';
-
-const apiBase = () => `${getApiUrl()}/api`;
+import { formatReportsMoney, formatReportsNumber } from '../../modules/informes/components/reportsFormatters';
 
 interface Props {
   slugProp?: string;
+  focus?: 'resumen' | 'ingresos' | 'reservas' | 'pendientes' | 'pos';
 }
 
 type Period = ReportsPeriod;
-
-type ProductStats = {
-  totals?: {
-    quantityAll?: number;
-    revenueAll?: number;
-    quantityTop?: number;
-    revenueTop?: number;
-    unsoldCount?: number;
-  };
-  top?: ProductRankingDatum[];
-  bottom?: ProductRankingDatum[];
-  unsold?: ProductRankingDatum[];
-};
-
-type DashboardStats = {
-  totalRevenue?: number;
-  totalBookings?: number;
-  dailyEvolution?: RevenueEvolutionPoint[];
-  paymentMethods?: PaymentMethodDatum[];
-  products?: ProductStats;
-};
-
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  CASH: 'Efectivo',
-  TRANSFER: 'Transferencia',
-  CARD: 'Tarjeta',
-  OTHER: 'Otro',
-  BANK_ACCOUNT: 'Cuenta bancaria',
-  VIRTUAL_WALLET: 'Billetera virtual',
-  CASH_DRAWER: 'Caja',
-  CARD_TERMINAL: 'Terminal',
-  AUTO: 'Automatico',
-};
 
 const periodOptions: Array<{ value: Period; label: string }> = [
   { value: 'hoy', label: 'Hoy' },
@@ -65,62 +28,79 @@ const periodOptions: Array<{ value: Period; label: string }> = [
   { value: 'mes', label: 'Mes' },
 ];
 
-const toPaymentMethodLabel = (method?: string) => {
-  const key = String(method || '').trim().toUpperCase();
-  return PAYMENT_METHOD_LABELS[key] || method || 'Otro';
-};
+const toDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-export const getDateRange = (period: Period, offset = 0) => {
+const getDateRange = (period: Period, offset = 0) => {
   const start = new Date();
   const end = new Date();
 
   if (period === 'hoy') {
     start.setDate(start.getDate() + offset);
-    start.setHours(0, 0, 0, 0);
-
     end.setDate(end.getDate() + offset);
-    end.setHours(23, 59, 59, 999);
   } else if (period === 'semana') {
     const day = start.getDay() || 7;
     start.setDate(start.getDate() - day + 1 + offset * 7);
-    start.setHours(0, 0, 0, 0);
-
     end.setTime(start.getTime());
     end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-  } else if (period === 'mes') {
+  } else {
     start.setFullYear(start.getFullYear(), start.getMonth() + offset, 1);
-    start.setHours(0, 0, 0, 0);
-
     end.setFullYear(end.getFullYear(), end.getMonth() + offset + 1, 0);
-    end.setHours(23, 59, 59, 999);
   }
 
   return {
-    startDate: start.toISOString(),
-    endDate: end.toISOString(),
+    startDate: toDateKey(start),
+    endDate: toDateKey(end),
     rawStart: start,
     rawEnd: end,
   };
 };
 
-export default function AdminTabStatistics({ slugProp }: Props) {
-  const finalSlug = slugProp;
+const formatDateTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
 
+const formatStatusLabel = (status: string) => {
+  switch (status) {
+    case 'PENDING':
+      return 'Pendientes';
+    case 'CONFIRMED':
+      return 'Confirmadas';
+    case 'COMPLETED':
+      return 'Completadas';
+    case 'CANCELLED':
+      return 'Canceladas';
+    default:
+      return status;
+  }
+};
+
+const showSection = (
+  focus: Props['focus'],
+  section: 'ingresos' | 'reservas' | 'pendientes' | 'pos'
+) => !focus || focus === 'resumen' || focus === section;
+
+export default function AdminTabStatistics({ slugProp, focus = 'resumen' }: Props) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [report, setReport] = useState<AdminDashboardReport | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const [activePeriod, setActivePeriod] = useState<Period>('hoy');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [activePeriod, setActivePeriod] = useState<Period>('mes');
   const [periodOffset, setPeriodOffset] = useState(0);
+  const [filters, setFilters] = useState(() => {
+    const initial = getDateRange('mes', 0);
+    return { startDate: initial.startDate, endDate: initial.endDate };
+  });
 
-  const handlePeriodChange = (newPeriod: Period) => {
-    setActivePeriod(newPeriod);
-    setPeriodOffset(0);
-  };
-
-  const getPeriodLabel = useCallback(() => {
+  const periodLabel = useMemo(() => {
     const { rawStart, rawEnd } = getDateRange(activePeriod, periodOffset);
-
     if (activePeriod === 'mes') {
       return rawStart.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
     }
@@ -129,287 +109,391 @@ export default function AdminTabStatistics({ slugProp }: Props) {
       if (periodOffset === -1) return 'Ayer';
       return rawStart.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
     }
-    const formatWeekDay = (date: Date) => date.toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: 'short',
-    }).replace('.', '').toLowerCase();
-    return `${formatWeekDay(rawStart)} - ${formatWeekDay(rawEnd)}`;
+    return `${rawStart.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })} - ${rawEnd.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}`;
   }, [activePeriod, periodOffset]);
 
-  const loadStats = useCallback(async () => {
-    if (!finalSlug) return;
+  const loadReport = useCallback(async (nextFilters = filters) => {
+    if (!slugProp) return;
     try {
       setLoading(true);
       setErrorMessage('');
-      const { startDate, endDate } = getDateRange(activePeriod, periodOffset);
-      const url = `${apiBase()}/clubs/${finalSlug}/admin/stats/dashboard?startDate=${startDate}&endDate=${endDate}`;
-      const response = await fetchWithAuth(url);
-
-      if (response.ok) {
-        const data = await response.json();
-        const normalizedPaymentMethods = Array.isArray(data?.paymentMethods)
-          ? data.paymentMethods.map((row: any) => ({
-              ...row,
-              name: toPaymentMethodLabel(row?.name),
-            }))
-          : [];
-        setStats({
-          ...data,
-          paymentMethods: normalizedPaymentMethods,
-        });
-      } else {
-        reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, new Error(`Error del servidor: ${response.status}`));
-        const message = 'No se pudieron cargar las estadisticas para este periodo.';
-        setErrorMessage(message);
-        showAdminToast(message, 'error');
-      }
+      setFieldErrors({});
+      const data = await ReportsService.getDashboardReport(slugProp, nextFilters);
+      setReport(data);
     } catch (error) {
-      reportUiError({ area: 'AdminTabStatistics', action: 'loadStats' }, error);
-      const message = 'No se pudo conectar para traer estadisticas.';
-      setErrorMessage(message);
-      showAdminToast(message, 'error');
+      reportUiError({ area: 'AdminTabStatistics', action: 'loadReport' }, error);
+      const normalized = normalizeApiError(error, 'No se pudieron cargar los informes.');
+      setErrorMessage(normalized.message);
+      setFieldErrors(getApiFieldErrors(error));
+      setReport(null);
     } finally {
       setLoading(false);
     }
-  }, [activePeriod, finalSlug, periodOffset]);
+  }, [filters, slugProp]);
 
   useEffect(() => {
-    void loadStats();
-  }, [loadStats]);
+    void loadReport(filters);
+  }, [filters, loadReport]);
 
-  const dailyEvolution = useMemo(
-    () => (
-      Array.isArray(stats?.dailyEvolution)
-        ? stats.dailyEvolution.map((row) => ({
-            day: String(row?.day || ''),
-            turnos: Number(row?.turnos || 0),
-            bar: Number(row?.bar || 0),
-          }))
-        : []
-    ),
-    [stats?.dailyEvolution]
-  );
+  const handlePeriodChange = (nextPeriod: Period) => {
+    const nextRange = getDateRange(nextPeriod, 0);
+    setActivePeriod(nextPeriod);
+    setPeriodOffset(0);
+    setFilters({ startDate: nextRange.startDate, endDate: nextRange.endDate });
+  };
 
-  const paymentMethods = useMemo(
-    () => (
-      Array.isArray(stats?.paymentMethods)
-        ? stats.paymentMethods.map((row) => ({
-            name: String(row?.name || 'Otro'),
-            value: Number(row?.value || 0),
-          }))
-        : []
-    ),
-    [stats?.paymentMethods]
-  );
+  const handleShiftPeriod = (direction: -1 | 1) => {
+    const nextOffset = periodOffset + direction;
+    const nextRange = getDateRange(activePeriod, nextOffset);
+    setPeriodOffset(nextOffset);
+    setFilters({ startDate: nextRange.startDate, endDate: nextRange.endDate });
+  };
 
-  const totalRevenue = Number(stats?.totalRevenue || 0);
-  const totalBookings = Number(stats?.totalBookings || 0);
-  const bookingsRevenue = dailyEvolution.reduce((sum, row) => sum + Number(row.turnos || 0), 0);
-  const consumptionsRevenue = dailyEvolution.reduce((sum, row) => sum + Number(row.bar || 0), 0);
-  const averageTicket = totalBookings > 0 ? totalRevenue / totalBookings : 0;
-  const productQuantity = Number(stats?.products?.totals?.quantityAll || 0);
-  const productRevenue = Number(stats?.products?.totals?.revenueAll || 0);
-  const unsoldCount = Number(stats?.products?.totals?.unsoldCount || 0);
+  const handleApplyCustomRange = () => {
+    void loadReport(filters);
+  };
 
-  const topProducts = Array.isArray(stats?.products?.top) ? stats.products.top : [];
-  const bottomProducts = Array.isArray(stats?.products?.bottom) ? stats.products.bottom : [];
-  const unsoldProducts = Array.isArray(stats?.products?.unsold) ? stats.products.unsold : [];
-  const soldTopProducts = topProducts.filter((row) => Number(row?.quantity || 0) > 0);
-  const soldBottomProducts = bottomProducts.filter((row) => Number(row?.quantity || 0) > 0);
-
-  const reportMetrics: ReportsMetric[] = [
+  const metrics: ReportsMetric[] = [
     {
-      label: 'Facturacion total',
-      value: totalRevenue,
+      label: 'Cobrado',
+      value: Number(report?.income.totals.collectedTotal || 0),
       format: 'money',
       icon: <DollarSign size={18} strokeWidth={2.4} />,
+      loading,
     },
     {
-      label: 'Turnos finalizados',
-      value: totalBookings,
+      label: 'Pendiente',
+      value: Number(report?.pendingAccounts.totalPending || 0),
+      format: 'money',
+      icon: <Clock3 size={18} strokeWidth={2.4} />,
+      loading,
+    },
+    {
+      label: 'Reservas del período',
+      value: Number(report?.bookings.total || 0),
       format: 'number',
       icon: <CalendarCheck size={18} strokeWidth={2.4} />,
+      loading,
     },
     {
-      label: 'Ticket promedio',
-      value: averageTicket,
-      format: 'money',
-      icon: <TrendingUp size={18} strokeWidth={2.4} />,
-    },
-    {
-      label: 'Ingresos por consumos',
-      value: consumptionsRevenue,
+      label: 'Ventas POS',
+      value: Number(report?.pos.totals.salesTotal || 0),
       format: 'money',
       icon: <ShoppingBag size={18} strokeWidth={2.4} />,
+      loading,
     },
   ];
 
-  if (loading && !stats) {
-    return (
-      <div className="flex w-full flex-col gap-4">
-        <ReportsPeriodToolbar
-          period={activePeriod}
-          options={periodOptions}
-          periodLabel={getPeriodLabel()}
-          isCurrentPeriod={periodOffset === 0}
-          onPeriodChange={handlePeriodChange}
-          onPreviousPeriod={() => setPeriodOffset((prev) => prev - 1)}
-          onNextPeriod={() => setPeriodOffset((prev) => prev + 1)}
-        />
-        <ReportsMetricGrid metrics={reportMetrics.map((metric) => ({ ...metric, loading: true }))} />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <AdminPanel title="Ingresos por dia" description="Separacion entre reservas y consumos." className="lg:col-span-2">
-            <div className="h-80 animate-pulse rounded-xl bg-p-surface-2" />
-          </AdminPanel>
-          <AdminPanel title="Metodos de pago" description="Distribucion de cobros por medio.">
-            <div className="h-80 animate-pulse rounded-xl bg-p-surface-2" />
-          </AdminPanel>
-        </div>
-      </div>
-    );
-  }
-
-  if (!stats) {
-    return (
-      <div className="flex w-full flex-col gap-4">
-        <ReportsPeriodToolbar
-          period={activePeriod}
-          options={periodOptions}
-          periodLabel={getPeriodLabel()}
-          isCurrentPeriod={periodOffset === 0}
-          onPeriodChange={handlePeriodChange}
-          onPreviousPeriod={() => setPeriodOffset((prev) => prev - 1)}
-          onNextPeriod={() => setPeriodOffset((prev) => prev + 1)}
-        />
-        <AdminPanel>
-          <ReportsEmptyState
-            title="No hay datos disponibles"
-            description={errorMessage || 'No se encontraron estadisticas reales para el periodo seleccionado.'}
-            actionLabel="Reintentar"
-            onAction={() => void loadStats()}
-          />
-        </AdminPanel>
-      </div>
-    );
-  }
+  const isCompletelyEmpty = Boolean(report)
+    && Number(report.income.totals.collectedTotal || 0) <= 0
+    && Number(report.pendingAccounts.totalPending || 0) <= 0
+    && Number(report.bookings.total || 0) <= 0
+    && Number(report.pos.totals.salesTotal || 0) <= 0;
 
   return (
     <div className="flex w-full flex-col gap-4" aria-busy={loading ? 'true' : undefined}>
       <ReportsPeriodToolbar
         period={activePeriod}
         options={periodOptions}
-        periodLabel={getPeriodLabel()}
+        periodLabel={periodLabel}
         isCurrentPeriod={periodOffset === 0}
         onPeriodChange={handlePeriodChange}
-        onPreviousPeriod={() => setPeriodOffset((prev) => prev - 1)}
-        onNextPeriod={() => setPeriodOffset((prev) => prev + 1)}
+        onPreviousPeriod={() => handleShiftPeriod(-1)}
+        onNextPeriod={() => handleShiftPeriod(1)}
       />
 
-      <ReportsMetricGrid metrics={reportMetrics} />
+      <AdminPanel
+        title="Rango"
+        description="Elegí el período a analizar. Los montos se calculan siempre en backend."
+        actions={(
+          <button
+            type="button"
+            onClick={handleApplyCustomRange}
+            className="rounded-xl bg-p-text px-3 py-2 text-[12px] font-semibold text-white transition hover:opacity-90"
+          >
+            Aplicar rango
+          </button>
+        )}
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <p className="mb-1 text-[12px] font-semibold text-p-text-muted">Desde</p>
+            <AdminDateInput
+              value={filters.startDate}
+              onChange={(value) => setFilters((prev) => ({ ...prev, startDate: value }))}
+              placeholder="Fecha desde"
+            />
+            {fieldErrors.startDate ? (
+              <p className="mt-1 text-[12px] font-semibold text-p-error">{fieldErrors.startDate}</p>
+            ) : null}
+          </div>
+          <div>
+            <p className="mb-1 text-[12px] font-semibold text-p-text-muted">Hasta</p>
+            <AdminDateInput
+              value={filters.endDate}
+              onChange={(value) => setFilters((prev) => ({ ...prev, endDate: value }))}
+              placeholder="Fecha hasta"
+            />
+            {fieldErrors.endDate ? (
+              <p className="mt-1 text-[12px] font-semibold text-p-error">{fieldErrors.endDate}</p>
+            ) : null}
+          </div>
+          <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">Rango activo</p>
+            <p className="mt-1 text-[13px] font-semibold text-p-text">
+              {filters.startDate} → {filters.endDate}
+            </p>
+          </div>
+          <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">Zona horaria</p>
+            <p className="mt-1 text-[13px] font-semibold text-p-text">
+              {report?.scope.timeZone || 'Club'}
+            </p>
+          </div>
+        </div>
+      </AdminPanel>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <AdminPanel
-          title="Ingresos por dia"
-          description="Pagos reales separados entre reservas y consumos."
-          className="lg:col-span-2"
-          actions={(
-            <div className="flex items-center gap-3 text-[11px] font-semibold text-p-text-muted">
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[var(--text-primary)]" />Reservas</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ink-900" />Consumos</span>
-            </div>
-          )}
-        >
-          <RevenueChart data={dailyEvolution} />
+      {errorMessage ? (
+        <AdminFeedbackBanner tone="error" title="No se pudieron cargar los informes">
+          {errorMessage}
+        </AdminFeedbackBanner>
+      ) : null}
+
+      <ReportsMetricGrid metrics={metrics} />
+
+      {!loading && report && isCompletelyEmpty ? (
+        <AdminPanel>
+          <ReportsEmptyState
+            title="Todavía no hay movimientos para este rango"
+            description="Probá con otro período o empezá por revisar Caja y Reservas."
+            actionLabel="Ir a Caja"
+            onAction={() => void router.push('/admin/caja?tab=reports')}
+          />
         </AdminPanel>
+      ) : null}
 
-        <AdminPanel title="Metodos de pago" description="Distribucion de cobros por medio.">
-          <PaymentMethodsDonut data={paymentMethods} />
-        </AdminPanel>
-      </div>
+      {showSection(focus, 'ingresos') && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <AdminPanel title="Ingresos por método" description="Cobros reales registrados en el período.">
+            <AdminDataTable
+              columns={[
+                { key: 'label', label: 'Método' },
+                { key: 'count', label: 'Pagos', align: 'right' },
+                {
+                  key: 'total',
+                  label: 'Total',
+                  align: 'right',
+                  render: (row) => <span className="font-semibold text-p-text">{formatReportsMoney(row.total)}</span>,
+                },
+              ]}
+              data={report?.income.byMethod || []}
+              rowKey={(row) => row.method}
+              loading={loading}
+              empty={{
+                title: 'Sin cobros registrados',
+                description: 'No hubo pagos en el rango seleccionado.',
+              }}
+            />
+          </AdminPanel>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <AdminPanel title="Productos vendidos" description="Resumen comercial del periodo." className="lg:col-span-3">
+          <AdminPanel title="Ingresos por origen" description="Cómo entra la plata según tipo de cuenta.">
+            <AdminDataTable
+              columns={[
+                { key: 'label', label: 'Origen' },
+                { key: 'count', label: 'Pagos', align: 'right' },
+                {
+                  key: 'total',
+                  label: 'Total',
+                  align: 'right',
+                  render: (row) => <span className="font-semibold text-p-text">{formatReportsMoney(row.total)}</span>,
+                },
+              ]}
+              data={report?.income.byAccountSource || []}
+              rowKey={(row) => row.sourceType}
+              loading={loading}
+              empty={{
+                title: 'Sin ingresos por origen',
+                description: 'Todavía no hay pagos para clasificar.',
+              }}
+            />
+          </AdminPanel>
+        </div>
+      )}
+
+      {showSection(focus, 'ingresos') && (
+        <AdminPanel title="Totales del período" description="Cobrado, deuda abierta y ajustes operativos.">
           <ReportsMetricGrid
-            className="xl:grid-cols-3"
+            className="xl:grid-cols-4"
             metrics={[
               {
-                label: 'Unidades vendidas',
-                value: productQuantity,
-                format: 'number',
-                icon: <ShoppingBag size={18} strokeWidth={2.4} />,
-              },
-              {
-                label: 'Facturacion productos',
-                value: productRevenue,
+                label: 'Cobrado',
+                value: Number(report?.income.totals.collectedTotal || 0),
                 format: 'money',
-                icon: <DollarSign size={18} strokeWidth={2.4} />,
+                icon: <Wallet size={18} strokeWidth={2.4} />,
+                loading,
               },
               {
-                label: 'Productos sin ventas',
-                value: unsoldCount,
-                format: 'number',
-                icon: <TrendingUp size={18} strokeWidth={2.4} />,
-                valueColor: unsoldCount > 0 ? 'var(--error-fg)' : undefined,
+                label: 'Pendiente actual',
+                value: Number(report?.income.totals.pendingTotal || 0),
+                format: 'money',
+                icon: <Clock3 size={18} strokeWidth={2.4} />,
+                loading,
+              },
+              {
+                label: 'Devoluciones ejecutadas',
+                value: Number(report?.income.totals.refundedTotal || 0),
+                format: 'money',
+                icon: <Receipt size={18} strokeWidth={2.4} />,
+                loading,
+              },
+              {
+                label: 'POS anulado',
+                value: Number(report?.income.totals.voidedTotal || 0),
+                format: 'money',
+                icon: <ShoppingBag size={18} strokeWidth={2.4} />,
+                loading,
               },
             ]}
           />
         </AdminPanel>
+      )}
 
-        <AdminPanel title="Ranking de productos" description={`Ventas registradas en ${getPeriodLabel()}`} className="lg:col-span-2">
-          <ProductsRankingChart data={topProducts} />
+      {showSection(focus, 'reservas') && (
+        <AdminPanel title="Reservas por estado" description="Reservas del rango según estado operativo.">
+          <ReportsMetricGrid
+            metrics={(report?.bookings.byStatus || []).map((row) => ({
+              label: formatStatusLabel(row.status),
+              value: Number(row.count || 0),
+              format: 'number',
+              loading,
+            }))}
+          />
         </AdminPanel>
+      )}
 
-        <AdminPanel title="Lecturas accionables" description="Listas compactas para entender el comportamiento del catalogo.">
-          <div className="space-y-3">
-            <div className="rounded-xl border border-p-border bg-p-surface-2 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-p-text-muted">
-                Ingresos por reservas
-              </p>
-              <p className="mt-1 text-[24px] font-bold leading-none text-p-text">
-                ${Number(bookingsRevenue || 0).toLocaleString('es-AR')}
-              </p>
-              <p className="mt-2 text-[12px] text-p-text-muted">
-                Calculado desde los pagos del periodo.
-              </p>
-            </div>
-            <div className="rounded-xl border border-p-border bg-p-surface-2 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-p-text-muted">
-                Cobros por consumos
-              </p>
-              <p className="mt-1 text-[24px] font-bold leading-none text-p-accent">
-                ${Number(consumptionsRevenue || 0).toLocaleString('es-AR')}
-              </p>
-              <p className="mt-2 text-[12px] text-p-text-muted">
-                No incluye datos inventados ni proyecciones.
-              </p>
-            </div>
+      {showSection(focus, 'pendientes') && (
+        <AdminPanel title="Cuentas pendientes de cobro" description="Snapshot operativo de deuda abierta hasta la fecha final elegida.">
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-[12px] text-p-text-muted">
+            <span>Cuentas abiertas: <strong className="text-p-text">{formatReportsNumber(report?.pendingAccounts.openCount || 0)}</strong></span>
+            <span>Total pendiente: <strong className="text-p-text">{formatReportsMoney(report?.pendingAccounts.totalPending || 0)}</strong></span>
           </div>
+          <AdminDataTable
+            columns={[
+              { key: 'label', label: 'Cuenta' },
+              { key: 'clientName', label: 'Cliente / titular' },
+              { key: 'sourceLabel', label: 'Origen' },
+              { key: 'ageDays', label: 'Antigüedad', align: 'right', render: (row) => `${formatReportsNumber(row.ageDays)} d` },
+              { key: 'pending', label: 'Pendiente', align: 'right', render: (row) => <span className="font-semibold text-p-text">{formatReportsMoney(row.pending)}</span> },
+            ]}
+            data={report?.pendingAccounts.accounts || []}
+            rowKey={(row) => row.id}
+            loading={loading}
+            empty={{
+              title: 'No hay cuentas pendientes',
+              description: 'El club no tiene saldos abiertos para este corte.',
+            }}
+          />
         </AdminPanel>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ReportsRankingList
-          title="Mas vendidos"
-          description="Productos con mayor cantidad vendida."
-          rows={soldTopProducts}
-          emptyLabel="Sin productos vendidos en este periodo."
-        />
-        <ReportsRankingList
-          title="Menos vendidos"
-          description="Productos con ventas bajas, sin contar los que no vendieron."
-          rows={soldBottomProducts}
-          emptyLabel="Todavia no hay ventas para comparar."
-          tone="muted"
-        />
-        <ReportsRankingList
-          title="Sin ventas"
-          description="Productos activos sin movimientos en el periodo."
-          rows={unsoldProducts}
-          emptyLabel="No hay productos activos sin ventas."
-          tone="muted"
-          showRevenue={false}
-        />
-      </div>
+      {showSection(focus, 'pos') && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <AdminPanel
+            title="Resumen POS"
+            description="Se reutiliza el mismo reporte POS de Caja para evitar divergencias."
+            actions={(
+              <button
+                type="button"
+                onClick={() => void router.push('/admin/caja?tab=reports')}
+                className="rounded-xl border border-p-border bg-p-surface px-3 py-2 text-[12px] font-semibold text-p-text transition hover:bg-p-surface-2"
+              >
+                Abrir reporte POS en Caja
+              </button>
+            )}
+          >
+            <ReportsMetricGrid
+              className="xl:grid-cols-3"
+              metrics={[
+                {
+                  label: 'Ventas POS',
+                  value: Number(report?.pos.totals.salesTotal || 0),
+                  format: 'money',
+                  icon: <ShoppingBag size={18} strokeWidth={2.4} />,
+                  loading,
+                },
+                {
+                  label: 'Cobrado POS',
+                  value: Number(report?.pos.totals.paidTotal || 0),
+                  format: 'money',
+                  icon: <DollarSign size={18} strokeWidth={2.4} />,
+                  loading,
+                },
+                {
+                  label: 'Pendiente POS',
+                  value: Number(report?.pos.totals.pendingTotal || 0),
+                  format: 'money',
+                  icon: <Clock3 size={18} strokeWidth={2.4} />,
+                  loading,
+                },
+                {
+                  label: 'Cuentas abiertas POS',
+                  value: Number(report?.pos.openAccountsCount || 0),
+                  format: 'number',
+                  loading,
+                },
+                {
+                  label: 'Productos POS',
+                  value: Number(report?.pos.totals.productTotal || 0),
+                  format: 'money',
+                  loading,
+                },
+                {
+                  label: 'Servicios POS',
+                  value: Number(report?.pos.totals.serviceTotal || 0),
+                  format: 'money',
+                  loading,
+                },
+              ]}
+            />
+          </AdminPanel>
+
+          <div className="grid grid-cols-1 gap-4">
+            <AdminPanel title="Top productos POS" description="Ventas POS agrupadas por producto.">
+              <AdminDataTable
+                columns={[
+                  { key: 'name', label: 'Producto' },
+                  { key: 'quantity', label: 'Cantidad', align: 'right' },
+                  { key: 'total', label: 'Total', align: 'right', render: (row) => formatReportsMoney(row.total) },
+                ]}
+                data={report?.pos.byProduct || []}
+                rowKey={(row) => `${row.productId ?? row.name}`}
+                loading={loading}
+                empty={{
+                  title: 'Sin ventas POS de productos',
+                  description: 'No hubo productos vendidos en el rango.',
+                }}
+              />
+            </AdminPanel>
+
+            <AdminPanel title="Top servicios POS" description="Ventas POS agrupadas por servicio.">
+              <AdminDataTable
+                columns={[
+                  { key: 'name', label: 'Servicio' },
+                  { key: 'quantity', label: 'Cantidad', align: 'right' },
+                  { key: 'total', label: 'Total', align: 'right', render: (row) => formatReportsMoney(row.total) },
+                ]}
+                data={report?.pos.byService || []}
+                rowKey={(row) => row.name}
+                loading={loading}
+                empty={{
+                  title: 'Sin ventas POS de servicios',
+                  description: 'No hubo servicios POS vendidos en el rango.',
+                }}
+              />
+            </AdminPanel>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

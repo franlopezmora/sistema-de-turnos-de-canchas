@@ -1,26 +1,25 @@
 import { useRouter } from 'next/router';
 import AdminRouteShell from '../../components/admin/AdminRouteShell';
 import AdminTabStatistics from '../../components/admin/AdminTabStatistics';
-import AdminComingSoonPanel from '../../components/admin/AdminComingSoonPanel';
 import { AdminSegmentedControl } from '../../components/admin/ui';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 
-type ReportsTab = 'resumen' | 'reservas' | 'ingresos' | 'clientes' | 'ocupacion';
+type ReportsTab = 'resumen' | 'reservas' | 'ingresos' | 'pendientes' | 'pos';
 
-const REPORT_TABS: Array<{ value: ReportsTab; label: string; comingSoon?: boolean }> = [
+const REPORT_TABS: Array<{ value: ReportsTab; label: string }> = [
   { value: 'resumen', label: 'Resumen' },
-  { value: 'reservas', label: 'Reservas', comingSoon: true },
-  { value: 'ingresos', label: 'Ingresos', comingSoon: true },
-  { value: 'clientes', label: 'Clientes', comingSoon: true },
-  { value: 'ocupacion', label: 'Ocupacion', comingSoon: true },
+  { value: 'ingresos', label: 'Ingresos' },
+  { value: 'reservas', label: 'Reservas' },
+  { value: 'pendientes', label: 'Pendientes' },
+  { value: 'pos', label: 'POS' },
 ];
 
 const parseReportsTab = (value: unknown): ReportsTab => {
   const raw = String(value || '').toLowerCase();
-  if (raw === 'reservas') return 'reservas';
   if (raw === 'ingresos') return 'ingresos';
-  if (raw === 'clientes') return 'clientes';
-  if (raw === 'ocupacion') return 'ocupacion';
+  if (raw === 'reservas') return 'reservas';
+  if (raw === 'pendientes') return 'pendientes';
+  if (raw === 'pos') return 'pos';
   return 'resumen';
 };
 
@@ -57,20 +56,22 @@ export default function AdminReportsPage() {
             <section className="min-h-0 flex-1 overflow-y-auto pb-6 lg:pb-8">
               {activeTab === 'resumen' && (
                 userSlug ? (
-                  <AdminTabStatistics slugProp={userSlug} />
+                  <AdminTabStatistics slugProp={userSlug} focus="resumen" />
                 ) : (
-                  <AdminComingSoonPanel
-                    title="Informes"
-                    description="No se encontro el club activo para cargar el resumen estadistico."
-                  />
+                  <div className="rounded-xl border border-p-border bg-p-surface p-4 text-[13px] text-p-text-muted">
+                    No se encontró el club activo para cargar los informes.
+                  </div>
                 )
               )}
 
-              {activeTab !== 'resumen' && (
-                <AdminComingSoonPanel
-                  title={`Informes de ${activeTab}`}
-                  description="Esta vista queda visible en la hoja de ruta del Admin v2 y se va a consolidar con filtros compartidos."
-                />
+              {activeTab !== 'resumen' && userSlug && (
+                <AdminTabStatistics slugProp={userSlug} focus={activeTab} />
+              )}
+
+              {activeTab !== 'resumen' && !userSlug && (
+                <div className="rounded-xl border border-p-border bg-p-surface p-4 text-[13px] text-p-text-muted">
+                  No se encontró el club activo para cargar los informes.
+                </div>
               )}
             </section>
           </div>
