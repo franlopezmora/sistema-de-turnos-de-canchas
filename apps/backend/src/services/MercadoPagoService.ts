@@ -125,6 +125,16 @@ export class MercadoPagoService {
     failureUrl: string;
     metadata?: Record<string, unknown>;
   }) {
+    const notificationUrl = safeTrim(params.notificationUrl);
+    const successUrl = safeTrim(params.successUrl);
+    const pendingUrl = safeTrim(params.pendingUrl);
+    const failureUrl = safeTrim(params.failureUrl);
+    const backUrls = {
+      ...(successUrl ? { success: successUrl } : {}),
+      ...(pendingUrl ? { pending: pendingUrl } : {}),
+      ...(failureUrl ? { failure: failureUrl } : {})
+    };
+
     const body = {
       items: [
         {
@@ -144,13 +154,9 @@ export class MercadoPagoService {
           }
         : undefined,
       external_reference: params.externalReference,
-      notification_url: params.notificationUrl,
-      back_urls: {
-        success: params.successUrl,
-        pending: params.pendingUrl,
-        failure: params.failureUrl
-      },
-      auto_return: 'approved',
+      notification_url: notificationUrl || undefined,
+      back_urls: Object.keys(backUrls).length > 0 ? backUrls : undefined,
+      auto_return: successUrl ? 'approved' : undefined,
       metadata: params.metadata || undefined
     };
 

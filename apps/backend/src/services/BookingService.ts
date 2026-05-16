@@ -4368,8 +4368,16 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             const payerEmail = String(booking.user?.email || booking.client?.email || '').trim() || null;
             const description = `Reserva ${booking.displayCode || `RES-${booking.id}`} - ${booking.court.club.name}`;
             const publicBase = mercadoPagoConfig.frontendUrl || 'http://localhost:3001';
-            const bookingsUrl = `${publicBase}/bookings?booking=${encodeURIComponent(String(booking.id))}`;
-            const webhookUrl = `${mercadoPagoConfig.appBaseUrl}/api/webhooks/mercadopago?clubId=${encodeURIComponent(String(booking.clubId))}&attemptId=${encodeURIComponent(attempt.id)}`;
+            const backendBase = mercadoPagoConfig.appBaseUrl || 'http://localhost:3000';
+            const buildBookingsReturnUrl = (checkoutStatus: 'success' | 'pending' | 'failure') => {
+                const url = new URL('/bookings', publicBase);
+                url.searchParams.set('booking', String(booking.id));
+                url.searchParams.set('checkoutStatus', checkoutStatus);
+                return url.toString();
+            };
+            const webhookUrl = new URL('/api/webhooks/mercadopago', backendBase);
+            webhookUrl.searchParams.set('clubId', String(booking.clubId));
+            webhookUrl.searchParams.set('attemptId', attempt.id);
 
             const preference = await this.mercadoPagoService.createPreference({
                 accessToken,
@@ -4385,10 +4393,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     }
                     : undefined,
                 externalReference: attempt.id,
-                notificationUrl: webhookUrl,
-                successUrl: `${bookingsUrl}&checkoutStatus=success`,
-                pendingUrl: `${bookingsUrl}&checkoutStatus=pending`,
-                failureUrl: `${bookingsUrl}&checkoutStatus=failure`,
+                notificationUrl: webhookUrl.toString(),
+                successUrl: buildBookingsReturnUrl('success'),
+                pendingUrl: buildBookingsReturnUrl('pending'),
+                failureUrl: buildBookingsReturnUrl('failure'),
                 metadata: {
                     attemptId: attempt.id,
                     bookingId: booking.id,
