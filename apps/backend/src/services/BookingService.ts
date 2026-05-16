@@ -82,6 +82,37 @@ type CreateFixedBookingOptions = {
     previewConflictsOnly?: boolean;
 };
 
+export type PlayerBookingDto = {
+    id: string;
+    publicCode: string;
+    club: {
+        id: string;
+        name: string;
+        slug: string;
+    };
+    court: {
+        name: string;
+    };
+    activity: {
+        name: string;
+    } | null;
+    startDateTime: string;
+    endDateTime: string;
+    status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+    myRole: 'OWNER';
+    paymentSummary: {
+        status: 'NOT_REQUIRED' | 'PENDING' | 'PARTIAL' | 'PAID';
+        label: string;
+    };
+    capabilities: {
+        canView: true;
+        canCancelBooking: boolean;
+        canLeaveBooking: false;
+        canPay: false;
+        canInvitePlayers: false;
+    };
+};
+
 type BookingPriceQuoteInput = {
     userId?: number | null;
     allowAdminBenefits?: boolean;
@@ -209,6 +240,62 @@ export class BookingService {
             ErrorCodes.CLIENT_POSSIBLE_DUPLICATE,
             details
         );
+    }
+
+    private bookingForbidden(message = 'No tenés permiso para ver o gestionar esta reserva.') {
+        return forbidden(message, ErrorCodes.BOOKING_FORBIDDEN);
+    }
+
+    private bookingCancellationNotAllowed(message: string) {
+        return conflict(message, ErrorCodes.BOOKING_CANCELLATION_NOT_ALLOWED);
+    }
+
+    private bookingHasPayments(message = 'Esta reserva tiene pagos registrados. Contactá al club para cancelarla.') {
+        return conflict(message, ErrorCodes.BOOKING_HAS_PAYMENTS);
+    }
+
+    private isExplicitBookingOwner(booking: {
+        userId?: number | null;
+        client?: { userId?: number | null } | null;
+    }, userId: number) {
+        if (!Number.isInteger(userId) || userId <= 0) return false;
+        if (Number(booking.userId || 0) === Number(userId)) return true;
+        return Number(booking.client?.userId || 0) === Number(userId);
+    }
+
+    private resolvePlayerPaymentSummary(input: {
+        totalAmount: number;
+        paidAmount: number;
+    }): PlayerBookingDto['paymentSummary'] {
+        const total = Number(Math.max(0, input.totalAmount || 0).toFixed(2));
+        const paid = Number(Math.max(0, input.paidAmount || 0).toFixed(2));
+        const remaining = Number(Math.max(0, total - paid).toFixed(2));
+
+        if (total <= 0.009) {
+            return {
+                status: 'NOT_REQUIRED',
+                label: 'Sin pagos requeridos por ahora.'
+            };
+        }
+
+        if (paid <= 0.009) {
+            return {
+                status: 'PENDING',
+                label: 'Pago pendiente con el club.'
+            };
+        }
+
+        if (remaining <= 0.009) {
+            return {
+                status: 'PAID',
+                label: 'Pago registrado.'
+            };
+        }
+
+        return {
+            status: 'PARTIAL',
+            label: 'Pago parcial registrado.'
+        };
     }
 
     async resolveClubIdForUser(userId: number, preferredClubId?: number) {
@@ -3591,6 +3678,165 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             take
         });
         return bookings;
+    }
+
+    async getPlayerBookings(userId: number): Promise<PlayerBookingDto[]> {
+        if (!Number.isInteger(userId) || userId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const bookings = await prisma.booking.findMany({
+            where: {
+                OR: [
+                    { userId },
+                    { client: { userId } }
+                ]
+            },
+            include: {
+                court: { include: { club: true } },
+                activity: true,
+                client: {
+                    select: {
+                        id: true,
+                        userId: true
+                    }
+                }
+            },
+            orderBy: { startDateTime: 'desc' }
+        });
+
+        const explicitBookings = bookings.filter((booking) => this.isExplicitBookingOwner(booking, userId));
+        const bookingIds = explicitBookings.map((booking) => Number(booking.id)).filter((id) => Number.isInteger(id) && id > 0);
+
+        const accounts = bookingIds.length > 0
+            ? await prisma.account.findMany({
+                where: {
+                    sourceType: 'BOOKING',
+                    sourceId: { in: bookingIds.map((id) => String(id)) }
+                },
+                select: {
+                    id: true,
+                    sourceId: true,
+                    totalAmount: true
+                }
+            })
+            : [];
+
+        const paymentSummaryByBookingId = new Map<number, { totalAmount: number; paidAmount: number }>();
+        for (const account of accounts) {
+            const bookingId = Number(account.sourceId || 0);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) continue;
+            const paidAmount = await this.accountService.calculateNetPaidAmount(account.id);
+            paymentSummaryByBookingId.set(bookingId, {
+                totalAmount: Number(account.totalAmount || 0),
+                paidAmount
+            });
+        }
+
+        const now = new Date();
+
+        return explicitBookings.map((booking) => {
+            const startDateTime = new Date(booking.startDateTime);
+            const paymentData = paymentSummaryByBookingId.get(Number(booking.id)) ?? {
+                totalAmount: 0,
+                paidAmount: 0
+            };
+            const hasRegisteredPayments = paymentData.paidAmount > 0.009;
+            const canCancelBooking =
+                this.isExplicitBookingOwner(booking, userId) &&
+                (booking.status === 'PENDING' || booking.status === 'CONFIRMED') &&
+                startDateTime.getTime() > now.getTime() &&
+                !hasRegisteredPayments;
+
+            return {
+                id: String(booking.id),
+                publicCode: String(booking.displayCode || `RES-${booking.id}`),
+                club: {
+                    id: String(booking.court.club.id),
+                    name: String(booking.court.club.name || 'Club'),
+                    slug: String(booking.court.club.slug || '')
+                },
+                court: {
+                    name: String(booking.court.name || 'Cancha')
+                },
+                activity: booking.activity
+                    ? { name: String(booking.activity.name || 'Actividad') }
+                    : null,
+                startDateTime: new Date(booking.startDateTime).toISOString(),
+                endDateTime: new Date(booking.endDateTime).toISOString(),
+                status: booking.status,
+                myRole: 'OWNER',
+                paymentSummary: this.resolvePlayerPaymentSummary(paymentData),
+                capabilities: {
+                    canView: true,
+                    canCancelBooking,
+                    canLeaveBooking: false,
+                    canPay: false,
+                    canInvitePlayers: false
+                }
+            } satisfies PlayerBookingDto;
+        });
+    }
+
+    async cancelPlayerBooking(bookingId: number, userId: number) {
+        if (!Number.isInteger(userId) || userId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const booking = await prisma.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                client: {
+                    select: {
+                        id: true,
+                        userId: true
+                    }
+                }
+            }
+        });
+
+        if (!booking) {
+            throw this.bookingNotFound('La reserva no existe.');
+        }
+
+        if (!this.isExplicitBookingOwner(booking, userId)) {
+            throw this.bookingForbidden('No tenés permiso para cancelar esta reserva.');
+        }
+
+        if (booking.status === 'COMPLETED') {
+            throw this.bookingInvalidStatus('No se puede cancelar una reserva completada.');
+        }
+
+        if (booking.status === 'CANCELLED') {
+            throw this.bookingInvalidStatus('La reserva ya está cancelada.');
+        }
+
+        const now = new Date();
+        if (new Date(booking.startDateTime).getTime() <= now.getTime()) {
+            throw this.bookingCancellationNotAllowed('La reserva ya comenzó o quedó en el pasado.');
+        }
+
+        const account = await prisma.account.findFirst({
+            where: {
+                sourceType: 'BOOKING',
+                sourceId: String(bookingId),
+                clubId: booking.clubId
+            },
+            select: { id: true }
+        });
+
+        if (account) {
+            const netPaid = await this.accountService.calculateNetPaidAmount(account.id);
+            if (netPaid > 0.009) {
+                throw this.bookingHasPayments();
+            }
+        }
+
+        return this.cancelBooking(bookingId, userId, undefined, {
+            skipAccessValidation: true,
+            reason: 'MANUAL',
+            triggeredBy: 'USER'
+        });
     }
 
     async getBookingById(bookingId: number, clubId: number) {

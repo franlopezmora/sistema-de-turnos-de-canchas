@@ -761,6 +761,42 @@ export class BookingController {
         }
     }
 
+    getMyBookings = async (req: Request, res: Response) => {
+        try {
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para ver tus reservas.');
+            }
+
+            const items = await this.bookingService.getPlayerBookings(userId);
+            return res.json({ items });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos cargar tus reservas.');
+        }
+    }
+
+    cancelMyBooking = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para cancelar tu reserva.');
+            }
+
+            const booking = await this.bookingService.cancelPlayerBooking(bookingId, userId);
+            return res.json({
+                message: 'Reserva cancelada.',
+                booking
+            });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos cancelar la reserva.');
+        }
+    }
+
     getById = async (req: Request, res: Response) => {
         try {
             const paramsSchema = z.object({

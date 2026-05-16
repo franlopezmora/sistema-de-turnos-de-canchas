@@ -25,6 +25,7 @@ import AuditLogRoutes from './routes/AuditLogRoutes';
 import CourtPriceRuleRoutes from './routes/CourtPriceRuleRoutes';
 import PaymentRoutes from './routes/PaymentRoutes';
 import ClubReviewRoutes from './routes/ClubReviewRoutes';
+import MeRoutes from './routes/MeRoutes';
 
 import { errorHandler } from './middleware/ErrorHandler';
 import { authMiddleware } from './middleware/AuthMiddleware';
@@ -149,6 +150,7 @@ export const createApp = () => {
   app.use('/api/court-price-rules', CourtPriceRuleRoutes);
   app.use('/api/payments', PaymentRoutes);
   app.use('/api/clients', ClientRoutes);
+  app.use('/api/me', MeRoutes);
 
   app.get('/', (_req: Request, res: Response) => {
     res.json({ message: 'API Sistema de Turnos' });
