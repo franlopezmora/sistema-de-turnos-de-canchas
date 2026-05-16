@@ -171,6 +171,23 @@ export type ClientDuplicateIncident = {
   candidateClients?: ClientDuplicateIncidentCandidate[];
 };
 
+export type ClubMembershipRole = 'OWNER' | 'ADMIN' | 'STAFF';
+
+export type ClubMember = {
+  id: string;
+  clubId: number;
+  userId: number;
+  role: ClubMembershipRole | string;
+  createdAt?: string;
+  status: 'ACTIVE' | string;
+  user: {
+    id: number;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+};
+
 export class ClubAdminService {
   /**
    * Obtener la agenda del administrador para un club específico
@@ -1074,5 +1091,51 @@ export class ClubAdminService {
     }
     const rows = await res.json();
     return Array.isArray(rows) ? rows : [];
+  }
+
+  static async listMembers(slug: string): Promise<ClubMember[]> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/members`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      await throwApiErrorFromResponse(res, 'No se pudieron cargar los miembros del club.');
+    }
+    const payload = await res.json();
+    return Array.isArray(payload?.items) ? payload.items : [];
+  }
+
+  static async inviteMember(slug: string, input: { email: string; role: ClubMembershipRole }) {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input)
+    });
+    if (!res.ok) {
+      await throwApiErrorFromResponse(res, 'No se pudo dar acceso al miembro.');
+    }
+    return res.json();
+  }
+
+  static async updateMemberRole(slug: string, membershipId: string, role: ClubMembershipRole) {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/members/${encodeURIComponent(membershipId)}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
+    if (!res.ok) {
+      await throwApiErrorFromResponse(res, 'No se pudo actualizar el rol.');
+    }
+    return res.json();
+  }
+
+  static async removeMember(slug: string, membershipId: string) {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/members/${encodeURIComponent(membershipId)}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      await throwApiErrorFromResponse(res, 'No se pudo quitar el acceso.');
+    }
+    return res.json();
   }
 }

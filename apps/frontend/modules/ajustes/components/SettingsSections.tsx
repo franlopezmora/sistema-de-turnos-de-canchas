@@ -1,4 +1,5 @@
 import AdminTabClub from '../../../components/admin/AdminTabClub';
+import SettingsMembersSection from './SettingsMembersSection';
 
 export function SettingsClubIdentitySection() {
   return (
@@ -49,3 +50,5 @@ export function SettingsAuditSection() {
     />
   );
 }
+
+export { SettingsMembersSection };

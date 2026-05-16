@@ -4,6 +4,7 @@ import {
   SettingsAuditSection,
   SettingsClubIdentitySection,
   SettingsExceptionsSection,
+  SettingsMembersSection,
   SettingsPricingSection,
   SettingsSchedulesSection,
 } from './SettingsSections';
@@ -19,9 +20,8 @@ export type SettingsWorkspaceTab =
   | 'excepciones'
   | 'auditoria';
 
-const comingSoonLabelByTab: Record<Extract<SettingsWorkspaceTab, 'usuarios' | 'notificaciones' | 'actividades'>, string> = {
+const comingSoonLabelByTab: Record<Extract<SettingsWorkspaceTab, 'notificaciones' | 'actividades'>, string> = {
   actividades: 'Actividades',
-  usuarios: 'Usuarios administradores',
   notificaciones: 'Notificaciones automaticas',
 };
 
@@ -42,6 +42,7 @@ export default function AdminSettingsWorkspace({ tab }: AdminSettingsWorkspacePr
   }
   if (tab === 'horarios') return <SettingsSchedulesSection />;
   if (tab === 'precios') return <SettingsPricingSection />;
+  if (tab === 'usuarios') return <SettingsMembersSection />;
   if (tab === 'excepciones') return <SettingsExceptionsSection />;
   if (tab === 'auditoria') return <SettingsAuditSection />;
 
