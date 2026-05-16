@@ -36,6 +36,8 @@ Recomendadas:
 
 - CORS debe permitir solo orígenes reales del frontend.
 - `credentials` está habilitado en backend y frontend.
+- Requests mutantes autenticadas por cookie requieren `X-CSRF-Token`.
+- El frontend lo obtiene desde `GET /api/auth/csrf` y lo envía automáticamente.
 - Para `SameSite=None`, `AUTH_COOKIE_SECURE=true` es obligatorio.
 - En local development: `AUTH_COOKIE_SECURE=false`.
 

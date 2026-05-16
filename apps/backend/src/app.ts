@@ -36,21 +36,23 @@ import { RedisService } from './services/RedisService';
 import { WhatsappDeliveryService } from './services/WhatsappDeliveryService';
 import { authConfig } from './utils/authConfig';
 
+const isProduction = process.env.NODE_ENV === 'production';
 const defaultAllowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:3001',
-  'https://pique.app',
-  'https://www.pique.app',
-  'http://187.77.48.97',
-  'https://187.77.48.97'
+  'http://localhost:3001'
 ];
 
 const getAllowedOrigins = () => {
   const fromEnv = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
     : [];
-
-  return Array.from(new Set([...defaultAllowedOrigins, ...fromEnv]));
+  const frontendOrigin = String(process.env.FRONTEND_URL || '').trim().replace(/\/+$/, '');
+  const base = isProduction ? [] : defaultAllowedOrigins;
+  const resolved = Array.from(new Set([...base, ...fromEnv, ...(frontendOrigin ? [frontendOrigin] : [])]));
+  if (isProduction && resolved.length === 0) {
+    throw new Error('CORS misconfigured: set ALLOWED_ORIGINS and/or FRONTEND_URL in production.');
+  }
+  return resolved;
 };
 
 export const createApp = () => {
@@ -104,7 +106,7 @@ export const createApp = () => {
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.log('❌ CORS bloqueado para:', origin);
+        baseLogger.warn({ origin, allowedOrigins }, 'CORS bloqueado');
         callback(new Error('Not allowed by CORS'));
       }
     },
