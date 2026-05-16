@@ -775,6 +775,160 @@ export class BookingController {
         }
     }
 
+    getMyBookingParticipants = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para ver los participantes.');
+            }
+
+            const items = await this.bookingService.getPlayerBookingParticipants(bookingId, userId);
+            return res.json({ items });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos cargar los participantes.');
+        }
+    }
+
+    inviteMyBookingParticipant = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const bodySchema = z.object({
+                email: z.string().trim().email(),
+                name: z.string().trim().min(1).max(120).optional()
+            });
+            const parsed = bodySchema.safeParse(req.body || {});
+            if (!parsed.success) {
+                return sendZodControllerError(res, parsed.error, 'Revisá los campos marcados.');
+            }
+
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para invitar jugadores.');
+            }
+
+            const participant = await this.bookingService.invitePlayerBookingParticipant({
+                bookingId,
+                ownerUserId: userId,
+                invitedEmail: parsed.data.email,
+                invitedName: parsed.data.name || null
+            });
+            return res.status(201).json({
+                message: 'Invitación creada.',
+                participant
+            });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos invitar al jugador.');
+        }
+    }
+
+    removeMyBookingParticipant = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const participantId = String(req.params.participantId || '').trim();
+            if (!participantId) {
+                return sendAppError(res, badRequest('Seleccioná un participante válido.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para gestionar participantes.');
+            }
+
+            await this.bookingService.removePlayerBookingParticipant({
+                bookingId,
+                participantId,
+                ownerUserId: userId
+            });
+            return res.json({ message: 'Participante removido.' });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos remover al participante.');
+        }
+    }
+
+    getMyBookingInvitations = async (req: Request, res: Response) => {
+        try {
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para ver tus invitaciones.');
+            }
+
+            const items = await this.bookingService.getMyBookingInvitations(userId);
+            return res.json({ items });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos cargar tus invitaciones.');
+        }
+    }
+
+    acceptMyBookingInvitation = async (req: Request, res: Response) => {
+        try {
+            const invitationId = String(req.params.id || '').trim();
+            if (!invitationId) {
+                return sendAppError(res, badRequest('Seleccioná una invitación válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para aceptar la invitación.');
+            }
+
+            await this.bookingService.acceptBookingInvitation(invitationId, userId);
+            return res.json({ message: 'Invitación aceptada.' });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos aceptar la invitación.');
+        }
+    }
+
+    declineMyBookingInvitation = async (req: Request, res: Response) => {
+        try {
+            const invitationId = String(req.params.id || '').trim();
+            if (!invitationId) {
+                return sendAppError(res, badRequest('Seleccioná una invitación válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para rechazar la invitación.');
+            }
+
+            await this.bookingService.declineBookingInvitation(invitationId, userId);
+            return res.json({ message: 'Invitación rechazada.' });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos rechazar la invitación.');
+        }
+    }
+
+    leaveMyBooking = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const userId = Number((req as any)?.user?.userId || 0);
+            if (!Number.isInteger(userId) || userId <= 0) {
+                return sendAuthError(res, 401, ErrorCodes.AUTH_MISSING, 'Necesitás iniciar sesión para salirte de la reserva.');
+            }
+
+            await this.bookingService.leavePlayerBooking(bookingId, userId);
+            return res.json({ message: 'Te saliste de la reserva.' });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos procesar tu salida de la reserva.');
+        }
+    }
+
     cancelMyBooking = async (req: Request, res: Response) => {
         try {
             const bookingId = Number(req.params.id);

@@ -11,7 +11,7 @@ import { User } from '../entities/User';
 import { Club } from '../entities/Club';
 import { Court as CourtEntity } from '../entities/Court';
 import { ActivityType } from '../entities/ActivityType';
-import { BookingStatus, ChargeMode, Prisma, RefundReasonType } from '@prisma/client';
+import { BookingParticipantStatus, BookingStatus, ChargeMode, Prisma, RefundReasonType } from '@prisma/client';
 import { CashRepository } from '../repositories/CashRepository';
 import { ProductRepository } from '../repositories/ProductRepository';
 import { buildSlotsFromSchedule, normalizeSchedule } from '../utils/ActivityScheduleHelper';
@@ -29,6 +29,7 @@ import { RefundService } from './RefundService';
 import { DiscountService } from './DiscountService';
 import { generateDisplayCode } from '../utils/displayCode';
 import { getPhoneIdentityVariants, normalizeIdentityPhone, toDialablePhoneNumber } from '../utils/phone';
+import { normalizeEmail } from '../utils/magicLink';
 import { recordUserClientLinkAuditTx } from './UserClientLinkAudit';
 import { AppError, ErrorCodes, badRequest, conflict, forbidden, notFound } from '../errors';
 
@@ -107,10 +108,38 @@ export type PlayerBookingDto = {
     capabilities: {
         canView: true;
         canCancelBooking: boolean;
-        canLeaveBooking: false;
+        canLeaveBooking: boolean;
         canPay: false;
-        canInvitePlayers: false;
+        canInvitePlayers: boolean;
     };
+};
+
+export type PlayerBookingParticipantDto = {
+    id: string;
+    displayName: string;
+    status: 'INVITED' | 'JOINED' | 'DECLINED' | 'LEFT' | 'REMOVED';
+    role: 'PARTICIPANT';
+    isMe: boolean;
+    invitedEmail?: string | null;
+    canManage: boolean;
+};
+
+export type PlayerBookingInvitationDto = {
+    id: string;
+    bookingId: string;
+    bookingPublicCode: string;
+    club: {
+        name: string;
+        slug: string;
+    };
+    court: {
+        name: string;
+    };
+    startDateTime: string;
+    endDateTime: string;
+    invitedName?: string | null;
+    invitedEmail?: string | null;
+    status: 'INVITED';
 };
 
 type BookingPriceQuoteInput = {
@@ -254,6 +283,50 @@ export class BookingService {
         return conflict(message, ErrorCodes.BOOKING_HAS_PAYMENTS);
     }
 
+    private bookingParticipantNotFound(message = 'No encontramos ese participante.') {
+        return notFound(message, ErrorCodes.BOOKING_PARTICIPANT_NOT_FOUND);
+    }
+
+    private bookingParticipantAlreadyExists(message = 'Ese jugador ya está invitado o participa de esta reserva.') {
+        return conflict(message, ErrorCodes.BOOKING_PARTICIPANT_ALREADY_EXISTS);
+    }
+
+    private bookingParticipantForbidden(message = 'No tenés permiso para gestionar participantes en esta reserva.') {
+        return forbidden(message, ErrorCodes.BOOKING_PARTICIPANT_FORBIDDEN);
+    }
+
+    private bookingInvitationNotFound(message = 'No encontramos esa invitación.') {
+        return notFound(message, ErrorCodes.BOOKING_INVITATION_NOT_FOUND);
+    }
+
+    private bookingInvitationExpired(message = 'La invitación ya no está disponible.') {
+        return conflict(message, ErrorCodes.BOOKING_INVITATION_EXPIRED);
+    }
+
+    private bookingInvitationInvalid(message = 'La invitación no es válida.') {
+        return conflict(message, ErrorCodes.BOOKING_INVITATION_INVALID);
+    }
+
+    private bookingInvitationAlreadyAccepted(message = 'Esa invitación ya fue aceptada.') {
+        return conflict(message, ErrorCodes.BOOKING_INVITATION_ALREADY_ACCEPTED);
+    }
+
+    private bookingInvitationAlreadyDeclined(message = 'Esa invitación ya fue rechazada.') {
+        return conflict(message, ErrorCodes.BOOKING_INVITATION_ALREADY_DECLINED);
+    }
+
+    private bookingInvitationEmailMismatch(message = 'Esta invitación corresponde a otro email.') {
+        return forbidden(message, ErrorCodes.BOOKING_INVITATION_EMAIL_MISMATCH);
+    }
+
+    private bookingCannotInviteParticipants(message = 'No se pueden invitar participantes en esta reserva.') {
+        return conflict(message, ErrorCodes.BOOKING_CANNOT_INVITE_PARTICIPANTS);
+    }
+
+    private bookingCannotLeave(message = 'No podés salirte de esta reserva desde acá.') {
+        return conflict(message, ErrorCodes.BOOKING_CANNOT_LEAVE);
+    }
+
     private isExplicitBookingOwner(booking: {
         userId?: number | null;
         client?: { userId?: number | null } | null;
@@ -261,6 +334,37 @@ export class BookingService {
         if (!Number.isInteger(userId) || userId <= 0) return false;
         if (Number(booking.userId || 0) === Number(userId)) return true;
         return Number(booking.client?.userId || 0) === Number(userId);
+    }
+
+    private isBookingParticipantJoined(booking: {
+        participants?: Array<{ userId?: number | null; status?: BookingParticipantStatus | string | null }> | null;
+    }, userId: number) {
+        if (!Number.isInteger(userId) || userId <= 0) return false;
+        return Array.isArray(booking.participants)
+            ? booking.participants.some((participant) =>
+                Number(participant?.userId || 0) === Number(userId) &&
+                String(participant?.status || '') === 'JOINED'
+            )
+            : false;
+    }
+
+    private canInviteParticipantsForPlayerBooking(booking: {
+        status: BookingStatus | string;
+        startDateTime: Date | string;
+        userId?: number | null;
+        client?: { userId?: number | null } | null;
+    }, userId: number, now = new Date()) {
+        if (!this.isExplicitBookingOwner(booking, userId)) return false;
+        if (!(booking.status === 'PENDING' || booking.status === 'CONFIRMED')) return false;
+        return new Date(booking.startDateTime).getTime() > now.getTime();
+    }
+
+    private canLeavePlayerBooking(booking: {
+        status: BookingStatus | string;
+        startDateTime: Date | string;
+    }, now = new Date()) {
+        if (!(booking.status === 'PENDING' || booking.status === 'CONFIRMED')) return false;
+        return new Date(booking.startDateTime).getTime() > now.getTime();
     }
 
     private resolvePlayerPaymentSummary(input: {
@@ -296,6 +400,23 @@ export class BookingService {
             status: 'PARTIAL',
             label: 'Pago parcial registrado.'
         };
+    }
+
+    private resolveParticipantDisplayName(input: {
+        invitedName?: string | null;
+        invitedEmail?: string | null;
+        user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+    }) {
+        const fullName = [String(input.user?.firstName || '').trim(), String(input.user?.lastName || '').trim()]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+        if (fullName) return fullName;
+        const invitedName = String(input.invitedName || '').trim();
+        if (invitedName) return invitedName;
+        const email = String(input.user?.email || input.invitedEmail || '').trim();
+        if (email) return email;
+        return 'Jugador invitado';
     }
 
     async resolveClubIdForUser(userId: number, preferredClubId?: number) {
@@ -3837,6 +3958,530 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             reason: 'MANUAL',
             triggeredBy: 'USER'
         });
+    }
+
+    async getPlayerBookingParticipants(bookingId: number, userId: number): Promise<PlayerBookingParticipantDto[]> {
+        if (!Number.isInteger(userId) || userId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const booking = await prisma.booking.findUnique({
+            where: { id: bookingId },
+            include: {
+                client: {
+                    select: { userId: true }
+                },
+                participants: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                                email: true
+                            }
+                        }
+                    },
+                    orderBy: { createdAt: 'asc' }
+                }
+            }
+        });
+
+        if (!booking) {
+            throw this.bookingNotFound('La reserva no existe.');
+        }
+
+        const isOwner = this.isExplicitBookingOwner(booking, userId);
+        const isParticipant = this.isBookingParticipantJoined(booking, userId);
+        if (!isOwner && !isParticipant) {
+            throw this.bookingForbidden('No tenés permiso para ver esta reserva.');
+        }
+
+        const visibleParticipants = booking.participants.filter((participant) => {
+            if (isOwner) return participant.status !== 'REMOVED';
+            return participant.status === 'JOINED';
+        });
+
+        return visibleParticipants.map((participant) => ({
+            id: participant.id,
+            displayName: this.resolveParticipantDisplayName(participant),
+            status: participant.status,
+            role: 'PARTICIPANT',
+            isMe: Number(participant.userId || 0) === Number(userId),
+            invitedEmail: isOwner ? participant.invitedEmail ?? null : null,
+            canManage: isOwner && participant.status !== 'REMOVED'
+        }));
+    }
+
+    async invitePlayerBookingParticipant(input: {
+        bookingId: number;
+        ownerUserId: number;
+        invitedEmail: string;
+        invitedName?: string | null;
+    }): Promise<PlayerBookingParticipantDto> {
+        if (!Number.isInteger(input.ownerUserId) || input.ownerUserId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const invitedEmail = normalizeEmail(input.invitedEmail);
+        const invitedName = String(input.invitedName || '').trim() || null;
+        if (!invitedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invitedEmail)) {
+            throw new AppError({
+                statusCode: 400,
+                code: ErrorCodes.INVALID_INPUT,
+                message: 'Revisá los campos marcados.',
+                fieldErrors: {
+                    email: 'Ingresá un email válido.'
+                }
+            });
+        }
+
+        const booking = await prisma.booking.findUnique({
+            where: { id: input.bookingId },
+            include: {
+                client: {
+                    select: { userId: true }
+                },
+                participants: {
+                    select: {
+                        id: true,
+                        userId: true,
+                        invitedEmail: true,
+                        status: true
+                    }
+                }
+            }
+        });
+
+        if (!booking) {
+            throw this.bookingNotFound('La reserva no existe.');
+        }
+
+        if (!this.canInviteParticipantsForPlayerBooking(booking, input.ownerUserId)) {
+            throw this.bookingCannotInviteParticipants();
+        }
+
+        const ownerUser = await prisma.user.findUnique({
+            where: { id: input.ownerUserId },
+            select: { email: true }
+        });
+        if (normalizeEmail(String(ownerUser?.email || '')) === invitedEmail) {
+            throw this.bookingParticipantAlreadyExists('No hace falta invitar al titular de la reserva.');
+        }
+
+        const duplicated = booking.participants.find((participant) => {
+            const sameEmail = normalizeEmail(String(participant.invitedEmail || '')) === invitedEmail;
+            const activeStatus = participant.status === 'INVITED' || participant.status === 'JOINED';
+            return sameEmail && activeStatus;
+        });
+        if (duplicated) {
+            throw this.bookingParticipantAlreadyExists();
+        }
+
+        const created = await prisma.$transaction(async (tx) => {
+            const participant = await tx.bookingParticipant.create({
+                data: {
+                    bookingId: booking.id,
+                    invitedEmail,
+                    invitedName,
+                    invitedByUserId: input.ownerUserId,
+                    status: 'INVITED',
+                    role: 'PARTICIPANT'
+                },
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true
+                        }
+                    }
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    clubId: booking.clubId,
+                    userId: input.ownerUserId,
+                    entity: 'BookingParticipant',
+                    entityId: participant.id,
+                    action: 'BOOKING_PARTICIPANT_INVITED',
+                    payload: {
+                        bookingId: booking.id,
+                        invitedEmail,
+                        invitedName
+                    }
+                }
+            });
+
+            return participant;
+        });
+
+        return {
+            id: created.id,
+            displayName: this.resolveParticipantDisplayName(created),
+            status: created.status,
+            role: 'PARTICIPANT',
+            isMe: false,
+            invitedEmail: created.invitedEmail ?? null,
+            canManage: true
+        };
+    }
+
+    async removePlayerBookingParticipant(input: {
+        bookingId: number;
+        participantId: string;
+        ownerUserId: number;
+    }) {
+        if (!Number.isInteger(input.ownerUserId) || input.ownerUserId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const booking = await prisma.booking.findUnique({
+            where: { id: input.bookingId },
+            include: {
+                client: {
+                    select: { userId: true }
+                }
+            }
+        });
+
+        if (!booking) {
+            throw this.bookingNotFound('La reserva no existe.');
+        }
+
+        if (!this.canInviteParticipantsForPlayerBooking(booking, input.ownerUserId)) {
+            throw this.bookingCannotInviteParticipants();
+        }
+
+        const participant = await prisma.bookingParticipant.findFirst({
+            where: {
+                id: input.participantId,
+                bookingId: input.bookingId
+            }
+        });
+
+        if (!participant) {
+            throw this.bookingParticipantNotFound();
+        }
+
+        if (participant.status === 'REMOVED') {
+            throw this.bookingParticipantNotFound('Ese participante ya no está activo en la reserva.');
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.bookingParticipant.update({
+                where: { id: participant.id },
+                data: {
+                    status: 'REMOVED',
+                    removedAt: new Date()
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    clubId: booking.clubId,
+                    userId: input.ownerUserId,
+                    entity: 'BookingParticipant',
+                    entityId: participant.id,
+                    action: 'BOOKING_PARTICIPANT_REMOVED',
+                    payload: {
+                        bookingId: booking.id,
+                        previousStatus: participant.status
+                    }
+                }
+            });
+        });
+
+        return { success: true };
+    }
+
+    async getMyBookingInvitations(userId: number): Promise<PlayerBookingInvitationDto[]> {
+        if (!Number.isInteger(userId) || userId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+        const email = normalizeEmail(String(user?.email || ''));
+        if (!email) return [];
+
+        const invitations = await prisma.bookingParticipant.findMany({
+            where: {
+                userId: null,
+                invitedEmail: email,
+                status: 'INVITED',
+                booking: {
+                    status: { in: ['PENDING', 'CONFIRMED'] },
+                    startDateTime: { gt: new Date() }
+                }
+            },
+            include: {
+                booking: {
+                    include: {
+                        court: {
+                            include: {
+                                club: true
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: {
+                booking: {
+                    startDateTime: 'asc'
+                }
+            }
+        });
+
+        return invitations.map((invitation) => ({
+            id: invitation.id,
+            bookingId: String(invitation.bookingId),
+            bookingPublicCode: String(invitation.booking.displayCode || `RES-${invitation.booking.id}`),
+            club: {
+                name: String(invitation.booking.court.club.name || 'Club'),
+                slug: String(invitation.booking.court.club.slug || '')
+            },
+            court: {
+                name: String(invitation.booking.court.name || 'Cancha')
+            },
+            startDateTime: new Date(invitation.booking.startDateTime).toISOString(),
+            endDateTime: new Date(invitation.booking.endDateTime).toISOString(),
+            invitedName: invitation.invitedName ?? null,
+            invitedEmail: invitation.invitedEmail ?? null,
+            status: 'INVITED'
+        }));
+    }
+
+    async acceptBookingInvitation(invitationId: string, userId: number) {
+        if (!Number.isInteger(userId) || userId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+        const userEmail = normalizeEmail(String(user?.email || ''));
+        if (!userEmail) {
+            throw this.bookingInvitationEmailMismatch();
+        }
+
+        const invitation = await prisma.bookingParticipant.findUnique({
+            where: { id: invitationId },
+            include: {
+                booking: {
+                    include: {
+                        client: {
+                            select: { userId: true }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!invitation) {
+            throw this.bookingInvitationNotFound();
+        }
+
+        if (invitation.status === 'JOINED') {
+            throw this.bookingInvitationAlreadyAccepted();
+        }
+        if (invitation.status === 'DECLINED') {
+            throw this.bookingInvitationAlreadyDeclined();
+        }
+        if (invitation.status === 'LEFT' || invitation.status === 'REMOVED') {
+            throw this.bookingInvitationInvalid();
+        }
+        if (invitation.status !== 'INVITED') {
+            throw this.bookingInvitationInvalid();
+        }
+
+        if (normalizeEmail(String(invitation.invitedEmail || '')) !== userEmail) {
+            throw this.bookingInvitationEmailMismatch();
+        }
+
+        if (!(invitation.booking.status === 'PENDING' || invitation.booking.status === 'CONFIRMED')) {
+            throw this.bookingInvalidStatus('La reserva ya no admite participantes.');
+        }
+        if (new Date(invitation.booking.startDateTime).getTime() <= Date.now()) {
+            throw this.bookingInvitationExpired('La invitación ya venció porque la reserva ya comenzó o pasó.');
+        }
+
+        const alreadyJoined = await prisma.bookingParticipant.findFirst({
+            where: {
+                bookingId: invitation.bookingId,
+                userId,
+                status: 'JOINED',
+                NOT: { id: invitation.id }
+            },
+            select: { id: true }
+        });
+        if (alreadyJoined) {
+            throw this.bookingParticipantAlreadyExists('Ya formás parte de esta reserva.');
+        }
+
+        const updated = await prisma.$transaction(async (tx) => {
+            const participant = await tx.bookingParticipant.update({
+                where: { id: invitation.id },
+                data: {
+                    userId,
+                    status: 'JOINED',
+                    acceptedAt: new Date(),
+                    declinedAt: null,
+                    leftAt: null,
+                    removedAt: null
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    clubId: invitation.booking.clubId,
+                    userId,
+                    entity: 'BookingParticipant',
+                    entityId: invitation.id,
+                    action: 'BOOKING_PARTICIPANT_ACCEPTED',
+                    payload: {
+                        bookingId: invitation.bookingId
+                    }
+                }
+            });
+
+            return participant;
+        });
+
+        return updated;
+    }
+
+    async declineBookingInvitation(invitationId: string, userId: number) {
+        if (!Number.isInteger(userId) || userId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+        const userEmail = normalizeEmail(String(user?.email || ''));
+        if (!userEmail) {
+            throw this.bookingInvitationEmailMismatch();
+        }
+
+        const invitation = await prisma.bookingParticipant.findUnique({
+            where: { id: invitationId },
+            include: {
+                booking: {
+                    select: {
+                        id: true,
+                        clubId: true,
+                        status: true,
+                        startDateTime: true
+                    }
+                }
+            }
+        });
+
+        if (!invitation) {
+            throw this.bookingInvitationNotFound();
+        }
+
+        if (invitation.status === 'JOINED') {
+            throw this.bookingInvitationAlreadyAccepted();
+        }
+        if (invitation.status === 'DECLINED') {
+            throw this.bookingInvitationAlreadyDeclined();
+        }
+        if (invitation.status === 'LEFT' || invitation.status === 'REMOVED') {
+            throw this.bookingInvitationInvalid();
+        }
+        if (normalizeEmail(String(invitation.invitedEmail || '')) !== userEmail) {
+            throw this.bookingInvitationEmailMismatch();
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.bookingParticipant.update({
+                where: { id: invitation.id },
+                data: {
+                    status: 'DECLINED',
+                    declinedAt: new Date()
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    clubId: invitation.booking.clubId,
+                    userId,
+                    entity: 'BookingParticipant',
+                    entityId: invitation.id,
+                    action: 'BOOKING_PARTICIPANT_DECLINED',
+                    payload: {
+                        bookingId: invitation.booking.id
+                    }
+                }
+            });
+        });
+
+        return { success: true };
+    }
+
+    async leavePlayerBooking(bookingId: number, userId: number) {
+        if (!Number.isInteger(userId) || userId <= 0) {
+            throw this.bookingForbidden();
+        }
+
+        const participant = await prisma.bookingParticipant.findFirst({
+            where: {
+                bookingId,
+                userId,
+                status: 'JOINED'
+            },
+            include: {
+                booking: {
+                    select: {
+                        id: true,
+                        clubId: true,
+                        status: true,
+                        startDateTime: true
+                    }
+                }
+            }
+        });
+
+        if (!participant) {
+            throw this.bookingCannotLeave('No formás parte activa de esta reserva.');
+        }
+
+        if (!this.canLeavePlayerBooking(participant.booking)) {
+            throw this.bookingCannotLeave('Ya no podés salirte de esta reserva desde acá.');
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.bookingParticipant.update({
+                where: { id: participant.id },
+                data: {
+                    status: 'LEFT',
+                    leftAt: new Date()
+                }
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    clubId: participant.booking.clubId,
+                    userId,
+                    entity: 'BookingParticipant',
+                    entityId: participant.id,
+                    action: 'BOOKING_PARTICIPANT_LEFT',
+                    payload: {
+                        bookingId: participant.booking.id
+                    }
+                }
+            });
+        });
+
+        return { success: true };
     }
 
     async getBookingById(bookingId: number, clubId: number) {
