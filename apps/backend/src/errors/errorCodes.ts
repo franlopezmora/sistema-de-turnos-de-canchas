@@ -84,6 +84,7 @@ export const ErrorCodes = {
   // ── Validación ───────────────────────────────────────────────────────
   VALIDATION_ERROR:             'VALIDATION_ERROR',
   INVALID_INPUT:                'INVALID_INPUT',
+  CSRF_INVALID:                 'CSRF_INVALID',
 
   // ── General ──────────────────────────────────────────────────────────
   NOT_FOUND:                    'NOT_FOUND',

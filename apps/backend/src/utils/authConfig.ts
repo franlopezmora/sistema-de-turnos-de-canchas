@@ -28,6 +28,7 @@ export const authConfig = {
   allowBearerLegacy: toBool(process.env.AUTH_ALLOW_BEARER_LEGACY, false),
   accessCookieName: String(process.env.AUTH_ACCESS_COOKIE_NAME || 'tc_access').trim() || 'tc_access',
   refreshCookieName: String(process.env.AUTH_REFRESH_COOKIE_NAME || 'tc_refresh').trim() || 'tc_refresh',
+  csrfCookieName: String(process.env.AUTH_CSRF_COOKIE_NAME || 'tc_csrf').trim() || 'tc_csrf',
   cookieDomain: String(process.env.AUTH_COOKIE_DOMAIN || '').trim() || undefined,
   cookieSecure: toBool(process.env.AUTH_COOKIE_SECURE, isProduction),
   cookieSameSite: normalizeSameSite(process.env.AUTH_COOKIE_SAMESITE),

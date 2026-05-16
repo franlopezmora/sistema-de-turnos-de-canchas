@@ -2,6 +2,7 @@
 
 import { getApiUrl } from '../utils/apiUrl';
 import { getEffectiveActiveClubId, persistSessionUser } from '../utils/session';
+import { buildCsrfHeaders } from '../utils/csrf';
 
 const apiBase = () => `${getApiUrl()}/api`;
 export const AUTH_LOGOUT_EVENT = 'auth:logout';
@@ -107,8 +108,10 @@ const setPendingLogoutRedirect = (target: string) => {
 
 const postSessionEndpoint = async (path: string) => {
   try {
+    const headers = await buildCsrfHeaders();
     await fetch(`${apiBase()}${path}`, {
       method: 'POST',
+      headers,
       credentials: 'include'
     });
   } catch {
@@ -161,11 +164,12 @@ export const getPendingLogoutRedirect = (): string | null => {
 };
 
 export const login = async (email: string, password: string) => {
+  const headers = await buildCsrfHeaders({
+    'Content-Type': 'application/json',
+  });
   const response = await fetch(`${apiBase()}/auth/login`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include',
     body: JSON.stringify({ email, password }),
   });
@@ -194,11 +198,12 @@ export const login = async (email: string, password: string) => {
 };
 
 export const requestMagicLink = async (email: string) => {
+  const headers = await buildCsrfHeaders({
+    'Content-Type': 'application/json',
+  });
   const response = await fetch(`${apiBase()}/auth/email/request-link`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     credentials: 'include',
     body: JSON.stringify({ email }),
   });
@@ -260,11 +265,12 @@ export const register = async (
   phoneCountryCode?: string,
   phoneNumberLocal?: string
 ) => {
+  const headers = await buildCsrfHeaders({
+    'Content-Type': 'application/json',
+  });
   const response = await fetch(`${apiBase()}/auth/register`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       firstName,
       lastName,
@@ -367,9 +373,9 @@ export const updateMyProfile = async (payload: {
   dni?: string;
 }) => {
 
-  const headers: Record<string, string> = {
+  const headers = await buildCsrfHeaders({
     'Content-Type': 'application/json',
-  };
+  });
   const activeClubId = getActiveClubId();
   if (activeClubId) headers['x-active-club-id'] = String(activeClubId);
 

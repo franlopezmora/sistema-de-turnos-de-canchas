@@ -1,6 +1,7 @@
 import { getApiUrl } from './apiUrl';
 import { getActiveClubId, logout } from '../services/AuthService';
 import { getActiveClubSlug } from './session';
+import { buildCsrfHeaders } from './csrf';
 
 type ApiErrorCode =
   | 'AUTH_MISSING'
@@ -79,8 +80,15 @@ export const isAuthSessionInvalidCode = (code: ApiErrorCode | null) => isSession
 export const isAuthSessionInvalidatedError = (value: unknown): value is AuthSessionInvalidatedError =>
   value instanceof AuthSessionInvalidatedError;
 
-const buildHeaders = (init?: RequestInit) => {
-  const headers = new Headers(init?.headers);
+const isUnsafeMethod = (method?: string) => {
+  const normalized = String(method || 'GET').trim().toUpperCase();
+  return normalized !== 'GET' && normalized !== 'HEAD' && normalized !== 'OPTIONS';
+};
+
+const buildHeaders = async (init?: RequestInit) => {
+  const headers = isUnsafeMethod(init?.method)
+    ? await buildCsrfHeaders(init?.headers)
+    : new Headers(init?.headers);
   const activeClubId = getActiveClubId();
   if (activeClubId) {
     headers.set('x-active-club-id', String(activeClubId));
@@ -137,7 +145,7 @@ const refreshSessionSingleFlight = async (): Promise<boolean> => {
 
   const task = (async () => {
     try {
-      const headers = buildHeaders();
+      const headers = await buildHeaders({ method: 'POST' });
       const response = await fetch(`${getApiUrl()}/api/auth/session/refresh`, {
         method: 'POST',
         headers,
@@ -167,7 +175,7 @@ const executeFetchWithAuth = async (
   init: RequestInit | undefined,
   retried: boolean
 ): Promise<Response> => {
-  const headers = buildHeaders(init);
+  const headers = await buildHeaders(init);
   const response = await fetch(input, { ...init, headers, credentials: 'include' });
   const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : String((input as any)?.url || '');
 

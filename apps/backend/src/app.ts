@@ -28,6 +28,7 @@ import ClubReviewRoutes from './routes/ClubReviewRoutes';
 
 import { errorHandler } from './middleware/ErrorHandler';
 import { authMiddleware } from './middleware/AuthMiddleware';
+import { csrfProtection } from './middleware/CsrfMiddleware';
 import { requireGlobalRole } from './middleware/RoleMiddleware';
 import { prisma } from './prisma';
 import { metricsService } from './services/MetricsService';
@@ -115,6 +116,7 @@ export const createApp = () => {
       'Cache-Control',
       'Pragma',
       'Expires',
+      'X-CSRF-Token',
       'X-Active-Club-Id',
       'X-Club-Id',
       'Idempotency-Key'
@@ -124,6 +126,7 @@ export const createApp = () => {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
   app.use(cookieParser());
+  app.use(csrfProtection);
   app.use(metricsService.middleware);
 
   app.use('/api/auth', authRoutes);

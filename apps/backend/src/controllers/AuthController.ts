@@ -20,6 +20,7 @@ import {
 } from '../utils/magicLink';
 import { sendAuthError } from '../utils/authError';
 import { ErrorCodes, notFound } from '../errors';
+import { ensureCsrfToken } from '../utils/csrf';
 const MAGIC_LINK_NEUTRAL_MESSAGE = 'Si el email es válido, te enviamos un enlace para ingresar.';
 const DEFAULT_MAGIC_LINK_USER_FIRST_NAME = 'Nuevo';
 const DEFAULT_MAGIC_LINK_USER_LAST_NAME = 'Usuario';
@@ -140,6 +141,13 @@ export class AuthController {
         const base = this.getCookieBaseOptions();
         res.clearCookie(authConfig.accessCookieName, base);
         res.clearCookie(authConfig.refreshCookieName, base);
+        res.clearCookie(authConfig.csrfCookieName, {
+            httpOnly: false,
+            secure: authConfig.cookieSecure,
+            sameSite: authConfig.cookieSameSite,
+            domain: authConfig.cookieDomain,
+            path: '/'
+        });
     }
 
     private getRequestMeta(req: Request) {
@@ -214,6 +222,7 @@ export class AuthController {
                 meta: this.getRequestMeta(req)
             });
             this.setSessionCookies(res, sessionBundle.accessToken, sessionBundle.refreshToken);
+            ensureCsrfToken(req, res);
             if (authConfig.allowBearerLegacy) {
                 token = sessionBundle.accessToken;
             }
@@ -574,6 +583,7 @@ export class AuthController {
             const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
             const clubId = activeMembership?.clubId ?? null;
             const club = activeMembership?.club ?? null;
+            ensureCsrfToken(req, res);
 
             return res.json({
                 id: user.id,
@@ -669,6 +679,7 @@ export class AuthController {
             const activeMembership = await resolveActiveMembership(user.id, preferredClubId);
             const clubId = activeMembership?.clubId ?? null;
             const club = activeMembership?.club ?? null;
+            ensureCsrfToken(req, res);
 
             return res.json({
                 id: user.id,
@@ -694,6 +705,11 @@ export class AuthController {
         return this.getMe(req, res);
     };
 
+    csrfToken = async (req: Request, res: Response) => {
+        const csrfToken = ensureCsrfToken(req, res);
+        return res.json({ csrfToken });
+    };
+
     sessionRefresh = async (req: Request, res: Response) => {
         try {
             const refreshToken = this.getRefreshTokenFromRequest(req);
@@ -713,6 +729,7 @@ export class AuthController {
             }
 
             this.setSessionCookies(res, rotated.accessToken, rotated.refreshToken);
+            ensureCsrfToken(req, res);
             return res.status(204).send();
         } catch (error: any) {
             logger.error({ err: error, action: 'sessionRefresh' }, 'Error refrescando sesión');
