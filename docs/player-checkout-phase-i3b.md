@@ -119,3 +119,33 @@ No forma parte del checkout actual de reservas.
 - jugador -> club,
 - por reservas,
 - usando `Account BOOKING` como fuente de verdad.
+
+## Estado actual de I.3C
+
+`I.3C — Smoke Mercado Pago sandbox` queda **parcial / no cerrada**.
+
+Quedó validado:
+
+- OAuth seller sandbox por club,
+- integración persistida por club,
+- creation de preference/initPoint real,
+- `OnlinePaymentAttempt`,
+- ausencia de `Payment` antes del webhook,
+- ausencia de `CashMovement POS`,
+- separación correcta entre return URL y webhook.
+
+Quedó bloqueado:
+
+- completar un pago sandbox aprobado,
+- recibir un webhook aprobado real,
+- validar creación real de `Payment ONLINE`,
+- validar idempotencia real con webhook duplicado.
+
+Diagnóstico probable:
+
+- comportamiento o restricción del sandbox de Mercado Pago,
+- buyer sandbox no apto o wallet de prueba con limitaciones,
+- seller y buyer mal mezclados en alguna sesión,
+- o configuración sandbox irregular.
+
+Mientras ese smoke no cierre, los pagos online no deben considerarse listos para piloto.

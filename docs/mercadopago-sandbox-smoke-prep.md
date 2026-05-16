@@ -146,3 +146,62 @@ Los pagos online quedan listos para piloto solo cuando:
 5. No se crea `CashMovement` POS.
 6. El saldo de `Account BOOKING` queda consistente.
 7. El webhook duplicado no duplica cobros.
+
+## 8. I.3C — Smoke Mercado Pago sandbox
+
+Estado: **parcial / no cerrado**.
+
+### Validado
+
+- OAuth seller sandbox por club.
+- Integración Mercado Pago persistida por club.
+- Preference/initPoint real creado.
+- `OnlinePaymentAttempt` creado.
+- No se crea `Payment` antes del webhook.
+- No se crea `CashMovement` POS.
+- Return URL no confirma pago.
+- Webhook sigue siendo la única fuente de confirmación.
+
+### Bloqueado
+
+- No se pudo completar pago sandbox aprobado.
+- El botón `Pagar` queda deshabilitado en el checkout sandbox.
+- No llegó webhook aprobado real.
+- No se validó `Payment ONLINE` real por webhook.
+- No se validó idempotencia real con webhook duplicado.
+
+### Diagnóstico probable
+
+Restricción o comportamiento del sandbox de Mercado Pago:
+
+- buyer sandbox no apto,
+- sesión de seller usada como buyer,
+- wallet/test buyer con restricción,
+- configuración sandbox rara.
+
+No hay evidencia suficiente para tocar arquitectura.
+
+### Acciones futuras recomendadas
+
+1. Crear buyer sandbox nuevo.
+2. Probar en incógnito / navegador limpio.
+3. Verificar seller != buyer.
+4. Probar otra app sandbox si persiste.
+5. Consultar documentación o soporte de Mercado Pago si el botón sigue deshabilitado.
+6. Repetir smoke hasta validar:
+   - pago aprobado,
+   - webhook real,
+   - `Payment ONLINE` único,
+   - no `CashMovement POS`,
+   - idempotencia.
+
+### Criterio para cerrar I.3C
+
+I.3C solo se cierra cuando:
+
+- un pago sandbox se completa,
+- Mercado Pago envía webhook real aprobado,
+- backend crea un único `Payment` con `source=ONLINE`,
+- `Account BOOKING` baja `pending` correctamente,
+- no se crea `CashMovement POS`,
+- webhook duplicado no duplica `Payment` ni allocations.
