@@ -197,6 +197,7 @@ export class MercadoPagoService {
   ): Promise<T> {
     const url = `${mercadoPagoConfig.apiBaseUrl}${path}`;
     const headers: Record<string, string> = {
+      Accept: 'application/json',
       'Content-Type': 'application/json'
     };
 
@@ -219,6 +220,7 @@ export class MercadoPagoService {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${safeTrim(accessToken)}`,
+        Accept: 'application/json',
         'Content-Type': 'application/json'
       }
     });
