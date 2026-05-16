@@ -4,6 +4,7 @@ import {
   SettingsAuditSection,
   SettingsClubIdentitySection,
   SettingsExceptionsSection,
+  SettingsIntegrationsWorkspaceSection,
   SettingsMembersSection,
   SettingsPricingSection,
   SettingsSchedulesSection,
@@ -15,6 +16,7 @@ export type SettingsWorkspaceTab =
   | 'actividades'
   | 'horarios'
   | 'precios'
+  | 'integraciones'
   | 'usuarios'
   | 'notificaciones'
   | 'excepciones'
@@ -42,6 +44,7 @@ export default function AdminSettingsWorkspace({ tab }: AdminSettingsWorkspacePr
   }
   if (tab === 'horarios') return <SettingsSchedulesSection />;
   if (tab === 'precios') return <SettingsPricingSection />;
+  if (tab === 'integraciones') return <SettingsIntegrationsWorkspaceSection />;
   if (tab === 'usuarios') return <SettingsMembersSection />;
   if (tab === 'excepciones') return <SettingsExceptionsSection />;
   if (tab === 'auditoria') return <SettingsAuditSection />;

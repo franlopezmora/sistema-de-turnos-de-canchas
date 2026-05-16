@@ -188,6 +188,23 @@ export type ClubMember = {
   } | null;
 };
 
+export type AdminClubPaymentIntegration = {
+  provider: 'MERCADO_PAGO';
+  status: 'CONNECTED' | 'DISCONNECTED' | 'EXPIRED' | 'ERROR';
+  connected: boolean;
+  publicKey: string | null;
+  externalUserId: string | null;
+  connectedBy: {
+    id: number;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+  connectedAt: string | null;
+  disconnectedAt: string | null;
+  updatedAt: string;
+};
+
 export class ClubAdminService {
   /**
    * Obtener la agenda del administrador para un club específico
@@ -1137,5 +1154,33 @@ export class ClubAdminService {
       await throwApiErrorFromResponse(res, 'No se pudo quitar el acceso.');
     }
     return res.json();
+  }
+
+  static async listPaymentIntegrations(slug: string): Promise<AdminClubPaymentIntegration[]> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/integrations`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      await throwApiErrorFromResponse(res, 'No se pudieron cargar las integraciones del club.');
+    }
+    const payload = await res.json();
+    return Array.isArray(payload?.items) ? payload.items : [];
+  }
+
+  static getMercadoPagoConnectUrl(slug: string) {
+    return `${apiBase()}/clubs/${slug}/admin/integrations/mercadopago/connect`;
+  }
+
+  static async disconnectMercadoPago(slug: string) {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/integrations/mercadopago/disconnect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      await throwApiErrorFromResponse(res, 'No se pudo desconectar Mercado Pago.');
+    }
+    const payload = await res.json();
+    return payload?.integration ?? payload;
   }
 }

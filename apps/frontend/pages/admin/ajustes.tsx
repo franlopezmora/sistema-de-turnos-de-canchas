@@ -10,6 +10,7 @@ const SETTINGS_TABS: Array<{ value: SettingsTab; label: string; comingSoon?: boo
   { value: 'canchas', label: 'Canchas' },
   { value: 'horarios', label: 'Horarios' },
   { value: 'precios', label: 'Precios' },
+  { value: 'integraciones', label: 'Integraciones' },
   { value: 'excepciones', label: 'Excepciones' },
   { value: 'auditoria', label: 'Auditoría' },
   { value: 'actividades', label: 'Actividades', comingSoon: true },
@@ -28,6 +29,7 @@ const parseSettingsTab = (value: unknown): SettingsTab => {
   if (raw === 'actividades') return 'actividades';
   if (raw === 'horarios') return 'horarios';
   if (raw === 'precios') return 'precios';
+  if (raw === 'integraciones') return 'integraciones';
   if (raw === 'usuarios') return 'usuarios';
   if (raw === 'notificaciones') return 'notificaciones';
   if (raw === 'excepciones') return 'excepciones';

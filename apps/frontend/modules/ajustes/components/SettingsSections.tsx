@@ -1,4 +1,5 @@
 import AdminTabClub from '../../../components/admin/AdminTabClub';
+import SettingsIntegrationsSection from './SettingsIntegrationsSection';
 import SettingsMembersSection from './SettingsMembersSection';
 
 export function SettingsClubIdentitySection() {
@@ -49,6 +50,10 @@ export function SettingsAuditSection() {
       subtitle="Registro de cambios y trazabilidad de configuración."
     />
   );
+}
+
+export function SettingsIntegrationsWorkspaceSection() {
+  return <SettingsIntegrationsSection />;
 }
 
 export { SettingsMembersSection };
