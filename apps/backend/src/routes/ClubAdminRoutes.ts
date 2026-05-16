@@ -22,6 +22,7 @@ import { ClubServiceCatalogController } from '../controllers/ClubServiceCatalogC
 import { ClubReviewController } from '../controllers/ClubReviewController';
 import { ClientDuplicateIncidentController } from '../controllers/ClientDuplicateIncidentController';
 import { ClientDuplicateIncidentService } from '../services/ClientDuplicateIncidentService';
+import { MembershipAdminController } from '../controllers/MembershipAdminController';
 
 const router = Router();
 
@@ -55,6 +56,7 @@ const clubServiceCatalogController = new ClubServiceCatalogController();
 const clubReviewController = new ClubReviewController();
 const clientDuplicateIncidentService = new ClientDuplicateIncidentService();
 const clientDuplicateIncidentController = new ClientDuplicateIncidentController(clientDuplicateIncidentService);
+const membershipAdminController = new MembershipAdminController();
 
 // Todas las rutas requieren autenticación y verificación de acceso al club.
 // El rol tenant se define por endpoint (ADMIN/OWNER para configuración sensible,
@@ -610,6 +612,34 @@ router.post('/:slug/admin/client-duplicate-incidents/:incidentId/dismiss',
     verifyClubAccess,
     requireTenantRole('ADMIN'),
     clientDuplicateIncidentController.dismiss
+);
+
+router.get('/:slug/admin/members',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    membershipAdminController.list
+);
+
+router.post('/:slug/admin/members/invite',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    membershipAdminController.invite
+);
+
+router.patch('/:slug/admin/members/:membershipId/role',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    membershipAdminController.updateRole
+);
+
+router.delete('/:slug/admin/members/:membershipId',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    membershipAdminController.remove
 );
 
 router.get('/:slug/admin/stats/dashboard', 
