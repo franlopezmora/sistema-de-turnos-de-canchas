@@ -9,6 +9,9 @@ function createService() {
   (service as any).accountService = {
     calculateNetPaidAmount: async () => 0
   };
+  (service as any).clubPaymentIntegrationService = {
+    getMercadoPagoIntegrationStatusForClub: async () => ({ connected: false, status: 'DISCONNECTED' })
+  };
   return service as any;
 }
 
@@ -107,6 +110,28 @@ test('titular consulta checkout de su reserva y obtiene bloqueo por proveedor no
       assert.equal(checkout.paymentSummary.status, 'PARTIAL');
       assert.equal('payments' in (checkout.account as any), false);
       assert.equal('paymentAllocations' in (checkout.account as any), false);
+    }
+  );
+});
+
+test('titular con provider conectado obtiene checkout habilitado', async () => {
+  const service = createService();
+  (service as any).accountService.calculateNetPaidAmount = async () => 1000;
+  (service as any).clubPaymentIntegrationService.getMercadoPagoIntegrationStatusForClub = async () => ({
+    connected: true,
+    status: 'CONNECTED'
+  });
+
+  await withPrismaMocks(
+    {
+      bookingFindUnique: async () => baseBooking(),
+      accountFindFirst: async () => baseAccount()
+    },
+    async () => {
+      const checkout = await service.getPlayerBookingCheckout(701, 77);
+      assert.equal(checkout.checkout.enabled, true);
+      assert.equal(checkout.checkout.reason, null);
+      assert.equal(checkout.checkout.futureProvider, 'MERCADO_PAGO');
     }
   );
 });
