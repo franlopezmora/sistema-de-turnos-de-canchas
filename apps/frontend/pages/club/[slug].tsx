@@ -14,7 +14,7 @@ import {
 } from '../../services/ClubReviewService';
 import { getMyBookings } from '../../services/BookingService';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
-import { reportUiError } from '../../utils/uiError';
+import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 import { isAuthSessionInvalidatedError } from '../../utils/apiClient';
 import { MapPin, Calendar, Phone, Instagram, Share2, Trophy, Star, Heart, ChevronRight, X } from 'lucide-react';
 
@@ -199,7 +199,7 @@ export default function ClubPage() {
         const now = Date.now();
         const eligibleInClub = Array.isArray(myBookings)
           ? myBookings.filter((b: any) => {
-            const clubSlug = String(b?.court?.club?.slug || '').trim();
+            const clubSlug = String(b?.club?.slug || '').trim();
             if (clubSlug !== slug) return false;
             const status = String(b?.status || '').toUpperCase();
             const endTime = new Date(b?.endDateTime || b?.startDateTime || '').getTime();
@@ -333,7 +333,7 @@ export default function ClubPage() {
       await loadReviews(slug);
     } catch (err: any) {
       reportUiError({ area: 'ClubPage', action: 'saveMyClubReview' }, err);
-      setReviewFeedback(err?.message || 'No se pudo guardar la reseña.');
+      setReviewFeedback(extractErrorMessage(err, 'No se pudo guardar la reseña.'));
     } finally {
       setReviewSaving(false);
     }

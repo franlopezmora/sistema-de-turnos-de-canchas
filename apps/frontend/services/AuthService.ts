@@ -3,6 +3,7 @@
 import { getApiUrl } from '../utils/apiUrl';
 import { getEffectiveActiveClubId, persistSessionUser } from '../utils/session';
 import { buildCsrfHeaders } from '../utils/csrf';
+import { throwApiErrorFromResponse } from '../utils/apiError';
 
 const apiBase = () => `${getApiUrl()}/api`;
 export const AUTH_LOGOUT_EVENT = 'auth:logout';
@@ -175,8 +176,7 @@ export const login = async (email: string, password: string) => {
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || errorData.message || 'Error al iniciar sesión');
+    await throwApiErrorFromResponse(response, 'No se pudo iniciar sesión.');
   }
 
   const data = await response.json();
@@ -208,10 +208,10 @@ export const requestMagicLink = async (email: string) => {
     body: JSON.stringify({ email }),
   });
 
-  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || 'No se pudo enviar el enlace');
+    await throwApiErrorFromResponse(response, 'No se pudo enviar el enlace.');
   }
+  const data = await response.json().catch(() => ({}));
   return data;
 };
 
@@ -221,10 +221,10 @@ export const verifyMagicLink = async (token: string) => {
     credentials: 'include',
   });
 
-  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || 'Enlace inválido o expirado');
+    await throwApiErrorFromResponse(response, 'El enlace es inválido o expiró.');
   }
+  const data = await response.json().catch(() => ({}));
 
   // Cookie-first: limpiamos token legacy siempre.
   localStorage.removeItem('token');
@@ -285,8 +285,7 @@ export const register = async (
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || errorData.message || 'Error al registrar usuario');
+    await throwApiErrorFromResponse(response, 'No se pudo crear la cuenta.');
   }
 
   const data = await response.json();
@@ -386,10 +385,10 @@ export const updateMyProfile = async (payload: {
     body: JSON.stringify(payload)
   });
 
-  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.error || data?.message || 'No se pudo actualizar el perfil');
+    await throwApiErrorFromResponse(response, 'No se pudo actualizar el perfil.');
   }
+  const data = await response.json().catch(() => ({}));
 
   if (data) {
     persistSessionUser(data);

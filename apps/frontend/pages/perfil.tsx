@@ -7,6 +7,7 @@ import { getPendingLogoutRedirect } from '../services/AuthService';
 import { useValidateAuth } from '../hooks/useValidateAuth';
 import { updateMyProfile } from '../services/AuthService';
 import { Mail, Phone, IdCard, User, Save, CheckCircle } from 'lucide-react';
+import { extractErrorMessage } from '../utils/uiError';
 import {
   buildCanonicalPhone,
   DEFAULT_PHONE_COUNTRY_ISO2,
@@ -123,8 +124,8 @@ export default function PerfilPage() {
         dni: safeDni || undefined
       });
       setSuccess('Cambios guardados.');
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo actualizar el perfil.');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'No se pudo actualizar el perfil.'));
     } finally {
       setSaving(false);
     }

@@ -10,6 +10,7 @@ import { buildCanonicalPhone, DEFAULT_PHONE_COUNTRY_ISO2, normalizePhoneCountryI
 import { useAuth } from '../contexts/AuthContext';
 import { useUserTheme } from '../contexts/UserThemeContext';
 import PiqueLogo from '../components/PiqueLogo';
+import { extractErrorMessage } from '../utils/uiError';
 
 type PostLoginRedirectIntent = { sourceUser?: any };
 
@@ -203,8 +204,8 @@ export default function LoginPage() {
         if (cancelled) return;
         await revalidateSession();
         setRedirectIntent({ sourceUser: data?.user });
-      } catch (err: any) {
-        if (!cancelled) setError(err?.message || 'No se pudo iniciar sesión con el enlace.');
+      } catch (err: unknown) {
+        if (!cancelled) setError(extractErrorMessage(err, 'No se pudo iniciar sesión con el enlace.'));
       } finally {
         if (!cancelled) setLoading(false);
         clearHash();
@@ -233,8 +234,8 @@ export default function LoginPage() {
         setIsLogin(true);
         setFirstName(''); setLastName(''); setPhoneNumber(''); setDni('');
       }
-    } catch (err: any) {
-      setError(err.message || (isLogin ? 'Credenciales inválidas' : 'Error al registrar'));
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, isLogin ? 'No se pudo iniciar sesión.' : 'No se pudo crear la cuenta.'));
     } finally { setLoading(false); }
   };
 
@@ -245,8 +246,8 @@ export default function LoginPage() {
     try {
       const data = await requestMagicLink(safeEmail);
       setSuccessMessage(data?.message || 'Si el email es válido, te enviamos un enlace para ingresar.');
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo enviar el enlace en este momento.');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'No se pudo enviar el enlace en este momento.'));
     } finally { setMagicLoading(false); }
   };
 
