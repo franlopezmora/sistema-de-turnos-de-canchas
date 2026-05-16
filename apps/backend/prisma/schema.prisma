@@ -104,6 +104,27 @@ enum PaymentSource {
   BACKOFFICE
 }
 
+enum PaymentProvider {
+  MERCADO_PAGO
+}
+
+enum PaymentIntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  EXPIRED
+  ERROR
+}
+
+enum OnlinePaymentAttemptStatus {
+  CREATED
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+  ERROR
+}
+
 enum PaymentChannel {
   AUTO
   CASH_DRAWER
@@ -244,6 +265,9 @@ model User {
   bookings      Booking[]
   bookingParticipants BookingParticipant[]
   bookingParticipantInvitationsSent BookingParticipant[] @relation("BookingParticipantInvitedBy")
+  paymentIntegrationsConnected ClubPaymentIntegration[] @relation("ClubPaymentIntegrationConnectedBy")
+  paymentProviderOAuthStates PaymentProviderOAuthState[]
+  onlinePaymentAttempts OnlinePaymentAttempt[]
   clients       Client[]
   fixedBookings FixedBooking[]
   memberships   Membership[]
@@ -361,6 +385,9 @@ model Club {
   reviews       ClubReview[]
   favorites     ClubFavorite[]
   duplicateIncidents ClientDuplicateIncident[]
+  paymentIntegrations ClubPaymentIntegration[]
+  paymentProviderOAuthStates PaymentProviderOAuthState[]
+  onlinePaymentAttempts OnlinePaymentAttempt[]
 }
 
 model ClubFavorite {
@@ -390,6 +417,47 @@ model Membership {
   @@unique([userId, clubId])
   @@index([clubId])
   @@index([userId])
+}
+
+model ClubPaymentIntegration {
+  id              String                   @id @default(cuid())
+  clubId          Int
+  club            Club                     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  provider        PaymentProvider
+  status          PaymentIntegrationStatus @default(DISCONNECTED)
+  accessTokenEnc  String?
+  refreshTokenEnc String?
+  publicKey       String?
+  externalUserId  String?
+  expiresAt       DateTime?                @db.Timestamptz(3)
+  connectedById   Int?
+  connectedBy     User?                    @relation("ClubPaymentIntegrationConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+  disconnectedAt  DateTime?                @db.Timestamptz(3)
+  createdAt       DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @db.Timestamptz(3)
+
+  onlinePaymentAttempts OnlinePaymentAttempt[]
+  oauthStates          PaymentProviderOAuthState[]
+
+  @@unique([clubId, provider])
+  @@index([provider, status])
+}
+
+model PaymentProviderOAuthState {
+  id            String          @id @default(cuid())
+  clubId        Int
+  club          Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  provider      PaymentProvider
+  userId        Int
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrationId String?
+  integration   ClubPaymentIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  nonce         String          @unique
+  expiresAt     DateTime        @db.Timestamptz(3)
+  consumedAt    DateTime?       @db.Timestamptz(3)
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+
+  @@index([clubId, provider, expiresAt])
 }
 
 model Location {
@@ -609,6 +677,7 @@ model Booking {
   fixedBooking   FixedBooking? @relation(fields: [fixedBookingId], references: [id])
   billingConfig  BookingBillingConfig?
   participants   BookingParticipant[]
+  onlinePaymentAttempts OnlinePaymentAttempt[]
   reviews        ClubReview[]
 
   @@index([courtId, startDateTime], map: "booking_court_day")
@@ -738,6 +807,7 @@ model Account {
 
   items         AccountItem[]
   payments      Payment[]
+  onlinePaymentAttempts OnlinePaymentAttempt[]
   paymentAllocations PaymentAllocation[]
   refunds       Refund[]
   ledgerEntries LedgerEntry[]
@@ -903,6 +973,7 @@ model Payment {
   cashShift   CashShift? @relation(fields: [cashShiftId], references: [id], onDelete: SetNull)
 
   cashMovement CashMovement?
+  onlinePaymentAttempts OnlinePaymentAttempt[] @relation("OnlinePaymentAttemptPayment")
   allocations  PaymentAllocation[]
   refunds      Refund[]
   ledgerEntries LedgerEntry[]
@@ -936,6 +1007,43 @@ model PaymentAllocation {
   @@index([accountItemId, createdAt])
   @@index([paymentId, createdAt])
   @@unique([paymentId, accountItemId])
+}
+
+model OnlinePaymentAttempt {
+  id                   String                     @id @default(cuid())
+  clubId               Int
+  club                 Club                       @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  bookingId            Int
+  booking              Booking                    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  accountId            String
+  account              Account                    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId               Int
+  user                 User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrationId        String?
+  integration          ClubPaymentIntegration?    @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  provider             PaymentProvider
+  status               OnlinePaymentAttemptStatus @default(CREATED)
+  amount               Decimal                    @db.Decimal(10, 2)
+  currency             String
+  idempotencyKey       String
+  externalReference    String                     @unique
+  providerPreferenceId String?
+  providerPaymentId    String?
+  initPoint            String?
+  providerStatus       String?
+  paymentId            String?                    @unique
+  payment              Payment?                   @relation("OnlinePaymentAttemptPayment", fields: [paymentId], references: [id], onDelete: SetNull)
+  failureReason        String?
+  rawProviderData      Json?
+  processedAt          DateTime?                  @db.Timestamptz(3)
+  createdAt            DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime                   @updatedAt @db.Timestamptz(3)
+
+  @@unique([clubId, idempotencyKey])
+  @@index([bookingId, status])
+  @@index([accountId, status])
+  @@index([provider, status])
+  @@index([providerPaymentId])
 }
 
 model LedgerTransaction {
