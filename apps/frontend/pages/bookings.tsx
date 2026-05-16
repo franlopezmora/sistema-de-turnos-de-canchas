@@ -5,6 +5,7 @@ import {
   getMyBookings,
   cancelBooking,
   getBookingParticipants,
+  getPlayerBookingCheckout,
   inviteBookingParticipant,
   removeBookingParticipant,
   getMyBookingInvitations,
@@ -12,6 +13,7 @@ import {
   declineBookingInvitation,
   leaveBooking,
   type PlayerBookingDto,
+  type PlayerBookingCheckoutDto,
   type PlayerBookingParticipantDto,
   type PlayerBookingInvitationDto
 } from '../services/BookingService';
@@ -169,6 +171,9 @@ export default function MyBookingsPage() {
   const [participants, setParticipants] = useState<PlayerBookingParticipantDto[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState('');
+  const [checkoutSummary, setCheckoutSummary] = useState<PlayerBookingCheckoutDto | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteFieldErrors, setInviteFieldErrors] = useState<Record<string, string>>({});
@@ -228,6 +233,13 @@ export default function MyBookingsPage() {
         return 'No tenés permiso para gestionar esta reserva.';
       case 'BOOKING_NOT_FOUND':
         return 'No encontramos esa reserva.';
+      case 'CHECKOUT_PROVIDER_NOT_CONFIGURED':
+      case 'CHECKOUT_NOT_AVAILABLE':
+        return 'El pago online todavía no está disponible para esta reserva.';
+      case 'CHECKOUT_ACCOUNT_NOT_FOUND':
+        return 'Todavía no hay una cuenta publicada para esta reserva.';
+      case 'CHECKOUT_NO_PENDING_BALANCE':
+        return 'Esta reserva no tiene saldo pendiente por ahora.';
       case 'AUTH_MISSING':
       case 'AUTH_INVALID':
       case 'AUTH_EXPIRED':
@@ -313,6 +325,9 @@ export default function MyBookingsPage() {
       setParticipants([]);
       setParticipantsError('');
       setParticipantsLoading(false);
+      setCheckoutSummary(null);
+      setCheckoutError('');
+      setCheckoutLoading(false);
       setInviteBannerError('');
       setInviteFieldErrors({});
       return;
@@ -336,6 +351,32 @@ export default function MyBookingsPage() {
       .finally(() => {
         if (cancelled) return;
         setParticipantsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBooking]);
+
+  useEffect(() => {
+    if (!selectedBooking) return;
+
+    let cancelled = false;
+    setCheckoutLoading(true);
+    setCheckoutError('');
+    void getPlayerBookingCheckout(selectedBooking.id)
+      .then((payload) => {
+        if (cancelled) return;
+        setCheckoutSummary(payload);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setCheckoutSummary(null);
+        setCheckoutError(toPublicBookingErrorMessage(err, 'No pudimos cargar el estado de pago de esta reserva.'));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setCheckoutLoading(false);
       });
 
     return () => {
@@ -371,8 +412,36 @@ export default function MyBookingsPage() {
     date.toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
       .replace(/^\w/, c => c.toUpperCase());
 
+  const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString('es-AR')}`;
+
   const getDuration = (b: PlayerBookingDto) =>
     Math.max(0, Math.round((new Date(b.endDateTime).getTime() - new Date(b.startDateTime).getTime()) / 60000)) || 60;
+
+  const getCheckoutReasonMessage = (checkout: PlayerBookingCheckoutDto) => {
+    switch (checkout.checkout.reason) {
+      case 'ACCOUNT_MISSING':
+        return 'Todavía no hay una cuenta publicada para esta reserva. Contactá al club para confirmar el estado de pago.';
+      case 'NO_PENDING_BALANCE':
+        return 'Esta reserva no tiene saldo pendiente por ahora.';
+      case 'PARTICIPANT_PAYMENTS_NOT_SUPPORTED':
+        return 'Por ahora el pago online está disponible solo para el titular de la reserva. Si necesitás resolver un pago, contactá al club.';
+      case 'BOOKING_HAS_REFUNDS':
+        return 'Esta reserva tiene devoluciones o ajustes en revisión. Contactá al club para resolver cualquier cambio de pago.';
+      case 'BOOKING_NOT_PAYABLE':
+        return 'Esta reserva ya no está disponible para pago online desde la app.';
+      case 'PROVIDER_NOT_CONFIGURED':
+        return 'El pago online todavía no está disponible para este club. Contactá al club para pagar o resolver cambios.';
+      default:
+        return 'Todavía no pudimos habilitar el pago online para esta reserva.';
+    }
+  };
+
+  const accountItemTypeLabel = (type: string) => {
+    if (type === 'COURT') return 'Cancha';
+    if (type === 'PRODUCT') return 'Producto';
+    if (type === 'SERVICE') return 'Servicio';
+    return 'Concepto';
+  };
 
   const resolveReviewAnchorForClub = (clubSlug: string) =>
     bookings.find((booking) => {
@@ -929,6 +998,105 @@ export default function MyBookingsPage() {
               <div className="bk-detail-total">
                 <div className="bk-detail-total-label">Estado de pago</div>
                 <div className="bk-detail-total-val" style={{ fontSize: 18 }}>{selectedBooking.paymentSummary.label}</div>
+              </div>
+
+              <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                  Resumen de pago
+                </div>
+
+                {checkoutLoading ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Cargando estado de pago...</div>
+                ) : checkoutError ? (
+                  <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
+                    {checkoutError}
+                  </div>
+                ) : checkoutSummary ? (
+                  <>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                        gap: 10
+                      }}
+                    >
+                      {[
+                        { label: 'Total', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.total) : '—' },
+                        { label: 'Pagado', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.paid) : '—' },
+                        { label: 'Pendiente', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.pending) : '—' }
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          style={{
+                            padding: '12px 14px',
+                            borderRadius: 14,
+                            background: 'var(--surface-2)',
+                            border: '1px solid var(--border-subtle)'
+                          }}
+                        >
+                          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                            {item.label}
+                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {checkoutSummary.account?.items?.length ? (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {checkoutSummary.account.items.map((item, index) => (
+                          <div
+                            key={`${item.label}-${index}`}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: 12,
+                              background: 'var(--surface-2)',
+                              border: '1px solid var(--border-subtle)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 12
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{item.label}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                {accountItemTypeLabel(item.type)} · {item.quantity} x {formatMoney(item.unitPrice)}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                              {formatMoney(item.total)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                        No hay conceptos de cobro visibles para esta reserva.
+                      </div>
+                    )}
+
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        background: checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
+                          ? 'var(--positive-bg)'
+                          : 'var(--surface-2)',
+                        border: checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
+                          ? '1px solid var(--accent-border-subtle)'
+                          : '1px solid var(--border-subtle)',
+                        color: checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
+                          ? 'var(--accent-fg)'
+                          : 'var(--text-secondary)',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        lineHeight: 1.5
+                      }}
+                    >
+                      {getCheckoutReasonMessage(checkoutSummary)}
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -134,6 +134,50 @@ export type PlayerBookingInvitationDto = {
   status: 'INVITED';
 };
 
+export type PlayerBookingCheckoutDto = {
+  booking: {
+    id: string;
+    publicCode: string;
+    clubName: string;
+    courtName: string;
+    startDateTime: string;
+    endDateTime: string;
+    status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+    myRole: 'OWNER' | 'PARTICIPANT';
+  };
+  account: {
+    id: string;
+    status: 'OPEN' | 'CLOSED';
+    total: number;
+    paid: number;
+    pending: number;
+    currency: 'ARS';
+    items: Array<{
+      label: string;
+      quantity: number;
+      unitPrice: number;
+      total: number;
+      type: 'COURT' | 'PRODUCT' | 'SERVICE' | 'OTHER';
+    }>;
+  } | null;
+  paymentSummary: {
+    status: 'NOT_REQUIRED' | 'PENDING' | 'PARTIAL' | 'PAID' | 'BLOCKED';
+    label: string;
+  };
+  checkout: {
+    enabled: false;
+    reason:
+      | 'PROVIDER_NOT_CONFIGURED'
+      | 'BOOKING_NOT_PAYABLE'
+      | 'NO_PENDING_BALANCE'
+      | 'ACCOUNT_MISSING'
+      | 'PARTICIPANT_PAYMENTS_NOT_SUPPORTED'
+      | 'BOOKING_HAS_REFUNDS'
+      | 'UNKNOWN';
+    futureProvider: 'MERCADO_PAGO' | null;
+  };
+};
+
 export const getBookingById = async (bookingId: number) => {
   const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}`, {
     method: 'GET',
@@ -287,6 +331,19 @@ export const getBookingParticipants = async (bookingId: number | string): Promis
 
   const payload = await res.json();
   return Array.isArray(payload?.items) ? payload.items : [];
+};
+
+export const getPlayerBookingCheckout = async (bookingId: number | string): Promise<PlayerBookingCheckoutDto> => {
+  const res = await fetchWithAuth(`${apiBase()}/me/bookings/${bookingId}/checkout`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos cargar el estado de pago.');
+  }
+
+  return await res.json() as PlayerBookingCheckoutDto;
 };
 
 export const inviteBookingParticipant = async (
