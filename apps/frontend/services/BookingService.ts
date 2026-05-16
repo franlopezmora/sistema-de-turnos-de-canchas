@@ -275,6 +275,107 @@ export const getMyBookings = async (_userId?: number): Promise<PlayerBookingDto[
     }
 };
 
+export const getBookingParticipants = async (bookingId: number | string): Promise<PlayerBookingParticipantDto[]> => {
+  const res = await fetchWithAuth(`${apiBase()}/me/bookings/${bookingId}/participants`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos cargar los participantes.');
+  }
+
+  const payload = await res.json();
+  return Array.isArray(payload?.items) ? payload.items : [];
+};
+
+export const inviteBookingParticipant = async (
+  bookingId: number | string,
+  input: { email: string; name?: string }
+): Promise<PlayerBookingParticipantDto> => {
+  const res = await fetchWithAuth(`${apiBase()}/me/bookings/${bookingId}/participants/invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: String(input?.email || '').trim(),
+      ...(String(input?.name || '').trim() ? { name: String(input.name).trim() } : {})
+    })
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos invitar al jugador.');
+  }
+
+  const payload = await res.json();
+  return payload?.participant as PlayerBookingParticipantDto;
+};
+
+export const removeBookingParticipant = async (bookingId: number | string, participantId: string) => {
+  const res = await fetchWithAuth(`${apiBase()}/me/bookings/${bookingId}/participants/${participantId}/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos remover al participante.');
+  }
+
+  return res.json();
+};
+
+export const getMyBookingInvitations = async (): Promise<PlayerBookingInvitationDto[]> => {
+  const res = await fetchWithAuth(`${apiBase()}/me/booking-invitations`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos cargar tus invitaciones.');
+  }
+
+  const payload = await res.json();
+  return Array.isArray(payload?.items) ? payload.items : [];
+};
+
+export const acceptBookingInvitation = async (invitationId: string) => {
+  const res = await fetchWithAuth(`${apiBase()}/me/booking-invitations/${invitationId}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos aceptar la invitación.');
+  }
+
+  return res.json();
+};
+
+export const declineBookingInvitation = async (invitationId: string) => {
+  const res = await fetchWithAuth(`${apiBase()}/me/booking-invitations/${invitationId}/decline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos rechazar la invitación.');
+  }
+
+  return res.json();
+};
+
+export const leaveBooking = async (bookingId: number | string) => {
+  const res = await fetchWithAuth(`${apiBase()}/me/bookings/${bookingId}/leave`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No pudimos sacarte de la reserva.');
+  }
+
+  return res.json();
+};
+
 export const getBookingTimelineEvents = async (
   bookingId: number,
   options?: { take?: number }

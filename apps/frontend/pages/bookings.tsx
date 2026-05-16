@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import DarkPageLayout from '../components/DarkPageLayout';
-import { getMyBookings, cancelBooking, type PlayerBookingDto } from '../services/BookingService';
+import {
+  getMyBookings,
+  cancelBooking,
+  getBookingParticipants,
+  inviteBookingParticipant,
+  removeBookingParticipant,
+  getMyBookingInvitations,
+  acceptBookingInvitation,
+  declineBookingInvitation,
+  leaveBooking,
+  type PlayerBookingDto,
+  type PlayerBookingParticipantDto,
+  type PlayerBookingInvitationDto
+} from '../services/BookingService';
 import { getMyReviewForClub, upsertMyClubReview } from '../services/ClubReviewService';
 import AppModal from '../components/AppModal';
 import { extractErrorMessage } from '../utils/uiError';
@@ -9,8 +22,8 @@ import { useValidateAuth } from '../hooks/useValidateAuth';
 import { getPendingLogoutRedirect } from '../services/AuthService';
 import Link from 'next/link';
 import UserLoadingState from '../components/UserLoadingState';
-import { Calendar, Clock, MapPin, Ticket, ArrowRight, Search, XCircle, CheckCircle2, Star, MessageSquare, X } from 'lucide-react';
-import { normalizeApiError } from '../utils/apiError';
+import { Calendar, Clock, MapPin, Ticket, ArrowRight, Search, XCircle, CheckCircle2, Star, MessageSquare, X, Users, UserPlus, Mail, LogOut, Trash2 } from 'lucide-react';
+import { getApiFieldErrors, normalizeApiError } from '../utils/apiError';
 
 const PAGE_CSS = `
   .bk-layout { display:grid; grid-template-columns:1.4fr 1fr; gap:24px; align-items:start; }
@@ -151,6 +164,17 @@ export default function MyBookingsPage() {
   const [cancellingBooking, setCancellingBooking] = useState(false);
   const [cancelSuccessMessage, setCancelSuccessMessage] = useState('');
   const cancelSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingInvitations, setPendingInvitations] = useState<PlayerBookingInvitationDto[]>([]);
+  const [invitationActionId, setInvitationActionId] = useState<string | null>(null);
+  const [participants, setParticipants] = useState<PlayerBookingParticipantDto[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [participantsError, setParticipantsError] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteFieldErrors, setInviteFieldErrors] = useState<Record<string, string>>({});
+  const [inviteBannerError, setInviteBannerError] = useState('');
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [participantActionId, setParticipantActionId] = useState<string | null>(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
@@ -165,6 +189,11 @@ export default function MyBookingsPage() {
   const closeModal = () => setModalState(p => ({ ...p, show: false, onConfirm: undefined, confirmDisabled: undefined, closeOnBackdrop: undefined, closeOnEscape: undefined }));
 
   const showError = (message: string) => setModalState({ show: true, title: 'Error', message, isWarning: true, cancelText: '', confirmText: 'Aceptar' });
+  const flashSuccess = (message: string) => {
+    if (cancelSuccessTimerRef.current) clearTimeout(cancelSuccessTimerRef.current);
+    setCancelSuccessMessage(message);
+    cancelSuccessTimerRef.current = setTimeout(() => setCancelSuccessMessage(''), 4000);
+  };
 
   const toPublicBookingErrorMessage = (error: unknown, fallback: string) => {
     const normalized = normalizeApiError(error, fallback);
@@ -176,6 +205,24 @@ export default function MyBookingsPage() {
         return 'Esta reserva ya comenzó o ya pasó, así que no se puede cancelar desde acá.';
       case 'BOOKING_INVALID_STATUS':
         return 'Esta reserva ya no está disponible para cancelación.';
+      case 'BOOKING_PARTICIPANT_ALREADY_EXISTS':
+        return 'Ese jugador ya está invitado o ya forma parte de esta reserva.';
+      case 'BOOKING_INVITATION_EMAIL_MISMATCH':
+        return 'Esta invitación fue enviada a otro email.';
+      case 'BOOKING_INVITATION_NOT_FOUND':
+      case 'BOOKING_PARTICIPANT_NOT_FOUND':
+        return 'No encontramos ese acceso o esa invitación.';
+      case 'BOOKING_INVITATION_ALREADY_ACCEPTED':
+        return 'Esa invitación ya había sido aceptada.';
+      case 'BOOKING_INVITATION_ALREADY_DECLINED':
+        return 'Esa invitación ya había sido rechazada.';
+      case 'BOOKING_INVITATION_EXPIRED':
+      case 'BOOKING_INVITATION_INVALID':
+        return 'La invitación ya no está disponible.';
+      case 'BOOKING_CANNOT_INVITE_PARTICIPANTS':
+        return 'Esta reserva ya no admite nuevas invitaciones desde la app.';
+      case 'BOOKING_CANNOT_LEAVE':
+        return 'Ya no podés salirte de esta reserva desde acá.';
       case 'BOOKING_FORBIDDEN':
       case 'FORBIDDEN':
         return 'No tenés permiso para gestionar esta reserva.';
@@ -206,13 +253,24 @@ export default function MyBookingsPage() {
     });
   };
 
+  const refreshSelectedParticipants = useCallback(async () => {
+    if (!selectedBooking) return;
+    const items = await getBookingParticipants(selectedBooking.id);
+    setParticipants(items);
+  }, [selectedBooking]);
+
   useEffect(() => () => { if (cancelSuccessTimerRef.current) clearTimeout(cancelSuccessTimerRef.current); }, []);
 
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
-      const data = await getMyBookings(user.id);
+      const [data, invitations] = await Promise.all([
+        getMyBookings(user.id),
+        getMyBookingInvitations().catch(() => [] as PlayerBookingInvitationDto[])
+      ]);
       setBookings(data.sort((a, b) => new Date(b.startDateTime).getTime() - new Date(a.startDateTime).getTime()));
+      setPendingInvitations(invitations);
+      setError('');
     } catch (err: unknown) {
       setError(toPublicBookingErrorMessage(err, 'No pudimos cargar tus reservas. Recargá la página.'));
     } finally {
@@ -249,6 +307,41 @@ export default function MyBookingsPage() {
   useEffect(() => {
     if (selectedBooking && !bookings.some(b => b.id === selectedBooking.id)) setSelectedBooking(null);
   }, [bookings, selectedBooking]);
+
+  useEffect(() => {
+    if (!selectedBooking) {
+      setParticipants([]);
+      setParticipantsError('');
+      setParticipantsLoading(false);
+      setInviteBannerError('');
+      setInviteFieldErrors({});
+      return;
+    }
+
+    let cancelled = false;
+    setParticipantsLoading(true);
+    setParticipantsError('');
+    setInviteBannerError('');
+    setInviteFieldErrors({});
+    void getBookingParticipants(selectedBooking.id)
+      .then((items) => {
+        if (cancelled) return;
+        setParticipants(items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setParticipants([]);
+        setParticipantsError(toPublicBookingErrorMessage(err, 'No pudimos cargar los participantes de esta reserva.'));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setParticipantsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBooking]);
 
   useEffect(() => {
     if (!reviewModalOpen) return;
@@ -316,9 +409,7 @@ export default function MyBookingsPage() {
           closeModal();
           setSelectedBooking(null);
           await loadData();
-          if (cancelSuccessTimerRef.current) clearTimeout(cancelSuccessTimerRef.current);
-          setCancelSuccessMessage('Reserva cancelada.');
-          cancelSuccessTimerRef.current = setTimeout(() => setCancelSuccessMessage(''), 4000);
+          flashSuccess('Reserva cancelada.');
         } catch (e: any) {
           setModalState(prev => ({
             ...prev,
@@ -336,6 +427,107 @@ export default function MyBookingsPage() {
           setCancellingBooking(false);
         }
       },
+    });
+  };
+
+  const handleAcceptInvitation = async (invitationId: string) => {
+    if (invitationActionId) return;
+    setInvitationActionId(invitationId);
+    try {
+      await acceptBookingInvitation(invitationId);
+      await loadData();
+      flashSuccess('Invitación aceptada.');
+    } catch (error) {
+      showError(toPublicBookingErrorMessage(error, 'No pudimos aceptar la invitación.'));
+    } finally {
+      setInvitationActionId(null);
+    }
+  };
+
+  const handleDeclineInvitation = async (invitationId: string) => {
+    if (invitationActionId) return;
+    setInvitationActionId(invitationId);
+    try {
+      await declineBookingInvitation(invitationId);
+      await loadData();
+      flashSuccess('Invitación rechazada.');
+    } catch (error) {
+      showError(toPublicBookingErrorMessage(error, 'No pudimos rechazar la invitación.'));
+    } finally {
+      setInvitationActionId(null);
+    }
+  };
+
+  const handleLeaveBooking = (booking: PlayerBookingDto) => {
+    if (participantActionId) return;
+    showConfirm({
+      title: '¿Salirte de esta reserva?',
+      message: 'Vas a dejar de figurar como participante. Si necesitás resolver algo de pago o una excepción, contactá al club.',
+      confirmText: 'Salir de la reserva',
+      cancelText: 'Volver',
+      isWarning: true,
+      onConfirm: async () => {
+        setParticipantActionId(booking.id);
+        try {
+          await leaveBooking(booking.id);
+          setSelectedBooking(null);
+          await loadData();
+          flashSuccess('Te saliste de la reserva.');
+        } catch (error) {
+          showError(toPublicBookingErrorMessage(error, 'No pudimos procesar tu salida de la reserva.'));
+        } finally {
+          setParticipantActionId(null);
+        }
+      }
+    });
+  };
+
+  const handleInviteParticipant = async () => {
+    if (!selectedBooking || inviteSubmitting) return;
+    setInviteSubmitting(true);
+    setInviteFieldErrors({});
+    setInviteBannerError('');
+    try {
+      await inviteBookingParticipant(selectedBooking.id, {
+        email: inviteEmail,
+        name: inviteName
+      });
+      setInviteEmail('');
+      setInviteName('');
+      await refreshSelectedParticipants();
+      await loadData();
+    } catch (error) {
+      const fieldErrors = getApiFieldErrors(error);
+      setInviteFieldErrors(fieldErrors);
+      const message = toPublicBookingErrorMessage(error, 'No pudimos enviar la invitación.');
+      if (Object.keys(fieldErrors).length === 0) {
+        setInviteBannerError(message);
+      }
+    } finally {
+      setInviteSubmitting(false);
+    }
+  };
+
+  const handleRemoveParticipant = (participant: PlayerBookingParticipantDto) => {
+    if (!selectedBooking || participantActionId) return;
+    showConfirm({
+      title: '¿Remover participante?',
+      message: `Vamos a quitar a ${participant.displayName} de esta reserva.`,
+      confirmText: 'Remover',
+      cancelText: 'Volver',
+      isWarning: true,
+      onConfirm: async () => {
+        setParticipantActionId(participant.id);
+        try {
+          await removeBookingParticipant(selectedBooking.id, participant.id);
+          await refreshSelectedParticipants();
+          await loadData();
+        } catch (error) {
+          showError(toPublicBookingErrorMessage(error, 'No pudimos remover al participante.'));
+        } finally {
+          setParticipantActionId(null);
+        }
+      }
     });
   };
 
@@ -389,6 +581,7 @@ export default function MyBookingsPage() {
     PAST: 'Pasadas',
     CANCELLED: 'Canceladas'
   };
+  const roleLabel = (booking: PlayerBookingDto) => booking.myRole === 'PARTICIPANT' ? 'Participante' : 'Titular';
 
   return (
     <DarkPageLayout
@@ -418,6 +611,62 @@ export default function MyBookingsPage() {
 
         {/* ── TABS ── */}
         <div style={{ marginBottom: 24 }}>
+          {pendingInvitations.length > 0 && (
+            <div style={{ marginBottom: 18, display: 'grid', gap: 10 }}>
+              {pendingInvitations.map((invitation) => {
+                const busy = invitationActionId === invitation.id;
+                return (
+                  <div
+                    key={invitation.id}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 16,
+                      background: 'var(--surface-1)',
+                      border: '1px solid var(--accent-border-subtle)',
+                      display: 'grid',
+                      gap: 10
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)' }}>
+                          Invitación pendiente para {invitation.club.name}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          {invitation.court.name} · {formatWeekday(new Date(invitation.startDateTime))} · {formatTime(new Date(invitation.startDateTime))}
+                        </div>
+                      </div>
+                      <span className="bk-card-chip" style={{ background: 'var(--positive-bg)', color: 'var(--accent-fg)' }}>
+                        Invitación
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="bk-action-btn bk-action-rebook"
+                        style={{ width: 'auto', padding: '10px 14px' }}
+                        disabled={busy}
+                        onClick={() => handleAcceptInvitation(invitation.id)}
+                      >
+                        <CheckCircle2 size={14} />
+                        {busy ? 'Procesando...' : 'Aceptar'}
+                      </button>
+                      <button
+                        type="button"
+                        className="bk-action-btn bk-action-cancel"
+                        style={{ width: 'auto', padding: '10px 14px' }}
+                        disabled={busy}
+                        onClick={() => handleDeclineInvitation(invitation.id)}
+                      >
+                        <XCircle size={14} />
+                        Rechazar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="p-public-tabs" style={{ display: 'inline-flex' }}>
             {(['ACTIVE', 'PAST', 'CANCELLED'] as const).map(tab => (
               <button
@@ -491,7 +740,7 @@ export default function MyBookingsPage() {
                         <div className="bk-card-club">{booking.club?.name || 'Club'}</div>
                         <div className="bk-card-meta">
                           {booking.activity?.name && <span className="bk-card-chip">{booking.activity.name}</span>}
-                          <span className="bk-card-chip">Titular</span>
+                          <span className="bk-card-chip">{roleLabel(booking)}</span>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Clock size={10} /> {formatTime(date)}
                           </span>
@@ -551,6 +800,130 @@ export default function MyBookingsPage() {
                     <div className="bk-detail-row-val">{selectedBooking.publicCode}</div>
                   </div>
                 </div>
+                <div className="bk-detail-row">
+                  <div className="bk-detail-icon"><Users size={16} /></div>
+                  <div>
+                    <div className="bk-detail-row-label">Tu rol</div>
+                    <div className="bk-detail-row-val">{roleLabel(selectedBooking)}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 18, borderTop: '1px solid var(--border)', paddingTop: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                    Participantes
+                  </div>
+                  {selectedBooking.capabilities.canInvitePlayers && (
+                    <span className="bk-card-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <UserPlus size={12} /> Podés invitar
+                    </span>
+                  )}
+                </div>
+
+                {participantsLoading ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Cargando participantes...</div>
+                ) : participantsError ? (
+                  <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
+                    {participantsError}
+                  </div>
+                ) : participants.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Todavía no hay participantes registrados para esta reserva.</div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {participants.map((participant) => (
+                      <div
+                        key={participant.id}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--surface-2)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 12
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {participant.displayName} {participant.isMe ? '· Vos' : ''}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                            {participant.status === 'JOINED' ? 'Confirmado' :
+                              participant.status === 'INVITED' ? 'Invitado' :
+                              participant.status === 'DECLINED' ? 'Rechazó' :
+                              participant.status === 'LEFT' ? 'Se bajó' : 'Removido'}
+                            {participant.invitedEmail ? ` · ${participant.invitedEmail}` : ''}
+                          </div>
+                        </div>
+                        {participant.canManage && (
+                          <button
+                            type="button"
+                            className="bk-action-btn bk-action-cancel"
+                            style={{ width: 'auto', padding: '8px 12px' }}
+                            disabled={participantActionId === participant.id}
+                            onClick={() => handleRemoveParticipant(participant)}
+                          >
+                            <Trash2 size={14} />
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {selectedBooking.capabilities.canInvitePlayers && (
+                  <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                      Invitar jugador
+                    </div>
+                    {inviteBannerError && (
+                      <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
+                        {inviteBannerError}
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      <div>
+                        <div style={{ position: 'relative' }}>
+                          <Mail size={14} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+                          <input
+                            type="email"
+                            value={inviteEmail}
+                            onChange={(e) => setInviteEmail(e.target.value)}
+                            placeholder="Email del jugador"
+                            style={{ width: '100%', padding: '10px 12px 10px 34px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                          />
+                        </div>
+                        {inviteFieldErrors.email && (
+                          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--error-fg)' }}>{inviteFieldErrors.email}</div>
+                        )}
+                      </div>
+                      <div>
+                        <input
+                          type="text"
+                          value={inviteName}
+                          onChange={(e) => setInviteName(e.target.value)}
+                          placeholder="Nombre (opcional)"
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                        />
+                        {inviteFieldErrors.name && (
+                          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--error-fg)' }}>{inviteFieldErrors.name}</div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="bk-action-btn bk-action-rebook"
+                        onClick={handleInviteParticipant}
+                        disabled={inviteSubmitting}
+                      >
+                        <UserPlus size={15} />
+                        {inviteSubmitting ? 'Enviando...' : 'Invitar jugador'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="bk-detail-total">
@@ -562,6 +935,11 @@ export default function MyBookingsPage() {
                 {activeTab === 'ACTIVE' && selectedBooking.capabilities?.canCancelBooking && (
                   <button className="bk-action-btn bk-action-cancel" onClick={() => handleCancel(selectedBooking.id)}>
                     <XCircle size={15} /> Cancelar reserva
+                  </button>
+                )}
+                {activeTab === 'ACTIVE' && !selectedBooking.capabilities?.canCancelBooking && selectedBooking.capabilities?.canLeaveBooking && (
+                  <button className="bk-action-btn bk-action-cancel" onClick={() => handleLeaveBooking(selectedBooking)} disabled={participantActionId === selectedBooking.id}>
+                    <LogOut size={15} /> {participantActionId === selectedBooking.id ? 'Procesando...' : 'Salir de la reserva'}
                   </button>
                 )}
                 {(activeTab === 'PAST' || activeTab === 'CANCELLED') && selectedBooking.club?.slug && (
