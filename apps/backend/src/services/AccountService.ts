@@ -618,8 +618,7 @@ export class AccountService {
             select: { id: true, type: true, productId: true, quantity: true, total: true, description: true }
           },
           payments: {
-            where: { status: { not: 'FAILED' } as any },
-            select: { id: true, amount: true, status: true }
+            select: { id: true, amount: true }
           },
           refunds: {
             where: { status: { not: 'CANCELLED' } as any },
