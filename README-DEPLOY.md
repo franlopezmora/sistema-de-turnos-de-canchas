@@ -52,6 +52,10 @@ No expongas tokens de clubes en logs, frontend ni variables compartidas.
 - El frontend lo obtiene desde `GET /api/auth/csrf` y lo envía automáticamente.
 - Para `SameSite=None`, `AUTH_COOKIE_SECURE=true` es obligatorio.
 - En local development: `AUTH_COOKIE_SECURE=false`.
+- En smoke/staging con frontend y backend en dominios HTTPS distintos (por ejemplo túneles), usar:
+  - `AUTH_COOKIE_SAMESITE=none`
+  - `AUTH_COOKIE_SECURE=true`
+  - `AUTH_COOKIE_DOMAIN=` vacío para mantener cookie host-only del backend.
 
 ## 4) Flujo de despliegue (resumen)
 
