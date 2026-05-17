@@ -17,7 +17,7 @@ Modo oficial: **cookie sessions HttpOnly** con refresh rotativo.
 | --- | --- | --- | --- | --- | --- | --- |
 | Local dev | `http://localhost:3001` | `http://localhost:3000` | host-only (`localhost`) | `false` | `Lax` | Cross-port same-site en localhost. |
 | Preview | `https://app-preview.<domain>` | `https://api-preview.<domain>` | host-only por defecto | `true` | `Lax` | Definir dominio explícito solo si hay necesidad real de compartir cookies entre subdominios. |
-| Production | `https://app.pique.app` | `https://api.pique.app` | `.pique.app` (opcional) | `true` | `Lax` | `None` solo para requerimientos cross-site explícitos. |
+| Production | `https://pique.ar` | `https://pique.ar/api` | host-only por defecto; `.pique.ar` opcional | `true` | `Lax` | Recomendado para el primer piloto por simplicidad operativa. |
 
 ## Rules
 
@@ -34,7 +34,7 @@ Modo oficial: **cookie sessions HttpOnly** con refresh rotativo.
 - `AUTH_ALLOW_BEARER_LEGACY=false`
 - `AUTH_ACCESS_COOKIE_NAME=tc_access`
 - `AUTH_REFRESH_COOKIE_NAME=tc_refresh`
-- `AUTH_COOKIE_DOMAIN=` (vacío => host-only)
+- `AUTH_COOKIE_DOMAIN=` (vacío => host-only; recomendado para el primer piloto)
 - `AUTH_COOKIE_SECURE=false` en local / `true` en producción
 - `AUTH_COOKIE_SAMESITE=lax`
 

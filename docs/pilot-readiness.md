@@ -87,14 +87,14 @@ Compensacion acordada:
 
 | Tema | Decision |
 |---|---|
-| Backend produccion | publicar una sola instancia controlada con URL publica HTTPS |
-| Frontend produccion | publicar una sola instancia controlada con URL publica HTTPS |
+| Backend produccion | publicar una sola instancia controlada detras de `https://pique.ar/api` |
+| Frontend produccion | publicar una sola instancia controlada en `https://pique.ar` |
 | PostgreSQL produccion | DB nueva, limpia y separada de local/staging |
 | Redis | habilitar si el despliegue lo necesita para workers, locks o jobs; si no, dejarlo explicitamente fuera |
 | Scheduler | encendido |
 | Worker WhatsApp | apagado al inicio salvo validacion operativa muy concreta |
-| Dominio frontend | dominio real del producto / club piloto |
-| Dominio backend | subdominio o dominio real HTTPS separado |
+| Dominio frontend | `https://pique.ar` |
+| Dominio backend | `https://pique.ar/api` |
 | Mercado Pago | recomendado OFF al dia 1 de onboarding; activar despues de validar agenda, reservas y caja |
 | WhatsApp | recomendado OFF al dia 1; comunicacion manual al inicio |
 
@@ -129,11 +129,11 @@ Reglas:
 | `DIRECT_DATABASE_URL` | si | pendiente |
 | `JWT_SECRET` | si | pendiente |
 | `AUTH_REFRESH_PEPPER` | si | pendiente |
-| `FRONTEND_URL` | si | pendiente |
-| `APP_BASE_URL` | si | pendiente |
-| `ALLOWED_ORIGINS` | si | pendiente |
+| `FRONTEND_URL` | si | recomendado `https://pique.ar` |
+| `APP_BASE_URL` | si | recomendado `https://pique.ar` |
+| `ALLOWED_ORIGINS` | si | recomendado `https://pique.ar,https://www.pique.ar` |
 | `AUTH_COOKIE_SECURE=true` | si | pendiente |
-| `AUTH_COOKIE_SAMESITE` | si | pendiente |
+| `AUTH_COOKIE_SAMESITE` | si | recomendado `lax` |
 | `AUTH_TRUST_PROXY=true` si aplica | si, si hay proxy | pendiente |
 | `INTEGRATION_SECRETS_KEY` | si | pendiente |
 | `MERCADO_PAGO_ENABLED` | si | pendiente |
@@ -141,7 +141,7 @@ Reglas:
 | `MERCADO_PAGO_CLIENT_ID` | si, si MP entra | pendiente |
 | `MERCADO_PAGO_CLIENT_SECRET` | si, si MP entra | pendiente |
 | `MERCADO_PAGO_WEBHOOK_SECRET` | si, si MP entra | pendiente |
-| `MERCADO_PAGO_REDIRECT_URI` | si, si MP entra | pendiente |
+| `MERCADO_PAGO_REDIRECT_URI` | si, si MP entra | recomendado `https://pique.ar/api/integrations/mercadopago/callback` |
 | flags de WhatsApp | segun decision | pendiente |
 | Redis si aplica | segun arquitectura | pendiente |
 
@@ -149,8 +149,14 @@ Reglas:
 
 | Env | Obligatoria | Estado |
 |---|---:|---|
-| `NEXT_PUBLIC_API_URL` | si | pendiente |
-| `NEXT_PUBLIC_SITE_URL` | si | pendiente |
+| `NEXT_PUBLIC_API_URL` | si | recomendado `/api` |
+| `NEXT_PUBLIC_SITE_URL` | si | recomendado `https://pique.ar` |
+
+Nota:
+
+- `app.pique.ar` queda como opcion futura si se separa web publica y app.
+- `api.pique.ar` queda como opcion futura si mas adelante se separa backend.
+- para el piloto inicial preferimos mismo dominio con `/api`.
 
 ### 7.4 Decision de WhatsApp
 

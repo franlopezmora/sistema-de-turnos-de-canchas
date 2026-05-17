@@ -1,4 +1,4 @@
-# Pique (ex TuCancha)
+# Pique
 
 Monorepo del sistema SaaS multi-club para gestión operativa de canchas, reservas, caja y clientes.
 
@@ -26,6 +26,14 @@ Monorepo del sistema SaaS multi-club para gestión operativa de canchas, reserva
 Por defecto:
 - Backend: `http://localhost:3000`
 - Frontend: `http://localhost:3001`
+
+Documentación operativa relacionada:
+
+- setup local paso a paso: `docs/setup-local.md`
+- deploy y entornos: `README-DEPLOY.md` y `docs/deploy.md`
+- matriz de variables: `docs/env-matrix.md`
+- checklist de release: `docs/release-checklist.md`
+- piloto controlado: `docs/pilot-readiness.md`
 
 ## Autenticación oficial (MVP)
 

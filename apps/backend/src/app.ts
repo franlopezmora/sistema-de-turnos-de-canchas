@@ -157,7 +157,7 @@ export const createApp = () => {
   app.use('/api', WebhookRoutes);
 
   app.get('/', (_req: Request, res: Response) => {
-    res.json({ message: 'API Sistema de Turnos' });
+    res.json({ message: 'API Pique' });
   });
 
   app.get('/health', (_req: Request, res: Response) => {

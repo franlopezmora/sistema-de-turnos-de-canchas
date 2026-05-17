@@ -33,7 +33,8 @@ Recomendadas:
 - `REDIS_URL`
 - `READ_DATABASE_URL`
 - `AUTH_COOKIE_SAMESITE=lax`
-- `AUTH_COOKIE_DOMAIN=.tu-dominio.com` solo si frontend/backend comparten dominio padre y necesitás cookie compartida.
+- `AUTH_COOKIE_DOMAIN=` vacío por defecto si servís frontend y backend desde `https://pique.ar` + `/api`.
+- `AUTH_COOKIE_DOMAIN=.pique.ar` solo si más adelante separás subdominios y realmente necesitás cookie compartida.
 
 Si vas a habilitar checkout online con Mercado Pago por club:
 
@@ -86,10 +87,20 @@ Separar staging de producción de forma explícita:
 - worker/scheduler staging propios;
 - integración Mercado Pago configurada de forma independiente por club si se prueba checkout online.
 
-Topología mínima sugerida:
+Topología mínima sugerida para el piloto inicial:
 
-- `frontend-staging.tu-dominio`
-- `api-staging.tu-dominio`
+- `https://pique.ar` para frontend
+- `https://pique.ar/api` para backend
+- `postgres staging`
+- `redis staging`
+- `backend api`
+- `backend worker`
+- `backend scheduler`
+
+Alternativa futura si se separa web/app o backend:
+
+- `app-staging.pique.ar`
+- `api-staging.pique.ar`
 - `postgres staging`
 - `redis staging`
 - `backend api`
