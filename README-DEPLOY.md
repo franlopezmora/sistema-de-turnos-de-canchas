@@ -75,7 +75,30 @@ Si una migración falla:
 3. no compensar con `db push`;
 4. corregir con una nueva migración o reparar una migration no aplicada en entornos compartidos.
 
-## 4) CORS y cookies
+## 4) Arquitectura recomendada de staging
+
+Separar staging de producción de forma explícita:
+
+- frontend staging con URL propia;
+- backend staging con URL propia;
+- PostgreSQL staging propio;
+- Redis staging propio;
+- worker/scheduler staging propios;
+- integración Mercado Pago configurada de forma independiente por club si se prueba checkout online.
+
+Topología mínima sugerida:
+
+- `frontend-staging.tu-dominio`
+- `api-staging.tu-dominio`
+- `postgres staging`
+- `redis staging`
+- `backend api`
+- `backend worker`
+- `backend scheduler`
+
+No reutilizar la base productiva ni compartir secretos entre entornos.
+
+## 5) CORS y cookies
 
 - CORS debe permitir solo orígenes reales del frontend.
 - `credentials` está habilitado en backend y frontend.
@@ -88,7 +111,7 @@ Si una migración falla:
   - `AUTH_COOKIE_SECURE=true`
   - `AUTH_COOKIE_DOMAIN=` vacío para mantener cookie host-only del backend.
 
-## 5) Flujo de despliegue (resumen)
+## 6) Flujo de staging / despliegue (resumen)
 
 ```bash
 docker-compose build
@@ -97,7 +120,28 @@ docker-compose logs -f backend
 docker-compose logs -f frontend
 ```
 
-## 6) Validación post-deploy (auth)
+Para una DB nueva o local de prueba, el helper seguro es:
+
+```bash
+cd apps/backend
+npm run db:setup
+```
+
+Variables útiles:
+
+- `POSTGRES_DB=pique_staging`
+- `RUN_SEED=true`
+
+Ese helper:
+
+1. reutiliza el `postgres` local existente o levanta uno nuevo;
+2. crea la DB si falta;
+3. valida permiso de `btree_gist`;
+4. construye una imagen Linux del backend;
+5. corre `prisma migrate deploy` dentro de Linux;
+6. opcionalmente ejecuta seed.
+
+## 7) Validación post-deploy (auth)
 
 1. Login exitoso desde frontend.
 2. Requests autenticadas responden 200 usando cookies.
@@ -105,7 +149,15 @@ docker-compose logs -f frontend
 4. Logout invalida sesión y limpia estado.
 5. Sesión expirada redirige a login con mensaje entendible (sin stack trace).
 
-## 7) Riesgos comunes
+## 8) Contingencia / rollback mínimo
+
+- si una migración falla: detener el deploy, revisar `_prisma_migrations`, no seguir con `db push`;
+- si backend staging falla: redeployar la imagen anterior;
+- si frontend staging falla: redeployar el build anterior;
+- si Mercado Pago genera incidentes: desactivar `MERCADO_PAGO_ENABLED` o desconectar el club;
+- si seed falla: recrear DB staging limpia y repetir bootstrap controlado.
+
+## 9) Riesgos comunes
 
 - `ALLOWED_ORIGINS` sin configurar: puede bloquear frontend o abrir CORS más de lo deseado.
 - `AUTH_COOKIE_SECURE=false` en producción: sesión vulnerable o rechazada por navegador en escenarios cross-site.
