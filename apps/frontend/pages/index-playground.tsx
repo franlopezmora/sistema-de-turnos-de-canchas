@@ -947,7 +947,7 @@ export default function Home() {
                   )}
                 </div>
               ) : (
-                <Link href="/login" className="btn-aurora border-neon border-neon-slow rounded-full bg-p-surface text-ink-900 px-5 py-2 text-sm font-black hover:bg-lima-300 transition-colors">
+                <Link href="/login" className="btn-aurora border-neon border-neon-slow rounded-full border border-[var(--accent-border)] bg-[var(--brand)] text-[var(--brand-on)] px-4 py-[11px] text-[12px] font-extrabold uppercase tracking-[.06em] leading-none hover:bg-[var(--brand-hover)] transition-colors">
                   <span>Ingresar</span>
                 </Link>
               )}

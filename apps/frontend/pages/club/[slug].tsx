@@ -120,10 +120,10 @@ const PAGE_CSS = `
   .p-public-root.p-public-theme-light .cl-review-star { border-color:var(--border); background:var(--surface-2); color:var(--text-muted); }
   .p-public-root.p-public-theme-light .cl-review-textarea { background:var(--surface-1); border-color:var(--border); color:var(--text-primary); }
   .p-public-root.p-public-theme-light .cl-review-secondary { border-color:var(--border); color:var(--text-secondary); }
-  .cl-login-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:14px; padding:11px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; color:var(--text-secondary); font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:var(--font-sans); transition:background .15s,border-color .15s,color .15s; }
-  .cl-login-btn:hover { background:var(--surface-2); border-color:var(--border-strong); color:var(--text-primary); }
-  .p-public-root.p-public-theme-light .cl-login-btn { background:var(--surface-2); border-color:var(--border-strong); color:var(--text-secondary); }
-  .p-public-root.p-public-theme-light .cl-login-btn:hover { background:var(--surface-2); border-color:var(--border-strong); color:var(--text-primary); }
+  .cl-login-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:14px; padding:11px 16px; background:var(--brand); border:1px solid var(--accent-border); border-radius:12px; color:var(--brand-on); font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:var(--font-sans); transition:background .15s,border-color .15s,color .15s; }
+  .cl-login-btn:hover { background:var(--brand-hover); border-color:var(--accent-border-strong); color:var(--brand-on); }
+  .p-public-root.p-public-theme-light .cl-login-btn { background:var(--brand); border-color:var(--accent-border); color:var(--brand-on); }
+  .p-public-root.p-public-theme-light .cl-login-btn:hover { background:var(--brand-hover); border-color:var(--accent-border-strong); color:var(--brand-on); }
 `;
 
 export default function ClubPage() {

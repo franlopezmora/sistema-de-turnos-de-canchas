@@ -60,10 +60,12 @@ const NAV_CSS = `
   .p-player-actions { display:flex; align-items:center; gap:8px; position:relative; }
   .p-player-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; padding:8px 14px; border-radius:var(--r-pill); border:1px solid var(--border); background:var(--surface-1); color:var(--text-primary); font-family:var(--font-sans); font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; text-decoration:none; transition:background .15s,border-color .15s,transform .15s; }
   .p-player-btn:hover { background:var(--surface-2); border-color:var(--border-strong); transform:translateY(-1px); }
-  .p-player-btn-accent { background:var(--brand); color:var(--brand-on); border-color:var(--accent-fg); }
-  .p-player-btn-accent:hover { background:var(--brand-hover); }
+  .p-player-btn-accent { background:var(--brand); color:var(--brand-on); border-color:var(--accent-border); text-shadow:none; box-shadow:none; }
+  .p-player-btn-accent:hover { background:var(--brand-hover); border-color:var(--accent-border-strong); color:var(--brand-on); }
+  .p-player-btn-accent span { color:var(--brand-on); }
+  .p-player-btn-accent:hover span { color:var(--brand-on); }
   .p-player-theme svg { width:14px; height:14px; }
-  .p-player-login { white-space:nowrap; }
+  .p-player-login { white-space:nowrap; line-height:1; min-height:40px; padding:11px 16px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--brand-on); }
   .p-player-menu-meta { padding:18px 18px 16px; text-align:center; border-bottom:1px solid var(--border); }
   .p-player-menu-role { margin-top:4px; color:var(--text-muted); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
   .p-player-menu-body { padding:8px; display:flex; flex-direction:column; gap:4px; }
