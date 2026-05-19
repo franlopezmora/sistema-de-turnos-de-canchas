@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import AdminToast from './AdminToast';
 import {
@@ -215,16 +216,32 @@ export default function AdminPlaygroundShell({
       <div className="flex h-full w-full flex-col">
         <header className="relative flex h-16 items-center overflow-visible bg-p-surface border-b border-p-border px-4 lg:px-6" style={{ zIndex: ADMIN_Z_INDEX.shellHeader }}>
           <div className="hidden w-[168px] items-center gap-2 overflow-hidden transition-[width] duration-200 ease-out lg:flex">
-            <PiqueLogo
-              variant={isSidebarCollapsed ? (isLight ? 'isotipo' : 'isotipoDark') : (isLight ? 'horizontal' : 'horizontalDark')}
-              className={`transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
-                isSidebarCollapsed ? 'h-8 w-8' : 'h-9 w-auto'
-              }`}
-            />
+            <Link
+              href="https://pique.ar"
+              aria-label="Ir a pique.ar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center"
+            >
+              <PiqueLogo
+                variant={isSidebarCollapsed ? (isLight ? 'isotipo' : 'isotipoDark') : (isLight ? 'horizontal' : 'horizontalDark')}
+                className={`transition-[opacity,transform,max-width,filter] duration-200 ease-out ${
+                  isSidebarCollapsed ? 'h-8 w-8' : 'h-9 w-auto'
+                }`}
+              />
+            </Link>
           </div>
 
           <div className="flex items-center gap-2 lg:hidden">
-            <PiqueLogo variant={isLight ? 'horizontal' : 'horizontalDark'} className="h-9 w-auto" />
+            <Link
+              href="https://pique.ar"
+              aria-label="Ir a pique.ar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center"
+            >
+              <PiqueLogo variant={isLight ? 'horizontal' : 'horizontalDark'} className="h-9 w-auto" />
+            </Link>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
