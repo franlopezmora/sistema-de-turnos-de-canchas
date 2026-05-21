@@ -13,7 +13,7 @@ import AgendaSlotLayer from '../../components/admin/agenda/AgendaSlotLayer';
 import AgendaTimeGutter from '../../components/admin/agenda/AgendaTimeGutter';
 import AgendaToolbar from '../../components/admin/agenda/AgendaToolbar';
 import BookingHoverCard from '../../components/admin/agenda/BookingHoverCard';
-import ChangeTitularModal from '../../components/admin/agenda/ChangeTitularModal';
+import ChangeTitularModal, { type ChangeTitularCandidate } from '../../components/admin/agenda/ChangeTitularModal';
 import DuplicateClientDecisionModal from '../../components/admin/agenda/DuplicateClientDecisionModal';
 import PlaytomicPaymentModal from '../../components/admin/payments/PlaytomicPaymentModal';
 import PaymentRegistrationDrawer from '../../components/admin/payments/PaymentRegistrationDrawer';
@@ -190,6 +190,11 @@ type Participant = {
   isOwner: boolean;
   sourceType: 'clubClient' | 'systemUser' | 'guest';
   entityRef?: string;
+  selectedUserId?: number;
+  personKind?: 'linked' | 'clubClient' | 'systemUser' | 'newClientSuggestion';
+  personKey?: string;
+  personSearchQuery?: string;
+  badges?: string[];
   paymentMethod: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
   customPrice: number | null;
 };
@@ -203,6 +208,11 @@ type ParticipantSuggestion = {
   name: string;
   contact?: string;
   dni?: string;
+  personKind?: Participant['personKind'];
+  personKey?: string;
+  personSearchQuery?: string;
+  badges?: string[];
+  selectedUserId?: number;
 };
 
 type BookingKind = 'regular' | 'recurringV2' | 'privateClass' | 'courseClass' | 'block';
@@ -1512,6 +1522,21 @@ function resolveParticipantClientId(participant?: Participant | null) {
   return '';
 }
 
+function resolveParticipantSelectedUserId(participant?: Participant | null) {
+  const direct = Number(participant?.selectedUserId || 0);
+  if (Number.isInteger(direct) && direct > 0) return direct;
+  const ref = String(participant?.entityRef || '').trim();
+  if (ref.startsWith('user:')) {
+    const raw = Number(ref.slice('user:'.length).trim());
+    return Number.isInteger(raw) && raw > 0 ? raw : 0;
+  }
+  if (ref.startsWith('booking-user:')) {
+    const raw = Number(ref.slice('booking-user:'.length).trim());
+    return Number.isInteger(raw) && raw > 0 ? raw : 0;
+  }
+  return 0;
+}
+
 function normalizeText(value: unknown) {
   return String(value || '')
     .normalize('NFD')
@@ -1580,6 +1605,23 @@ function buildDefaultParticipantsForBooking(booking: Booking): Participant[] {
           paid: booking.paymentState === 'paid',
           sourceType: ownerSourceType,
           entityRef: ownerEntityRef,
+          selectedUserId: Number.isFinite(Number(booking.userId || 0)) && Number(booking.userId) > 0 ? Number(booking.userId) : undefined,
+          personKind:
+            booking.clientId && booking.userId
+              ? 'linked'
+              : booking.clientId
+                ? 'clubClient'
+                : booking.userId
+                  ? 'systemUser'
+                  : undefined,
+          badges:
+            booking.clientId && booking.userId
+              ? ['Cliente del club', 'Usuario Pique']
+              : booking.clientId
+                ? ['Cliente del club']
+                : booking.userId
+                  ? ['Usuario Pique']
+                  : undefined,
         }
       : { ...participant, paid: booking.paymentState === 'paid' }
   );
@@ -2065,8 +2107,12 @@ export default function AdminAgendaPlaygroundPage() {
   const [changeTitularLoading, setChangeTitularLoading] = useState(false);
   const [changeTitularSubmitting, setChangeTitularSubmitting] = useState(false);
   const [changeTitularError, setChangeTitularError] = useState('');
-  const [changeTitularCandidates, setChangeTitularCandidates] = useState<Array<{ id: string; name: string; phone?: string; email?: string }>>([]);
-  const [changeTitularSelectedClientId, setChangeTitularSelectedClientId] = useState('');
+  const [changeTitularCandidates, setChangeTitularCandidates] = useState<ChangeTitularCandidate[]>([]);
+  const [changeTitularSelectedKey, setChangeTitularSelectedKey] = useState('');
+  const [changeTitularDraftName, setChangeTitularDraftName] = useState('');
+  const [changeTitularDraftPhone, setChangeTitularDraftPhone] = useState('');
+  const [changeTitularDraftEmail, setChangeTitularDraftEmail] = useState('');
+  const [changeTitularDraftDni, setChangeTitularDraftDni] = useState('');
   const [bookingKindMenuOpen, setBookingKindMenuOpen] = useState(false);
   const [editSeriesScopeModalOpen, setEditSeriesScopeModalOpen] = useState(false);
   const [pendingSeriesScopeSave, setPendingSeriesScopeSave] = useState<EditSeriesScope | null>(null);
@@ -2634,16 +2680,23 @@ export default function AdminAgendaPlaygroundPage() {
     setChangeTitularError('');
     const timer = window.setTimeout(async () => {
       try {
-        const rows = await ClubAdminService.getClients(slug, query);
+        const rows = await ClubAdminService.searchPeople(slug, query);
         if (cancelled) return;
         const normalizedRows = (Array.isArray(rows) ? rows : [])
-          .map((client: any) => ({
-            id: String(client?.id || '').trim().replace(/^client-/, ''),
-            name: String(client?.name || '').trim() || 'Cliente sin nombre',
-            phone: String(client?.phone || '').trim() || undefined,
-            email: String(client?.email || '').trim() || undefined,
+          .filter((row: any) => String(row?.kind || '').trim() !== 'newClientSuggestion')
+          .map((row: any) => ({
+            key: String(row?.personKey || row?.clientId || row?.userId || '').trim(),
+            kind: String(row?.kind || '').trim() as ChangeTitularCandidate['kind'],
+            clientId: String(row?.clientId || '').trim() || undefined,
+            userId: Number.isFinite(Number(row?.userId || 0)) && Number(row?.userId) > 0 ? Number(row.userId) : undefined,
+            name: String(row?.displayName || '').trim() || 'Persona sin nombre',
+            phone: String(row?.phone || '').trim() || undefined,
+            email: String(row?.email || '').trim() || undefined,
+            badges: Array.isArray(row?.badges) ? row.badges.filter(Boolean).map(String) : [],
+            personKey: String(row?.personKey || '').trim() || undefined,
+            searchQuery: query,
           }))
-          .filter((client: any) => client.id.length > 0);
+          .filter((candidate: any) => candidate.key.length > 0);
         setChangeTitularCandidates(normalizedRows);
       } catch (error: any) {
         if (cancelled) return;
@@ -2667,7 +2720,11 @@ export default function AdminAgendaPlaygroundPage() {
     setChangeTitularReason('');
     setChangeTitularError('');
     setChangeTitularCandidates([]);
-    setChangeTitularSelectedClientId('');
+    setChangeTitularSelectedKey('');
+    setChangeTitularDraftName('');
+    setChangeTitularDraftPhone('');
+    setChangeTitularDraftEmail('');
+    setChangeTitularDraftDni('');
   }, []);
 
   const closeChangeTitularModal = useCallback(() => {
@@ -2677,31 +2734,49 @@ export default function AdminAgendaPlaygroundPage() {
     setChangeTitularReason('');
     setChangeTitularError('');
     setChangeTitularCandidates([]);
-    setChangeTitularSelectedClientId('');
+    setChangeTitularSelectedKey('');
+    setChangeTitularDraftName('');
+    setChangeTitularDraftPhone('');
+    setChangeTitularDraftEmail('');
+    setChangeTitularDraftDni('');
   }, [changeTitularSubmitting]);
 
   const changeTitularSelectedCandidate = useMemo(
     () =>
       changeTitularCandidates.find(
-        (candidate) => String(candidate.id) === String(changeTitularSelectedClientId)
+        (candidate) => String(candidate.key) === String(changeTitularSelectedKey)
       ) || null,
-    [changeTitularCandidates, changeTitularSelectedClientId]
+    [changeTitularCandidates, changeTitularSelectedKey]
   );
 
   const submitChangeTitular = useCallback(async () => {
     if (changeTitularSubmitting) return;
     const bookingId = Number(editingBookingId || 0);
-    const newClientId = String(changeTitularSelectedClientId || '').trim();
+    const selectedCandidate = changeTitularSelectedCandidate;
+    const newClientId = String(selectedCandidate?.kind === 'clubClient' ? (selectedCandidate?.clientId || '') : '').trim();
+    const selectedUserId = Number(selectedCandidate?.userId || 0);
+    const changeTitularOwnerSelection =
+      selectedCandidate && (selectedCandidate.kind === 'linked' || selectedCandidate.kind === 'systemUser') && selectedUserId > 0
+        ? {
+            kind: selectedCandidate.kind,
+            userId: selectedUserId,
+            personKey: String(selectedCandidate.personKey || '').trim(),
+            searchQuery: String(selectedCandidate.searchQuery || '').trim(),
+          }
+        : null;
+    const isDraftMode =
+      !selectedCandidate &&
+      String(changeTitularDraftName || '').trim().length >= 2;
     if (!Number.isFinite(bookingId) || bookingId <= 0) {
       setChangeTitularError('Reserva inválida.');
       return;
     }
-    if (!newClientId) {
-      setChangeTitularError('Seleccioná un cliente para continuar.');
+    if (!newClientId && !changeTitularOwnerSelection && !isDraftMode) {
+      setChangeTitularError('Seleccioná una persona o cargá un nuevo titular para continuar.');
       return;
     }
     const currentClientId = String(editingBooking?.clientId || '').trim();
-    if (currentClientId && currentClientId === newClientId) {
+    if (currentClientId && newClientId && currentClientId === newClientId) {
       setChangeTitularError('Ese cliente ya es el titular actual.');
       return;
     }
@@ -2710,7 +2785,18 @@ export default function AdminAgendaPlaygroundPage() {
     setChangeTitularError('');
     try {
       await changeBookingClient(bookingId, {
-        newClientId,
+        ...(newClientId ? { newClientId } : {}),
+        ...(changeTitularOwnerSelection ? { ownerSelection: changeTitularOwnerSelection } : {}),
+        ...(!newClientId && !changeTitularOwnerSelection && isDraftMode
+          ? {
+              newClient: {
+                name: String(changeTitularDraftName || '').trim(),
+                phone: String(changeTitularDraftPhone || '').trim() || undefined,
+                email: String(changeTitularDraftEmail || '').trim() || undefined,
+                dni: String(changeTitularDraftDni || '').trim() || undefined,
+              },
+            }
+          : {}),
         reason: String(changeTitularReason || '').trim() || undefined,
       });
       await reloadSchedule();
@@ -2726,7 +2812,11 @@ export default function AdminAgendaPlaygroundPage() {
   }, [
     changeTitularReason,
     changeTitularSubmitting,
-    changeTitularSelectedClientId,
+    changeTitularSelectedCandidate,
+    changeTitularDraftDni,
+    changeTitularDraftEmail,
+    changeTitularDraftName,
+    changeTitularDraftPhone,
     closeChangeTitularModal,
     editingBooking?.clientId,
     editingBookingId,
@@ -4253,7 +4343,7 @@ export default function AdminAgendaPlaygroundPage() {
 
   const updateParticipant = useCallback((
     id: string,
-    patch: Partial<Pick<Participant, 'name' | 'contact' | 'dni' | 'sourceType' | 'entityRef' | 'paymentMethod' | 'customPrice'>>
+    patch: Partial<Participant>
   ) => {
     setParticipants((previous) =>
       previous.map((participant) =>
@@ -4397,6 +4487,11 @@ export default function AdminAgendaPlaygroundPage() {
       dni: currentOwner?.sourceType === 'guest' ? currentOwner.dni : undefined,
       sourceType: 'guest',
       entityRef: undefined,
+      selectedUserId: undefined,
+      personKind: undefined,
+      personKey: undefined,
+      personSearchQuery: undefined,
+      badges: undefined,
     });
     const query = String(rawValue || '').trim();
     if (!query) {
@@ -4413,24 +4508,38 @@ export default function AdminAgendaPlaygroundPage() {
         setSimplifiedOwnerSuggestions([]);
         return;
       }
-      const clients = await ClubAdminService.getClients(slug, query);
-      const ownerSuggestions: ParticipantSuggestion[] = (Array.isArray(clients) ? clients : [])
+      const rows = await ClubAdminService.searchPeople(slug, query);
+      const ownerSuggestions: ParticipantSuggestion[] = (Array.isArray(rows) ? rows : [])
         .slice(0, 8)
-        .map((client: any, index: number) => {
-          const phone = String(client?.phone || '').trim();
-          const email = String(client?.email || '').trim();
-          const rawId = String(client?.id || '').trim();
-          const normalizedClientId = rawId.startsWith('client-') ? rawId.slice('client-'.length).trim() : rawId;
-          return {
-            id: `owner-${normalizedClientId || index}`,
-            label: String(client?.name || query),
-            secondary: phone || email || String(client?.dni || '').trim() || 'Cliente del club',
-            sourceType: 'clubClient',
-            entityRef: normalizedClientId ? `client:${normalizedClientId}` : undefined,
-            name: String(client?.name || query),
-            contact: phone || email || '',
-            dni: String(client?.dni || '').trim() || undefined,
-          } satisfies ParticipantSuggestion;
+        .flatMap((row: any, index: number) => {
+          const kind = String(row?.kind || '').trim();
+          if (kind === 'newClientSuggestion') return [];
+          const phone = String(row?.phone || '').trim();
+          const email = String(row?.email || '').trim().toLowerCase();
+          const sourceType: Participant['sourceType'] =
+            kind === 'clubClient' ? 'clubClient' : 'systemUser';
+          const clientId = String(row?.clientId || '').trim();
+          const userId = Number(row?.userId || 0);
+          return [{
+            id: `owner-${String(row?.personKey || row?.clientId || row?.userId || index)}`,
+            label: String(row?.displayName || query),
+            secondary: phone || email || String(row?.dni || '').trim() || 'Persona de Pique',
+            sourceType,
+            entityRef:
+              sourceType === 'clubClient' && clientId
+                ? `client:${clientId}`
+                : Number.isFinite(userId) && userId > 0
+                  ? `user:${userId}`
+                  : undefined,
+            name: String(row?.displayName || query),
+            contact: buildParticipantContactFromFields(phone, email),
+            dni: String(row?.dni || '').trim() || undefined,
+            personKind: kind as Participant['personKind'],
+            personKey: String(row?.personKey || '').trim() || undefined,
+            personSearchQuery: query,
+            badges: Array.isArray(row?.badges) ? row.badges.filter(Boolean).map(String) : undefined,
+            selectedUserId: Number.isFinite(userId) && userId > 0 ? userId : undefined,
+          } satisfies ParticipantSuggestion];
         });
       setSimplifiedOwnerSuggestions(ownerSuggestions);
     } catch {
@@ -4447,6 +4556,11 @@ export default function AdminAgendaPlaygroundPage() {
       dni: suggestion.dni,
       sourceType: suggestion.sourceType,
       entityRef: suggestion.entityRef,
+      selectedUserId: suggestion.selectedUserId,
+      personKind: suggestion.personKind,
+      personKey: suggestion.personKey,
+      personSearchQuery: suggestion.personSearchQuery,
+      badges: suggestion.badges,
     });
     setSimplifiedOwnerSuggestionsOpen(false);
     setSimplifiedOwnerSearchLoading(false);
@@ -7550,10 +7664,23 @@ export default function AdminAgendaPlaygroundPage() {
     }
 
     const ownerClientId = resolveParticipantClientId(owner);
+    const ownerSelectedUserId = resolveParticipantSelectedUserId(owner);
     const ownerPhone = resolvePlaygroundClientPhone(owner);
     const ownerEmail = resolvePlaygroundClientEmail(owner);
     const ownerDni = resolvePlaygroundClientDni(owner);
-    if (!ownerClientId && !ownerPhone) {
+    const ownerPersonSelection =
+      !ownerClientId &&
+      ownerSelectedUserId > 0 &&
+      String(owner?.personKey || '').trim() &&
+      String(owner?.personSearchQuery || '').trim().length >= 2
+        ? {
+            kind: (owner.personKind === 'linked' ? 'linked' : 'systemUser') as 'linked' | 'systemUser',
+            userId: ownerSelectedUserId,
+            personKey: String(owner.personKey || '').trim(),
+            searchQuery: String(owner.personSearchQuery || '').trim(),
+          }
+        : null;
+    if (!ownerClientId && !ownerPersonSelection && !ownerPhone) {
       setBlockingFieldError('owner', 'Cargá el teléfono del titular o seleccioná un cliente existente.');
       return;
     }
@@ -7930,6 +8057,8 @@ export default function AdminAgendaPlaygroundPage() {
                   ...(Number.isFinite(repetitionsPerDay) ? { repetitions: repetitionsPerDay } : {}),
                   ...(ownerClientId
                     ? { clientId: ownerClientId }
+                    : ownerPersonSelection
+                      ? { ownerSelection: ownerPersonSelection }
                     : {
                         client: {
                           name: owner.name.trim(),
@@ -7998,6 +8127,8 @@ export default function AdminAgendaPlaygroundPage() {
             ...(Number.isFinite(repetitionsPerDay) ? { repetitions: repetitionsPerDay } : {}),
             ...(ownerClientId
               ? { clientId: ownerClientId }
+              : ownerPersonSelection
+                ? { ownerSelection: ownerPersonSelection }
               : {
                   client: {
                     name: owner.name.trim(),
@@ -8217,6 +8348,8 @@ export default function AdminAgendaPlaygroundPage() {
           durationMinutes: selectionMinutes,
           ...(ownerClientId
             ? { clientId: ownerClientId }
+            : ownerPersonSelection
+              ? { ownerSelection: ownerPersonSelection }
             : {
                 client: {
                   name: owner.name.trim(),
@@ -12131,6 +12264,11 @@ export default function AdminAgendaPlaygroundPage() {
                                           dni: undefined,
                                           sourceType: 'guest',
                                           entityRef: undefined,
+                                          selectedUserId: undefined,
+                                          personKind: undefined,
+                                          personKey: undefined,
+                                          personSearchQuery: undefined,
+                                          badges: undefined,
                                         });
                                         setSimplifiedOwnerAdded(false);
                                         setSimplifiedOwnerPaymentMethodDraft('');
@@ -12186,6 +12324,18 @@ export default function AdminAgendaPlaygroundPage() {
                                           className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
                                         >
                                           <span className="block text-[12px] font-semibold text-p-text">{suggestion.label}</span>
+                                          {Array.isArray(suggestion.badges) && suggestion.badges.length > 0 && (
+                                            <span className="mt-1 flex flex-wrap gap-1">
+                                              {suggestion.badges.map((badge) => (
+                                                <span
+                                                  key={`${suggestion.id}-${badge}`}
+                                                  className="inline-flex items-center rounded-full border border-p-border bg-p-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-p-text-muted"
+                                                >
+                                                  {badge}
+                                                </span>
+                                              ))}
+                                            </span>
+                                          )}
                                           {suggestion.secondary && (
                                             <span className="block text-[11px] text-p-text-muted">{suggestion.secondary}</span>
                                           )}
@@ -12195,7 +12345,7 @@ export default function AdminAgendaPlaygroundPage() {
                                         <>
                                           {simplifiedOwnerSuggestions.length === 0 && !simplifiedOwnerSearchLoading && (
                                             <p className="px-2 py-1 text-[11px] text-p-text-muted">
-                                              No encontramos clientes con ese dato.
+                                              No encontramos personas con ese dato.
                                             </p>
                                           )}
                                           <button
@@ -12209,6 +12359,11 @@ export default function AdminAgendaPlaygroundPage() {
                                                 dni: undefined,
                                                 sourceType: 'guest',
                                                 entityRef: undefined,
+                                                selectedUserId: undefined,
+                                                personKind: undefined,
+                                                personKey: undefined,
+                                                personSearchQuery: undefined,
+                                                badges: undefined,
                                               });
                                               setSimplifiedOwnerSuggestionsOpen(false);
                                               setSimplifiedOwnerSearchLoading(false);
@@ -13386,14 +13541,44 @@ export default function AdminAgendaPlaygroundPage() {
         search={changeTitularSearch}
         reason={changeTitularReason}
         candidates={changeTitularCandidates}
-        selectedClientId={changeTitularSelectedClientId}
+        selectedKey={changeTitularSelectedKey}
         selectedCandidate={changeTitularSelectedCandidate}
+        draftName={changeTitularDraftName}
+        draftPhone={changeTitularDraftPhone}
+        draftEmail={changeTitularDraftEmail}
+        draftDni={changeTitularDraftDni}
         loading={changeTitularLoading}
         submitting={changeTitularSubmitting}
         error={changeTitularError}
-        onSearchChange={setChangeTitularSearch}
+        onSearchChange={(value) => {
+          setChangeTitularSearch(value);
+          setChangeTitularSelectedKey('');
+          setChangeTitularDraftName('');
+          setChangeTitularDraftPhone('');
+          setChangeTitularDraftEmail('');
+          setChangeTitularDraftDni('');
+        }}
         onReasonChange={setChangeTitularReason}
-        onSelectClient={setChangeTitularSelectedClientId}
+        onSelectCandidate={(candidateKey) => {
+          setChangeTitularSelectedKey(candidateKey);
+          setChangeTitularDraftName('');
+          setChangeTitularDraftPhone('');
+          setChangeTitularDraftEmail('');
+          setChangeTitularDraftDni('');
+          setChangeTitularError('');
+        }}
+        onDraftNameChange={setChangeTitularDraftName}
+        onDraftPhoneChange={setChangeTitularDraftPhone}
+        onDraftEmailChange={setChangeTitularDraftEmail}
+        onDraftDniChange={setChangeTitularDraftDni}
+        onUseNewClient={() => {
+          setChangeTitularSelectedKey('');
+          setChangeTitularDraftName(String(changeTitularSearch || '').trim());
+          setChangeTitularDraftPhone('');
+          setChangeTitularDraftEmail('');
+          setChangeTitularDraftDni('');
+          setChangeTitularError('');
+        }}
         onClose={closeChangeTitularModal}
         onSubmit={() => void submitChangeTitular()}
       />

@@ -207,6 +207,23 @@ export const createBooking = async (
     durationMinutes?: number;
     applyDiscount?: boolean;
     clientId?: string;
+    ownerSelection?:
+      | {
+          kind: 'linked' | 'systemUser';
+          userId: number;
+          personKey: string;
+          searchQuery: string;
+        }
+      | {
+          kind: 'newClient';
+          name: string;
+          phone?: string;
+          phoneCountryCode?: string;
+          phoneNumberLocal?: string;
+          email?: string;
+          dni?: string;
+          duplicateResolution?: 'CREATE_NEW';
+        };
     client?: {
       name: string;
       phone?: string;
@@ -229,6 +246,7 @@ export const createBooking = async (
         slotTime
       } : { startDateTime: date.toISOString() }),
       ...(options?.clientId ? { clientId: options.clientId } : {}),
+      ...(options?.ownerSelection ? { ownerSelection: options.ownerSelection } : {}),
       ...(options?.client ? { client: options.client } : {}),
       ...(Number.isFinite(options?.durationMinutes) ? { durationMinutes: options?.durationMinutes } : {}),
       ...(options?.applyDiscount === undefined ? {} : { applyDiscount: options.applyDiscount })
@@ -547,17 +565,38 @@ export const completeBooking = async (bookingId: number) => {
 export const changeBookingClient = async (
   bookingId: number,
   input: {
-    newClientId: string;
+    newClientId?: string;
+    newClient?: {
+      name: string;
+      phone?: string;
+      email?: string;
+      dni?: string;
+      duplicateResolution?: 'CREATE_NEW';
+    };
+    ownerSelection?: {
+      kind: 'linked' | 'systemUser' | 'newClient';
+      userId?: number;
+      personKey?: string;
+      searchQuery?: string;
+      name?: string;
+      phone?: string;
+      email?: string;
+      dni?: string;
+      duplicateResolution?: 'CREATE_NEW';
+    };
     reason?: string;
   }
 ) => {
+  const payload: Record<string, unknown> = {
+    ...(String(input?.newClientId || '').trim() ? { newClientId: String(input?.newClientId || '').trim() } : {}),
+    ...(input?.newClient ? { newClient: input.newClient } : {}),
+    ...(input?.ownerSelection ? { ownerSelection: input.ownerSelection } : {}),
+    ...(String(input?.reason || '').trim() ? { reason: String(input.reason).trim() } : {}),
+  };
   const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/client`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      newClientId: String(input?.newClientId || '').trim(),
-      ...(String(input?.reason || '').trim() ? { reason: String(input.reason).trim() } : {}),
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
