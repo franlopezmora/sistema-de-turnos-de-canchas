@@ -59,7 +59,8 @@ const CHECKOUT_CSS = `
   .checkout-actions { display:flex; gap:10px; padding-top:16px; }
   .checkout-secondary,.checkout-primary { height:48px; border-radius:15px; font-family:var(--font-sans); font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; padding:0 18px; }
   .checkout-secondary { flex:0 0 auto; min-width:154px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-secondary); }
-  .checkout-primary { flex:1; border:none; background:var(--brand); color:var(--brand-on); }
+  .checkout-primary { flex:1; border:1px solid var(--accent-border-subtle); background:var(--positive-bg); color:var(--brand); }
+  .checkout-primary:hover { border-color:var(--accent-border); color:var(--brand); }
   .checkout-primary:disabled { cursor:not-allowed; opacity:.65; }
   .checkout-success { max-width:720px; margin:0 auto; text-align:center; }
   .checkout-success-icon { width:68px; height:68px; border-radius:22px; margin:0 auto 18px; display:flex; align-items:center; justify-content:center; background:var(--positive-bg); border:1px solid var(--accent-border-subtle); color:var(--accent-fg); }
