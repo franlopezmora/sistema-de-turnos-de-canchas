@@ -495,6 +495,20 @@ router.get('/:slug/admin/clients-list',
     clubController.getClubClientsList 
 );
 
+router.get('/:slug/admin/participants-search',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    clubController.searchClubParticipants
+);
+
+router.get('/:slug/admin/person-search',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    clubController.searchClubPeople
+);
+
 router.post('/:slug/admin/clients',
     authMiddleware,
     verifyClubAccess,

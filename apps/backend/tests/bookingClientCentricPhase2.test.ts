@@ -12,6 +12,7 @@ type TxMock = {
   };
   client: {
     findFirst: (args: any) => Promise<any>;
+    findMany?: (args: any) => Promise<any[]>;
     findUnique: (args: any) => Promise<any>;
     update: (args: any) => Promise<any>;
     create: (args: any) => Promise<any>;
@@ -211,6 +212,7 @@ test('usuario autenticado crea booking con clientId resuelto', async () => {
         }
         return null;
       },
+      findMany: async () => [],
       findUnique: async () => null,
       update: async (args: any) => ({ id: args.where.id, ...args.data }),
       create: async (args: any) => ({ id: 'client-user', ...args.data })
@@ -309,10 +311,16 @@ test('reserva pública con usuario logueado conserva Booking.userId y no auto-li
     client: {
       findFirst: async (args: any) => {
         if (args?.where?.userId) return null;
-        if (args?.where?.email === 'ada@example.com') {
-          return { id: 'client-preexisting', clubId: 5, name: 'Ada Preexisting', userId: null, email: 'ada@example.com', phone: '+5493511234567' };
-        }
         return null;
+      },
+      findMany: async (args: any) => {
+        if (args?.where?.email === 'ada@example.com') {
+          return [{ id: 'client-preexisting', clubId: 5, name: 'Ada Preexisting', userId: null, email: 'ada@example.com', phone: '+5493511234567', createdAt: new Date('2026-05-19T20:00:00.000Z') }];
+        }
+        if (Array.isArray(args?.where?.phone?.in)) {
+          return [{ id: 'client-preexisting', clubId: 5, name: 'Ada Preexisting', userId: null, email: 'ada@example.com', phone: '+5493511234567', createdAt: new Date('2026-05-19T20:00:00.000Z') }];
+        }
+        return [];
       },
       findUnique: async () => null,
       update: async (args: any) => {
@@ -348,7 +356,8 @@ test('reserva pública con usuario logueado conserva Booking.userId y no auto-li
 
     assert.equal(result.id, 905);
     assert.equal(createdBookingData.userId, 7);
-    assert.equal(createdClientData.userId, null);
+    assert.equal(createdBookingData.clientId, 'client-preexisting');
+    assert.equal(createdClientData, null);
     assert.equal(clientUpdateCalls, 0);
   });
 });
@@ -474,24 +483,45 @@ test('alta rápida sin teléfono falla explícitamente', async () => {
   );
 });
 
-test('booking admin con identidad ambigua devuelve CLIENT_POSSIBLE_DUPLICATE usando teléfono canónico', async () => {
+test('booking admin reutiliza client existente por identidad fuerte y no crea duplicado', async () => {
   const service = buildServiceHarness();
   let seenPhoneWhere: string | null = null;
+  let createdData: any = null;
 
   const tx: TxMock = {
     booking: {
       findMany: async () => [],
-      create: async () => {
-        throw new Error('No debería crear reserva cuando hay identidad ambigua');
+      create: async (args: any) => {
+        createdData = args.data;
+        return {
+          id: 903,
+          ...args.data,
+          user: null,
+          client: { id: args.data.clientId, name: 'Cliente Canonico', phone: '+5493511234567', email: 'cliente.local@example.com', dni: null },
+          court: { id: 10, name: 'Cancha 1', isIndoor: false, surface: 'cemento', isUnderMaintenance: false, club: { id: 5, slug: 'club-demo', name: 'Club Demo', addressLine: 'Calle 123', city: 'Cordoba', phone: '+5493511234567' } },
+          activityType: { id: 20, name: 'Futbol 5' }
+        };
       }
     },
     client: {
       findFirst: async (args: any) => {
         if (Array.isArray(args?.where?.phone?.in)) {
           seenPhoneWhere = String(args.where.phone.in[0] || '');
-          return { id: 'client-canonical', clubId: 5, name: 'Cliente Canonico', phone: '+5493511234567' };
         }
         return null;
+      },
+      findMany: async (args: any) => {
+        if (Array.isArray(args?.where?.phone?.in)) {
+          seenPhoneWhere = String(args.where.phone.in[0] || '');
+          return [{ id: 'client-canonical', clubId: 5, name: 'Cliente Canonico', phone: '+5493511234567', userId: null, createdAt: new Date('2026-05-19T21:02:15.000Z') }];
+        }
+        if (args?.where?.email) {
+          return [];
+        }
+        if (args?.where?.dni) {
+          return [];
+        }
+        return [];
       },
       findUnique: async (args: any) => {
         if (args?.where?.id === 'client-canonical') {
@@ -514,31 +544,24 @@ test('booking admin con identidad ambigua devuelve CLIENT_POSSIBLE_DUPLICATE usa
   };
 
   await withMockedTransaction(tx, async () => {
-    await assert.rejects(
-      () =>
-        service.createBooking(
-          null,
-          10,
-          new Date('2026-04-10T13:00:00.000Z'),
-          20,
-          60,
-          true,
-          {
-            clientDraft: {
-              name: 'Cliente Local',
-              phone: '+54 9 351 123-4567',
-              email: 'cliente.local@example.com'
-            }
-          }
-        ),
-      (error: any) => {
-        assert.equal(error?.code, 'CLIENT_POSSIBLE_DUPLICATE');
-        assert.equal(Array.isArray(error?.details?.candidateClientIds), true);
-        assert.equal(error?.details?.candidateClientIds?.includes('client-canonical'), true);
-        return true;
+    const booking = await service.createBooking(
+      null,
+      10,
+      new Date('2026-04-10T13:00:00.000Z'),
+      20,
+      60,
+      true,
+      {
+        clientDraft: {
+          name: 'Cliente Local',
+          phone: '+54 9 351 123-4567',
+          email: 'cliente.local@example.com'
+        }
       }
     );
 
+    assert.equal(booking.id, 903);
+    assert.equal(createdData.clientId, 'client-canonical');
     assert.equal(seenPhoneWhere, '+5493511234567');
   });
 });

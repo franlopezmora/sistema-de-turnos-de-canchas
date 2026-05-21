@@ -213,6 +213,7 @@ test('admin puede crear Client rápido y luego FixedBooking', async () => {
       transaction: async (fn) => fn({
         client: {
           findFirst: async () => null,
+          findMany: async () => [],
           findUnique: async () => null,
           update: async (args: any) => ({ id: args.where.id, ...args.data }),
           create: async (args: any) => ({ id: 'client-new', ...args.data })
@@ -288,10 +289,16 @@ test('fixed booking con userId no auto-linkea Client.userId por coincidencia de 
         client: {
           findFirst: async (args: any) => {
             if (args?.where?.userId) return null;
-            if (args?.where?.email === 'ada@example.com') {
-              return { id: 'client-existing', clubId: 5, userId: null, email: 'ada@example.com', phone: '+5493511234567' };
-            }
             return null;
+          },
+          findMany: async (args: any) => {
+            if (args?.where?.email === 'ada@example.com') {
+              return [{ id: 'client-existing', clubId: 5, userId: null, email: 'ada@example.com', phone: '+5493511234567', createdAt: new Date('2026-05-19T20:00:00.000Z') }];
+            }
+            if (Array.isArray(args?.where?.phone?.in)) {
+              return [{ id: 'client-existing', clubId: 5, userId: null, email: 'ada@example.com', phone: '+5493511234567', createdAt: new Date('2026-05-19T20:00:00.000Z') }];
+            }
+            return [];
           },
           findUnique: async () => null,
           update: async (args: any) => {
@@ -329,8 +336,8 @@ test('fixed booking con userId no auto-linkea Client.userId por coincidencia de 
       );
 
       assert.equal(result.fixedBookingId, 90);
-      assert.equal(result.clientId, 'client-new-fixed');
-      assert.equal(createdClientData.userId, null);
+      assert.equal(result.clientId, 'client-existing');
+      assert.equal(createdClientData, null);
       assert.equal(clientUpdateCalls, 0);
       assert.deepEqual(createBookingUserIds, [null]);
     }

@@ -4,13 +4,17 @@ import { Club } from '../entities/Club';
 import type { ClubOperationalStatus, FixedBookingSettingsByActivity } from '../entities/Club';
 import { Court } from '../entities/Court';
 import { Prisma } from '@prisma/client';
+import { normalizeEmail } from '../utils/magicLink';
 import { normalizeIdentityPhone } from '../utils/phone';
 import { ErrorCodes, badRequest, conflict, forbidden, notFound } from '../errors';
+import { PersonService, type PersonSearchResult } from './PersonService';
 
 // 👇 1. USAMOS TUS IMPORTS CORRECTOS
 import { prisma } from '../prisma'; 
 
 export class ClubService {
+    private readonly personService = new PersonService();
+
     constructor(
         private clubRepo: ClubRepository,
         private activityRepo: ActivityTypeRepository
@@ -204,7 +208,7 @@ export class ClubService {
             orderBy: { createdAt: 'desc' }
         });
 
-        return clients.map((client) => ({
+        return this.dedupeClientSearchRows(clients).map((client) => ({
             id: client.id,
             name: client.name,
             phone: client.phone || '',
@@ -230,10 +234,10 @@ export class ClubService {
                 ]
             },
             orderBy: { createdAt: 'desc' },
-            take: 8
+            take: 24
         });
 
-        const clientResults = clients.map((client) => ({
+        const clientResults = this.dedupeClientSearchRows(clients).map((client) => ({
             id: `client-${client.id}`,
             name: client.name,
             phone: client.phone || '',
@@ -277,7 +281,7 @@ export class ClubService {
                 phoneNumber: true
             },
             orderBy: { id: 'desc' },
-            take: 8
+            take: 24
         });
 
         const systemUserResults = users
@@ -296,7 +300,105 @@ export class ClubService {
                 };
             });
 
-        return [...clientResults, ...systemUserResults];
+        return this.dedupeParticipantSearchRows([...clientResults, ...systemUserResults]).slice(0, 8);
+    }
+
+    async searchPeople(clubId: number, query?: string): Promise<PersonSearchResult[]> {
+        return this.personService.searchPeople(clubId, query);
+    }
+
+    private normalizeSearchEmail(value: string | null | undefined) {
+        const normalized = normalizeEmail(String(value || ''));
+        return normalized || null;
+    }
+
+    private normalizeSearchPhone(value: string | null | undefined) {
+        return normalizeIdentityPhone(value);
+    }
+
+    private normalizeSearchDni(value: string | null | undefined) {
+        const normalized = String(value || '').replace(/\D/g, '');
+        return normalized.length >= 6 ? normalized : null;
+    }
+
+    private buildIdentityTokens(input: {
+        userId?: number | null;
+        email?: string | null;
+        phone?: string | null;
+        dni?: string | null;
+    }) {
+        const tokens: string[] = [];
+        const userId = Number(input.userId || 0);
+        if (Number.isInteger(userId) && userId > 0) tokens.push(`user:${userId}`);
+        const email = this.normalizeSearchEmail(input.email);
+        if (email) tokens.push(`email:${email}`);
+        const phone = this.normalizeSearchPhone(input.phone);
+        if (phone) tokens.push(`phone:${phone}`);
+        const dni = this.normalizeSearchDni(input.dni);
+        if (dni) tokens.push(`dni:${dni}`);
+        return tokens;
+    }
+
+    private dedupeClientSearchRows(rows: any[]) {
+        const tokenOwner = new Map<string, string>();
+        const deduped: any[] = [];
+
+        for (const row of Array.isArray(rows) ? rows : []) {
+            const id = String(row?.id || '').trim();
+            if (!id) continue;
+            const tokens = this.buildIdentityTokens({
+                userId: row?.userId ?? null,
+                email: row?.email ?? null,
+                phone: row?.phone ?? null,
+                dni: row?.dni ?? null
+            });
+            if (tokens.length > 0 && tokens.some((token) => tokenOwner.has(token))) {
+                continue;
+            }
+            deduped.push(row);
+            for (const token of tokens) tokenOwner.set(token, id);
+        }
+
+        return deduped;
+    }
+
+    private dedupeParticipantSearchRows(rows: Array<{
+        id: string;
+        name: string;
+        phone?: string;
+        email?: string;
+        dni?: string;
+        isProfessor?: boolean;
+        sourceType: 'clubClient' | 'systemUser';
+        userId?: number | null;
+    }>) {
+        const tokenOwner = new Map<string, string>();
+        const deduped: Array<{
+            id: string;
+            name: string;
+            phone?: string;
+            email?: string;
+            dni?: string;
+            isProfessor?: boolean;
+            sourceType: 'clubClient' | 'systemUser';
+            userId?: number | null;
+        }> = [];
+
+        for (const row of rows) {
+            const tokens = this.buildIdentityTokens({
+                userId: row.userId ?? null,
+                email: row.email ?? null,
+                phone: row.phone ?? null,
+                dni: row.dni ?? null
+            });
+            if (tokens.length > 0 && tokens.some((token) => tokenOwner.has(token))) {
+                continue;
+            }
+            deduped.push(row);
+            for (const token of tokens) tokenOwner.set(token, row.id);
+        }
+
+        return deduped;
     }
 
     async createClient(clubId: number, input: {

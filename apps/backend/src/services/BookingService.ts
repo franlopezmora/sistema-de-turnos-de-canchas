@@ -1805,6 +1805,169 @@ export class BookingService {
         return normalized.length >= 6 ? normalized : null;
     }
 
+    private normalizeClientEmail(email: string | null | undefined) {
+        const normalized = normalizeEmail(String(email || ''));
+        return normalized || null;
+    }
+
+    private maskEmailForLog(email: string | null | undefined) {
+        const normalized = this.normalizeClientEmail(email);
+        if (!normalized) return null;
+        const [localPart = '', domainPart = ''] = normalized.split('@');
+        if (!domainPart) return normalized.slice(0, 2) + '***';
+        const safeLocal = localPart.length <= 2
+            ? `${localPart.slice(0, 1)}***`
+            : `${localPart.slice(0, 2)}***`;
+        return `${safeLocal}@${domainPart}`;
+    }
+
+    private maskPhoneForLog(phone: string | null | undefined) {
+        const normalized = this.normalizePhone(phone);
+        if (!normalized) return null;
+        const digits = String(normalized).replace(/\D/g, '');
+        if (digits.length <= 4) return `***${digits}`;
+        return `***${digits.slice(-4)}`;
+    }
+
+    private summarizeClientIdentityForLog(input: {
+        userId?: number | null;
+        phone?: string | null;
+        email?: string | null;
+        dni?: string | null;
+    }) {
+        const safeUserId = Number(input.userId || 0);
+        const safeDni = this.normalizeDni(input.dni);
+        return {
+            userId: safeUserId > 0 ? safeUserId : null,
+            phone: this.maskPhoneForLog(input.phone),
+            email: this.maskEmailForLog(input.email),
+            dniSuffix: safeDni ? safeDni.slice(-4) : null
+        };
+    }
+
+    private logClientResolution(event: string, input: {
+        clubId: number;
+        userId?: number | null;
+        phone?: string | null;
+        email?: string | null;
+        dni?: string | null;
+    }, extra?: Record<string, unknown>) {
+        console.info('[CLIENT_RESOLUTION]', {
+            event,
+            clubId: Number(input.clubId),
+            ...this.summarizeClientIdentityForLog(input),
+            ...(extra || {})
+        });
+    }
+
+    private buildClientResolutionLockKey(input: {
+        clubId: number;
+        userId?: number | null;
+        phone?: string | null;
+        email?: string | null;
+        dni?: string | null;
+    }) {
+        const parts = [`club:${Number(input.clubId)}`];
+        const safeUserId = Number(input.userId || 0);
+        const safePhone = this.normalizePhone(input.phone);
+        const safeEmail = this.normalizeClientEmail(input.email);
+        const safeDni = this.normalizeDni(input.dni);
+        if (safeUserId > 0) parts.push(`user:${safeUserId}`);
+        if (safeDni) parts.push(`dni:${safeDni}`);
+        if (safeEmail) parts.push(`email:${safeEmail}`);
+        if (safePhone) parts.push(`phone:${safePhone}`);
+        return parts.length > 1 ? parts.join('|') : null;
+    }
+
+    private async acquireClientResolutionLockTx(
+        tx: Prisma.TransactionClient,
+        input: {
+            clubId: number;
+            userId?: number | null;
+            phone?: string | null;
+            email?: string | null;
+            dni?: string | null;
+        }
+    ) {
+        const lockKey = this.buildClientResolutionLockKey(input);
+        if (!lockKey) return;
+        if (typeof (tx as any)?.$executeRaw !== 'function') return;
+        await (tx as any).$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pique_client_resolution'), hashtext(${lockKey}))`;
+    }
+
+    private async findCanonicalClientByStrongIdentityTx(
+        txLike: { client: any },
+        input: {
+            clubId: number;
+            phone?: string | null;
+            email?: string | null;
+            dni?: string | null;
+        }
+    ) {
+        const safePhone = this.normalizePhone(input.phone);
+        const safeEmail = this.normalizeClientEmail(input.email);
+        const safeDni = this.normalizeDni(input.dni);
+        const candidatesById = new Map<string, { row: any; reasons: Set<'DNI' | 'PHONE' | 'EMAIL'> }>();
+
+        const registerRows = (rows: any[], reason: 'DNI' | 'PHONE' | 'EMAIL') => {
+            for (const row of Array.isArray(rows) ? rows : []) {
+                const id = String(row?.id || '').trim();
+                if (!id) continue;
+                const existing = candidatesById.get(id);
+                if (existing) {
+                    existing.reasons.add(reason);
+                    continue;
+                }
+                candidatesById.set(id, { row, reasons: new Set([reason]) });
+            }
+        };
+
+        if (safeDni) {
+            const rows = await txLike.client.findMany({
+                where: { clubId: input.clubId, dni: safeDni },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+            });
+            registerRows(rows, 'DNI');
+        }
+
+        if (safeEmail) {
+            const rows = await txLike.client.findMany({
+                where: { clubId: input.clubId, email: safeEmail },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+            });
+            registerRows(rows, 'EMAIL');
+        }
+
+        if (safePhone) {
+            const phoneVariants = getPhoneIdentityVariants(safePhone);
+            const rows = await txLike.client.findMany({
+                where: { clubId: input.clubId, phone: { in: phoneVariants } },
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+            });
+            registerRows(rows, 'PHONE');
+        }
+
+        const matches = Array.from(candidatesById.values())
+            .map((entry) => ({
+                ...entry.row,
+                matchedBy: Array.from(entry.reasons.values()).sort() as Array<'DNI' | 'PHONE' | 'EMAIL'>
+            }))
+            .sort((left, right) => {
+                const leftHasUser = Number(left?.userId || 0) > 0 ? 1 : 0;
+                const rightHasUser = Number(right?.userId || 0) > 0 ? 1 : 0;
+                if (leftHasUser !== rightHasUser) return rightHasUser - leftHasUser;
+                const leftCreatedAt = left?.createdAt ? new Date(left.createdAt).getTime() : Number.MAX_SAFE_INTEGER;
+                const rightCreatedAt = right?.createdAt ? new Date(right.createdAt).getTime() : Number.MAX_SAFE_INTEGER;
+                if (leftCreatedAt !== rightCreatedAt) return leftCreatedAt - rightCreatedAt;
+                return String(left?.id || '').localeCompare(String(right?.id || ''));
+            });
+
+        return {
+            canonical: matches[0] || null,
+            matches
+        };
+    }
+
     private async resolveClientIdForDiscountTx(
         tx: Prisma.TransactionClient,
         input: {
@@ -1834,33 +1997,13 @@ export class BookingService {
             if (byUser?.id) return byUser.id;
         }
 
-        const safeDni = this.normalizeDni(input.clientDni);
-        if (safeDni) {
-            const byDni = await tx.client.findFirst({
-                where: { clubId: input.clubId, dni: safeDni },
-                select: { id: true }
-            });
-            if (byDni?.id) return byDni.id;
-        }
-
-        const safePhone = this.normalizePhone(input.clientPhone);
-        if (safePhone) {
-            const phoneVariants = getPhoneIdentityVariants(safePhone);
-            const byPhone = await tx.client.findFirst({
-                where: { clubId: input.clubId, phone: { in: phoneVariants } },
-                select: { id: true }
-            });
-            if (byPhone?.id) return byPhone.id;
-        }
-
-        const safeEmail = String(input.clientEmail || '').trim().toLowerCase();
-        if (safeEmail) {
-            const byEmail = await tx.client.findFirst({
-                where: { clubId: input.clubId, email: safeEmail },
-                select: { id: true }
-            });
-            if (byEmail?.id) return byEmail.id;
-        }
+        const strongMatch = await this.findCanonicalClientByStrongIdentityTx(tx as any, {
+            clubId: input.clubId,
+            dni: input.clientDni,
+            email: input.clientEmail,
+            phone: input.clientPhone
+        });
+        if (strongMatch.canonical?.id) return String(strongMatch.canonical.id);
 
         return null;
     }
@@ -2101,11 +2244,6 @@ export class BookingService {
         phone?: string | null;
         email?: string | null;
         dni?: string | null;
-        /**
-         * Caso C — el humano confirmó crear un nuevo cliente aunque coincida con existentes.
-         * Con este flag en true, los candidatos encontrados NO bloquean la creación.
-         * Sin este flag (default), cualquier candidato lanza CLIENT_POSSIBLE_DUPLICATE.
-         */
         forceCreateNew?: boolean;
     }) {
         const safeName = String(input.name ?? '').trim();
@@ -2115,7 +2253,7 @@ export class BookingService {
 
         const safePhone = this.normalizePhone(input.phone);
         const safeDni = this.normalizeDni(input.dni);
-        const safeEmail = String(input.email ?? '').trim().toLowerCase();
+        const safeEmail = this.normalizeClientEmail(input.email);
         const safeUserId = Number.isInteger(Number(input.userId)) && Number(input.userId) > 0 ? Number(input.userId) : null;
 
         if (!safeUserId) {
@@ -2126,15 +2264,28 @@ export class BookingService {
             }
         }
 
-        if (safeUserId) {
-            // Logged-in user path: fully self-contained, never falls through to
-            // the anonymous multi-candidate logic below (which can throw CLIENT_POSSIBLE_DUPLICATE).
+        await this.acquireClientResolutionLockTx(tx, {
+            clubId: input.clubId,
+            userId: safeUserId,
+            phone: safePhone,
+            email: safeEmail,
+            dni: safeDni
+        });
 
-            // Step 1: already linked to this user in this club?
+        if (safeUserId) {
             const existingByUser = await tx.client.findFirst({
                 where: { clubId: input.clubId, userId: safeUserId }
             });
             if (existingByUser) {
+                this.logClientResolution('reuse_already_linked_client', {
+                    clubId: input.clubId,
+                    userId: safeUserId,
+                    phone: safePhone,
+                    email: safeEmail,
+                    dni: safeDni
+                }, {
+                    clientId: String(existingByUser.id)
+                });
                 await recordUserClientLinkAuditTx(tx, {
                     clubId: input.clubId,
                     userId: safeUserId,
@@ -2144,144 +2295,51 @@ export class BookingService {
                 });
                 return existingByUser;
             }
-
-            // Step 2 (EXACT_EMAIL_MATCH) deliberately removed.
-            // Auto-linking an existing client to a user by email coincidence is
-            // not allowed. A manual PATCH /admin/bookings/:id/client endpoint
-            // must be used to change the titular explicitly (Commit 3).
-
-            // Step 3: no existing linked client found.
-            // MVP policy: bookings must never create automatic User<->Client links.
-            // We create an operational client record without userId linkage.
-            const created = await tx.client.create({
-                data: {
-                    clubId: input.clubId,
-                    name: safeName,
-                    phone: safePhone || null,
-                    email: safeEmail || null,
-                    dni: safeDni || null,
-                    userId: null
-                }
-            });
-            return created;
         }
 
-        let existingByDni: any = null;
-        if (safeDni) {
-            existingByDni = await tx.client.findFirst({
-                where: {
-                    clubId: input.clubId,
-                    dni: safeDni
-                }
-            });
-        }
+        const strongMatches = await this.findCanonicalClientByStrongIdentityTx(tx as any, {
+            clubId: input.clubId,
+            dni: safeDni,
+            email: safeEmail,
+            phone: safePhone
+        });
 
-        let existingByPhone: any = null;
-        if (safePhone) {
-            const phoneVariants = getPhoneIdentityVariants(safePhone);
-            existingByPhone = await tx.client.findFirst({
-                where: {
-                    clubId: input.clubId,
-                    phone: { in: phoneVariants }
-                }
-            });
-        }
-
-        let existingByEmail: any = null;
-        if (safeEmail) {
-            existingByEmail = await tx.client.findFirst({
-                where: {
-                    clubId: input.clubId,
-                    email: safeEmail
-                }
-            });
-        }
-
-        const candidateIds = Array.from(
-            new Set(
-                [existingByDni?.id, existingByPhone?.id, existingByEmail?.id]
-                    .filter((value): value is string => Boolean(value))
-            )
-        );
-        if (candidateIds.length > 1) {
-            const candidateMap = new Map<string, { id: string; name: string; phone?: string | null; email?: string | null }>();
-            const pushCandidate = (row: any) => {
-                const id = String(row?.id || '').trim();
-                if (!id || candidateMap.has(id)) return;
-                candidateMap.set(id, {
-                    id,
-                    name: String(row?.name || '').trim() || 'Cliente sin nombre',
-                    phone: row?.phone ?? null,
-                    email: row?.email ?? null
-                });
-            };
-            pushCandidate(existingByDni);
-            pushCandidate(existingByPhone);
-            pushCandidate(existingByEmail);
-            const reasonSignals = new Set<string>();
-            if (existingByDni?.id) reasonSignals.add('DNI');
-            if (existingByPhone?.id) reasonSignals.add('PHONE');
-            if (existingByEmail?.id) reasonSignals.add('EMAIL');
-            throw this.clientPossibleDuplicate({
+        if (strongMatches.canonical) {
+            const matchedBy = Array.isArray((strongMatches.canonical as any).matchedBy)
+                ? (strongMatches.canonical as any).matchedBy
+                : [];
+            this.logClientResolution('reuse_existing_client_by_strong_identity', {
                 clubId: input.clubId,
                 userId: safeUserId,
-                candidateClientIds: candidateIds,
-                reasonType: reasonSignals.size === 1 ? Array.from(reasonSignals)[0] : 'MULTI_SIGNAL_CONFLICT',
-                signals: {
-                    dni: safeDni || null,
-                    phone: safePhone || null,
-                    email: safeEmail || null
-                },
-                candidates: Array.from(candidateMap.values())
+                phone: safePhone,
+                email: safeEmail,
+                dni: safeDni
+            }, {
+                clientId: String(strongMatches.canonical.id),
+                matchedBy,
+                duplicateClientCount: strongMatches.matches.length
             });
+            return strongMatches.canonical;
         }
 
-        // Si hay exactamente un candidato, cargarlo para incluirlo en el error.
-        const existingByIdentity = candidateIds.length === 1
-            ? await tx.client.findUnique({ where: { id: candidateIds[0] } })
-            : null;
+        this.logClientResolution('create_new_client', {
+            clubId: input.clubId,
+            userId: safeUserId,
+            phone: safePhone,
+            email: safeEmail,
+            dni: safeDni
+        }, {
+            forced: Boolean(input.forceCreateNew)
+        });
 
-        // Caso B — candidato único encontrado: la decisión es humana, no automática.
-        // Lanzamos CLIENT_POSSIBLE_DUPLICATE igual que para múltiples candidatos.
-        // La UI debe elegir: usar ese cliente, cancelar, o crear uno nuevo igualmente.
-        //
-        // Caso C — si forceCreateNew está activo, el humano ya confirmó crear nuevo.
-        // En ese caso saltamos el error y creamos directamente.
-        if (existingByIdentity && !input.forceCreateNew) {
-            const reasonSignals = new Set<string>();
-            if (existingByDni?.id) reasonSignals.add('DNI');
-            if (existingByPhone?.id) reasonSignals.add('PHONE');
-            if (existingByEmail?.id) reasonSignals.add('EMAIL');
-            throw this.clientPossibleDuplicate({
-                clubId: input.clubId,
-                candidateClientIds: [existingByIdentity.id],
-                reasonType: reasonSignals.size === 1 ? Array.from(reasonSignals)[0] : 'IDENTITY_MATCH_REQUIRES_SELECTION',
-                signals: {
-                    dni: safeDni || null,
-                    phone: safePhone || null,
-                    email: safeEmail || null
-                },
-                candidates: [
-                    {
-                        id: String(existingByIdentity.id),
-                        name: String(existingByIdentity.name || '').trim() || 'Cliente sin nombre',
-                        phone: existingByIdentity.phone ?? null,
-                        email: existingByIdentity.email ?? null
-                    }
-                ]
-            });
-        }
-
-        // Sin candidatos, o forceCreateNew confirmado: crear nuevo cliente.
-        // Nunca se setea Client.userId aquí (solo en el path safeUserId arriba,
-        // para usuarios logueados sin cliente previo).
         const created = await tx.client.create({
             data: {
                 clubId: input.clubId,
                 name: safeName,
                 phone: safePhone || null,
                 email: safeEmail || null,
-                dni: safeDni || null
+                dni: safeDni || null,
+                userId: null
             }
         });
         return created;

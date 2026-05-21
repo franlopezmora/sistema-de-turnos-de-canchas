@@ -205,6 +205,19 @@ export type AdminClubPaymentIntegration = {
   updatedAt: string;
 };
 
+export type PersonSearchResult = {
+  personKey: string;
+  kind: 'linked' | 'clubClient' | 'systemUser' | 'newClientSuggestion';
+  clientId: string | null;
+  userId: number | null;
+  displayName: string;
+  email: string | null;
+  phone: string | null;
+  dni: string | null;
+  badges: string[];
+  sourceReason?: string;
+};
+
 export class ClubAdminService {
   /**
    * Obtener la agenda del administrador para un club específico
@@ -845,6 +858,28 @@ export class ClubAdminService {
       headers: { 'Content-Type': 'application/json' }
     });
     if (!response.ok) throw new Error('Error al obtener lista de clientes');
+    return response.json();
+  }
+
+  static async searchParticipants(slug: string, query?: string) {
+    const q = String(query || '').trim();
+    const queryString = q ? `?q=${encodeURIComponent(q)}` : '';
+    const response = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/participants-search${queryString}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Error al obtener participantes');
+    return response.json();
+  }
+
+  static async searchPeople(slug: string, query?: string): Promise<PersonSearchResult[]> {
+    const q = String(query || '').trim();
+    const queryString = q ? `?q=${encodeURIComponent(q)}` : '';
+    const response = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/person-search${queryString}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Error al obtener personas');
     return response.json();
   }
 

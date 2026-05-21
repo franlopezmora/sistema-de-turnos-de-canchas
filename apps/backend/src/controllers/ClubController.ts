@@ -675,11 +675,53 @@ export class ClubController {
             return res.json([]); 
         }
 
-        const filtered = await this.clubService.searchParticipants(club.id, query);
+        const filtered = await this.clubService.getClients(club.id, query);
         res.json(filtered);
 
     } catch (error: any) {
         return sendAppError(res, error, 'Error al buscar clientes');
+    }
+};
+
+    searchClubParticipants = async (req: Request, res: Response) => {
+    try {
+        const club = (req as any).club;
+
+        if (!club) {
+            return res.status(404).json({ message: 'Club no encontrado' });
+        }
+
+        const query = String(req.query.q || '').trim();
+        if (!query) {
+            return res.json([]);
+        }
+
+        const filtered = await this.clubService.searchParticipants(club.id, query);
+        res.json(filtered);
+
+    } catch (error: any) {
+        return sendAppError(res, error, 'Error al buscar participantes');
+    }
+};
+
+    searchClubPeople = async (req: Request, res: Response) => {
+    try {
+        const club = (req as any).club;
+
+        if (!club) {
+            return res.status(404).json({ message: 'Club no encontrado' });
+        }
+
+        const query = String(req.query.q || '').trim();
+        if (!query) {
+            return res.json([]);
+        }
+
+        const filtered = await this.clubService.searchPeople(club.id, query);
+        res.json(filtered);
+
+    } catch (error: any) {
+        return sendAppError(res, error, 'Error al buscar personas');
     }
 };
 
