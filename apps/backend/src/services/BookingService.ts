@@ -1585,13 +1585,9 @@ export class BookingService {
             const previousNotes = this.extractSidebarNotesFromMetadata(previousConfig.metadata as Record<string, unknown>);
             const nextNotes = this.extractSidebarNotesFromMetadata((input.metadata || {}) as Record<string, unknown>);
             const notesChanged = previousNotes !== nextNotes;
-            const isBootstrapNormalizationSync =
-                (bootstrapInitializer === 'BOOKING_CREATED' || bootstrapInitializer === 'AUTO_INITIALIZE_ON_READ') &&
-                !chargeModeChanged &&
-                !chargeResponsibleChanged &&
-                !notesChanged &&
-                addedParticipantRefs.every((ref) => ref === 'booking:responsible') &&
-                removedParticipantRefs.every((ref) => ref === 'booking:responsible');
+            const suppressVisibleBillingBootstrapHistory =
+                bootstrapInitializer === 'BOOKING_CREATED' ||
+                bootstrapInitializer === 'AUTO_INITIALIZE_ON_READ';
 
             this.validateBillingConfig({
                 chargeMode: input.chargeMode,
@@ -1640,7 +1636,7 @@ export class BookingService {
                 },
             });
 
-            if (!isBootstrapNormalizationSync && billingConfigChanged) {
+            if (!suppressVisibleBillingBootstrapHistory && billingConfigChanged) {
                 const stableResponsibleForEvent =
                     String(previousConfig.chargeResponsibleRef || '').trim() ||
                     String(effectiveChargeResponsibleRef || '').trim() ||
@@ -1681,7 +1677,7 @@ export class BookingService {
                     },
                 });
             }
-            if (!isBootstrapNormalizationSync && notesChanged) {
+            if (!suppressVisibleBillingBootstrapHistory && notesChanged) {
                 await this.eventService.bookingNotesUpdated(input.clubId, {
                     bookingId: booking.id,
                     actorUserId: input.actorUserId || null,
