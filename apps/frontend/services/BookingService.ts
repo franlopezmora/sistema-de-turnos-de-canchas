@@ -67,12 +67,24 @@ export type BookingBillingConfigPayload = {
   metadata?: Record<string, unknown>;
 };
 
-export type BookingDomainEvent = {
+export type BookingHistoryEntryDto = {
   id: string;
-  type: string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-  processed: boolean;
+  bookingId: number;
+  clubId: number;
+  action: string;
+  category: string;
+  source: string;
+  summary: string;
+  occurredAt: string;
+  actorUserId: number | null;
+  actorLabel: string | null;
+  detail: Record<string, unknown> | null;
+  previousState: Record<string, unknown> | null;
+  nextState: Record<string, unknown> | null;
+  bookingParticipantId: string | null;
+  paymentId: string | null;
+  accountId: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 export type PlayerBookingDto = {
@@ -110,10 +122,24 @@ export type PlayerBookingParticipantDto = {
   id: string;
   displayName: string;
   status: 'INVITED' | 'JOINED' | 'DECLINED' | 'LEFT' | 'REMOVED';
-  role: 'PARTICIPANT';
+  role: 'ORGANIZER' | 'PARTICIPANT';
   isMe: boolean;
   invitedEmail?: string | null;
   canManage: boolean;
+};
+
+export type AdminBookingParticipantDto = {
+  id: string;
+  bookingId: number;
+  clientId: string | null;
+  userId: number | null;
+  displayName: string;
+  email?: string | null;
+  phone?: string | null;
+  status: 'INVITED' | 'JOINED' | 'DECLINED' | 'LEFT' | 'REMOVED';
+  role: 'ORGANIZER' | 'PARTICIPANT';
+  invitedEmail?: string | null;
+  invitedName?: string | null;
 };
 
 export type PlayerBookingInvitationDto = {
@@ -358,6 +384,55 @@ export const getBookingParticipants = async (bookingId: number | string): Promis
   return Array.isArray(payload?.items) ? payload.items : [];
 };
 
+export const getAdminBookingParticipants = async (
+  bookingId: number | string
+): Promise<AdminBookingParticipantDto[]> => {
+  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/participants`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No se pudieron cargar los participantes de la reserva.');
+  }
+  const payload = await res.json();
+  return Array.isArray(payload?.items) ? payload.items : [];
+};
+
+export const addAdminBookingParticipant = async (
+  bookingId: number | string,
+  input: {
+    personSelection:
+      | { kind: 'clubClient'; clientId: string }
+      | { kind: 'linked' | 'systemUser'; userId: number; personKey: string; searchQuery: string }
+      | { kind: 'newClient'; name: string; phone?: string; email?: string; dni?: string; forceCreateNew?: boolean };
+  }
+): Promise<AdminBookingParticipantDto> => {
+  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/participants`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No se pudo agregar el participante.');
+  }
+  const payload = await res.json();
+  return payload?.participant as AdminBookingParticipantDto;
+};
+
+export const removeAdminBookingParticipant = async (
+  bookingId: number | string,
+  participantId: string
+) => {
+  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/participants/${participantId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!res.ok) {
+    await throwApiErrorFromResponse(res, 'No se pudo remover al participante.');
+  }
+  return res.json();
+};
+
 export const getPlayerBookingCheckout = async (bookingId: number | string): Promise<PlayerBookingCheckoutDto> => {
   const res = await fetchWithAuth(`${apiBase()}/me/bookings/${bookingId}/checkout`, {
     method: 'GET',
@@ -473,32 +548,37 @@ export const leaveBooking = async (bookingId: number | string) => {
   return res.json();
 };
 
-export const getBookingTimelineEvents = async (
-  bookingId: number,
-  options?: { take?: number }
-): Promise<BookingDomainEvent[]> => {
-  const query = new URLSearchParams();
-  query.set('bookingId', String(bookingId));
-  if (Number.isFinite(options?.take) && Number(options?.take) > 0) {
-    query.set('take', String(Number(options?.take)));
-  }
-
-  const res = await fetchWithAuth(`${apiBase()}/events?${query.toString()}`, {
+export const getAdminBookingHistory = async (
+  bookingId: number
+): Promise<BookingHistoryEntryDto[]> => {
+  const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/history`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
   });
   if (!res.ok) {
-    await throwApiErrorFromResponse(res, 'No se pudo cargar el historial de eventos de la reserva');
+    await throwApiErrorFromResponse(res, 'No se pudo cargar el historial de la reserva');
   }
 
   const payload = await res.json();
   if (!Array.isArray(payload)) return [];
-  return payload.map((event: any) => ({
-    id: String(event?.id || ''),
-    type: String(event?.type || ''),
-    payload: event?.payload && typeof event.payload === 'object' ? event.payload : {},
-    createdAt: String(event?.createdAt || ''),
-    processed: Boolean(event?.processed)
+  return payload.map((entry: any) => ({
+    id: String(entry?.id || ''),
+    bookingId: Number(entry?.bookingId || 0),
+    clubId: Number(entry?.clubId || 0),
+    action: String(entry?.action || ''),
+    category: String(entry?.category || ''),
+    source: String(entry?.source || ''),
+    summary: String(entry?.summary || ''),
+    occurredAt: String(entry?.occurredAt || ''),
+    actorUserId: Number.isInteger(Number(entry?.actorUserId || 0)) ? Number(entry.actorUserId) : null,
+    actorLabel: typeof entry?.actorLabel === 'string' ? entry.actorLabel : null,
+    detail: entry?.detail && typeof entry.detail === 'object' ? entry.detail : null,
+    previousState: entry?.previousState && typeof entry.previousState === 'object' ? entry.previousState : null,
+    nextState: entry?.nextState && typeof entry.nextState === 'object' ? entry.nextState : null,
+    bookingParticipantId: typeof entry?.bookingParticipantId === 'string' ? entry.bookingParticipantId : null,
+    paymentId: typeof entry?.paymentId === 'string' ? entry.paymentId : null,
+    accountId: typeof entry?.accountId === 'string' ? entry.accountId : null,
+    metadata: entry?.metadata && typeof entry.metadata === 'object' ? entry.metadata : null,
   }));
 };
 

@@ -15,11 +15,14 @@ import AgendaToolbar from '../../components/admin/agenda/AgendaToolbar';
 import BookingHoverCard from '../../components/admin/agenda/BookingHoverCard';
 import ChangeTitularModal, { type ChangeTitularCandidate } from '../../components/admin/agenda/ChangeTitularModal';
 import DuplicateClientDecisionModal from '../../components/admin/agenda/DuplicateClientDecisionModal';
-import PlaytomicPaymentModal from '../../components/admin/payments/PlaytomicPaymentModal';
-import PaymentRegistrationDrawer from '../../components/admin/payments/PaymentRegistrationDrawer';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
-import { ClubAdminService, type BookingBillingConfig } from '../../services/ClubAdminService';
-import { cancelBooking, cancelFixedBooking, changeBookingClient, confirmBooking, createBooking, createFixedBooking, getAdminSchedule, getBookingBillingConfig, getBookingById, getBookingFinancialSummary, getBookingQuote, getBookingTimelineEvents, registerBookingPartialPayment, rescheduleFixedBooking, updateBookingBillingConfig, type BookingDomainEvent } from '../../services/BookingService';
+import { ClubAdminService } from '../../services/ClubAdminService';
+import { addAdminBookingParticipant, cancelBooking, cancelFixedBooking, changeBookingClient, confirmBooking, createBooking, createFixedBooking, getAdminBookingHistory, getAdminBookingParticipants, getAdminSchedule, getBookingById, getBookingFinancialSummary, getBookingQuote, removeAdminBookingParticipant, rescheduleFixedBooking, type AdminBookingParticipantDto, type BookingHistoryEntryDto } from '../../services/BookingService';
+import AccountDrawer, {
+  type AccountDrawerContext,
+  type AccountDrawerInitialView,
+} from '../../modules/cuentas/components/AccountDrawer';
+import { listAccounts } from '../../services/AccountService';
 import { useValidateAuth } from '../../hooks/useValidateAuth';
 import { reportUiError } from '../../utils/uiError';
 import { ADMIN_Z_INDEX_CLASS } from '../../utils/adminZIndex';
@@ -30,7 +33,6 @@ import { normalizeApiError } from '../../utils/apiError';
 import { resolveBookingErrorBehavior } from '../../utils/bookingErrorMap';
 import BookingDrawerShell from '../../modules/admin/bookingDrawer/components/BookingDrawerShell';
 import { bookingDrawerReducer, initialBookingDrawerState } from '../../modules/admin/bookingDrawer/reducer';
-import type { BookingDrawerDraft as NewBookingDrawerDraft, BookingPayment as NewBookingPayment } from '../../modules/admin/bookingDrawer/types';
 
 type SportFilter = string;
 
@@ -98,7 +100,6 @@ type BookingDropPreview = {
   endSlot: number;
 };
 
-type PaymentMode = 'Único' | 'Dividido';
 type EditSeriesScope = 'THIS_OCCURRENCE' | 'NEXT_OCCURRENCES' | 'ALL_OCCURRENCES';
 
 type RecurringOverlapItem = {
@@ -183,6 +184,7 @@ type EditingBaseline = {
 
 type Participant = {
   id: string;
+  bookingParticipantId?: string;
   name: string;
   contact: string;
   dni?: string;
@@ -238,9 +240,6 @@ type BookingConsumptionItem = {
   remainingAmount: number;
   type: string;
 };
-type PaymentImputationMode = 'BY_PARTICIPANT' | 'BY_CONCEPT';
-type PaymentConceptMode = 'AUTO' | 'COURT' | 'CONSUMPTIONS' | 'CUSTOM';
-type PaymentQuickPreset = 'MY_SHARE' | 'FULL' | 'COURT_ONLY' | 'CUSTOM_ITEMS';
 type ParticipantUiState =
   | { mode: 'idle'; participantId: null }
   | { mode: 'menu'; participantId: string }
@@ -249,25 +248,17 @@ type SuggestionPlacement = {
   openUp: boolean;
   maxHeight: number;
 };
-type PlaytomicPaymentResultModal = {
-  variant: 'success' | 'partial' | 'error';
-  title: string;
-  detail: string;
-  requestedAmount: number;
-  appliedAmount: number;
-  remainingAfter: number;
-  methodLabel: string;
-  appliedItems: Array<{ label: string; amount: number }>;
-};
-type PaymentModalState =
-  | { flow: 'playtomicPayment'; step: 'form' | 'preconfirm' | 'result' }
-  | null;
 
 type DuplicateClientCandidate = {
   id: string;
   name: string;
   phone?: string;
   email?: string;
+};
+
+type DuplicateDecisionActions = {
+  onUseExisting: (clientId: string) => Promise<void>;
+  onCreateNew: () => Promise<void>;
 };
 
 
@@ -354,10 +345,6 @@ const CUSTOM_DAY_OPTIONS = [
   { value: 6, short: 'Sa' },
   { value: 0, short: 'Do' },
 ];
-
-function isParticipantPaymentMethod(value: string): value is Participant['paymentMethod'] {
-  return value === 'CASH' || value === 'TRANSFER' || value === 'CARD' || value === 'OTHER';
-}
 
 function formatPaymentMethodLabel(method: string): string {
   if (method === 'CASH') return 'Efectivo';
@@ -618,6 +605,54 @@ function toSelectionRange(selection: DraftSelection) {
   };
 }
 
+function formatSeriesDateLabel(value: unknown) {
+  const parsed = new Date(String(value || ''));
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return parsed.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatSeriesTimeLabel(value: unknown) {
+  const parsed = new Date(String(value || ''));
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return parsed.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function mapSeriesImpactItem(item: any, fallbackCourtName: string): RecurringOverlapItem {
+  const requestedAt = item?.requestedStartDateTime || item?.startDateTime || item?.requestedAt;
+  const conflictingAt = item?.conflictingStartDateTime || item?.conflictStartDateTime || item?.overlapStartDateTime;
+  return {
+    courtName: String(item?.courtName || item?.requestedCourtName || fallbackCourtName || 'Cancha').trim(),
+    requestedDateLabel: formatSeriesDateLabel(requestedAt),
+    requestedTimeLabel: formatSeriesTimeLabel(requestedAt),
+    conflictingDateLabel: formatSeriesDateLabel(conflictingAt) || undefined,
+    conflictingTimeLabel: formatSeriesTimeLabel(conflictingAt) || undefined,
+    activityName: String(item?.activityName || '').trim() || undefined,
+    clientName: String(item?.clientName || '').trim() || undefined,
+  };
+}
+
+function mapSeriesAppliedItem(item: any, fallbackCourtName: string): RecurringCreatedItem {
+  const requestedAt = item?.requestedStartDateTime || item?.startDateTime || item?.requestedAt;
+  const parsed = new Date(String(requestedAt || ''));
+  return {
+    bookingId: Number.isFinite(Number(item?.bookingId || item?.id))
+      ? Number(item?.bookingId || item?.id)
+      : undefined,
+    courtName: String(item?.courtName || item?.requestedCourtName || fallbackCourtName || 'Cancha').trim(),
+    requestedDateLabel: formatSeriesDateLabel(requestedAt),
+    requestedTimeLabel: formatSeriesTimeLabel(requestedAt),
+    activityName: String(item?.activityName || '').trim() || undefined,
+    sortStartMs: Number.isFinite(parsed.getTime()) ? parsed.getTime() : undefined,
+  };
+}
+
 function bookingColor(state: Booking['state']) {
   // Pasteles sólidos 100% — texto siempre ink-900 para máxima legibilidad.
   if (state === 'completed') return 'bg-blue-100 text-ink-900';
@@ -650,46 +685,6 @@ function bookingPaymentBadgeColor(state: Booking['paymentState']) {
   if (state === 'paid')    return 'bg-lima-200 text-ink-900';
   if (state === 'partial') return 'bg-amber-300 text-ink-900';
   return 'bg-ink-300 text-ink-900';
-}
-
-function distributePaidByParticipants(
-  participants: Participant[],
-  paymentMode: PaymentMode,
-  totalAmount: number,
-  paidAmount: number,
-  payerParticipantId?: string
-) {
-  const safeTotal = Number(Math.max(0, totalAmount || 0).toFixed(2));
-  let remainingPaid = Number(Math.max(0, paidAmount || 0).toFixed(2));
-
-  if (paymentMode === 'Único') {
-    const payerId = String(payerParticipantId || '').trim();
-    if (payerId && participants.some((participant) => participant.id === payerId)) {
-      const hasAnyPaid = remainingPaid > 0.009;
-      return participants.map((participant) => ({ ...participant, paid: hasAnyPaid && participant.id === payerId }));
-    }
-
-    return participants.map((participant) => {
-      if (!participant.isOwner) return { ...participant, paid: false };
-      const covered = remainingPaid + 0.009 >= safeTotal;
-      if (covered) remainingPaid = Number(Math.max(0, remainingPaid - safeTotal).toFixed(2));
-      return { ...participant, paid: covered };
-    });
-  }
-
-  const active = participants.filter((participant) => participant.name.trim().length > 0);
-  const target = active.length > 0 ? active : participants.filter((participant) => participant.isOwner);
-  const paidTargetIds = new Set<string>();
-  const share = target.length > 0 ? Number((safeTotal / target.length).toFixed(2)) : safeTotal;
-
-  for (const participant of target) {
-    if (remainingPaid + 0.009 >= share) {
-      paidTargetIds.add(participant.id);
-      remainingPaid = Number(Math.max(0, remainingPaid - share).toFixed(2));
-    }
-  }
-
-  return participants.map((participant) => ({ ...participant, paid: paidTargetIds.has(participant.id) }));
 }
 
 function blockContentVisibility(height: number) {
@@ -754,58 +749,12 @@ function isOwnerLikeParticipantId(participantId: string | null | undefined) {
   return normalized === 'owner' || normalized.startsWith('owner-') || normalized.startsWith('owner_');
 }
 
-function resolveLatestPaymentPayerRef(events: BookingDomainEvent[] | null | undefined) {
-  const timelineEvents = Array.isArray(events) ? [...events] : [];
-  timelineEvents.sort((left, right) => {
-    const leftTime = new Date(String(left?.createdAt || '')).getTime();
-    const rightTime = new Date(String(right?.createdAt || '')).getTime();
-    return rightTime - leftTime;
-  });
-
-  for (const event of timelineEvents) {
-    const normalizedType = String(event?.type || '').trim().toUpperCase();
-    if (normalizedType !== 'PAYMENT_RECEIVED') continue;
-    const payload =
-      event?.payload && typeof event.payload === 'object'
-        ? (event.payload as Record<string, unknown>)
-        : {};
-    const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
-    if (payerRef) return payerRef;
-  }
-
-  return '';
-}
-
-function resolveLatestPaymentCoveredRef(events: BookingDomainEvent[] | null | undefined) {
-  const timelineEvents = Array.isArray(events) ? [...events] : [];
-  timelineEvents.sort((left, right) => {
-    const leftTime = new Date(String(left?.createdAt || '')).getTime();
-    const rightTime = new Date(String(right?.createdAt || '')).getTime();
-    return rightTime - leftTime;
-  });
-
-  for (const event of timelineEvents) {
-    const normalizedType = String(event?.type || '').trim().toUpperCase();
-    if (normalizedType !== 'PAYMENT_RECEIVED') continue;
-    const payload =
-      event?.payload && typeof event.payload === 'object'
-        ? (event.payload as Record<string, unknown>)
-        : {};
-    const coveredRef = String((payload as any)?.coveredParticipantRef || '').trim();
-    if (coveredRef) return coveredRef;
-    const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
-    if (payerRef) return payerRef;
-  }
-
-  return '';
-}
-
 function resolveHoverParticipantsForBooking(booking: Booking) {
   const ownerName = String(booking.title || '').trim();
   const hoverPayment = booking.hoverPayment;
   const status = hoverPayment?.status || (booking.paymentState === 'paid' ? 'PAID' : 'UNPAID');
   const chargeMode = String(hoverPayment?.chargeMode || 'INDIVIDUAL').trim().toUpperCase();
-  const modeLabel = chargeMode === 'SHARED' ? 'Pago dividido' : 'Pago único';
+  const modeLabel = chargeMode === 'SHARED' ? 'Cuenta compartida' : 'Cuenta individual';
   const chargeResponsibleName = String(hoverPayment?.chargeResponsibleName || '').trim();
   const latestPayerName = String(hoverPayment?.latestPayerName || '').trim();
   const latestPayerRef = String(hoverPayment?.latestPayerRef || '').trim();
@@ -948,9 +897,9 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
 
   const assignedAmountByParticipantId = new Map<string, number>();
   if (chargeMode === 'SHARED') {
-    const chargeableParticipants = participants.filter((participant) => participant.name.trim().length > 0);
-    const target = chargeableParticipants.length > 0
-      ? chargeableParticipants
+    const activeParticipants = participants.filter((participant) => participant.name.trim().length > 0);
+    const target = activeParticipants.length > 0
+      ? activeParticipants
       : (participants.filter((participant) => participant.isOwner).length > 0
           ? participants.filter((participant) => participant.isOwner)
           : participants);
@@ -973,7 +922,12 @@ function resolveHoverParticipantsForBooking(booking: Booking) {
     }
   }
 
-  return participants.map((participant) => {
+  const orderedParticipants = [
+    ...participants.filter((participant) => participant.isOwner),
+    ...participants.filter((participant) => !participant.isOwner),
+  ];
+
+  return orderedParticipants.map((participant) => {
     const isPayer = payerParticipantIdSet.has(participant.id);
     const payerAmount = Number(payerAmountByParticipantId.get(participant.id) || 0);
     const assignedAmount = Number(assignedAmountByParticipantId.get(participant.id) || 0);
@@ -1038,6 +992,30 @@ function participantIdentityTokens(input: Pick<Participant, 'sourceType' | 'name
   if (contact) tokens.push(`${input.sourceType}:contact:${contact}`);
   if (name) tokens.push(`${input.sourceType}:name:${name}`);
   return Array.from(new Set(tokens));
+}
+
+function participantExplicitIdentityKeys(input: {
+  entityRef?: string;
+  selectedUserId?: number;
+  personKind?: Participant['personKind'];
+}) {
+  const keys: string[] = [];
+  const normalizedEntityRef = String(input.entityRef || '').trim().toLowerCase();
+  if (normalizedEntityRef) {
+    if (
+      normalizedEntityRef.startsWith('client:') ||
+      normalizedEntityRef.startsWith('user:') ||
+      normalizedEntityRef.startsWith('booking-client:') ||
+      normalizedEntityRef.startsWith('booking-user:')
+    ) {
+      keys.push(`ref:${normalizedEntityRef}`);
+    }
+  }
+  const selectedUserId = Number(input.selectedUserId || 0);
+  if (Number.isInteger(selectedUserId) && selectedUserId > 0) {
+    keys.push(`user:${selectedUserId}`);
+  }
+  return Array.from(new Set(keys));
 }
 
 function buildStartDateTimeFromSlot(baseDate: Date, slot: number) {
@@ -1328,19 +1306,6 @@ function normalizeBookingConsumptionItem(raw: any): BookingConsumptionItem | nul
   };
 }
 
-function clampParticipantPrice(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  return roundMoney(Math.min(Math.max(0, value), MAX_MANUAL_PARTICIPANT_PRICE));
-}
-
-function parseMoneyInput(raw: string) {
-  const normalized = String(raw || '').replace(',', '.').trim();
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) return null;
-  return clampParticipantPrice(parsed);
-}
-
 function distributeAmountByParticipants(totalAmount: number, participantIds: string[]) {
   const distribution = new Map<string, number>();
   const ids = Array.isArray(participantIds)
@@ -1436,26 +1401,6 @@ function allocatePaymentProportionallyByDebt(input: {
     }));
 }
 
-function resolveChargedParticipantIds(
-  participants: Participant[],
-  paymentMode: PaymentMode,
-  singleChargeParticipantId?: string
-) {
-  if (paymentMode === 'Único') {
-    if (singleChargeParticipantId && participants.some((participant) => participant.id === singleChargeParticipantId)) {
-      return [singleChargeParticipantId];
-    }
-    const owner = participants.find((participant) => participant.isOwner);
-    return owner ? [owner.id] : [];
-  }
-
-  const named = participants.filter((participant) => participant.name.trim().length > 0);
-  if (named.length > 0) return named.map((participant) => participant.id);
-
-  const owner = participants.find((participant) => participant.isOwner);
-  return owner ? [owner.id] : [];
-}
-
 function resolvePlaygroundClientPhone(owner?: Participant | null) {
   const fromContact = extractPhoneFromParticipantContact(owner?.contact);
   if (fromContact.length >= 8) {
@@ -1510,6 +1455,115 @@ function buildParticipantContactFromFields(phone: unknown, email: unknown) {
   const safeEmail = String(email || '').trim().toLowerCase();
   if (safePhone && safeEmail) return `${safePhone} · ${safeEmail}`;
   return safePhone || safeEmail || '';
+}
+
+function mapPersonSearchResultToParticipantSuggestion(
+  row: any,
+  query: string,
+  prefix: string
+): ParticipantSuggestion | null {
+  const kind = String(row?.kind || '').trim();
+  if (!kind || kind === 'newClientSuggestion') return null;
+
+  const clientId = String(row?.clientId || '').trim();
+  const userIdRaw = Number(row?.userId || 0);
+  const userId = Number.isFinite(userIdRaw) && userIdRaw > 0 ? userIdRaw : undefined;
+  const phone = String(row?.phone || '').trim();
+  const email = String(row?.email || '').trim().toLowerCase();
+  const sourceType: Participant['sourceType'] =
+    kind === 'systemUser' && !clientId ? 'systemUser' : 'clubClient';
+  const entityRef =
+    clientId
+      ? `client:${clientId}`
+      : userId
+        ? `user:${userId}`
+        : undefined;
+
+  return {
+    id: `${prefix}-${String(row?.personKey || clientId || userId || query)}`,
+    label: String(row?.displayName || query).trim() || query,
+    secondary:
+      phone || email || String(row?.dni || '').trim() || (kind === 'systemUser' ? 'Usuario Pique' : 'Cliente del club'),
+    sourceType,
+    entityRef,
+    name: String(row?.displayName || query).trim() || query,
+    contact: buildParticipantContactFromFields(phone, email),
+    dni: String(row?.dni || '').trim() || undefined,
+    personKind: kind as Participant['personKind'],
+    personKey: String(row?.personKey || '').trim() || undefined,
+    personSearchQuery: String(query || '').trim() || undefined,
+    badges: Array.isArray(row?.badges) ? row.badges.filter(Boolean).map(String) : undefined,
+    selectedUserId: userId,
+  } satisfies ParticipantSuggestion;
+}
+
+function mapAdminParticipantToPlaygroundParticipant(
+  dto: AdminBookingParticipantDto,
+  existing?: Participant | null
+): Participant {
+  const clientId = String(dto.clientId || '').trim();
+  const userIdRaw = Number(dto.userId || 0);
+  const userId = Number.isFinite(userIdRaw) && userIdRaw > 0 ? userIdRaw : undefined;
+  const entityRef = clientId ? `client:${clientId}` : userId ? `user:${userId}` : undefined;
+  const sourceType: Participant['sourceType'] = clientId ? 'clubClient' : userId ? 'systemUser' : 'guest';
+  const isOwner = String(dto.role || '') === 'ORGANIZER';
+  const displayName = String(dto.displayName || dto.invitedName || '').trim() || (isOwner ? 'Titular' : 'Participante');
+
+  return {
+    id: isOwner ? 'owner' : (existing?.id || `booking-participant:${dto.id}`),
+    bookingParticipantId: dto.id,
+    name: displayName,
+    contact: buildParticipantContactFromFields(dto.phone, dto.email),
+    dni: existing?.dni,
+    paid: existing?.paid ?? false,
+    isOwner,
+    sourceType,
+    entityRef,
+    selectedUserId: userId,
+    personKind:
+      clientId && userId
+        ? 'linked'
+        : clientId
+          ? 'clubClient'
+          : userId
+            ? 'systemUser'
+            : undefined,
+    personKey: existing?.personKey,
+    personSearchQuery: existing?.personSearchQuery,
+    badges:
+      clientId && userId
+        ? ['Cliente del club', 'Usuario Pique']
+        : clientId
+          ? ['Cliente del club']
+          : userId
+            ? ['Usuario Pique']
+            : undefined,
+    paymentMethod: existing?.paymentMethod || 'CASH',
+    customPrice: existing?.customPrice ?? null,
+  };
+}
+
+function findExistingParticipantMatch(
+  participant: AdminBookingParticipantDto,
+  currentParticipants: Participant[]
+) {
+  const participantId = String(participant.id || '').trim();
+  const clientId = String(participant.clientId || '').trim();
+  const userIdRaw = Number(participant.userId || 0);
+  const userId = Number.isFinite(userIdRaw) && userIdRaw > 0 ? userIdRaw : 0;
+
+  return (
+    currentParticipants.find((entry) => String(entry.bookingParticipantId || '').trim() === participantId) ||
+    currentParticipants.find((entry) => {
+      if (String(participant.role || '') === 'ORGANIZER') return entry.isOwner;
+      const entryClientId = resolveParticipantClientId(entry);
+      const entryUserId = resolveParticipantSelectedUserId(entry);
+      if (clientId && entryClientId === clientId) return true;
+      if (userId > 0 && entryUserId === userId) return true;
+      return false;
+    }) ||
+    null
+  );
 }
 
 function resolveParticipantClientId(participant?: Participant | null) {
@@ -1581,11 +1635,6 @@ function normalizeParticipantSourceType(value: unknown): Participant['sourceType
   return 'guest';
 }
 
-function normalizeParticipantPaymentMethod(value: unknown): Participant['paymentMethod'] {
-  if (value === 'TRANSFER' || value === 'CARD' || value === 'OTHER') return value;
-  return 'CASH';
-}
-
 function buildDefaultParticipantsForBooking(booking: Booking): Participant[] {
   const ownerEntityRef =
     booking.clientId
@@ -1633,245 +1682,6 @@ function inferParticipantSourceTypeFromEntityRef(entityRef: string | undefined):
   if (ref.startsWith('booking-client:') || ref.startsWith('client:')) return 'clubClient';
   if (ref.startsWith('booking-user:') || ref.startsWith('user:')) return 'systemUser';
   return 'guest';
-}
-
-function parseSidebarParticipantsFromMetadata(
-  metadata: BookingBillingConfig['metadata'] | undefined,
-  booking: Booking
-): Participant[] | null {
-  if (!metadata || typeof metadata !== 'object') return null;
-
-  const metadataRecord = metadata as Record<string, unknown>;
-  const sidebarBlock =
-    metadataRecord.sidebar && typeof metadataRecord.sidebar === 'object'
-      ? (metadataRecord.sidebar as Record<string, unknown>)
-      : null;
-  const rawParticipants =
-    (Array.isArray(metadataRecord.sidebarParticipants)
-      ? metadataRecord.sidebarParticipants
-      : (Array.isArray(sidebarBlock?.participants) ? sidebarBlock?.participants : null)) as
-      | Array<Record<string, unknown>>
-      | null;
-
-  if (!Array.isArray(rawParticipants)) return null;
-
-  const mapped = rawParticipants
-    .map((rawParticipant, index) => {
-      if (!rawParticipant || typeof rawParticipant !== 'object') return null;
-      const rawRef = String(rawParticipant.ref || rawParticipant.entityRef || '').trim();
-      const rawName = String(rawParticipant.name || '').trim();
-      const rawContact = String(rawParticipant.contact || '').trim();
-      const rawId = String(rawParticipant.id || '').trim();
-      const isOwner = Boolean(rawParticipant.isOwner) || isOwnerLikeParticipantRef(rawRef) || isOwnerLikeParticipantId(rawId);
-      const baseToken = rawRef || rawId || rawName || `participant-${index + 1}`;
-      return {
-        id: isOwner ? 'owner' : (rawId || `meta-${index}-${toSlugToken(baseToken)}`),
-        name: rawName,
-        contact: rawContact,
-        dni: String(rawParticipant.dni || '').trim() || undefined,
-        paid: Boolean(rawParticipant.paid),
-        isOwner,
-        sourceType: normalizeParticipantSourceType(rawParticipant.sourceType),
-        entityRef: rawRef || undefined,
-        paymentMethod: normalizeParticipantPaymentMethod(rawParticipant.paymentMethod),
-        customPrice: null,
-      } satisfies Participant;
-    })
-    .filter((participant): participant is NonNullable<typeof participant> => Boolean(participant));
-
-  if (mapped.length === 0) return buildDefaultParticipantsForBooking(booking);
-  if (!mapped.some((participant) => participant.isOwner)) {
-    mapped[0] = { ...mapped[0], id: 'owner', isOwner: true };
-  } else {
-    let ownerFixed = false;
-    for (let i = 0; i < mapped.length; i += 1) {
-      if (!mapped[i].isOwner || ownerFixed) continue;
-      mapped[i] = { ...mapped[i], id: 'owner' };
-      ownerFixed = true;
-    }
-  }
-  return mapped;
-}
-
-function buildSidebarParticipantsMetadata(participants: Participant[]) {
-  return participants.map((participant) => ({
-    id: String(participant.id || ''),
-    ref: String(participant.entityRef || ''),
-    name: String(participant.name || ''),
-    contact: String(participant.contact || ''),
-    dni: String(participant.dni || ''),
-    isOwner: Boolean(participant.isOwner),
-    sourceType: normalizeParticipantSourceType(participant.sourceType),
-    paymentMethod: normalizeParticipantPaymentMethod(participant.paymentMethod),
-  }));
-}
-
-function buildSidebarComparableParticipants(participants: Participant[]) {
-  return participants
-    .map((participant) => ({
-      name: String(participant.name || '').trim(),
-      contact: String(participant.contact || '').trim(),
-      dni: String(participant.dni || '').trim(),
-      isOwner: Boolean(participant.isOwner),
-      paymentMethod: normalizeParticipantPaymentMethod(participant.paymentMethod),
-    }))
-    .sort((left, right) => {
-      const ownerDiff = Number(right.isOwner) - Number(left.isOwner);
-      if (ownerDiff !== 0) return ownerDiff;
-      const byName = left.name.localeCompare(right.name);
-      if (byName !== 0) return byName;
-      const byContact = left.contact.localeCompare(right.contact);
-      if (byContact !== 0) return byContact;
-      const byDni = left.dni.localeCompare(right.dni);
-      if (byDni !== 0) return byDni;
-      return left.paymentMethod.localeCompare(right.paymentMethod);
-    });
-}
-
-function resolveDefaultAssignmentIdForDraft(draft?: NewBookingDrawerDraft | null) {
-  if (!draft) return undefined;
-  const assignments = Array.isArray(draft.billing.assignments) ? draft.billing.assignments : [];
-  if (assignments.length === 0) return undefined;
-
-  if (draft.billing.chargeMode === 'INDIVIDUAL') {
-    const responsibleId = String(draft.billing.chargeResponsibleParticipantId || '');
-    if (responsibleId) {
-      const responsibleAssignment = assignments.find(
-        (assignment) =>
-          assignment.participantId === responsibleId &&
-          assignment.isChargeable &&
-          assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
-      );
-      if (responsibleAssignment) return responsibleAssignment.id;
-    }
-  }
-
-  const firstActiveChargeable = assignments.find(
-    (assignment) =>
-      assignment.isChargeable && assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
-  );
-  if (firstActiveChargeable) return firstActiveChargeable.id;
-
-  const firstChargeable = assignments.find((assignment) => assignment.isChargeable);
-  if (firstChargeable) return firstChargeable.id;
-
-  return undefined;
-}
-
-function resolveOwnerAssignmentIdForDraft(draft?: NewBookingDrawerDraft | null) {
-  if (!draft) return undefined;
-  const bookingResponsibleId =
-    String(draft.operational.bookingResponsibleParticipantId || '').trim() ||
-    String(
-      draft.participants.find(
-        (participant) => participant.bookingRole === 'BOOKING_RESPONSIBLE' && !participant.archived
-      )?.id || ''
-    ).trim();
-  if (!bookingResponsibleId) return undefined;
-
-  const ownerAssignment = draft.billing.assignments.find(
-    (assignment) =>
-      assignment.participantId === bookingResponsibleId &&
-      assignment.isChargeable &&
-      assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
-  );
-
-  return ownerAssignment?.id;
-}
-
-function buildComparableBillingFromDrawerDraft(draft?: NewBookingDrawerDraft | null) {
-  if (!draft) return null;
-  const participants = (Array.isArray(draft.participants) ? draft.participants : [])
-    .map((participant) => ({
-      id: String(participant.id || ''),
-      identity: [
-        participant.bookingRole === 'BOOKING_RESPONSIBLE' ? 'OWNER' : 'PARTICIPANT',
-        normalizeParticipantText(String(participant.displayName || '')),
-        normalizeParticipantText(String(participant.contact || '')),
-        Boolean(participant.archived) ? 'ARCHIVED' : 'ACTIVE',
-      ].join('|'),
-      archived: Boolean(participant.archived),
-    }))
-    .sort((left, right) => {
-      const byIdentity = left.identity.localeCompare(right.identity);
-      if (byIdentity !== 0) return byIdentity;
-      return left.id.localeCompare(right.id);
-    });
-
-  const assignmentByParticipantId = new Map<
-    string,
-    {
-      isChargeable: boolean;
-      assignedAmount: number;
-      participantLinkState: 'ACTIVE' | 'ARCHIVED_REFERENCE';
-    }
-  >();
-  (Array.isArray(draft.billing.assignments) ? draft.billing.assignments : []).forEach((assignment) => {
-    const participantId = String(assignment.participantId || '');
-    if (!participantId || assignmentByParticipantId.has(participantId)) return;
-    assignmentByParticipantId.set(participantId, {
-      isChargeable: Boolean(assignment.isChargeable),
-      assignedAmount: Number(Number(assignment.assignedAmount || 0).toFixed(2)),
-      participantLinkState:
-        assignment.participantLinkState === 'ARCHIVED_REFERENCE'
-          ? 'ARCHIVED_REFERENCE'
-          : 'ACTIVE',
-    });
-  });
-
-  const participantBillingRows = participants.map((participant) => {
-    const assignment = assignmentByParticipantId.get(participant.id);
-    const isArchived = participant.archived;
-    const isChargeable = !isArchived && Boolean(assignment?.isChargeable);
-    return {
-      participantIdentity: participant.identity,
-      isChargeable,
-      assignedAmount: isChargeable ? Number(Number(assignment?.assignedAmount || 0).toFixed(2)) : 0,
-      archived: isArchived,
-    };
-  });
-
-  const groupedByIdentity = new Map<
-    string,
-    {
-      count: number;
-      archivedCount: number;
-      chargeableCount: number;
-      assignedAmountTotal: number;
-    }
-  >();
-  participantBillingRows.forEach((row) => {
-    const key = row.participantIdentity;
-    const current = groupedByIdentity.get(key) || {
-      count: 0,
-      archivedCount: 0,
-      chargeableCount: 0,
-      assignedAmountTotal: 0,
-    };
-    current.count += 1;
-    if (row.archived) current.archivedCount += 1;
-    if (row.isChargeable) current.chargeableCount += 1;
-    current.assignedAmountTotal = Number(
-      Number(current.assignedAmountTotal + Number(row.assignedAmount || 0)).toFixed(2)
-    );
-    groupedByIdentity.set(key, current);
-  });
-
-  const participantGroups = Array.from(groupedByIdentity.entries())
-    .map(([participantIdentity, metrics]) => ({
-      participantIdentity,
-      count: metrics.count,
-      archivedCount: metrics.archivedCount,
-      chargeableCount: metrics.chargeableCount,
-      assignedAmountTotal: Number(Number(metrics.assignedAmountTotal || 0).toFixed(2)),
-    }))
-    .sort((left, right) => left.participantIdentity.localeCompare(right.participantIdentity));
-
-  return {
-    chargeMode: draft.billing.chargeMode === 'SHARED' ? 'SHARED' : 'INDIVIDUAL',
-    totalAmount: Number(Number(draft.billing.financialSummary.totalAmount || 0).toFixed(2)),
-    participantGroups,
-  };
 }
 
 function isBlockingQuoteError(message: string) {
@@ -1928,6 +1738,10 @@ export default function AdminAgendaPlaygroundPage() {
   const [courtsData, setCourtsData] = useState<Court[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const [dragSelection, setDragSelection] = useState<DraftSelection | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -1938,25 +1752,27 @@ export default function AdminAgendaPlaygroundPage() {
   const pendingBookingPointerRef = useRef<PendingBookingPointer | null>(null);
   const lastValidDropPreviewRef = useRef<BookingDropPreview | null>(null);
   const dragGrabOffsetSlotsRef = useRef<number>(0);
+  const modalBackdropPressedRef = useRef(false);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedCourtId, setSelectedCourtId] = useState<string>('');
   const [selectedStartSlot, setSelectedStartSlot] = useState(2);
   const [selectedEndSlot, setSelectedEndSlot] = useState(4);
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>('Único');
-  const [participantPriceDraftById, setParticipantPriceDraftById] = useState<Record<string, string>>({});
-  const [defaultPricePerParticipant, setDefaultPricePerParticipant] = useState(0);
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
   const [simplifiedOwnerAdded, setSimplifiedOwnerAdded] = useState(false);
-  const [simplifiedOwnerPaymentMethodDraft, setSimplifiedOwnerPaymentMethodDraft] = useState('');
   const [simplifiedEditingParticipantId, setSimplifiedEditingParticipantId] = useState<string | null>(null);
-  const [simplifiedEditPaymentMethodDraft, setSimplifiedEditPaymentMethodDraft] = useState('');
   const [simplifiedNewParticipantOpen, setSimplifiedNewParticipantOpen] = useState(false);
   const [simplifiedNewParticipantName, setSimplifiedNewParticipantName] = useState('');
   const [simplifiedNewParticipantContact, setSimplifiedNewParticipantContact] = useState('');
   const [simplifiedNewParticipantSourceTypeDraft, setSimplifiedNewParticipantSourceTypeDraft] =
     useState<Participant['sourceType']>('guest');
   const [simplifiedNewParticipantEntityRefDraft, setSimplifiedNewParticipantEntityRefDraft] = useState('');
+  const [simplifiedNewParticipantSelectedUserIdDraft, setSimplifiedNewParticipantSelectedUserIdDraft] = useState<number | undefined>(undefined);
+  const [simplifiedNewParticipantPersonKindDraft, setSimplifiedNewParticipantPersonKindDraft] = useState<Participant['personKind'] | undefined>(undefined);
+  const [simplifiedNewParticipantPersonKeyDraft, setSimplifiedNewParticipantPersonKeyDraft] = useState<string | undefined>(undefined);
+  const [simplifiedNewParticipantPersonSearchQueryDraft, setSimplifiedNewParticipantPersonSearchQueryDraft] = useState<string | undefined>(undefined);
+  const [simplifiedNewParticipantBadgesDraft, setSimplifiedNewParticipantBadgesDraft] = useState<string[] | undefined>(undefined);
+  const [persistedAdminParticipants, setPersistedAdminParticipants] = useState<AdminBookingParticipantDto[] | null>(null);
   const [simplifiedOwnerSuggestionsOpen, setSimplifiedOwnerSuggestionsOpen] = useState(false);
   const [simplifiedOwnerSearchLoading, setSimplifiedOwnerSearchLoading] = useState(false);
   const [simplifiedOwnerSuggestions, setSimplifiedOwnerSuggestions] = useState<ParticipantSuggestion[]>([]);
@@ -1972,25 +1788,6 @@ export default function AdminAgendaPlaygroundPage() {
   const [simplifiedNewParticipantSuggestionsPlacement, setSimplifiedNewParticipantSuggestionsPlacement] =
     useState<SuggestionPlacement | null>(null);
   const [simplifiedSuggestionsPositionTick, setSimplifiedSuggestionsPositionTick] = useState(0);
-  const [activePaymentModal, setActivePaymentModal] = useState<PaymentModalState>(null);
-  const [simplifiedPaymentPayerParticipantIdDraft, setSimplifiedPaymentPayerParticipantIdDraft] = useState('');
-  const [simplifiedPaymentCoveredParticipantIdDraft, setSimplifiedPaymentCoveredParticipantIdDraft] = useState('');
-  const [simplifiedPaymentCoveredParticipantIdsDraft, setSimplifiedPaymentCoveredParticipantIdsDraft] = useState<string[]>([]);
-  const [simplifiedPaymentAmountDraft, setSimplifiedPaymentAmountDraft] = useState('');
-  const [simplifiedPaymentMethodDraft, setSimplifiedPaymentMethodDraft] = useState('');
-  const [simplifiedPaymentModalVariant, setSimplifiedPaymentModalVariant] =
-    useState<'LEGACY' | 'PLAYTOMIC'>('PLAYTOMIC');
-  const [simplifiedPaymentQuickPreset, setSimplifiedPaymentQuickPreset] =
-    useState<PaymentQuickPreset>('MY_SHARE');
-  const [simplifiedPaymentImputationMode, setSimplifiedPaymentImputationMode] =
-    useState<PaymentImputationMode>('BY_PARTICIPANT');
-  const [simplifiedPaymentConceptMode, setSimplifiedPaymentConceptMode] =
-    useState<PaymentConceptMode>('AUTO');
-  const [simplifiedPaymentSelectedItemIdsDraft, setSimplifiedPaymentSelectedItemIdsDraft] = useState<string[]>([]);
-  const [simplifiedPaymentCustomItemAmountDraftById, setSimplifiedPaymentCustomItemAmountDraftById] =
-    useState<Record<string, string>>({});
-  const [simplifiedSinglePaymentAdvancedOpen, setSimplifiedSinglePaymentAdvancedOpen] = useState(false);
-  const [playtomicResultModal, setPlaytomicResultModal] = useState<PlaytomicPaymentResultModal | null>(null);
   const [simplifiedSidebarSection, setSimplifiedSidebarSection] = useState<SimplifiedSidebarSection>('DETAILS');
   const [consumptionProducts, setConsumptionProducts] = useState<ClubProductOption[]>([]);
   const [consumptionProductsLoading, setConsumptionProductsLoading] = useState(false);
@@ -2026,9 +1823,14 @@ export default function AdminAgendaPlaygroundPage() {
   const [quotedFinalPrice, setQuotedFinalPrice] = useState<number | null>(null);
   const [quotedDiscountAmount, setQuotedDiscountAmount] = useState<number>(0);
   const [isBookingFinancialLoading, setIsBookingFinancialLoading] = useState(false);
-  const [bookingTimelineEvents, setBookingTimelineEvents] = useState<BookingDomainEvent[]>([]);
+  const [bookingHistoryEntries, setBookingHistoryEntries] = useState<BookingHistoryEntryDto[]>([]);
   const [bookingTimelineLoading, setBookingTimelineLoading] = useState(false);
   const [bookingTimelineError, setBookingTimelineError] = useState('');
+  const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
+  const [accountDrawerAccountId, setAccountDrawerAccountId] = useState<string | null>(null);
+  const [accountDrawerInitialView, setAccountDrawerInitialView] =
+    useState<AccountDrawerInitialView>('overview');
+  const [accountDrawerContext, setAccountDrawerContext] = useState<AccountDrawerContext | undefined>(undefined);
   const [bookingFinancial, setBookingFinancial] = useState<{
     courtTotal: number;
     itemsTotal: number;
@@ -2037,11 +1839,6 @@ export default function AdminAgendaPlaygroundPage() {
     remaining: number;
     confirmationMode: 'AUTOMATIC' | 'MANUAL' | 'DEPOSIT_REQUIRED';
   } | null>(null);
-  const [remoteBillingConfig, setRemoteBillingConfig] = useState<BookingBillingConfig | null>(null);
-  const [isRemoteBillingConfigLoading, setIsRemoteBillingConfigLoading] = useState(false);
-  const [isBillingConfigHydrated, setIsBillingConfigHydrated] = useState(false);
-  const [billingConfigLoadError, setBillingConfigLoadError] = useState('');
-  const [billingConfigTouchedByUser, setBillingConfigTouchedByUser] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
   const [bookingKind, setBookingKind] = useState<BookingKind>('regular');
   const [recurringDayOfWeek, setRecurringDayOfWeek] = useState<number>(new Date().getDay());
@@ -2071,6 +1868,39 @@ export default function AdminAgendaPlaygroundPage() {
     courtsCount: number;
   } | null>(null);
   const isRecurringKind = bookingKind === 'recurringV2';
+  const handleModalBackdropPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    modalBackdropPressedRef.current = event.target === event.currentTarget;
+  }, []);
+  const handleModalBackdropPointerUp = useCallback((
+    event: React.PointerEvent<HTMLDivElement>,
+    onClose: () => void
+  ) => {
+    const shouldClose = modalBackdropPressedRef.current && event.target === event.currentTarget;
+    modalBackdropPressedRef.current = false;
+    if (shouldClose) onClose();
+  }, []);
+  const moveDate = useCallback((days: number) => {
+    if (!Number.isFinite(days) || days === 0) return;
+    setSelectedDate((previous) => {
+      const next = new Date(previous);
+      next.setDate(next.getDate() + days);
+      return next;
+    });
+    setFormError('');
+  }, []);
+  const nowLineTop = useMemo(() => {
+    const now = new Date(nowTick);
+    const isSameDay =
+      now.getFullYear() === selectedDate.getFullYear() &&
+      now.getMonth() === selectedDate.getMonth() &&
+      now.getDate() === selectedDate.getDate();
+    if (!isSameDay) return null;
+    const minutesFromStart = now.getHours() * 60 + now.getMinutes() - startHour * 60;
+    if (minutesFromStart < 0) return null;
+    const maxMinutes = (endHour - startHour) * 60;
+    const clampedMinutes = Math.min(minutesFromStart, maxMinutes);
+    return Number(((clampedMinutes / slotMinutes) * slotHeight).toFixed(2));
+  }, [nowTick, selectedDate]);
   const [deleteBookingConfirmOpen, setDeleteBookingConfirmOpen] = useState(false);
   const [deleteBookingFinalConfirmOpen, setDeleteBookingFinalConfirmOpen] = useState(false);
   const [cancelRefundAmountInput, setCancelRefundAmountInput] = useState('');
@@ -2090,17 +1920,6 @@ export default function AdminAgendaPlaygroundPage() {
   const [duplicateDecisionError, setDuplicateDecisionError] = useState('');
   const [duplicateDecisionCandidates, setDuplicateDecisionCandidates] = useState<DuplicateClientCandidate[]>([]);
   const [duplicateDecisionSelectedClientId, setDuplicateDecisionSelectedClientId] = useState('');
-  const [duplicateDecisionPendingPayload, setDuplicateDecisionPendingPayload] = useState<{
-    courtId: number;
-    activityId: number;
-    bookingDate: Date;
-    slotTime: string;
-    durationMinutes: number;
-    ownerName: string;
-    ownerPhone: string;
-    ownerEmail: string;
-    ownerDni: string;
-  } | null>(null);
   const [changeTitularModalOpen, setChangeTitularModalOpen] = useState(false);
   const [changeTitularSearch, setChangeTitularSearch] = useState('');
   const [changeTitularReason, setChangeTitularReason] = useState('');
@@ -2126,7 +1945,6 @@ export default function AdminAgendaPlaygroundPage() {
   const [seriesOperationResult, setSeriesOperationResult] = useState<SeriesOperationResult | null>(null);
   const [seriesOperationResultOpen, setSeriesOperationResultOpen] = useState(false);
   const [scheduleInputsDirty, setScheduleInputsDirty] = useState(false);
-  const [paymentInFlightId, setPaymentInFlightId] = useState<string | null>(null);
   const [participantUiState, setParticipantUiState] = useState<ParticipantUiState>({
     mode: 'idle',
     participantId: null,
@@ -2134,7 +1952,6 @@ export default function AdminAgendaPlaygroundPage() {
   const [participantSearchOpenId, setParticipantSearchOpenId] = useState<string | null>(null);
   const [participantSearchLoadingId, setParticipantSearchLoadingId] = useState<string | null>(null);
   const [participantSuggestionsById, setParticipantSuggestionsById] = useState<Record<string, ParticipantSuggestion[]>>({});
-  const [billingHubTab, setBillingHubTab] = useState<'SUMMARY' | 'ASSIGNMENTS' | 'PAYMENTS'>('SUMMARY');
   const [bookingDrawerState, bookingDrawerDispatch] = useReducer(
     bookingDrawerReducer,
     initialBookingDrawerState
@@ -2163,9 +1980,19 @@ export default function AdminAgendaPlaygroundPage() {
   const drawerCloseCleanupTimerRef = useRef<number | null>(null);
   const bookingFinancialRequestSeqRef = useRef(0);
   const bookingTimelineRequestSeqRef = useRef(0);
-  const remoteBillingConfigRequestSeqRef = useRef(0);
   const bookingConsumptionRequestSeqRef = useRef(0);
   const consumptionQuoteRequestSeqRef = useRef(0);
+  const duplicateDecisionActionsRef = useRef<DuplicateDecisionActions | null>(null);
+  const activeDrawerBookingIdRef = useRef<number | null>(null);
+  const accountDrawerBookingIdRef = useRef<number | null>(null);
+  const refreshPersistedBookingViewRef = useRef<null | ((bookingId: number, options?: {
+    schedule?: boolean;
+    participants?: boolean;
+    financial?: boolean;
+    consumptions?: boolean;
+    history?: boolean;
+    forceDrawerSections?: boolean;
+  }) => Promise<any>)>(null);
   const bookingDrawerLoadKeyRef = useRef<string>('');
   const bookingDrawerFormSyncSignatureRef = useRef<string>('');
   const pendingParticipantSaveNoticeRef = useRef<string>('');
@@ -2291,7 +2118,53 @@ export default function AdminAgendaPlaygroundPage() {
     setDuplicateDecisionError('');
     setDuplicateDecisionCandidates([]);
     setDuplicateDecisionSelectedClientId('');
-    setDuplicateDecisionPendingPayload(null);
+    duplicateDecisionActionsRef.current = null;
+  }, []);
+
+  const closeRecurringResultModal = useCallback(() => {
+    setRecurringOverlapModalOpen(false);
+  }, []);
+
+  const closeDeleteBookingFlow = useCallback(() => {
+    if (isDeletingBooking) return;
+    setDeleteBookingConfirmOpen(false);
+    setDeleteBookingFinalConfirmOpen(false);
+    setSeriesDeletePreviewScope(null);
+    setSeriesDeletePreviewSummary(null);
+    setSeriesDeletePreviewLoading(false);
+    setCancelBookingFlowError('');
+    setCancelRefundAmountInput('');
+    setCancelRefundReasonType('FULL');
+    setCancelRefundExecutionNotes('');
+    setCancelRefundExecuteNow(true);
+  }, [isDeletingBooking]);
+
+  const closeSeriesOperationResult = useCallback(() => {
+    setSeriesOperationResultOpen(false);
+    setSeriesOperationResult(null);
+  }, []);
+
+  const openDuplicateDecisionModal = useCallback((params: {
+    candidates: DuplicateClientCandidate[];
+    selectedClientId?: string;
+    onUseExisting: (clientId: string) => Promise<void>;
+    onCreateNew: () => Promise<void>;
+  }) => {
+    const normalizedCandidates = (Array.isArray(params.candidates) ? params.candidates : []).filter(
+      (candidate) => String(candidate?.id || '').trim().length > 0
+    );
+    const initialSelectedClientId = String(
+      params.selectedClientId || normalizedCandidates[0]?.id || ''
+    ).trim();
+    duplicateDecisionActionsRef.current = {
+      onUseExisting: params.onUseExisting,
+      onCreateNew: params.onCreateNew,
+    };
+    setDuplicateDecisionCandidates(normalizedCandidates);
+    setDuplicateDecisionSelectedClientId(initialSelectedClientId);
+    setDuplicateDecisionError('');
+    setDuplicateDecisionLoading(false);
+    setDuplicateDecisionOpen(true);
   }, []);
 
   const extractDuplicateCandidatesFromMeta = useCallback((meta?: Record<string, unknown>) => {
@@ -2321,8 +2194,8 @@ export default function AdminAgendaPlaygroundPage() {
   }, []);
 
   async function runDuplicateDecisionRetry(mode: 'USE_EXISTING' | 'CREATE_NEW') {
-    const payload = duplicateDecisionPendingPayload;
-    if (!payload) return;
+    const actions = duplicateDecisionActionsRef.current;
+    if (!actions) return;
     const selectedClientId = String(duplicateDecisionSelectedClientId || '').trim();
     if (mode === 'USE_EXISTING' && !selectedClientId) {
       setDuplicateDecisionError('Seleccioná un cliente existente para continuar.');
@@ -2332,83 +2205,23 @@ export default function AdminAgendaPlaygroundPage() {
     setDuplicateDecisionLoading(true);
     setDuplicateDecisionError('');
     try {
-      const createdPayload: any = await createBooking(payload.courtId, payload.activityId, payload.bookingDate, payload.slotTime, {
-        durationMinutes: payload.durationMinutes,
-        ...(mode === 'USE_EXISTING'
-          ? { clientId: selectedClientId }
-          : {
-              client: {
-                name: payload.ownerName,
-                phone: payload.ownerPhone,
-                email: payload.ownerEmail,
-                dni: payload.ownerDni || undefined,
-                duplicateResolution: 'CREATE_NEW',
-              },
-            }),
-      });
-
-      const maybeId = Number(createdPayload?.booking?.id ?? createdPayload?.id ?? createdPayload?.bookingId);
-      if (Number.isFinite(maybeId) && maybeId > 0) {
-        const bookingPayload =
-          createdPayload?.booking && typeof createdPayload.booking === 'object'
-            ? createdPayload.booking
-            : createdPayload;
-        let createdBookingClientIdRaw = String(
-          bookingPayload?.clientId || bookingPayload?.client?.id || ''
-        ).trim();
-        let createdBookingClientName = String(
-          bookingPayload?.client?.name || bookingPayload?.clientName || ''
-        ).trim();
-        let createdBookingUserIdRaw = Number(
-          bookingPayload?.userId || bookingPayload?.user?.id || 0
-        );
-        if (!createdBookingClientIdRaw && !(Number.isFinite(createdBookingUserIdRaw) && createdBookingUserIdRaw > 0)) {
-          try {
-            const hydratedBooking = await getBookingById(maybeId);
-            createdBookingClientIdRaw = String(
-              hydratedBooking?.clientId || hydratedBooking?.client?.id || ''
-            ).trim();
-            createdBookingClientName = String(
-              hydratedBooking?.client?.name || hydratedBooking?.clientName || createdBookingClientName
-            ).trim();
-            createdBookingUserIdRaw = Number(
-              hydratedBooking?.userId || hydratedBooking?.user?.id || 0
-            );
-          } catch {
-          }
-        }
-        const createdBookingClientId = createdBookingClientIdRaw.length > 0 ? createdBookingClientIdRaw : undefined;
-        const createdBookingUserId =
-          Number.isFinite(createdBookingUserIdRaw) && createdBookingUserIdRaw > 0
-            ? createdBookingUserIdRaw
-            : undefined;
-        await persistNewBookingDraftState(maybeId, {
-          bookingClientId: createdBookingClientId,
-          bookingUserId: createdBookingUserId,
-          bookingClientName: createdBookingClientName || undefined,
-        });
+      if (mode === 'USE_EXISTING') {
+        await actions.onUseExisting(selectedClientId);
+      } else {
+        await actions.onCreateNew();
       }
-
-      await reloadSchedule();
       closeDuplicateDecisionModal();
-      setFormError('');
-      setDrawerOpen(false);
-      showAgendaToast(
-        mode === 'USE_EXISTING'
-          ? 'Reserva creada con el cliente existente seleccionado.'
-          : 'Reserva creada como cliente nuevo (duplicado permitido).',
-        'success'
-      );
     } catch (error: any) {
-      const normalized = normalizeApiError(error, 'No se pudo crear la reserva.');
+      const normalized = normalizeApiError(error, 'No se pudo completar la operación.');
       if (normalized.code === 'CLIENT_POSSIBLE_DUPLICATE') {
         const nextCandidates = extractDuplicateCandidatesFromMeta(normalized.meta);
         if (nextCandidates.length > 0) {
           setDuplicateDecisionCandidates(nextCandidates);
-          setDuplicateDecisionSelectedClientId(String(nextCandidates[0]?.id || ''));
+          const nextPrimaryClientId = String(normalized.meta?.primaryClientId || '').trim();
+          setDuplicateDecisionSelectedClientId(nextPrimaryClientId || String(nextCandidates[0]?.id || ''));
         }
       }
-      setDuplicateDecisionError(toUserSafeMessage(normalized.message, 'No se pudo crear la reserva.'));
+      setDuplicateDecisionError(toUserSafeMessage(normalized.message, 'No se pudo completar la operación.'));
     } finally {
       setDuplicateDecisionLoading(false);
     }
@@ -2433,6 +2246,11 @@ export default function AdminAgendaPlaygroundPage() {
     if (Object.keys(fieldErrors).length === 0) return;
     setFieldErrors({});
   }, [fieldErrors, formError]);
+  const timeFieldError = String(fieldErrors.time || '').trim();
+  const dateFieldError = String(fieldErrors.date || '').trim();
+  const courtFieldError = String(fieldErrors.court || '').trim();
+  const ownerFieldError = String(fieldErrors.owner || '').trim();
+  const participantsFieldError = String(fieldErrors.participants || '').trim();
 
   useEffect(() => {
     if (!expandedParticipantId) return;
@@ -2530,10 +2348,6 @@ export default function AdminAgendaPlaygroundPage() {
     setConsumptionQuoteLoading(false);
     setConsumptionAddInFlight(false);
     setConsumptionRemovingId(null);
-    setSimplifiedPaymentQuickPreset('MY_SHARE');
-    setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
-    setSimplifiedPaymentConceptMode('AUTO');
-    setSimplifiedPaymentSelectedItemIdsDraft([]);
     bookingConsumptionRequestSeqRef.current += 1;
     consumptionQuoteRequestSeqRef.current += 1;
   }, []);
@@ -2551,19 +2365,16 @@ export default function AdminAgendaPlaygroundPage() {
     return buildDefaultParticipantsForBooking(booking);
   }, []);
   const openBookingInDrawer = useCallback((booking: Booking) => {
+    activeDrawerBookingIdRef.current =
+      Number.isFinite(Number(booking.id)) && Number(booking.id) > 0 ? Number(booking.id) : null;
     bookingFinancialRequestSeqRef.current += 1;
     bookingTimelineRequestSeqRef.current += 1;
-    remoteBillingConfigRequestSeqRef.current += 1;
     setIsBookingFinancialLoading(booking.state !== 'blocked');
-    setIsRemoteBillingConfigLoading(booking.state !== 'blocked');
     setBookingTimelineLoading(booking.state !== 'blocked');
     setBookingTimelineError('');
-    setBookingTimelineEvents([]);
+    setBookingHistoryEntries([]);
     setBookingFinancial(null);
-    setRemoteBillingConfig(null);
-    setIsBillingConfigHydrated(false);
-    setBillingConfigLoadError('');
-    setBillingConfigTouchedByUser(false);
+    setPersistedAdminParticipants(null);
     setParticipantLabelByRefCache({});
     pendingParticipantSaveNoticeRef.current = '';
     resetConsumptionsDraft();
@@ -2586,8 +2397,6 @@ export default function AdminAgendaPlaygroundPage() {
       participant.isOwner ? participant : { ...participant, customPrice: null }
     );
     setParticipants(resolvedParticipants);
-    setParticipantPriceDraftById({});
-    setPaymentMode('Único');
     setSimplifiedSidebarSection('DETAILS');
     if (booking.state === 'blocked') {
       setBookingKind('block');
@@ -2664,6 +2473,249 @@ export default function AdminAgendaPlaygroundPage() {
       return '';
     }
   }, []);
+
+  const resetSimplifiedNewParticipantDraft = useCallback(() => {
+    setSimplifiedNewParticipantOpen(false);
+    setSimplifiedNewParticipantName('');
+    setSimplifiedNewParticipantContact('');
+    setSimplifiedNewParticipantSourceTypeDraft('guest');
+    setSimplifiedNewParticipantEntityRefDraft('');
+    setSimplifiedNewParticipantSelectedUserIdDraft(undefined);
+    setSimplifiedNewParticipantPersonKindDraft(undefined);
+    setSimplifiedNewParticipantPersonKeyDraft(undefined);
+    setSimplifiedNewParticipantPersonSearchQueryDraft(undefined);
+    setSimplifiedNewParticipantBadgesDraft(undefined);
+    setSimplifiedNewParticipantSuggestionsOpen(false);
+    setSimplifiedNewParticipantSearchLoading(false);
+    setSimplifiedNewParticipantSuggestions([]);
+  }, []);
+
+  const loadAdminParticipantsForBooking = useCallback(async (bookingId: number) => {
+    const items = await getAdminBookingParticipants(bookingId);
+    setPersistedAdminParticipants(Array.isArray(items) ? items : []);
+    return Array.isArray(items) ? items : [];
+  }, []);
+
+  const loadBookingHistoryForDrawer = useCallback(async (bookingId: number) => {
+    const timelineRequestSeq = bookingTimelineRequestSeqRef.current + 1;
+    bookingTimelineRequestSeqRef.current = timelineRequestSeq;
+    setBookingTimelineLoading(true);
+    setBookingTimelineError('');
+    try {
+      const events = await getAdminBookingHistory(bookingId);
+      if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
+        setBookingHistoryEntries(Array.isArray(events) ? events : []);
+      }
+      return Array.isArray(events) ? events : [];
+    } catch (error: any) {
+      if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
+        setBookingHistoryEntries([]);
+        const normalized = normalizeApiError(error, 'No se pudo cargar el historial de la reserva.');
+        setBookingTimelineError(toUserSafeMessage(normalized.message, 'No se pudo cargar el historial de la reserva.'));
+      }
+      throw error;
+    } finally {
+      if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
+        setBookingTimelineLoading(false);
+      }
+    }
+  }, []);
+
+  const buildParticipantPersonSelection = useCallback(
+    (
+      draft: Pick<
+        Participant,
+        | 'name'
+        | 'contact'
+        | 'dni'
+        | 'sourceType'
+        | 'entityRef'
+        | 'selectedUserId'
+        | 'personKind'
+        | 'personKey'
+        | 'personSearchQuery'
+      >,
+      options?: { forceCreateNew?: boolean }
+    ) => {
+      const clientId = resolveParticipantClientId(draft as Participant);
+      if (clientId) {
+        return {
+          kind: 'clubClient' as const,
+          clientId,
+        };
+      }
+
+      const selectedUserId = resolveParticipantSelectedUserId(draft as Participant);
+      const personKey = String(draft.personKey || '').trim();
+      const personSearchQuery = String(draft.personSearchQuery || '').trim();
+      if (selectedUserId > 0 && personKey && personSearchQuery.length >= 2) {
+        return {
+          kind: (draft.personKind === 'linked' ? 'linked' : 'systemUser') as 'linked' | 'systemUser',
+          userId: selectedUserId,
+          personKey,
+          searchQuery: personSearchQuery,
+        };
+      }
+
+      const phone = resolvePlaygroundClientPhone(draft as Participant);
+      if (!phone) return null;
+      return {
+        kind: 'newClient' as const,
+        name: String(draft.name || '').trim(),
+        phone,
+        email: resolvePlaygroundClientEmail(draft as Participant) || undefined,
+        dni: resolvePlaygroundClientDni(draft as Participant) || undefined,
+        forceCreateNew: Boolean(options?.forceCreateNew),
+      };
+    },
+    []
+  );
+
+  const addParticipantToExistingBooking = useCallback(async (
+    bookingId: number,
+    participantDraft: Pick<
+      Participant,
+      | 'name'
+      | 'contact'
+      | 'dni'
+      | 'sourceType'
+      | 'entityRef'
+      | 'selectedUserId'
+      | 'personKind'
+      | 'personKey'
+      | 'personSearchQuery'
+    >,
+    options?: {
+      forceCreateNew?: boolean;
+      successMessage?: string;
+      onSuccess?: () => void;
+    }
+  ): Promise<'added' | 'deferred'> => {
+    const selection = buildParticipantPersonSelection(participantDraft, {
+      forceCreateNew: options?.forceCreateNew,
+    });
+    if (!selection) {
+      throw new Error('Completá el participante con una persona válida o cargá un teléfono.');
+    }
+
+    try {
+      await addAdminBookingParticipant(bookingId, {
+        personSelection: selection as any,
+      });
+      await refreshPersistedBookingViewRef.current?.(bookingId, {
+        participants: true,
+        schedule: true,
+        history: true,
+      });
+      options?.onSuccess?.();
+      if (options?.successMessage) {
+        showAgendaToast(options.successMessage, 'success');
+      }
+      return 'added';
+    } catch (error: any) {
+      const normalized = normalizeApiError(error, 'No se pudo agregar el participante.');
+      const candidateRows = extractDuplicateCandidatesFromMeta(normalized.meta);
+      const isNewClientDraft = selection.kind === 'newClient';
+      if (normalized.code === 'CLIENT_POSSIBLE_DUPLICATE' && isNewClientDraft && candidateRows.length > 0) {
+        const currentDraft = {
+          ...participantDraft,
+        };
+        openDuplicateDecisionModal({
+          candidates: candidateRows,
+          selectedClientId: String(normalized.meta?.primaryClientId || candidateRows[0]?.id || ''),
+          onUseExisting: async (selectedClientId) => {
+            await addParticipantToExistingBooking(
+              bookingId,
+              {
+                ...currentDraft,
+                sourceType: 'clubClient',
+                entityRef: `client:${selectedClientId}`,
+                selectedUserId: undefined,
+                personKind: 'clubClient',
+                personKey: undefined,
+                personSearchQuery: undefined,
+              },
+              options
+            );
+          },
+          onCreateNew: async () => {
+            await addParticipantToExistingBooking(
+              bookingId,
+              currentDraft,
+              {
+                ...options,
+                forceCreateNew: true,
+              }
+            );
+          },
+        });
+        return 'deferred';
+      }
+      throw error;
+    }
+  }, [
+    buildParticipantPersonSelection,
+    extractDuplicateCandidatesFromMeta,
+    openDuplicateDecisionModal,
+    showAgendaToast,
+  ]);
+
+  const removePersistedParticipantFromBooking = useCallback(async (
+    bookingId: number,
+    participantId: string
+  ) => {
+    await removeAdminBookingParticipant(bookingId, participantId);
+    await refreshPersistedBookingViewRef.current?.(bookingId, {
+      participants: true,
+      schedule: true,
+      history: true,
+    });
+  }, []);
+
+  const removeParticipant = useCallback(async (participantId: string) => {
+    const safeParticipantId = String(participantId || '').trim();
+    if (!safeParticipantId) return;
+    const participant = participants.find((item) => item.id === safeParticipantId);
+    if (!participant || participant.isOwner) return;
+
+    if (persistedEditingBookingId && participant.bookingParticipantId) {
+      await removePersistedParticipantFromBooking(
+        persistedEditingBookingId,
+        participant.bookingParticipantId
+      );
+      showAgendaToast('Participante eliminado.', 'success');
+      return;
+    }
+
+    setParticipants((previous) => previous.filter((item) => item.id !== safeParticipantId));
+    showAgendaToast('Participante eliminado.', 'success');
+  }, [
+    participants,
+    persistedEditingBookingId,
+    removePersistedParticipantFromBooking,
+    showAgendaToast,
+  ]);
+
+  const syncDraftParticipantsToPersistedBooking = useCallback(async (
+    bookingId: number,
+    participantDrafts: Participant[]
+  ): Promise<'completed' | 'deferred'> => {
+    const queue = participantDrafts.filter(
+      (participant) => !participant.isOwner && String(participant.name || '').trim().length > 0
+    );
+    if (queue.length === 0) {
+      await loadAdminParticipantsForBooking(bookingId);
+      return 'completed';
+    }
+
+    for (const participant of queue) {
+      const result = await addParticipantToExistingBooking(bookingId, participant);
+      if (result === 'deferred') return 'deferred';
+    }
+
+    await loadAdminParticipantsForBooking(bookingId);
+    return 'completed';
+  }, [addParticipantToExistingBooking, loadAdminParticipantsForBooking]);
 
   useEffect(() => {
     if (!changeTitularModalOpen) return;
@@ -2799,12 +2851,67 @@ export default function AdminAgendaPlaygroundPage() {
           : {}),
         reason: String(changeTitularReason || '').trim() || undefined,
       });
-      await reloadSchedule();
+      await refreshPersistedBookingViewRef.current?.(bookingId, {
+        schedule: true,
+        participants: true,
+        financial: true,
+        history: true,
+      });
       closeChangeTitularModal();
       setEditingBookingId(String(bookingId));
       showAgendaToast('Titular actualizado correctamente.', 'success');
     } catch (error: any) {
       const normalized = normalizeApiError(error, 'No se pudo cambiar el titular.');
+      const candidateRows = extractDuplicateCandidatesFromMeta(normalized.meta);
+      if (normalized.code === 'CLIENT_POSSIBLE_DUPLICATE' && isDraftMode && candidateRows.length > 0) {
+        const nextDraftName = String(changeTitularDraftName || '').trim();
+        const nextDraftPhone = String(changeTitularDraftPhone || '').trim();
+        const nextDraftEmail = String(changeTitularDraftEmail || '').trim();
+        const nextDraftDni = String(changeTitularDraftDni || '').trim();
+        const nextReason = String(changeTitularReason || '').trim() || undefined;
+        openDuplicateDecisionModal({
+          candidates: candidateRows,
+          selectedClientId: String(normalized.meta?.primaryClientId || candidateRows[0]?.id || ''),
+          onUseExisting: async (selectedClientId) => {
+            await changeBookingClient(bookingId, {
+              newClientId: selectedClientId,
+              reason: nextReason,
+            });
+            await refreshPersistedBookingViewRef.current?.(bookingId, {
+              schedule: true,
+              participants: true,
+              financial: true,
+              history: true,
+            });
+            closeChangeTitularModal();
+            setEditingBookingId(String(bookingId));
+            showAgendaToast('Titular actualizado con el cliente existente seleccionado.', 'success');
+          },
+          onCreateNew: async () => {
+            await changeBookingClient(bookingId, {
+              newClient: {
+                name: nextDraftName,
+                phone: nextDraftPhone || undefined,
+                email: nextDraftEmail || undefined,
+                dni: nextDraftDni || undefined,
+                duplicateResolution: 'CREATE_NEW',
+              },
+              reason: nextReason,
+            });
+            await refreshPersistedBookingViewRef.current?.(bookingId, {
+              schedule: true,
+              participants: true,
+              financial: true,
+              history: true,
+            });
+            closeChangeTitularModal();
+            setEditingBookingId(String(bookingId));
+            showAgendaToast('Titular actualizado creando un cliente nuevo.', 'success');
+          },
+        });
+        setChangeTitularError('');
+        return;
+      }
       setChangeTitularError(toUserSafeMessage(normalized.message, 'No se pudo cambiar el titular.'));
     } finally {
       setChangeTitularSubmitting(false);
@@ -2818,9 +2925,10 @@ export default function AdminAgendaPlaygroundPage() {
     changeTitularDraftName,
     changeTitularDraftPhone,
     closeChangeTitularModal,
+    extractDuplicateCandidatesFromMeta,
     editingBooking?.clientId,
     editingBookingId,
-    reloadSchedule,
+    openDuplicateDecisionModal,
     showAgendaToast,
   ]);
 
@@ -2962,6 +3070,172 @@ export default function AdminAgendaPlaygroundPage() {
     }
   }, []);
 
+  const refreshPersistedBookingView = useCallback(async (
+    bookingId: number,
+    options?: {
+      schedule?: boolean;
+      participants?: boolean;
+      financial?: boolean;
+      consumptions?: boolean;
+      history?: boolean;
+      forceDrawerSections?: boolean;
+    }
+  ) => {
+    if (!Number.isFinite(bookingId) || bookingId <= 0) return {};
+
+    const targetOptions = {
+      schedule: Boolean(options?.schedule),
+      participants: Boolean(options?.participants),
+      financial: Boolean(options?.financial),
+      consumptions: Boolean(options?.consumptions),
+      history: Boolean(options?.history),
+      forceDrawerSections: Boolean(options?.forceDrawerSections),
+    };
+
+    const shouldRefreshDrawerSections =
+      targetOptions.forceDrawerSections ||
+      (drawerOpen &&
+        bookingKind !== 'block' &&
+        Number(activeDrawerBookingIdRef.current || 0) === bookingId);
+
+    const results: {
+      schedule?: Booking[];
+      participants?: AdminBookingParticipantDto[];
+      financial?: Awaited<ReturnType<typeof refreshBookingFinancial>>;
+    } = {};
+
+    const tasks: Promise<void>[] = [];
+
+    if (targetOptions.schedule) {
+      tasks.push(
+        reloadSchedule()
+          .then((items) => {
+            results.schedule = Array.isArray(items) ? items : [];
+          })
+          .catch((error) => {
+            reportUiError({ area: 'AgendaPlayground', action: 'refreshScheduleAfterMutation' }, error);
+          })
+      );
+    }
+
+    if (shouldRefreshDrawerSections && targetOptions.participants) {
+      tasks.push(
+        loadAdminParticipantsForBooking(bookingId)
+          .then((items) => {
+            results.participants = items;
+          })
+          .catch((error) => {
+            reportUiError({ area: 'AgendaPlayground', action: 'refreshBookingParticipantsAfterMutation' }, error);
+            setPersistedAdminParticipants(null);
+          })
+      );
+    }
+
+    if (shouldRefreshDrawerSections && targetOptions.financial) {
+      tasks.push(
+        refreshBookingFinancial(bookingId)
+          .then((summary) => {
+            results.financial = summary;
+          })
+          .catch((error) => {
+            reportUiError({ area: 'AgendaPlayground', action: 'refreshBookingFinancialAfterMutation' }, error);
+          })
+      );
+    }
+
+    if (shouldRefreshDrawerSections && targetOptions.consumptions) {
+      tasks.push(
+        loadBookingConsumptions(bookingId)
+          .then(() => undefined)
+          .catch((error) => {
+            reportUiError({ area: 'AgendaPlayground', action: 'refreshBookingConsumptionsAfterMutation' }, error);
+          })
+      );
+    }
+
+    if (shouldRefreshDrawerSections && targetOptions.history) {
+      tasks.push(
+        loadBookingHistoryForDrawer(bookingId)
+          .then(() => undefined)
+          .catch((error) => {
+            reportUiError({ area: 'AgendaPlayground', action: 'refreshBookingHistoryAfterMutation' }, error);
+          })
+      );
+    }
+
+    await Promise.all(tasks);
+    return results;
+  }, [
+    bookingKind,
+    drawerOpen,
+    loadAdminParticipantsForBooking,
+    loadBookingConsumptions,
+    loadBookingHistoryForDrawer,
+    refreshBookingFinancial,
+    reloadSchedule,
+  ]);
+  refreshPersistedBookingViewRef.current = refreshPersistedBookingView;
+
+  const closeAgendaAccountDrawer = useCallback(() => {
+    setAccountDrawerOpen(false);
+    setAccountDrawerAccountId(null);
+    setAccountDrawerInitialView('overview');
+    setAccountDrawerContext(undefined);
+    accountDrawerBookingIdRef.current = null;
+  }, []);
+
+  const openAgendaAccountDrawer = useCallback(async (
+    bookingId: number,
+    initialView: AccountDrawerInitialView = 'overview'
+  ) => {
+    if (!Number.isFinite(bookingId) || bookingId <= 0) {
+      showAgendaToast('No se encontró una reserva válida para abrir la cuenta.');
+      return;
+    }
+
+    const paymentLockedByPendingReservation = Boolean(
+      bookingId === persistedEditingBookingId &&
+      bookingKind !== 'block' &&
+      bookingFinancial?.confirmationMode === 'MANUAL' &&
+      editingBooking?.state === 'pending'
+    );
+
+    if (initialView === 'payment' && paymentLockedByPendingReservation) {
+      showAgendaToast('Primero confirmá la reserva para habilitar cobros.');
+      return;
+    }
+
+    try {
+      const accounts = await listAccounts({ bookingId });
+      const bookingAccount = Array.isArray(accounts) ? accounts[0] : null;
+      if (!bookingAccount?.id) {
+        showAgendaToast('No se encontró la cuenta de esta reserva.');
+        return;
+      }
+
+      accountDrawerBookingIdRef.current = bookingId;
+      setAccountDrawerAccountId(String(bookingAccount.id));
+      setAccountDrawerInitialView(initialView);
+      setAccountDrawerContext({
+        title: String(editingBooking?.title || '').trim() || `Reserva #${bookingId}`,
+        subtitle: selectedDate.toLocaleDateString('es-AR'),
+        accountStatus: bookingAccount.status === 'CLOSED' ? 'CLOSED' : 'OPEN',
+      });
+      setAccountDrawerOpen(true);
+    } catch (error) {
+      reportUiError({ area: 'AgendaPlayground', action: 'openAgendaAccountDrawer' }, error);
+      showAgendaToast('No se pudo abrir la cuenta de la reserva.');
+    }
+  }, [
+    bookingFinancial?.confirmationMode,
+    bookingKind,
+    editingBooking?.state,
+    editingBooking?.title,
+    persistedEditingBookingId,
+    selectedDate,
+    showAgendaToast,
+  ]);
+
   useEffect(() => {
     if (!authChecked || user) return;
     if (getPendingLogoutRedirect()) return;
@@ -3014,23 +3288,17 @@ export default function AdminAgendaPlaygroundPage() {
     drawerCloseCleanupTimerRef.current = window.setTimeout(() => {
       bookingFinancialRequestSeqRef.current += 1;
       bookingTimelineRequestSeqRef.current += 1;
-      remoteBillingConfigRequestSeqRef.current += 1;
-      setBillingHubTab('SUMMARY');
       setParticipantMenuId(null);
       setExpandedParticipantId(null);
       setParticipantSearchOpenId(null);
       setParticipantSearchLoadingId(null);
       setParticipantSuggestionsById({});
       setIsBookingFinancialLoading(false);
-      setIsRemoteBillingConfigLoading(false);
       setBookingTimelineLoading(false);
       setBookingTimelineError('');
-      setBookingTimelineEvents([]);
+      setBookingHistoryEntries([]);
       setBookingFinancial(null);
-      setRemoteBillingConfig(null);
-      setIsBillingConfigHydrated(false);
-      setBillingConfigLoadError('');
-      setBillingConfigTouchedByUser(false);
+      setPersistedAdminParticipants(null);
       resetConsumptionsDraft();
       setParticipantLabelByRefCache({});
       pendingParticipantSaveNoticeRef.current = '';
@@ -3048,6 +3316,7 @@ export default function AdminAgendaPlaygroundPage() {
       setSeriesDeletePreviewSummary(null);
       setSeriesOperationResult(null);
       setSeriesOperationResultOpen(false);
+      activeDrawerBookingIdRef.current = null;
       bookingDrawerDispatch({ type: 'CLEAR' });
       bookingDrawerFormSyncSignatureRef.current = '';
       drawerCloseCleanupTimerRef.current = null;
@@ -3060,6 +3329,7 @@ export default function AdminAgendaPlaygroundPage() {
 
   useEffect(() => {
     if (drawerOpen) return;
+    activeDrawerBookingIdRef.current = null;
     bookingDrawerLoadKeyRef.current = '';
   }, [drawerOpen]);
 
@@ -3079,6 +3349,35 @@ export default function AdminAgendaPlaygroundPage() {
     if (!persistedEditingBookingId) return;
     void loadBookingConsumptions(persistedEditingBookingId);
   }, [bookingKind, drawerOpen, persistedEditingBookingId, loadBookingConsumptions]);
+
+  useEffect(() => {
+    if (!drawerOpen || bookingKind === 'block') {
+      setPersistedAdminParticipants(null);
+      return;
+    }
+    if (!persistedEditingBookingId) {
+      setPersistedAdminParticipants(null);
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const items = await getAdminBookingParticipants(persistedEditingBookingId);
+        if (cancelled) return;
+        setPersistedAdminParticipants(Array.isArray(items) ? items : []);
+      } catch (error) {
+        if (cancelled) return;
+        reportUiError({ area: 'AgendaPlayground', action: 'loadAdminBookingParticipants' }, error);
+        setPersistedAdminParticipants(null);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingKind, drawerOpen, persistedEditingBookingId]);
 
   useEffect(() => {
     if (!drawerOpen || bookingKind === 'block' || !persistedEditingBookingId) {
@@ -3149,16 +3448,8 @@ export default function AdminAgendaPlaygroundPage() {
     let cancelled = false;
     const run = async () => {
       try {
-        const summary = await refreshBookingFinancial(persistedEditingBookingId);
+        await refreshBookingFinancial(persistedEditingBookingId);
         if (cancelled) return;
-        setParticipants((previous) =>
-          distributePaidByParticipants(
-            previous,
-            paymentMode,
-            Number(summary?.total || 0),
-            Number(summary?.paid || 0)
-          )
-        );
       } catch {
         // Si falla la lectura financiera, mantenemos el estado actual local.
       }
@@ -3168,96 +3459,33 @@ export default function AdminAgendaPlaygroundPage() {
     return () => {
       cancelled = true;
     };
-  }, [bookingKind, drawerOpen, paymentMode, persistedEditingBookingId, refreshBookingFinancial]);
-
-  useEffect(() => {
-    if (!drawerOpen || bookingKind === 'block') return;
-    if (!persistedEditingBookingId) return;
-
-    let cancelled = false;
-    const requestSeq = remoteBillingConfigRequestSeqRef.current + 1;
-    remoteBillingConfigRequestSeqRef.current = requestSeq;
-    const run = async () => {
-      setIsRemoteBillingConfigLoading(true);
-      setIsBillingConfigHydrated(false);
-      setBillingConfigLoadError('');
-      try {
-        const config = await getBookingBillingConfig(persistedEditingBookingId);
-        if (cancelled) return;
-        if (remoteBillingConfigRequestSeqRef.current !== requestSeq) return;
-        setRemoteBillingConfig(config);
-      } catch {
-        if (!cancelled && remoteBillingConfigRequestSeqRef.current === requestSeq) {
-          setRemoteBillingConfig(null);
-          setIsRemoteBillingConfigLoading(false);
-          setIsBillingConfigHydrated(false);
-          setBillingConfigLoadError('No se pudo cargar la configuración de cobro.');
-        }
-      } finally {
-        if (!cancelled && remoteBillingConfigRequestSeqRef.current === requestSeq) {
-          setIsRemoteBillingConfigLoading(false);
-        }
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [bookingKind, drawerOpen, persistedEditingBookingId]);
+  }, [bookingKind, drawerOpen, persistedEditingBookingId, refreshBookingFinancial]);
 
   useEffect(() => {
     if (!drawerOpen || bookingKind === 'block') return;
     if (!persistedEditingBookingId || !editingBooking) return;
-    if (!remoteBillingConfig) return;
+    if (!Array.isArray(persistedAdminParticipants) || persistedAdminParticipants.length === 0) return;
 
-    setPaymentMode(remoteBillingConfig.chargeMode === 'SHARED' ? 'Dividido' : 'Único');
-
-    const metadata = remoteBillingConfig?.metadata;
-    const resolvedParticipants = parseSidebarParticipantsFromMetadata(metadata, editingBooking);
-    let shouldRebaseDrawerSource = false;
-    if (resolvedParticipants && resolvedParticipants.length > 0) {
-      setParticipants(
-        resolvedParticipants.map((participant) =>
-          participant.isOwner ? participant : { ...participant, customPrice: null }
+    setParticipants((previous) => {
+      const mapped = persistedAdminParticipants.map((participant) =>
+        mapAdminParticipantToPlaygroundParticipant(
+          participant,
+          findExistingParticipantMatch(participant, previous)
         )
       );
-      shouldRebaseDrawerSource = true;
-    } else {
-      const persistedResponsibleRef = String(remoteBillingConfig?.chargeResponsibleRef || '').trim();
-      if (remoteBillingConfig.chargeMode === 'INDIVIDUAL' && persistedResponsibleRef) {
-        const nextSourceType = inferParticipantSourceTypeFromEntityRef(persistedResponsibleRef);
-        setParticipants((previous) =>
-          previous.map((participant, index) => {
-            const isOwnerCandidate = participant.isOwner || index === 0;
-            if (!isOwnerCandidate) return participant;
-            return {
-              ...participant,
-              sourceType: nextSourceType,
-              entityRef: participant.entityRef,
-            };
-          })
-        );
-        shouldRebaseDrawerSource = true;
+      if (!mapped.some((participant) => participant.isOwner)) {
+        return buildDefaultParticipantsForBooking(editingBooking);
       }
-    }
-
-    if (shouldRebaseDrawerSource) {
-      bookingDrawerLoadKeyRef.current = '';
-      bookingDrawerFormSyncSignatureRef.current = '';
-      setBillingConfigTouchedByUser(false);
-    }
-    setIsRemoteBillingConfigLoading(false);
-    setIsBillingConfigHydrated(true);
-    setBillingConfigLoadError('');
+      return mapped.map((participant) =>
+        participant.isOwner ? participant : { ...participant, customPrice: null }
+      );
+    });
   }, [
     bookingKind,
     drawerOpen,
     editingBooking,
+    persistedAdminParticipants,
     persistedEditingBookingId,
-    remoteBillingConfig,
-    remoteBillingConfig?.metadata,
-    remoteBillingConfig?.updatedAt,
   ]);
 
   useEffect(() => {
@@ -3270,29 +3498,14 @@ export default function AdminAgendaPlaygroundPage() {
     if (!drawerOpen || bookingKind === 'block') return;
     if (!persistedEditingBookingId) return;
 
-    const requestSeq = bookingTimelineRequestSeqRef.current + 1;
-    bookingTimelineRequestSeqRef.current = requestSeq;
-    setBookingTimelineLoading(true);
-    setBookingTimelineError('');
-
     let cancelled = false;
     const run = async () => {
       try {
-        const events = await getBookingTimelineEvents(persistedEditingBookingId, { take: 200 });
+        const events = await loadBookingHistoryForDrawer(persistedEditingBookingId);
         if (cancelled) return;
-        if (bookingTimelineRequestSeqRef.current !== requestSeq) return;
-        setBookingTimelineEvents(Array.isArray(events) ? events : []);
-      } catch (error: any) {
+        setBookingHistoryEntries(Array.isArray(events) ? events : []);
+      } catch {
         if (cancelled) return;
-        if (bookingTimelineRequestSeqRef.current !== requestSeq) return;
-        setBookingTimelineEvents([]);
-        const normalized = normalizeApiError(error, 'No se pudo cargar el historial de la reserva.');
-        setBookingTimelineError(toUserSafeMessage(normalized.message, 'No se pudo cargar el historial de la reserva.'));
-      } finally {
-        if (cancelled) return;
-        if (bookingTimelineRequestSeqRef.current === requestSeq) {
-          setBookingTimelineLoading(false);
-        }
       }
     };
 
@@ -3304,6 +3517,7 @@ export default function AdminAgendaPlaygroundPage() {
     bookingDrawerState.ui.saveStatus,
     bookingKind,
     drawerOpen,
+    loadBookingHistoryForDrawer,
     persistedEditingBookingId,
   ]);
 
@@ -3399,7 +3613,12 @@ export default function AdminAgendaPlaygroundPage() {
           )
         );
         void persistBookingMove(meta.bookingId, targetCourtId, safeStart, safeEnd)
-          .then(() => reloadSchedule())
+          .then(() =>
+            refreshPersistedBookingView(Number(meta.bookingId), {
+              schedule: true,
+              history: true,
+            })
+          )
           .catch(async (error) => {
             reportUiError({ area: 'AgendaPlayground', action: 'persistBookingMove' }, error);
             applyBookingError(error, 'No se pudo guardar el movimiento del turno.', { forceNotice: true });
@@ -3441,22 +3660,14 @@ export default function AdminAgendaPlaygroundPage() {
         setSelectedEndSlot(range.end);
         resetRecurringDraft(selectedDate, draftSelectionSnapshot.courtId);
         setParticipants(initialParticipants.map((participant) => ({ ...participant })));
-        setPaymentMode('Único');
         setSimplifiedSidebarSection('DETAILS');
-        setParticipantPriceDraftById({});
         bookingFinancialRequestSeqRef.current += 1;
         bookingTimelineRequestSeqRef.current += 1;
-        remoteBillingConfigRequestSeqRef.current += 1;
         setIsBookingFinancialLoading(false);
-        setIsRemoteBillingConfigLoading(false);
         setBookingTimelineLoading(false);
         setBookingTimelineError('');
-        setBookingTimelineEvents([]);
+        setBookingHistoryEntries([]);
         setBookingFinancial(null);
-        setRemoteBillingConfig(null);
-        setIsBillingConfigHydrated(false);
-        setBillingConfigLoadError('');
-        setBillingConfigTouchedByUser(false);
         resetConsumptionsDraft();
         setQuotedListPrice(null);
         setQuotedFinalPrice(null);
@@ -3487,6 +3698,7 @@ export default function AdminAgendaPlaygroundPage() {
     resetRecurringDraft,
     resetConsumptionsDraft,
     persistBookingMove,
+    refreshPersistedBookingView,
     reloadSchedule,
     selectedDate,
     showAgendaToast,
@@ -3502,6 +3714,21 @@ export default function AdminAgendaPlaygroundPage() {
   const visibleCourtIds = useMemo(() => new Set(visibleCourts.map((court) => court.id)), [visibleCourts]);
 
   const visibleBookings = useMemo(() => bookings.filter((booking) => visibleCourtIds.has(booking.courtId)), [bookings, visibleCourtIds]);
+
+  const hasOverlapForRange = useCallback((input: {
+    courtId: string;
+    startSlot: number;
+    endSlot: number;
+    ignoreBookingId?: string | null;
+  }) => {
+    const rangeStart = Math.min(input.startSlot, input.endSlot);
+    const rangeEnd = Math.max(input.startSlot, input.endSlot);
+    return visibleBookings.some((booking) => {
+      if (booking.courtId !== input.courtId) return false;
+      if (input.ignoreBookingId && String(booking.id) === String(input.ignoreBookingId)) return false;
+      return rangeStart < booking.endSlot && rangeEnd > booking.startSlot;
+    });
+  }, [visibleBookings]);
 
   const openQuickCreateBooking = useCallback(
     (preferredCourtId?: string) => {
@@ -3543,22 +3770,14 @@ export default function AdminAgendaPlaygroundPage() {
       setSelectedEndSlot(suggestedEndSlot);
       resetRecurringDraft(selectedDate, fallbackCourtId);
       setParticipants(initialParticipants.map((participant) => ({ ...participant })));
-      setPaymentMode('Único');
       setSimplifiedSidebarSection('DETAILS');
-      setParticipantPriceDraftById({});
       bookingFinancialRequestSeqRef.current += 1;
       bookingTimelineRequestSeqRef.current += 1;
-      remoteBillingConfigRequestSeqRef.current += 1;
       setIsBookingFinancialLoading(false);
-      setIsRemoteBillingConfigLoading(false);
       setBookingTimelineLoading(false);
       setBookingTimelineError('');
-      setBookingTimelineEvents([]);
+      setBookingHistoryEntries([]);
       setBookingFinancial(null);
-      setRemoteBillingConfig(null);
-      setIsBillingConfigHydrated(false);
-      setBillingConfigLoadError('');
-      setBillingConfigTouchedByUser(false);
       resetConsumptionsDraft();
       setQuotedListPrice(null);
       setQuotedFinalPrice(null);
@@ -3736,119 +3955,71 @@ export default function AdminAgendaPlaygroundPage() {
     () => isBlockingQuoteError(quoteError),
     [quoteError]
   );
-  const latestPaymentPayerRef = useMemo(
-    () => resolveLatestPaymentPayerRef(bookingTimelineEvents),
-    [bookingTimelineEvents]
-  );
-  const latestPaymentCoveredRef = useMemo(
-    () => resolveLatestPaymentCoveredRef(bookingTimelineEvents),
-    [bookingTimelineEvents]
-  );
-  const singleChargeParticipantIdFromRemoteConfig = useMemo(() => {
-    if (paymentMode !== 'Único') return undefined;
-    const responsibleRef = String(remoteBillingConfig?.chargeResponsibleRef || '').trim();
-    if (!responsibleRef) return undefined;
-
-    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
-    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-    const bookingUserId =
-      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-        ? bookingUserIdRaw
-        : undefined;
-
-    const matched = participants.find(
-      (participant) =>
-        buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === responsibleRef
+  const hasScheduleChanges = useMemo(() => {
+    if (!editingBaseline) return false;
+    return (
+      String(editingBaseline.courtId) !== String(selectedCourtId) ||
+      Number(editingBaseline.startSlot) !== Number(selectedStartSlot) ||
+      Number(editingBaseline.endSlot) !== Number(selectedEndSlot)
     );
-    return matched?.id;
-  }, [
-    editingBooking?.clientId,
-    editingBooking?.userId,
-    participants,
-    paymentMode,
-    remoteBillingConfig?.chargeResponsibleRef,
-  ]);
-  const singleChargeParticipantId = useMemo(() => {
-    if (paymentMode !== 'Único') return undefined;
-    if (
-      singleChargeParticipantIdFromRemoteConfig &&
-      participants.some((participant) => participant.id === singleChargeParticipantIdFromRemoteConfig)
-    ) {
-      return singleChargeParticipantIdFromRemoteConfig;
-    }
-    const draftResponsible = String(bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || '').trim();
-    if (draftResponsible && participants.some((participant) => participant.id === draftResponsible)) {
-      return draftResponsible;
-    }
-    const owner = participants.find((participant) => participant.isOwner);
-    return owner?.id;
-  }, [
-    bookingDrawerState.draft?.billing.chargeResponsibleParticipantId,
-    participants,
-    paymentMode,
-    singleChargeParticipantIdFromRemoteConfig,
-  ]);
-  const effectiveSingleChargeResponsibleParticipantId = useMemo(() => {
-    if (paymentMode !== 'Único') return '';
-    const draftResponsible = String(bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || '').trim();
-    if (draftResponsible && participants.some((participant) => participant.id === draftResponsible)) {
-      return draftResponsible;
-    }
-    const fromConfig = String(singleChargeParticipantId || '').trim();
-    if (fromConfig && participants.some((participant) => participant.id === fromConfig)) {
-      return fromConfig;
-    }
-    const ownerParticipant = participants.find((participant) => participant.isOwner);
-    return ownerParticipant?.id || participants[0]?.id || '';
-  }, [
-    bookingDrawerState.draft?.billing.chargeResponsibleParticipantId,
-    participants,
-    paymentMode,
-    singleChargeParticipantId,
-  ]);
-  const deleteParticipantContext = useMemo(() => {
-    const participantId = String(deleteParticipantConfirm.participantId || '').trim();
-    if (!participantId) {
-      return {
-        participantId: '',
-        isChargeResponsible: false,
-        nextResponsibleParticipantId: '',
-        nextResponsibleLabel: '',
-      };
-    }
-    const isChargeResponsible =
-      paymentMode === 'Único' &&
-      participantId === effectiveSingleChargeResponsibleParticipantId;
-    const remainingParticipants = participants.filter((participant) => participant.id !== participantId);
-    const nextResponsibleParticipant =
-      remainingParticipants.find((participant) => participant.isOwner) ||
-      remainingParticipants.find((participant) => participant.name.trim().length > 0) ||
-      remainingParticipants[0];
-    const nextResponsibleLabel = nextResponsibleParticipant
-      ? (String(nextResponsibleParticipant.name || '').trim() ||
-          (nextResponsibleParticipant.isOwner ? 'Titular' : 'Participante'))
-      : '';
-    return {
-      participantId,
-      isChargeResponsible,
-      nextResponsibleParticipantId: String(nextResponsibleParticipant?.id || ''),
-      nextResponsibleLabel,
-    };
-  }, [
-    deleteParticipantConfirm.participantId,
-    effectiveSingleChargeResponsibleParticipantId,
-    participants,
-    paymentMode,
-  ]);
-  const chargedParticipantIds = useMemo(
-    () => resolveChargedParticipantIds(participants, paymentMode, singleChargeParticipantId),
-    [participants, paymentMode, singleChargeParticipantId]
+  }, [editingBaseline, selectedCourtId, selectedEndSlot, selectedStartSlot]);
+  const isCompletedReservation = Boolean(
+    persistedEditingBookingId &&
+    bookingKind !== 'block' &&
+    editingBooking?.state === 'completed'
   );
-  const chargedParticipantIdSet = useMemo(
-    () => new Set(chargedParticipantIds),
-    [chargedParticipantIds]
+  const isCompletedReservationScheduleLocked = isCompletedReservation;
+  const isSelectionInPastBlocking = isSelectionInPast && (!editingBookingId || hasScheduleChanges);
+  const shouldBlockSaveByQuote = hasBlockingQuoteError && (!editingBookingId || hasScheduleChanges);
+  const hasConflict = useMemo(() => {
+    if (!selectedCourtId) return false;
+    const ignoreBookingId = editingBookingId && !hasScheduleChanges ? editingBookingId : null;
+    return hasOverlapForRange({
+      courtId: selectedCourtId,
+      startSlot: selectedStartSlot,
+      endSlot: selectedEndSlot,
+      ignoreBookingId,
+    });
+  }, [
+    editingBookingId,
+    hasOverlapForRange,
+    hasScheduleChanges,
+    selectedCourtId,
+    selectedEndSlot,
+    selectedStartSlot,
+  ]);
+  const blockingActionMessage = isSelectionInPastBlocking
+    ? 'No podés guardar una reserva en un horario pasado.'
+    : shouldBlockSaveByQuote
+      ? quoteError || 'No se pudo cotizar la reserva para ese horario.'
+      : hasConflict
+        ? 'Ese horario ya está ocupado en la cancha seleccionada.'
+        : '';
+  const hasBlockingActionError = blockingActionMessage.trim().length > 0;
+  const isPaymentLockedByManualPending = Boolean(
+    bookingKind !== 'block' &&
+    bookingFinancial?.confirmationMode === 'MANUAL' &&
+    editingBooking?.state === 'pending'
   );
-  const chargedParticipantsCount = Math.max(chargedParticipantIds.length, 1);
+  const selectedBookingKindLabel =
+    bookingKind === 'block'
+      ? 'Bloqueo'
+      : isRecurringKind
+        ? 'Serie'
+        : editingBookingId
+          ? 'Reserva'
+          : 'Nueva reserva';
+  const quickSummaryDateLabel = selectedDate.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+  const quickSummaryCourtsLabel = isRecurringKind
+    ? (recurringCourtIds
+        .map((courtId) => effectiveCourts.find((court) => court.id === courtId)?.name || '')
+        .filter(Boolean)
+        .join(', ') || (selectedCourt?.name || 'Sin cancha'))
+    : (selectedCourt?.name || 'Sin cancha');
   const usesPersistedFinancialSummary = Boolean(persistedEditingBookingId && bookingKind !== 'block');
   const hasQuotedPrice = quotedFinalPrice != null || quotedListPrice != null;
   const isPersistedFinancialPending = usesPersistedFinancialSummary && (isBookingFinancialLoading || !bookingFinancial);
@@ -3857,319 +4028,103 @@ export default function AdminAgendaPlaygroundPage() {
     bookingKind !== 'block' &&
     (quoteLoading || !hasQuotedPrice);
   const isFinancialDisplayPending = isPersistedFinancialPending || isQuoteFinancialPending;
-  const fallbackTotalPrice = defaultPricePerParticipant * chargedParticipantsCount;
-  const quotedBaseTotalPrice = quotedFinalPrice ?? quotedListPrice ?? fallbackTotalPrice;
+  const quotedBaseTotalPrice = quotedFinalPrice ?? quotedListPrice ?? 0;
   const sourceTotalPrice = usesPersistedFinancialSummary
     ? roundMoney(Number(bookingFinancial?.total || 0))
     : roundMoney(quotedBaseTotalPrice);
   const totalPrice = sourceTotalPrice;
-  const participantPriceById = useMemo(() => {
-    const map = new Map<string, number>();
-    if (participants.length === 0) return map;
-
-    if (paymentMode === 'Único') {
-      const ownerId = chargedParticipantIds[0];
-      participants.forEach((participant) => {
-        map.set(participant.id, participant.id === ownerId ? totalPrice : 0);
-      });
-      return map;
-    }
-
-    const charged = participants.filter((participant) => chargedParticipantIdSet.has(participant.id));
-    const manual = charged.filter((participant) => participant.customPrice != null);
-    const auto = charged.filter((participant) => participant.customPrice == null);
-    const totalCents = Math.max(0, Math.round(Number(totalPrice || 0) * 100));
-    let manualCents = 0;
-
-    participants.forEach((participant) => map.set(participant.id, 0));
-    manual.forEach((participant) => {
-      const cents = Math.max(0, Math.round(clampParticipantPrice(Number(participant.customPrice || 0)) * 100));
-      manualCents += cents;
-      map.set(participant.id, Number((cents / 100).toFixed(2)));
-    });
-    const remainingCents = Math.max(0, totalCents - manualCents);
-    const baseShareCents = auto.length > 0 ? Math.floor(remainingCents / auto.length) : 0;
-    let remainderCents = auto.length > 0 ? remainingCents - (baseShareCents * auto.length) : 0;
-    auto.forEach((participant) => {
-      let allocatedCents = baseShareCents;
-      if (remainderCents > 0) {
-        allocatedCents += 1;
-        remainderCents -= 1;
-      }
-      map.set(participant.id, Number((allocatedCents / 100).toFixed(2)));
-    });
-
-    return map;
-  }, [chargedParticipantIdSet, chargedParticipantIds, participants, paymentMode, totalPrice]);
-  const resolveParticipantPrice = useCallback((participant: Participant) => {
-    return Number(participantPriceById.get(participant.id) || 0);
-  }, [participantPriceById]);
-  const participantCoverageAmountById = useMemo(() => {
-    const totals = new Map<string, number>();
-    if (!persistedEditingBookingId || bookingKind === 'block' || participants.length === 0) return totals;
-
-    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
-    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-    const bookingUserId =
-      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-        ? bookingUserIdRaw
-        : undefined;
-
-    const participantIdByRef = new Map<string, string>();
-    const participantIdByName = new Map<string, string>();
-    const ownerParticipant = participants.find((participant) => participant.isOwner) || participants[0] || null;
-    const ownerId = String(ownerParticipant?.id || '').trim();
-
-    const registerRefAlias = (participantId: string, rawRef: string) => {
-      const normalizedRef = String(rawRef || '').trim().toLowerCase();
-      if (!participantId || !normalizedRef) return;
-      participantIdByRef.set(normalizedRef, participantId);
-    };
-
-    participants.forEach((participant) => {
-      const participantId = String(participant.id || '').trim();
-      if (!participantId) return;
-      const stableRef = buildStableParticipantRef(participant, { bookingClientId, bookingUserId });
-      registerRefAlias(participantId, stableRef);
-      registerRefAlias(participantId, participant.entityRef || '');
-      if (participant.isOwner) {
-        registerRefAlias(participantId, 'guest:owner');
-        registerRefAlias(participantId, 'guest:booking-responsible');
-        if (bookingClientId) {
-          registerRefAlias(participantId, `booking-client:${bookingClientId}`);
-        }
-        if (bookingUserId) {
-          registerRefAlias(participantId, `booking-user:${bookingUserId}`);
-        }
-      }
-
-      const normalizedName = String(participant.name || '').trim().toLowerCase();
-      if (normalizedName && !participantIdByName.has(normalizedName)) {
-        participantIdByName.set(normalizedName, participantId);
-      }
-    });
-
-    const addCoveredAmount = (participantRefRaw: unknown, participantNameRaw: unknown, amountRaw: unknown) => {
-      const amount = Number(amountRaw || 0);
-      if (!Number.isFinite(amount) || amount <= 0.009) return;
-
-      const normalizedRef = String(participantRefRaw || '').trim().toLowerCase();
-      const normalizedName = String(participantNameRaw || '').trim().toLowerCase();
-      let participantId = normalizedRef ? participantIdByRef.get(normalizedRef) : undefined;
-      if (!participantId && normalizedName) {
-        participantId = participantIdByName.get(normalizedName);
-      }
-      if (!participantId && normalizedRef && isOwnerLikeParticipantRef(normalizedRef) && ownerId) {
-        participantId = ownerId;
-      }
-      if (!participantId) return;
-
-      totals.set(
-        participantId,
-        Number((Number(totals.get(participantId) || 0) + amount).toFixed(2))
-      );
-    };
-
-    let usedTimelineEvents = 0;
-    (Array.isArray(bookingTimelineEvents) ? bookingTimelineEvents : []).forEach((event) => {
-      const normalizedType = String(event?.type || '').trim().toUpperCase();
-      if (normalizedType !== 'PAYMENT_RECEIVED') return;
-      const payload =
-        event?.payload && typeof event.payload === 'object'
-          ? (event.payload as Record<string, unknown>)
-          : {};
-      const amount = Number((payload as any)?.amount || 0);
-      if (!Number.isFinite(amount) || amount <= 0.009) return;
-      usedTimelineEvents += 1;
-      const coveredRef = String((payload as any)?.coveredParticipantRef || '').trim();
-      const coveredName = String((payload as any)?.coveredParticipantName || '').trim();
-      const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
-      const payerName = String((payload as any)?.payerParticipantName || '').trim();
-      addCoveredAmount(coveredRef || payerRef, coveredName || payerName, amount);
-    });
-
-    if (usedTimelineEvents === 0) {
-      const coveredFallback = Array.isArray(editingBooking?.hoverPayment?.coveredParticipants)
-        ? editingBooking?.hoverPayment?.coveredParticipants
-        : [];
-      coveredFallback.forEach((row) => {
-        addCoveredAmount(row?.ref, row?.name, row?.amount);
-      });
-      if (coveredFallback.length === 0) {
-        const payerFallback = Array.isArray(editingBooking?.hoverPayment?.payerParticipants)
-          ? editingBooking?.hoverPayment?.payerParticipants
-          : [];
-        payerFallback.forEach((row) => {
-          addCoveredAmount(row?.ref, row?.name, row?.amount);
-        });
-      }
-    }
-
-    return totals;
-  }, [
-    bookingKind,
-    bookingTimelineEvents,
-    editingBooking?.clientId,
-    editingBooking?.hoverPayment?.coveredParticipants,
-    editingBooking?.hoverPayment?.payerParticipants,
-    editingBooking?.userId,
-    participants,
-    persistedEditingBookingId,
-  ]);
-  const participantPayerAmountById = useMemo(() => {
-    const totals = new Map<string, number>();
-    if (!persistedEditingBookingId || bookingKind === 'block' || participants.length === 0) return totals;
-
-    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
-    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-    const bookingUserId =
-      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-        ? bookingUserIdRaw
-        : undefined;
-
-    const participantIdByRef = new Map<string, string>();
-    const participantIdByName = new Map<string, string>();
-    const ownerParticipant = participants.find((participant) => participant.isOwner) || participants[0] || null;
-    const ownerId = String(ownerParticipant?.id || '').trim();
-
-    const registerRefAlias = (participantId: string, rawRef: string) => {
-      const normalizedRef = String(rawRef || '').trim().toLowerCase();
-      if (!participantId || !normalizedRef) return;
-      participantIdByRef.set(normalizedRef, participantId);
-    };
-
-    participants.forEach((participant) => {
-      const participantId = String(participant.id || '').trim();
-      if (!participantId) return;
-      const stableRef = buildStableParticipantRef(participant, { bookingClientId, bookingUserId });
-      registerRefAlias(participantId, stableRef);
-      registerRefAlias(participantId, participant.entityRef || '');
-      if (participant.isOwner) {
-        registerRefAlias(participantId, 'guest:owner');
-        registerRefAlias(participantId, 'guest:booking-responsible');
-        if (bookingClientId) registerRefAlias(participantId, `booking-client:${bookingClientId}`);
-        if (bookingUserId) registerRefAlias(participantId, `booking-user:${bookingUserId}`);
-      }
-      const normalizedName = String(participant.name || '').trim().toLowerCase();
-      if (normalizedName && !participantIdByName.has(normalizedName)) {
-        participantIdByName.set(normalizedName, participantId);
-      }
-    });
-
-    const addPayerAmount = (participantRefRaw: unknown, participantNameRaw: unknown, amountRaw: unknown) => {
-      const amount = Number(amountRaw || 0);
-      if (!Number.isFinite(amount) || amount <= 0.009) return;
-      const normalizedRef = String(participantRefRaw || '').trim().toLowerCase();
-      const normalizedName = String(participantNameRaw || '').trim().toLowerCase();
-      let participantId = normalizedRef ? participantIdByRef.get(normalizedRef) : undefined;
-      if (!participantId && normalizedName) participantId = participantIdByName.get(normalizedName);
-      if (!participantId && normalizedRef && isOwnerLikeParticipantRef(normalizedRef) && ownerId) {
-        participantId = ownerId;
-      }
-      if (!participantId) return;
-      totals.set(participantId, Number((Number(totals.get(participantId) || 0) + amount).toFixed(2)));
-    };
-
-    let usedTimelineEvents = 0;
-    (Array.isArray(bookingTimelineEvents) ? bookingTimelineEvents : []).forEach((event) => {
-      const normalizedType = String(event?.type || '').trim().toUpperCase();
-      if (normalizedType !== 'PAYMENT_RECEIVED') return;
-      const payload =
-        event?.payload && typeof event.payload === 'object'
-          ? (event.payload as Record<string, unknown>)
-          : {};
-      const amount = Number((payload as any)?.amount || 0);
-      if (!Number.isFinite(amount) || amount <= 0.009) return;
-      usedTimelineEvents += 1;
-      const payerRef = String((payload as any)?.payerParticipantRef || '').trim();
-      const payerName = String((payload as any)?.payerParticipantName || '').trim();
-      addPayerAmount(payerRef, payerName, amount);
-    });
-
-    if (usedTimelineEvents === 0) {
-      const payerFallback = Array.isArray(editingBooking?.hoverPayment?.payerParticipants)
-        ? editingBooking?.hoverPayment?.payerParticipants
-        : [];
-      payerFallback.forEach((row) => {
-        addPayerAmount(row?.ref, row?.name, row?.amount);
-      });
-    }
-
-    return totals;
-  }, [
-    bookingKind,
-    bookingTimelineEvents,
-    editingBooking?.clientId,
-    editingBooking?.hoverPayment?.payerParticipants,
-    editingBooking?.userId,
-    participants,
-    persistedEditingBookingId,
-  ]);
-  const participantAssignedAmountById = useMemo(() => {
-    const assigned = new Map<string, number>();
-    participants.forEach((participant) => {
-      assigned.set(participant.id, 0);
-    });
-
-    if (paymentMode === 'Único') {
-      const responsibleId = String(singleChargeParticipantId || '').trim() ||
-        participants.find((participant) => participant.isOwner)?.id ||
-        participants[0]?.id ||
-        '';
-      if (responsibleId) {
-        assigned.set(responsibleId, Number(totalPrice.toFixed(2)));
-      }
-      return assigned;
-    }
-
-    participants.forEach((participant) => {
-      if (!chargedParticipantIdSet.has(participant.id)) return;
-      assigned.set(participant.id, Number(resolveParticipantPrice(participant).toFixed(2)));
-    });
-    return assigned;
-  }, [
-    chargedParticipantIdSet,
-    participants,
-    paymentMode,
-    resolveParticipantPrice,
-    singleChargeParticipantId,
-    totalPrice,
-  ]);
-  const participantDebtAmountById = useMemo(() => {
-    const debt = new Map<string, number>();
-    participants.forEach((participant) => {
-      const assigned = Number(participantAssignedAmountById.get(participant.id) || 0);
-      const covered = Number(participantCoverageAmountById.get(participant.id) || 0);
-      debt.set(participant.id, Number(Math.max(0, assigned - covered).toFixed(2)));
-    });
-    return debt;
-  }, [participantAssignedAmountById, participantCoverageAmountById, participants]);
-  const participantPaidComputedIdSet = useMemo(() => {
-    const paidIds = new Set<string>();
-    participants.forEach((participant) => {
-      const assigned = Number(participantAssignedAmountById.get(participant.id) || 0);
-      if (assigned <= 0.009) return;
-      const debt = Number(participantDebtAmountById.get(participant.id) || 0);
-      if (debt <= 0.009) {
-        paidIds.add(participant.id);
-      }
-    });
-    return paidIds;
-  }, [participantAssignedAmountById, participantDebtAmountById, participants]);
-  const isClassBooking = bookingKind === 'privateClass' || bookingKind === 'courseClass';
-  const priceFieldLabel = 'Precio total';
-  const priceFieldHint = isClassBooking
-    ? 'En clases, este total se distribuye entre los alumnos cargados.'
-    : paymentMode === 'Único'
-      ? 'En reserva normal, paga una sola persona.'
-      : 'En reserva normal, se reparte automáticamente entre participantes.';
-  const exceedsRemainingWarning = useMemo(() => {
-    if (!bookingFinancial || bookingFinancial.remaining <= 0.009) return false;
-    return participants.some((participant) => {
-      if (paymentMode === 'Único' && !participant.isOwner) return false;
-      return resolveParticipantPrice(participant) > bookingFinancial.remaining + 0.009;
-    });
-  }, [bookingFinancial, participants, paymentMode, resolveParticipantPrice]);
+  const simplifiedFinancialTotal = totalPrice;
+  const simplifiedPaidAmount = usesPersistedFinancialSummary
+    ? roundMoney(Number(bookingFinancial?.paid || 0))
+    : 0;
+  const simplifiedRemainingAmount = usesPersistedFinancialSummary
+    ? roundMoney(Number(bookingFinancial?.remaining || 0))
+    : roundMoney(Math.max(0, totalPrice - simplifiedPaidAmount));
+  const bookingItemsAmount = roundMoney(
+    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0)
+  );
+  const bookingConsumptionsPaid = roundMoney(
+    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.paidAmount || 0), 0)
+  );
+  const bookingConsumptionsRemaining = roundMoney(
+    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0)
+  );
+  const bookingCourtAmount = roundMoney(
+    Number(bookingFinancial?.courtTotal ?? Math.max(0, totalPrice - bookingItemsAmount))
+  );
+  const billingSummary = {
+    totalAmount: simplifiedFinancialTotal,
+    paidAmount: simplifiedPaidAmount,
+    remainingAmount: simplifiedRemainingAmount,
+  };
+  const shouldHideBillingUntilCreated = !persistedEditingBookingId;
+  const shouldHideBillingUntilConfirmed = !shouldHideBillingUntilCreated && isPaymentLockedByManualPending;
+  const showConfirmMainAction = Boolean(
+    editingBookingId &&
+    bookingKind !== 'block' &&
+    editingBooking?.state === 'pending'
+  );
+  const reservationStatusLabel = editingBooking?.state === 'completed'
+    ? 'Completada'
+    : editingBooking?.state === 'confirmed'
+      ? 'Confirmada'
+      : editingBooking?.state === 'blocked'
+        ? 'Bloqueada'
+        : 'Pendiente';
+  const reservationStatusTone = editingBooking?.state === 'completed'
+    ? 'bg-p-positive-bg text-p-positive'
+    : editingBooking?.state === 'confirmed'
+      ? 'bg-p-accent-soft text-p-accent'
+      : editingBooking?.state === 'blocked'
+        ? 'bg-p-surface-3 text-p-text-secondary'
+        : 'bg-p-warning-bg text-p-warning';
+  const paymentStatusLabel = simplifiedRemainingAmount <= 0.009
+    ? 'Pagado'
+    : simplifiedPaidAmount > 0.009
+      ? 'Parcial'
+      : 'Pendiente';
+  const paymentStatusTone = simplifiedRemainingAmount <= 0.009
+    ? 'bg-p-positive-bg text-p-positive'
+    : simplifiedPaidAmount > 0.009
+      ? 'bg-p-warning-bg text-p-warning'
+      : 'bg-p-surface-3 text-p-text-secondary';
+  const lockBookingDetails = isCompletedReservationScheduleLocked;
+  const shouldShowSeriesScopeHint = Boolean(
+    editingBooking?.fixedBookingId && hasScheduleChanges && !pendingSeriesScopeSave
+  );
+  const primaryActionDisabled = Boolean(
+    isSubmittingBooking ||
+    isDeletingBooking ||
+    confirmingBooking ||
+    hasBlockingActionError ||
+    (editingBookingId ? false : !selectedCourtId)
+  );
+  const primaryActionLabel = editingBookingId ? 'Guardar cambios' : 'Crear reserva';
+  const primaryActionMeta = editingBookingId
+    ? `${slotToTime(selectedStartSlot)} - ${slotToTime(selectedEndSlot)}`
+    : (selectedCourt?.name || 'Sin cancha');
+  const operationalChecklist = [
+    {
+      key: 'court',
+      label: 'Cancha seleccionada',
+      ok: Boolean(selectedCourtId),
+      detail: selectedCourtId ? '' : 'Elegí una cancha para continuar.',
+    },
+    {
+      key: 'time',
+      label: 'Horario válido',
+      ok: selectedEndSlot > selectedStartSlot,
+      detail: selectedEndSlot > selectedStartSlot ? '' : 'La hora de fin debe ser posterior al inicio.',
+    },
+    {
+      key: 'owner',
+      label: 'Titular cargado',
+      ok: Boolean(participants.find((participant) => participant.isOwner && participant.name.trim().length > 0)),
+      detail: participants.find((participant) => participant.isOwner && participant.name.trim().length > 0)
+        ? ''
+        : 'Agregá un titular antes de guardar.',
+    },
+  ];
 
   const duplicateParticipantIds = useMemo(() => {
     const firstByToken = new Map<string, string>();
@@ -4177,7 +4132,7 @@ export default function AdminAgendaPlaygroundPage() {
 
     for (const participant of participants) {
       if (!participant.name.trim()) continue;
-      const tokens = participantIdentityTokens(participant);
+      const tokens = participantExplicitIdentityKeys(participant);
       if (tokens.length === 0) continue;
 
       for (const token of tokens) {
@@ -4207,20 +4162,6 @@ export default function AdminAgendaPlaygroundPage() {
       setFormError('');
     }
   }, [formError, hasDuplicateParticipants]);
-
-  const applySplitParticipantManualPrice = useCallback((participantId: string, nextPrice: number) => {
-    const nextBounded = clampParticipantPrice(Math.min(nextPrice, totalPrice));
-    setParticipants((previous) => {
-      const chargedIds = new Set(resolveChargedParticipantIds(previous, 'Dividido'));
-      return previous.map((participant) => {
-        if (!chargedIds.has(participant.id)) return participant;
-        if (participant.id === participantId) {
-          return { ...participant, customPrice: nextBounded };
-        }
-        return { ...participant, customPrice: null };
-      });
-    });
-  }, [totalPrice]);
 
   const resolveBookingHoverPosition = useCallback((clientX: number, clientY: number, participantsCount: number) => {
     const cardWidth = 292;
@@ -4353,7 +4294,16 @@ export default function AdminAgendaPlaygroundPage() {
   }, []);
 
   const runParticipantSearch = useCallback(async (participantId: string, rawValue: string) => {
-    updateParticipant(participantId, { name: rawValue, sourceType: 'guest', entityRef: undefined });
+    updateParticipant(participantId, {
+      name: rawValue,
+      sourceType: 'guest',
+      entityRef: undefined,
+      selectedUserId: undefined,
+      personKind: undefined,
+      personKey: undefined,
+      personSearchQuery: undefined,
+      badges: undefined,
+    });
     const query = String(rawValue || '').trim();
     if (!query) {
       setParticipantSearchOpenId(null);
@@ -4364,63 +4314,31 @@ export default function AdminAgendaPlaygroundPage() {
     setParticipantSearchOpenId(participantId);
     const seq = ++participantSearchSeqRef.current;
     setParticipantSearchLoadingId(participantId);
-    const guestSuggestion: ParticipantSuggestion = {
-      id: `guest-${participantId}-${query}`,
-      label: query,
-      secondary: 'Invitado',
-      sourceType: 'guest',
-      entityRef: `guest:${toSlugToken(query)}`,
-      name: query,
-    };
-
     try {
       const slug = getClubSlug();
       if (!slug || query.length < 2) {
         if (seq !== participantSearchSeqRef.current) return;
-        setParticipantSuggestionsById((previous) => ({ ...previous, [participantId]: [guestSuggestion] }));
+        setParticipantSuggestionsById((previous) => ({ ...previous, [participantId]: [] }));
         return;
       }
 
-      const clients = await ClubAdminService.searchParticipants(slug, query);
+      const rows = await ClubAdminService.searchPeople(slug, query);
       if (seq !== participantSearchSeqRef.current) return;
 
-      const clientSuggestions: ParticipantSuggestion[] = (Array.isArray(clients) ? clients : [])
+      const clientSuggestions: ParticipantSuggestion[] = (Array.isArray(rows) ? rows : [])
         .slice(0, 6)
-        .map((client: any, index: number) => {
-          const phone = String(client?.phone || '').trim();
-          const email = String(client?.email || '').trim();
-          const sourceType: Participant['sourceType'] =
-            client?.sourceType === 'systemUser' ? 'systemUser' : 'clubClient';
-          const stableRef =
-            sourceType === 'systemUser'
-              ? (Number(client?.userId || 0) > 0 ? `user:${Number(client.userId)}` : undefined)
-              : (() => {
-                  const rawId = String(client?.id || '').trim();
-                  if (!rawId) return undefined;
-                  const normalizedClientId = rawId.startsWith('client-') ? rawId.slice('client-'.length).trim() : rawId;
-                  return normalizedClientId ? `client:${normalizedClientId}` : undefined;
-                })();
-          return {
-            id: `club-${participantId}-${client?.id || index}`,
-            label: String(client?.name || query),
-            secondary:
-              phone ||
-              email ||
-              (sourceType === 'systemUser' ? 'Usuario del sistema' : 'Cliente del club'),
-            sourceType,
-            entityRef: stableRef,
-            name: String(client?.name || query),
-            contact: phone || email || '',
-          } satisfies ParticipantSuggestion;
-        });
+        .map((row: any, index: number) =>
+          mapPersonSearchResultToParticipantSuggestion(row, query, `club-${participantId}-${index}`)
+        )
+        .filter((suggestion): suggestion is ParticipantSuggestion => Boolean(suggestion));
 
       setParticipantSuggestionsById((previous) => ({
         ...previous,
-        [participantId]: [...clientSuggestions, guestSuggestion],
+        [participantId]: clientSuggestions,
       }));
     } catch {
       if (seq !== participantSearchSeqRef.current) return;
-      setParticipantSuggestionsById((previous) => ({ ...previous, [participantId]: [guestSuggestion] }));
+      setParticipantSuggestionsById((previous) => ({ ...previous, [participantId]: [] }));
     } finally {
       if (seq === participantSearchSeqRef.current) {
         setParticipantSearchLoadingId((previous) => (previous === participantId ? null : previous));
@@ -4431,51 +4349,19 @@ export default function AdminAgendaPlaygroundPage() {
   const fetchParticipantSuggestionsForDraft = useCallback(async (query: string) => {
     const safeQuery = String(query || '').trim();
     if (!safeQuery) return [] as ParticipantSuggestion[];
-    const guestSuggestion: ParticipantSuggestion = {
-      id: `guest-draft-${safeQuery}`,
-      label: safeQuery,
-      secondary: 'Invitado',
-      sourceType: 'guest',
-      entityRef: `guest:${toSlugToken(safeQuery)}`,
-      name: safeQuery,
-    };
 
     const slug = getClubSlug();
-    if (!slug || safeQuery.length < 2) return [guestSuggestion];
+    if (!slug || safeQuery.length < 2) return [] as ParticipantSuggestion[];
 
     try {
-      const clients = await ClubAdminService.searchParticipants(slug, safeQuery);
-      const clientSuggestions: ParticipantSuggestion[] = (Array.isArray(clients) ? clients : [])
+      const rows = await ClubAdminService.searchPeople(slug, safeQuery);
+      const clientSuggestions: ParticipantSuggestion[] = (Array.isArray(rows) ? rows : [])
         .slice(0, 6)
-        .map((client: any, index: number) => {
-          const phone = String(client?.phone || '').trim();
-          const email = String(client?.email || '').trim();
-          const sourceType: Participant['sourceType'] =
-            client?.sourceType === 'systemUser' ? 'systemUser' : 'clubClient';
-          const stableRef =
-            sourceType === 'systemUser'
-              ? (Number(client?.userId || 0) > 0 ? `user:${Number(client.userId)}` : undefined)
-              : (() => {
-                  const rawId = String(client?.id || '').trim();
-                  if (!rawId) return undefined;
-                  const normalizedClientId = rawId.startsWith('client-') ? rawId.slice('client-'.length).trim() : rawId;
-                  return normalizedClientId ? `client:${normalizedClientId}` : undefined;
-                })();
-          return {
-            id: `draft-${client?.id || index}`,
-            label: String(client?.name || safeQuery),
-            secondary:
-              phone || email || String(client?.dni || '').trim() || (sourceType === 'systemUser' ? 'Usuario del sistema' : 'Cliente del club'),
-            sourceType,
-            entityRef: stableRef,
-            name: String(client?.name || safeQuery),
-            contact: phone || email || '',
-            dni: String(client?.dni || '').trim() || undefined,
-          } satisfies ParticipantSuggestion;
-        });
-      return [...clientSuggestions, guestSuggestion];
+        .map((row: any, index: number) => mapPersonSearchResultToParticipantSuggestion(row, safeQuery, `draft-${index}`))
+        .filter((suggestion): suggestion is ParticipantSuggestion => Boolean(suggestion));
+      return clientSuggestions;
     } catch {
-      return [guestSuggestion];
+      return [] as ParticipantSuggestion[];
     }
   }, [getClubSlug]);
 
@@ -4573,6 +4459,11 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedNewParticipantContact('');
     setSimplifiedNewParticipantSourceTypeDraft('guest');
     setSimplifiedNewParticipantEntityRefDraft('');
+    setSimplifiedNewParticipantSelectedUserIdDraft(undefined);
+    setSimplifiedNewParticipantPersonKindDraft(undefined);
+    setSimplifiedNewParticipantPersonKeyDraft(undefined);
+    setSimplifiedNewParticipantPersonSearchQueryDraft(undefined);
+    setSimplifiedNewParticipantBadgesDraft(undefined);
     const query = String(rawValue || '').trim();
     if (!query) {
       setSimplifiedNewParticipantSuggestionsOpen(false);
@@ -4591,16 +4482,15 @@ export default function AdminAgendaPlaygroundPage() {
     const existingIdentityTokens = new Set(
       participants
         .filter((participant) => participant.name.trim().length > 0)
-        .flatMap((participant) => participantIdentityTokens(participant))
+        .flatMap((participant) => participantExplicitIdentityKeys(participant))
     );
     const filteredSuggestions = suggestions.filter((suggestion) => {
       const suggestionRef = String(suggestion.entityRef || '').trim().toLowerCase();
       if (suggestionRef && existingRefs.has(suggestionRef)) return false;
-      const suggestionTokens = participantIdentityTokens({
-        sourceType: suggestion.sourceType,
-        name: suggestion.name,
-        contact: suggestion.contact || '',
-        dni: suggestion.dni,
+      const suggestionTokens = participantExplicitIdentityKeys({
+        entityRef: suggestion.entityRef,
+        selectedUserId: suggestion.selectedUserId,
+        personKind: suggestion.personKind,
       });
       if (suggestionTokens.some((token) => existingIdentityTokens.has(token))) return false;
       return true;
@@ -4614,6 +4504,11 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedNewParticipantContact(String(suggestion.contact || '').trim());
     setSimplifiedNewParticipantSourceTypeDraft(suggestion.sourceType);
     setSimplifiedNewParticipantEntityRefDraft(String(suggestion.entityRef || '').trim());
+    setSimplifiedNewParticipantSelectedUserIdDraft(suggestion.selectedUserId);
+    setSimplifiedNewParticipantPersonKindDraft(suggestion.personKind);
+    setSimplifiedNewParticipantPersonKeyDraft(suggestion.personKey);
+    setSimplifiedNewParticipantPersonSearchQueryDraft(suggestion.personSearchQuery);
+    setSimplifiedNewParticipantBadgesDraft(suggestion.badges);
     setSimplifiedNewParticipantSuggestionsOpen(false);
     setSimplifiedNewParticipantSearchLoading(false);
     setSimplifiedNewParticipantSuggestions([]);
@@ -4621,16 +4516,15 @@ export default function AdminAgendaPlaygroundPage() {
   }, []);
 
   const applyParticipantSuggestion = useCallback((participantId: string, suggestion: ParticipantSuggestion) => {
-    const incomingTokens = participantIdentityTokens({
-      sourceType: suggestion.sourceType,
-      name: suggestion.name,
-      contact: suggestion.contact || '',
-      dni: suggestion.dni,
+    const incomingTokens = participantExplicitIdentityKeys({
+      entityRef: suggestion.entityRef,
+      selectedUserId: suggestion.selectedUserId,
+      personKind: suggestion.personKind,
     });
     const duplicateExists = participants.some((participant) => {
       if (participant.id === participantId) return false;
       if (!participant.name.trim()) return false;
-      const currentTokens = participantIdentityTokens(participant);
+      const currentTokens = participantExplicitIdentityKeys(participant);
       return incomingTokens.some((token) => currentTokens.includes(token));
     });
     if (duplicateExists) {
@@ -4645,15 +4539,16 @@ export default function AdminAgendaPlaygroundPage() {
       dni: suggestion.dni,
       sourceType: suggestion.sourceType,
       entityRef: suggestion.entityRef,
+      selectedUserId: suggestion.selectedUserId,
+      personKind: suggestion.personKind,
+      personKey: suggestion.personKey,
+      personSearchQuery: suggestion.personSearchQuery,
+      badges: suggestion.badges,
     });
     setFormError('');
     setParticipantSearchOpenId(null);
     setParticipantSuggestionsById((previous) => ({ ...previous, [participantId]: [] }));
   }, [participants, updateParticipant]);
-
-  const resolveParticipantCharge = useCallback((participant: Participant) => {
-    return resolveParticipantPrice(participant);
-  }, [resolveParticipantPrice]);
 
   const applyOptimisticBookingPaymentUpdate = useCallback((bookingId: number, paidDelta: number) => {
     const safeDelta = Number(Number(paidDelta || 0).toFixed(2));
@@ -4700,2871 +4595,6 @@ export default function AdminAgendaPlaygroundPage() {
     );
   }, []);
 
-  const registerPaymentNow = useCallback(async (input: {
-    amount: number;
-    method: Participant['paymentMethod'];
-    successMessage?: string;
-    silentSuccessNotice?: boolean;
-    participantId?: string;
-    coveredParticipantId?: string;
-    itemAllocations?: Array<{ accountItemId: string; amount: number }>;
-  }) => {
-    const lockPaymentsNow = Boolean(
-      persistedEditingBookingId &&
-      bookingKind !== 'block' &&
-      bookingFinancial?.confirmationMode === 'MANUAL' &&
-      editingBooking?.state === 'pending'
-    );
-    if (lockPaymentsNow) {
-      showAgendaToast('Primero confirmá la reserva para poder registrar pagos.');
-      return false;
-    }
-    if (!persistedEditingBookingId || bookingKind === 'block') {
-      showAgendaToast('Primero creá/abrí una reserva válida.');
-      return false;
-    }
-
-    const amount = Number(Number(input.amount || 0).toFixed(2));
-    if (!Number.isFinite(amount) || amount <= 0.009) {
-      showAgendaToast('Ingresá un monto mayor a 0.');
-      return false;
-    }
-
-    const effectiveParticipantId = (() => {
-      if (paymentMode !== 'Único') return input.participantId;
-      const confirmedFromDraft = Boolean(
-        bookingDrawerState.draft?.billing.payments.some(
-          (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
-        )
-      );
-      const confirmedFromFinancial = Number(bookingFinancial?.paid || 0) > 0.009;
-      const hasConfirmedPayments = confirmedFromDraft || confirmedFromFinancial;
-      const explicitResponsibleId = String(singleChargeParticipantId || '').trim();
-      const requestedParticipantId = String(input.participantId || '').trim();
-
-      if (
-        !hasConfirmedPayments &&
-        requestedParticipantId &&
-        requestedParticipantId !== explicitResponsibleId &&
-        participants.some((participant) => participant.id === requestedParticipantId)
-      ) {
-        setBillingConfigTouchedByUser(true);
-        bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId: requestedParticipantId } });
-        return requestedParticipantId;
-      }
-
-      if (hasConfirmedPayments && explicitResponsibleId) return explicitResponsibleId;
-      if (input.participantId) return input.participantId;
-      if (explicitResponsibleId) return explicitResponsibleId;
-      const ownerParticipant = participants.find((participant) => participant.isOwner);
-      return ownerParticipant?.id;
-    })();
-    const effectiveCoveredParticipantId = (() => {
-      const requestedCoveredParticipantId = String(input.coveredParticipantId || '').trim();
-      if (requestedCoveredParticipantId && participants.some((participant) => participant.id === requestedCoveredParticipantId)) {
-        return requestedCoveredParticipantId;
-      }
-      if (paymentMode === 'Único') {
-        const explicitResponsibleId = String(singleChargeParticipantId || '').trim();
-        if (explicitResponsibleId && participants.some((participant) => participant.id === explicitResponsibleId)) {
-          return explicitResponsibleId;
-        }
-      }
-      return String(effectiveParticipantId || '').trim();
-    })();
-
-    try {
-      if (effectiveParticipantId) {
-        setPaymentInFlightId(effectiveParticipantId);
-      }
-      setIsWaitingQueuedPaymentConfirmation(true);
-      setFormError('');
-
-      const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-      const payerParticipant =
-        (effectiveParticipantId
-          ? participants.find((participant) => participant.id === effectiveParticipantId)
-          : null) ||
-        participants.find((participant) => participant.isOwner) ||
-        participants[0];
-      const payerParticipantRef = payerParticipant
-        ? buildStableParticipantRef(payerParticipant, {
-            bookingClientId: String(editingBooking?.clientId || '').trim() || undefined,
-            bookingUserId:
-              Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-                ? bookingUserIdRaw
-                : undefined,
-          })
-        : undefined;
-      const payerParticipantName = payerParticipant
-        ? (String(payerParticipant.name || '').trim() || (payerParticipant.isOwner ? 'Titular' : 'Participante'))
-        : undefined;
-      const coveredParticipant =
-        (effectiveCoveredParticipantId
-          ? participants.find((participant) => participant.id === effectiveCoveredParticipantId)
-          : null) ||
-        payerParticipant;
-      const coveredParticipantRef = coveredParticipant
-        ? buildStableParticipantRef(coveredParticipant, {
-            bookingClientId: String(editingBooking?.clientId || '').trim() || undefined,
-            bookingUserId:
-              Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-                ? bookingUserIdRaw
-                : undefined,
-          })
-        : undefined;
-      const coveredParticipantName = coveredParticipant
-        ? (String(coveredParticipant.name || '').trim() || (coveredParticipant.isOwner ? 'Titular' : 'Participante'))
-        : undefined;
-
-      const paymentChannel = input.method === 'TRANSFER' ? 'BANK_ACCOUNT' : undefined;
-      await registerBookingPartialPayment(
-        persistedEditingBookingId,
-        amount,
-        input.method,
-        paymentChannel,
-        input.itemAllocations,
-        {
-          participantRef: payerParticipantRef,
-          participantName: payerParticipantName,
-        },
-        {
-          participantRef: coveredParticipantRef,
-          participantName: coveredParticipantName,
-        }
-      );
-      applyOptimisticBookingPaymentUpdate(persistedEditingBookingId, amount);
-
-      if (Array.isArray(input.itemAllocations) && input.itemAllocations.length > 0) {
-        const allocationByItemId = new Map<string, number>();
-        input.itemAllocations.forEach((allocation) => {
-          const itemId = String(allocation.accountItemId || '').trim();
-          if (!itemId) return;
-          const current = Number(allocationByItemId.get(itemId) || 0);
-          allocationByItemId.set(itemId, Number((current + Number(allocation.amount || 0)).toFixed(2)));
-        });
-        if (allocationByItemId.size > 0) {
-          setBookingAccountItems((previous) => {
-            const next = previous.map((item) => {
-              const allocated = Number(allocationByItemId.get(String(item.id)) || 0);
-              if (allocated <= 0.009) return item;
-              const nextPaid = Number((Number(item.paidAmount || 0) + allocated).toFixed(2));
-              const nextRemaining = Number(Math.max(0, Number(item.totalPrice || 0) - nextPaid).toFixed(2));
-              return {
-                ...item,
-                paidAmount: nextPaid,
-                remainingAmount: nextRemaining,
-              };
-            });
-            setBookingConsumptionItems(next.filter((entry) => entry.type !== 'BOOKING'));
-            return next;
-          });
-        }
-      }
-      await reloadSchedule();
-      const latestFinancialSummary = await refreshBookingFinancial(persistedEditingBookingId);
-      await loadBookingConsumptions(persistedEditingBookingId);
-      setParticipants((previous) =>
-        distributePaidByParticipants(
-          previous,
-          paymentMode,
-          Number(latestFinancialSummary?.total || 0),
-          Number(latestFinancialSummary?.paid || 0),
-          effectiveCoveredParticipantId
-        )
-      );
-
-      const timelineRequestSeq = bookingTimelineRequestSeqRef.current + 1;
-      bookingTimelineRequestSeqRef.current = timelineRequestSeq;
-      setBookingTimelineLoading(true);
-      setBookingTimelineError('');
-      try {
-        const events = await getBookingTimelineEvents(persistedEditingBookingId, { take: 200 });
-        if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-          setBookingTimelineEvents(Array.isArray(events) ? events : []);
-        }
-      } catch (timelineError: any) {
-        if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-          setBookingTimelineEvents([]);
-          const normalized = normalizeApiError(timelineError, 'No se pudo cargar el historial de la reserva.');
-          setBookingTimelineError(
-            toUserSafeMessage(
-              normalized.message,
-              'No se pudo cargar el historial de la reserva.'
-            )
-          );
-        }
-      } finally {
-        if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-          setBookingTimelineLoading(false);
-        }
-      }
-
-      if (!input.silentSuccessNotice) {
-        showAgendaToast(input.successMessage || `Pago registrado: ${amount.toFixed(2)} $.`, 'success');
-      }
-      if (paymentMode === 'Único' && effectiveParticipantId) {
-        const currentResponsibleId = String(
-          bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || ''
-        ).trim();
-        if (
-          currentResponsibleId !== effectiveParticipantId &&
-          participants.some((participant) => participant.id === effectiveParticipantId)
-        ) {
-          setBillingConfigTouchedByUser(true);
-          bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId: effectiveParticipantId } });
-          try {
-            const bookingClientIdRaw = String(editingBooking?.clientId || '').trim();
-            const bookingClientId = bookingClientIdRaw.length > 0 ? bookingClientIdRaw : undefined;
-            const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-            const bookingUserId =
-              Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-                ? bookingUserIdRaw
-                : undefined;
-
-            const participantRefById = new Map<string, string>();
-            participants.forEach((participant) => {
-              participantRefById.set(
-                String(participant.id),
-                buildStableParticipantRef(participant, { bookingClientId, bookingUserId })
-              );
-            });
-
-            const totalChargeableAmount = Number(
-              Number(
-                bookingDrawerState.draft?.billing.financialSummary.totalAmount ??
-                  latestFinancialSummary?.total ??
-                  0
-              ).toFixed(2)
-            );
-            const assignmentByParticipantId = new Map<string, string>();
-            (bookingDrawerState.draft?.billing.assignments || []).forEach((assignment) => {
-              const participantId = String(assignment?.participantId || '').trim();
-              if (!participantId) return;
-              assignmentByParticipantId.set(
-                participantId,
-                String(assignment?.id || `asg-${participantId}`)
-              );
-            });
-
-            const payloadAssignments = participants.map((participant) => {
-              const participantId = String(participant.id || '').trim();
-              const participantRef =
-                participantRefById.get(participantId) || `guest:${participantId}`;
-              const isChargeable = participantId === effectiveParticipantId;
-              return {
-                id: assignmentByParticipantId.get(participantId) || `asg-${participantId}`,
-                participantRef,
-                isChargeable,
-                assignedAmount: isChargeable ? totalChargeableAmount : 0,
-                participantLinkState: 'ACTIVE' as const,
-              };
-            });
-
-            const chargeResponsibleRef =
-              participantRefById.get(String(effectiveParticipantId)) ||
-              `guest:${String(effectiveParticipantId)}`;
-            const sidebarParticipantsMetadata = buildSidebarParticipantsMetadata(participants);
-
-            const savedConfig = await updateBookingBillingConfig(persistedEditingBookingId, {
-              chargeMode: 'INDIVIDUAL',
-              chargeResponsibleRef,
-              assignments: payloadAssignments,
-              metadata: {
-                schemaVersion: 1,
-                client: 'agenda-admin-v2',
-                sidebarParticipants: sidebarParticipantsMetadata,
-                sidebar: {
-                  participants: sidebarParticipantsMetadata,
-                },
-              },
-            });
-            remoteBillingConfigRequestSeqRef.current += 1;
-            setRemoteBillingConfig(savedConfig);
-          } catch (persistError) {
-            reportUiError({ area: 'AgendaPlayground', action: 'persistChargeResponsibleAfterPayment' }, persistError);
-          }
-        }
-      }
-      return true;
-    } catch (error: any) {
-      const normalized = normalizeApiError(error, 'No se pudo registrar el pago.');
-      const message = toUserSafeMessage(normalized.message, 'No se pudo registrar el pago.');
-      setFormError(message);
-      showAgendaToast(message);
-      return false;
-    } finally {
-      if (effectiveParticipantId) {
-        setPaymentInFlightId((previous) => (previous === effectiveParticipantId ? null : previous));
-      }
-      setIsWaitingQueuedPaymentConfirmation(false);
-    }
-  }, [
-    bookingFinancial?.confirmationMode,
-    bookingFinancial?.paid,
-    bookingDrawerState.draft,
-    bookingKind,
-    editingBooking?.clientId,
-    editingBooking?.state,
-    editingBooking?.userId,
-    paymentMode,
-    participants,
-    persistedEditingBookingId,
-    loadBookingConsumptions,
-    refreshBookingFinancial,
-    reloadSchedule,
-    singleChargeParticipantId,
-    showAgendaToast,
-    applyOptimisticBookingPaymentUpdate,
-  ]);
-
-  const toggleParticipantPaid = useCallback((id: string) => {
-    const participant = participants.find((entry) => entry.id === id);
-    if (!participant) return;
-    const draft = bookingDrawerState.draft;
-    if (!draft) return;
-
-    const assignment = draft.billing.assignments.find((entry) => entry.participantId === id && entry.isChargeable);
-    const assignmentId = assignment?.id || resolveDefaultAssignmentIdForDraft(draft);
-    const attributedConfirmed = draft.billing.payments
-      .filter((payment) => payment.status === 'CONFIRMED' && payment.assignmentId === assignmentId)
-      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-    const assignmentRemaining = assignment
-      ? Math.max(0, Number(assignment.assignedAmount || 0) - attributedConfirmed)
-      : 0;
-    const globalRemaining = Number(draft.billing.financialSummary.remainingAmount || 0);
-    const amount = Number(Math.min(globalRemaining, assignmentRemaining > 0 ? assignmentRemaining : globalRemaining).toFixed(2));
-    if (amount <= 0.009) return;
-
-    void registerPaymentNow({
-      amount,
-      method: participant.paymentMethod,
-      participantId: id,
-      successMessage: `Pago registrado: ${amount.toFixed(2)} $.`,
-    });
-  }, [bookingDrawerState.draft, participants, registerPaymentNow]);
-
-  const addParticipantRow = () => {
-    if (!persistedEditingBookingId && bookingKind !== 'block') {
-      showAgendaToast('Primero creá la reserva. Después podés agregar más participantes.');
-      return;
-    }
-    setParticipants((previous) => [
-      ...previous,
-      {
-        id: `player-${Date.now()}`,
-        name: '',
-        contact: '',
-        paid: false,
-        isOwner: false,
-        sourceType: 'guest',
-        paymentMethod: 'CASH',
-        entityRef: undefined,
-        customPrice: null,
-      },
-    ]);
-  };
-
-  const removeParticipant = useCallback((id: string) => {
-    const participantId = String(id || '').trim();
-    if (!participantId) return;
-    const participantToRemove = participants.find((participant) => participant.id === participantId);
-    if (!participantToRemove || participantToRemove.isOwner) return;
-
-    const remainingParticipants = participants.filter((participant) => participant.id !== participantId);
-    const fallbackResponsibleParticipant =
-      remainingParticipants.find((participant) => participant.isOwner) ||
-      remainingParticipants.find((participant) => participant.name.trim().length > 0) ||
-      remainingParticipants[0];
-    const nextResponsibleParticipantId = String(fallbackResponsibleParticipant?.id || '').trim();
-
-    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
-    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-    const bookingUserId =
-      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-        ? bookingUserIdRaw
-        : undefined;
-    const removedParticipantLabel =
-      String(participantToRemove.name || '').trim() ||
-      (participantToRemove.isOwner ? 'Titular' : 'Participante sin nombre');
-    const refsForHistory = new Set<string>();
-    refsForHistory.add(buildStableParticipantRef(participantToRemove, { bookingClientId, bookingUserId }));
-    refsForHistory.add(String(participantToRemove.entityRef || '').trim());
-    refsForHistory.add(`guest:${participantToRemove.id}`);
-    if (participantToRemove.isOwner) {
-      refsForHistory.add('guest:owner');
-      refsForHistory.add('guest:booking-responsible');
-      if (bookingClientId) refsForHistory.add(`booking-client:${bookingClientId}`);
-      if (bookingUserId) refsForHistory.add(`booking-user:${bookingUserId}`);
-    }
-    setParticipantLabelByRefCache((previous) => {
-      const next = { ...previous };
-      refsForHistory.forEach((ref) => {
-        const safeRef = String(ref || '').trim();
-        if (!safeRef) return;
-        next[safeRef] = removedParticipantLabel;
-      });
-      return next;
-    });
-
-    setParticipants(remainingParticipants);
-    setParticipantMenuId((previous) => (previous === participantId ? null : previous));
-    setExpandedParticipantId((previous) => (previous === participantId ? null : previous));
-    setParticipantSearchOpenId((previous) => (previous === participantId ? null : previous));
-    setParticipantSearchLoadingId((previous) => (previous === participantId ? null : previous));
-    setParticipantSuggestionsById((previous) => {
-      if (!Object.prototype.hasOwnProperty.call(previous, participantId)) return previous;
-      const next = { ...previous };
-      delete next[participantId];
-      return next;
-    });
-    setSimplifiedEditingParticipantId((previous) => (previous === participantId ? null : previous));
-    setSimplifiedEditPaymentMethodDraft((previous) =>
-      simplifiedEditingParticipantId === participantId ? '' : previous
-    );
-
-    const payerDraftId = String(simplifiedPaymentPayerParticipantIdDraft || '').trim();
-    if (payerDraftId === participantId) {
-      const fallbackPayer =
-        fallbackResponsibleParticipant ||
-        remainingParticipants.find((participant) => participant.isOwner) ||
-        remainingParticipants[0];
-      const fallbackPaymentMethod = String(fallbackPayer?.paymentMethod || '');
-      setSimplifiedPaymentPayerParticipantIdDraft(String(fallbackPayer?.id || ''));
-      setSimplifiedPaymentMethodDraft(
-        isParticipantPaymentMethod(fallbackPaymentMethod)
-          ? fallbackPaymentMethod
-          : 'CASH'
-      );
-    }
-
-    const isRemovingChargeResponsible =
-      paymentMode === 'Único' &&
-      participantId === effectiveSingleChargeResponsibleParticipantId;
-    if (isRemovingChargeResponsible && nextResponsibleParticipantId) {
-      setBillingConfigTouchedByUser(true);
-      bookingDrawerDispatch({
-        type: 'SET_CHARGE_RESPONSIBLE',
-        payload: { participantId: nextResponsibleParticipantId },
-      });
-      const nextResponsibleLabel =
-        String(fallbackResponsibleParticipant?.name || '').trim() ||
-        (fallbackResponsibleParticipant?.isOwner ? 'Titular' : 'Participante');
-      pendingParticipantSaveNoticeRef.current =
-        `Participante eliminado. Responsable de pago reasignado a ${nextResponsibleLabel}.`
-      return;
-    }
-
-    if (!pendingParticipantSaveNoticeRef.current) {
-      pendingParticipantSaveNoticeRef.current = 'Participante eliminado.';
-    }
-  }, [
-    bookingDrawerDispatch,
-    editingBooking?.clientId,
-    editingBooking?.userId,
-    effectiveSingleChargeResponsibleParticipantId,
-    participants,
-    paymentMode,
-    setExpandedParticipantId,
-    setParticipantMenuId,
-    simplifiedEditingParticipantId,
-    simplifiedPaymentPayerParticipantIdDraft,
-  ]);
-
-  const markParticipantAsPending = useCallback((id: string) => {
-    if (persistedEditingBookingId) {
-      setFormError('Para volver a pendiente una reserva cobrada hay que gestionar una devolución.');
-      return;
-    }
-    setParticipants((previous) =>
-      previous.map((participant) =>
-        participant.id === id ? { ...participant, paid: false } : participant
-      )
-    );
-  }, [persistedEditingBookingId]);
-
-  const handleConfirmPendingBooking = useCallback(async () => {
-    if (!persistedEditingBookingId) return;
-    if (confirmingBooking || isSubmittingBooking || isDeletingBooking) return;
-    try {
-      setConfirmingBooking(true);
-      setFormError('');
-      await confirmBooking(persistedEditingBookingId);
-      await reloadSchedule();
-      await Promise.all([
-        refreshBookingFinancial(persistedEditingBookingId),
-        loadBookingConsumptions(persistedEditingBookingId),
-      ]);
-      const timelineRequestSeq = bookingTimelineRequestSeqRef.current + 1;
-      bookingTimelineRequestSeqRef.current = timelineRequestSeq;
-      setBookingTimelineLoading(true);
-      setBookingTimelineError('');
-      try {
-        const events = await getBookingTimelineEvents(persistedEditingBookingId, { take: 200 });
-        if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-          setBookingTimelineEvents(Array.isArray(events) ? events : []);
-        }
-      } catch (timelineError: any) {
-        if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-          const normalized = normalizeApiError(timelineError, 'No se pudo cargar el historial de la reserva.');
-          setBookingTimelineError(toUserSafeMessage(normalized.message, 'No se pudo cargar el historial de la reserva.'));
-        }
-      } finally {
-        if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-          setBookingTimelineLoading(false);
-        }
-      }
-      showAgendaToast('Reserva confirmada. Ya podés registrar pagos.', 'success');
-    } catch (error: any) {
-      applyBookingError(error, 'No se pudo confirmar la reserva.');
-    } finally {
-      setConfirmingBooking(false);
-    }
-  }, [
-    applyBookingError,
-    confirmingBooking,
-    isDeletingBooking,
-    isSubmittingBooking,
-    loadBookingConsumptions,
-    persistedEditingBookingId,
-    refreshBookingFinancial,
-    reloadSchedule,
-    showAgendaToast,
-  ]);
-
-  const mapSeriesImpactItem = useCallback((item: any, fallbackCourtName: string): RecurringOverlapItem => {
-    const requestedStartRaw = item?.requestedStartDateTime || item?.startDateTime || item?.date || null;
-    const requestedEndRaw = item?.requestedEndDateTime || item?.endDateTime || null;
-    const conflictingStartRaw = item?.conflictingStartDateTime || null;
-    const conflictingEndRaw = item?.conflictingEndDateTime || null;
-    const requestedStart = requestedStartRaw ? new Date(requestedStartRaw) : null;
-    const requestedEnd = requestedEndRaw ? new Date(requestedEndRaw) : null;
-    const conflictingStart = conflictingStartRaw ? new Date(conflictingStartRaw) : null;
-    const conflictingEnd = conflictingEndRaw ? new Date(conflictingEndRaw) : null;
-    const hasRequestedStart = requestedStart && !Number.isNaN(requestedStart.getTime());
-    const hasRequestedEnd = requestedEnd && !Number.isNaN(requestedEnd.getTime());
-    const hasConflictingStart = conflictingStart && !Number.isNaN(conflictingStart.getTime());
-    const hasConflictingEnd = conflictingEnd && !Number.isNaN(conflictingEnd.getTime());
-    const inferredRequestedEnd =
-      hasRequestedStart && !hasRequestedEnd
-        ? new Date((requestedStart as Date).getTime() + Math.max(15, selectionMinutes) * 60000)
-        : null;
-
-    return {
-      courtName: String(item?.courtName || item?.conflictingCourtName || fallbackCourtName || 'Cancha'),
-      requestedDateLabel: hasRequestedStart
-        ? (requestedStart as Date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        : selectedDate.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      requestedTimeLabel: `${
-        hasRequestedStart
-          ? (requestedStart as Date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-          : slotToTime(selectedStartSlot)
-      } - ${
-        hasRequestedEnd
-          ? (requestedEnd as Date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-          : inferredRequestedEnd
-            ? inferredRequestedEnd.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-            : slotToTime(selectedEndSlot)
-      }`,
-      conflictingDateLabel: hasConflictingStart
-        ? (conflictingStart as Date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        : undefined,
-      conflictingTimeLabel:
-        hasConflictingStart && hasConflictingEnd
-          ? `${(conflictingStart as Date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })} - ${(conflictingEnd as Date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}`
-          : undefined,
-      activityName: String(item?.reason || item?.conflictingActivityName || item?.activityName || '').trim() || undefined,
-      clientName: String(item?.conflictingClientName || item?.clientName || '').trim() || undefined,
-    };
-  }, [selectedDate, selectedEndSlot, selectedStartSlot, selectionMinutes]);
-
-  const mapSeriesAppliedItem = useCallback((item: any, fallbackCourtName: string): RecurringCreatedItem => {
-    const startRaw = item?.startDateTime || item?.requestedStartDateTime || item?.date || null;
-    const endRaw = item?.endDateTime || item?.requestedEndDateTime || null;
-    const startDate = startRaw ? new Date(startRaw) : null;
-    const endDate = endRaw ? new Date(endRaw) : null;
-    const hasStart = startDate && !Number.isNaN(startDate.getTime());
-    const hasEnd = endDate && !Number.isNaN(endDate.getTime());
-    const inferredEnd =
-      hasStart && !hasEnd
-        ? new Date((startDate as Date).getTime() + Math.max(15, selectionMinutes) * 60000)
-        : null;
-
-    return {
-      bookingId: Number.isFinite(Number(item?.bookingId)) ? Number(item.bookingId) : undefined,
-      courtName: String(item?.courtName || fallbackCourtName || 'Cancha'),
-      requestedDateLabel: hasStart
-        ? (startDate as Date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-        : selectedDate.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-      requestedTimeLabel: `${
-        hasStart
-          ? (startDate as Date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-          : slotToTime(selectedStartSlot)
-      } - ${
-        hasEnd
-          ? (endDate as Date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-          : inferredEnd
-            ? inferredEnd.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
-            : slotToTime(selectedEndSlot)
-      }`,
-      activityName: String(item?.activityName || '').trim() || undefined,
-      sortStartMs: hasStart ? (startDate as Date).getTime() : undefined,
-    };
-  }, [selectedDate, selectedEndSlot, selectedStartSlot, selectionMinutes]);
-
-  const resolveSeriesPaidOccurrences = useCallback(async (items: RecurringCreatedItem[]) => {
-    const rows = await Promise.all(
-      items.map(async (item) => {
-        const bookingId = Number(item.bookingId || 0);
-        if (!Number.isFinite(bookingId) || bookingId <= 0) return null;
-        const summary = await getBookingFinancialSummary(bookingId);
-        const paidAmount = roundMoney(Number(summary?.paid || 0));
-        if (paidAmount <= 0.009) return null;
-        return { ...item, bookingId, paidAmount };
-      })
-    );
-    return rows.filter((item): item is SeriesPaidOccurrence => Boolean(item));
-  }, []);
-
-  const previewSeriesEditScope = useCallback(async (scope: EditSeriesScope) => {
-    const fixedBookingId = Number(editingBooking?.fixedBookingId || 0);
-    const numericBookingId = Number(editingBookingId || 0);
-    const numericCourtId = Number(selectedCourtId || 0);
-    if (!Number.isFinite(fixedBookingId) || fixedBookingId <= 0) return;
-    if (!Number.isFinite(numericCourtId) || numericCourtId <= 0) {
-      setBlockingFieldError('court', 'Seleccioná una cancha válida para editar la serie.');
-      return;
-    }
-    try {
-      setSeriesEditPreviewScope(scope);
-      setSeriesEditPreviewSummary(null);
-      setSeriesEditPreviewLoading(true);
-      setFormError('');
-      const result: any = await rescheduleFixedBooking(fixedBookingId, {
-        scope,
-        occurrenceBookingId: Number.isFinite(numericBookingId) && numericBookingId > 0 ? numericBookingId : undefined,
-        courtId: numericCourtId,
-        startDateTime: buildStartDateTimeFromSlot(selectedDate, selectedStartSlot),
-        durationMinutes: Math.max(15, (selectedEndSlot - selectedStartSlot) * slotMinutes),
-        previewOnly: true,
-      });
-      const overlapItemsRaw = Array.isArray(result?.overlaps) ? result.overlaps : [];
-      const applicableItemsRaw = Array.isArray(result?.applicableItems) ? result.applicableItems : [];
-      const failureMessages = Array.isArray(result?.failures)
-        ? result.failures
-            .map((item: any) => String(item?.reason || '').trim())
-            .filter((value: string) => value.length > 0)
-        : [];
-      setSeriesEditPreviewSummary({
-        scope,
-        totalCandidates: Number(result?.totalCandidates || 0),
-        applicableCount: Number(result?.willUpdateCount || result?.updatedCount || 0),
-        applicableItems: applicableItemsRaw
-          .map((item: any) => mapSeriesAppliedItem(item, selectedCourt?.name || 'Cancha'))
-          .sort((a, b) => (Number(a.sortStartMs || 0) - Number(b.sortStartMs || 0))),
-        skippedCount: overlapItemsRaw.length + failureMessages.length,
-        overlapItems: overlapItemsRaw.map((item: any) => mapSeriesImpactItem(item, selectedCourt?.name || 'Cancha')),
-        failureMessages,
-      });
-    } catch (error: any) {
-      setSeriesEditPreviewScope(null);
-      applyBookingError(error, 'No se pudo previsualizar la edición de la serie.');
-    } finally {
-      setSeriesEditPreviewLoading(false);
-    }
-  }, [applyBookingError, editingBooking?.fixedBookingId, editingBookingId, mapSeriesAppliedItem, mapSeriesImpactItem, selectedCourt?.name, selectedCourtId, selectedDate, selectedEndSlot, selectedStartSlot, setBlockingFieldError]);
-
-  const previewSeriesDeleteScope = useCallback(async (scope: EditSeriesScope) => {
-    const fixedBookingId = Number(editingBooking?.fixedBookingId || 0);
-    const numericBookingId = Number(editingBookingId || 0);
-    if (!Number.isFinite(fixedBookingId) || fixedBookingId <= 0) return;
-    try {
-      setSeriesDeletePreviewScope(scope);
-      setSeriesDeletePreviewSummary(null);
-      setSeriesDeletePreviewLoading(true);
-      setFormError('');
-      const result: any = await cancelFixedBooking(fixedBookingId, {
-        scope,
-        occurrenceBookingId: Number.isFinite(numericBookingId) && numericBookingId > 0 ? numericBookingId : undefined,
-        previewOnly: true,
-      });
-      const skippedRaw = Array.isArray(result?.skipped) ? result.skipped : [];
-      const applicableItemsRaw = Array.isArray(result?.applicableItems) ? result.applicableItems : [];
-      const applicableItems = applicableItemsRaw
-        .map((item: any) => mapSeriesAppliedItem(item, selectedCourt?.name || 'Cancha'))
-        .sort((a, b) => (Number(a.sortStartMs || 0) - Number(b.sortStartMs || 0)));
-      const paidItems = await resolveSeriesPaidOccurrences(applicableItems);
-      setSeriesDeletePreviewSummary({
-        scope,
-        totalCandidates: Number(result?.totalCandidates || 0),
-        applicableCount: Number(result?.cancelledCount || 0),
-        applicableItems,
-        skippedCount: skippedRaw.length,
-        overlapItems: skippedRaw.map((item: any) => mapSeriesImpactItem(item, selectedCourt?.name || 'Cancha')),
-        failureMessages: [],
-        paidItems,
-        paidAmountTotal: roundMoney(paidItems.reduce((sum, item) => sum + Number(item.paidAmount || 0), 0)),
-      });
-    } catch (error: any) {
-      setSeriesDeletePreviewScope(null);
-      applyBookingError(error, 'No se pudo previsualizar la cancelación de la serie.');
-    } finally {
-      setSeriesDeletePreviewLoading(false);
-    }
-  }, [applyBookingError, editingBooking?.fixedBookingId, editingBookingId, mapSeriesAppliedItem, mapSeriesImpactItem, resolveSeriesPaidOccurrences, selectedCourt?.name]);
-
-  const cancelBookingPaidAmount = roundMoney(Math.max(
-    Number(bookingFinancial?.paid || 0),
-    Number(editingBooking?.hoverPayment?.paidAmount || 0),
-    Number(bookingDrawerState.draft?.billing.financialSummary.paidAmount || 0)
-  ));
-  const cancelBookingHasPayments = cancelBookingPaidAmount > 0.009;
-  const parsedCancelRefundAmount = Number(String(cancelRefundAmountInput || '').replace(',', '.'));
-  const normalizedCancelRefundAmount = Number.isFinite(parsedCancelRefundAmount)
-    ? roundMoney(parsedCancelRefundAmount)
-    : 0;
-
-  const closeDeleteBookingFlow = useCallback(() => {
-    if (isDeletingBooking) return;
-    setDeleteBookingConfirmOpen(false);
-    setDeleteBookingFinalConfirmOpen(false);
-    setCancelBookingFlowError('');
-  }, [isDeletingBooking]);
-
-  const closeSeriesOperationResult = useCallback(() => {
-    setSeriesOperationResultOpen(false);
-    if (seriesOperationResult?.mode === 'delete') {
-      setDrawerOpen(false);
-      setEditingBookingId(null);
-      setEditingBaseline(null);
-    }
-  }, [seriesOperationResult?.mode]);
-
-  const closeRecurringResultModal = useCallback(() => {
-    const generatedCount = Number(recurringResult?.generatedCount || 0);
-    setRecurringOverlapModalOpen(false);
-    if (generatedCount > 0) {
-      setDrawerOpen(false);
-      setEditingBookingId(null);
-      setEditingBaseline(null);
-      setFormError('');
-    }
-  }, [recurringResult?.generatedCount]);
-
-  const buildCancelBookingOptions = useCallback((): {
-    options?: {
-      refund?: {
-        amount?: number;
-        executeNow?: boolean;
-        reasonType?: CancelRefundReasonType;
-        executionNotes?: string;
-      };
-    };
-    error?: string;
-  } => {
-    if (isBookingFinancialLoading) {
-      return { error: 'Esperá a que termine de cargar el impacto financiero de la reserva.' };
-    }
-
-    if (!cancelBookingHasPayments) return {};
-
-    const amount = Number(String(cancelRefundAmountInput || '').replace(',', '.'));
-    if (!Number.isFinite(amount) || amount <= 0.009) {
-      return { error: 'Para cancelar una reserva con pagos, indicá un monto a devolver mayor a 0.' };
-    }
-
-    const refundAmount = roundMoney(amount);
-    if (refundAmount > cancelBookingPaidAmount + 0.009) {
-      return { error: `El monto a devolver no puede superar ${cancelBookingPaidAmount.toFixed(2)} $.` };
-    }
-
-    if (!cancelRefundExecuteNow && refundAmount + 0.009 < cancelBookingPaidAmount) {
-      return { error: 'Si la devolución queda pendiente, debe ser por el total pagado.' };
-    }
-
-    return {
-      options: {
-        refund: {
-          amount: refundAmount,
-          executeNow: cancelRefundExecuteNow,
-          reasonType: cancelRefundReasonType,
-          executionNotes: cancelRefundExecutionNotes.trim() || undefined,
-        },
-      },
-    };
-  }, [
-    cancelBookingHasPayments,
-    cancelBookingPaidAmount,
-    cancelRefundAmountInput,
-    cancelRefundExecuteNow,
-    cancelRefundExecutionNotes,
-    cancelRefundReasonType,
-    isBookingFinancialLoading,
-  ]);
-
-  const openDeleteBookingFlow = useCallback(() => {
-    const isEditingRecurringSeries = Number(editingBooking?.fixedBookingId || 0) > 0;
-    if (isEditingRecurringSeries) {
-      setDeleteSeriesScopeModalOpen(true);
-      setDeleteBookingConfirmOpen(false);
-      setDeleteBookingFinalConfirmOpen(false);
-      setSeriesDeletePreviewLoading(false);
-      setSeriesDeletePreviewScope(null);
-      setSeriesDeletePreviewSummary(null);
-      return;
-    }
-    setCancelRefundAmountInput(cancelBookingPaidAmount > 0.009 ? cancelBookingPaidAmount.toFixed(2) : '');
-    setCancelRefundReasonType(cancelBookingPaidAmount > 0.009 ? 'FULL' : 'OTHER');
-    setCancelRefundExecutionNotes('');
-    setCancelRefundExecuteNow(true);
-    setCancelBookingFlowError('');
-    setDeleteBookingFinalConfirmOpen(false);
-    setDeleteBookingConfirmOpen(true);
-  }, [cancelBookingPaidAmount, editingBooking?.fixedBookingId]);
-
-  const handleDeleteBooking = useCallback(async (
-    seriesScope?: EditSeriesScope,
-    options?: {
-      refund?: {
-        amount?: number;
-        executeNow?: boolean;
-        reasonType?: CancelRefundReasonType;
-        executionNotes?: string;
-      };
-    }
-  ) => {
-    if (!editingBookingId) return;
-
-    const numericBookingId = Number(editingBookingId);
-    if (!Number.isFinite(numericBookingId) || numericBookingId <= 0) {
-      setBookings((previous) => previous.filter((booking) => String(booking.id) !== String(editingBookingId)));
-      setDrawerOpen(false);
-      setEditingBookingId(null);
-      setEditingBaseline(null);
-      setFormError('');
-      return;
-    }
-
-    const fixedBookingId = Number(editingBooking?.fixedBookingId || 0);
-    const isEditingRecurringSeries = Number.isFinite(fixedBookingId) && fixedBookingId > 0;
-    const shouldDeferDrawerCloseForSeriesResult = isEditingRecurringSeries && Boolean(seriesScope);
-
-    try {
-      setIsDeletingBooking(true);
-      setFormError('');
-      if (isEditingRecurringSeries && seriesScope) {
-        const result: any = await cancelFixedBooking(fixedBookingId, {
-          scope: seriesScope,
-          occurrenceBookingId: Number.isFinite(numericBookingId) && numericBookingId > 0 ? numericBookingId : undefined,
-        });
-        const skippedRaw = Array.isArray(result?.skipped) ? result.skipped : [];
-        const cancelledItemsRaw = Array.isArray(result?.cancelledItems)
-          ? result.cancelledItems
-          : Array.isArray(result?.applicableItems)
-            ? result.applicableItems
-            : [];
-        const overlapItems = skippedRaw.map((item: any) => mapSeriesImpactItem(item, selectedCourt?.name || 'Cancha'));
-        const appliedItems = cancelledItemsRaw
-          .map((item: any) => mapSeriesAppliedItem(item, selectedCourt?.name || 'Cancha'))
-          .sort((a, b) => (Number(a.sortStartMs || 0) - Number(b.sortStartMs || 0)));
-        const cancelledCount = Number(result?.cancelledCount || 0);
-        setSeriesOperationResult({
-          mode: 'delete',
-          title: cancelledCount > 0 ? 'Serie cancelada' : 'No se cancelaron ocurrencias',
-          detail:
-            cancelledCount > 0
-              ? `Se cancelaron ${cancelledCount} turno(s) de la serie.`
-              : 'No se pudo cancelar ninguna ocurrencia con el alcance elegido.',
-          appliedCount: cancelledCount,
-          appliedItems,
-          skippedCount: skippedRaw.length,
-          overlapItems,
-        });
-        setSeriesOperationResultOpen(true);
-      } else {
-        await cancelBooking(numericBookingId, options);
-      }
-      await reloadSchedule();
-      setDeleteBookingConfirmOpen(false);
-      setDeleteBookingFinalConfirmOpen(false);
-      if (isEditingRecurringSeries && seriesScope) {
-        showAgendaToast('Serie cancelada.', 'success');
-      } else {
-        showAgendaToast('Reserva cancelada.', 'success');
-      }
-      if (!shouldDeferDrawerCloseForSeriesResult) {
-        setDrawerOpen(false);
-        setEditingBookingId(null);
-        setEditingBaseline(null);
-      }
-    } catch (error: any) {
-      applyBookingError(error, 'No se pudo eliminar/cancelar la reserva.');
-    } finally {
-      setIsDeletingBooking(false);
-    }
-  }, [applyBookingError, editingBooking?.fixedBookingId, editingBookingId, mapSeriesAppliedItem, mapSeriesImpactItem, reloadSchedule, selectedCourt?.name, showAgendaToast]);
-
-  const confirmCancelBookingFromDrawer = useCallback(async () => {
-    const result = buildCancelBookingOptions();
-    if (result.error) {
-      setCancelBookingFlowError(result.error);
-      setDeleteBookingFinalConfirmOpen(false);
-      return;
-    }
-    setCancelBookingFlowError('');
-    setDeleteBookingFinalConfirmOpen(false);
-    await handleDeleteBooking(undefined, result.options);
-  }, [buildCancelBookingOptions, handleDeleteBooking]);
-
-  const hasOverlapForRange = useCallback((params: {
-    courtId: string;
-    startSlot: number;
-    endSlot: number;
-    ignoreBookingId?: string | number | null;
-  }) => {
-    const { courtId, startSlot, endSlot, ignoreBookingId } = params;
-    if (endSlot <= startSlot) return false;
-
-    return bookings.some((booking) => {
-      if (ignoreBookingId != null && String(booking.id) === String(ignoreBookingId)) return false;
-      if (booking.courtId !== courtId) return false;
-      return startSlot < booking.endSlot && endSlot > booking.startSlot;
-    });
-  }, [bookings]);
-
-  const hasConflict = useMemo(() => {
-    if (
-      editingBaseline &&
-      selectedCourtId === editingBaseline.courtId &&
-      selectedStartSlot === editingBaseline.startSlot &&
-      selectedEndSlot === editingBaseline.endSlot
-    ) {
-      return false;
-    }
-    return hasOverlapForRange({
-      courtId: selectedCourtId,
-      startSlot: selectedStartSlot,
-      endSlot: selectedEndSlot,
-      ignoreBookingId: editingBookingId,
-    });
-  }, [editingBaseline, editingBookingId, hasOverlapForRange, selectedCourtId, selectedStartSlot, selectedEndSlot]);
-
-  const bookingDropHasConflict = useMemo(() => {
-    if (!bookingDropPreview || !draggingBookingMeta) return false;
-    return hasOverlapForRange({
-      courtId: bookingDropPreview.courtId,
-      startSlot: bookingDropPreview.startSlot,
-      endSlot: bookingDropPreview.endSlot,
-      ignoreBookingId: draggingBookingMeta.bookingId,
-    });
-  }, [bookingDropPreview, draggingBookingMeta, hasOverlapForRange]);
-
-  const hasScheduleChanges = useMemo(() => {
-    if (!editingBaseline) return true;
-    return !(
-      selectedCourtId === editingBaseline.courtId &&
-      selectedStartSlot === editingBaseline.startSlot &&
-      selectedEndSlot === editingBaseline.endSlot
-    );
-  }, [editingBaseline, selectedCourtId, selectedStartSlot, selectedEndSlot]);
-
-  const shouldShowScheduleConflict = hasConflict && (
-    editingBookingId ? hasScheduleChanges : scheduleInputsDirty
-  );
-  const isSelectionInPastBlocking = isSelectionInPast && (!editingBookingId || hasScheduleChanges);
-  const isPaymentLockedByManualPending = Boolean(
-    persistedEditingBookingId &&
-    bookingKind !== 'block' &&
-    bookingFinancial?.confirmationMode === 'MANUAL' &&
-    editingBooking?.state === 'pending'
-  );
-  const hasRegisteredPaymentsForCurrentBooking = useMemo(() => {
-    const fromTimeline = (Array.isArray(bookingTimelineEvents) ? bookingTimelineEvents : []).some((event) => {
-      const normalizedType = String(event?.type || '').trim().toUpperCase();
-      return normalizedType === 'PAYMENT_RECEIVED';
-    });
-    const fromDraft = Boolean(
-      bookingDrawerState.draft?.billing?.payments?.some(
-        (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
-      )
-    );
-    const fromFinancial = Number(bookingFinancial?.paid || 0) > 0.009;
-    return fromTimeline || fromDraft || fromFinancial;
-  }, [bookingDrawerState.draft?.billing?.payments, bookingFinancial?.paid, bookingTimelineEvents]);
-  const isBillingConfigLockedByPayments = Boolean(
-    persistedEditingBookingId &&
-    bookingKind !== 'block' &&
-    hasRegisteredPaymentsForCurrentBooking
-  );
-  const shouldHideBillingUntilCreated = Boolean(
-    !persistedEditingBookingId &&
-    bookingKind !== 'block'
-  );
-  const isCompletedReservation = Boolean(
-    persistedEditingBookingId &&
-    bookingKind !== 'block' &&
-    editingBooking?.state === 'completed'
-  );
-  const isCompletedReservationScheduleLocked = isCompletedReservation;
-  const isBookingFullyPaid = Boolean(
-    persistedEditingBookingId &&
-    bookingKind !== 'block' &&
-    bookingFinancial &&
-    bookingFinancial.remaining <= 0.009
-  );
-  const reservationStatusLabel = useMemo(() => {
-    if (bookingKind === 'block') return 'Bloqueo';
-    if (!editingBooking) return 'Nueva';
-    if (editingBooking.state === 'completed') return 'Completada';
-    if (editingBooking.state === 'confirmed') return 'Confirmada';
-    if (editingBooking.state === 'blocked') return 'Bloqueada';
-    return 'Pendiente';
-  }, [bookingKind, editingBooking]);
-  const reservationStatusTone = useMemo(() => {
-    if (bookingKind === 'block' || editingBooking?.state === 'blocked') return 'bg-p-error-bg text-p-error';
-    if (editingBooking?.state === 'completed') return 'bg-p-positive-bg text-p-accent';
-    if (editingBooking?.state === 'confirmed') return 'bg-p-positive-bg text-p-positive';
-    if (!editingBooking) return 'bg-p-positive-bg text-p-accent';
-    return 'bg-p-warning-bg text-p-warning';
-  }, [bookingKind, editingBooking]);
-  const paymentStatusLabel = useMemo(() => {
-    if (!persistedEditingBookingId || bookingKind === 'block') return 'Sin pago';
-    if (!bookingFinancial) return editingBooking?.paymentState === 'paid' ? 'Pagada' : 'Sin pago';
-    if (bookingFinancial.remaining <= 0.009) return 'Pagada';
-    if (bookingFinancial.paid > 0.009) return 'Parcial';
-    return 'Sin pago';
-  }, [bookingFinancial, bookingKind, editingBooking?.paymentState, persistedEditingBookingId]);
-  const paymentStatusTone = paymentStatusLabel === 'Pagada'
-    ? 'bg-p-positive-bg text-p-positive'
-    : paymentStatusLabel === 'Parcial'
-      ? 'bg-p-warning-bg text-p-warning'
-      : 'bg-p-surface-3 text-p-text-secondary';
-  const isEditingRecurringSeries = Boolean(
-    editingBookingId && Number(editingBooking?.fixedBookingId || 0) > 0
-  );
-  const shouldShowSeriesScopeHint = isEditingRecurringSeries && hasScheduleChanges;
-  const canShowMainAction = Boolean(persistedEditingBookingId && bookingKind !== 'block');
-  const showConfirmMainAction = canShowMainAction && isPaymentLockedByManualPending;
-  const showCollectMainAction = canShowMainAction && !isPaymentLockedByManualPending && !isBookingFullyPaid;
-  const shouldHideBillingUntilConfirmed = isPaymentLockedByManualPending || shouldHideBillingUntilCreated;
-  const isPaymentsTabActive = billingHubTab === 'PAYMENTS';
-  const bookingConsumptionsTotal = Number(
-    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0).toFixed(2)
-  );
-  const bookingConsumptionsPaid = Number(
-    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.paidAmount || 0), 0).toFixed(2)
-  );
-  const bookingConsumptionsRemaining = Number(
-    bookingConsumptionItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0).toFixed(2)
-  );
-  const pendingAccountItems = useMemo(
-    () =>
-      bookingAccountItems.filter((item) => Number(item.remainingAmount || 0) > 0.009),
-    [bookingAccountItems]
-  );
-  const pendingCourtAccountItems = useMemo(
-    () => pendingAccountItems.filter((item) => item.type === 'BOOKING'),
-    [pendingAccountItems]
-  );
-  const pendingConsumptionAccountItems = useMemo(
-    () => pendingAccountItems.filter((item) => item.type !== 'BOOKING'),
-    [pendingAccountItems]
-  );
-  const pendingAccountItemById = useMemo(() => {
-    const map = new Map<string, BookingConsumptionItem>();
-    pendingAccountItems.forEach((item) => {
-      map.set(String(item.id), item);
-    });
-    return map;
-  }, [pendingAccountItems]);
-  const bookingCourtAmount = Number(
-    (usesPersistedFinancialSummary
-      ? Number(bookingFinancial?.courtTotal || 0)
-      : Math.max(0, Number(totalPrice || 0) - bookingConsumptionsTotal)
-    ).toFixed(2)
-  );
-  const bookingItemsAmount = Number(
-    (usesPersistedFinancialSummary
-      ? Number(bookingFinancial?.itemsTotal || 0)
-      : bookingConsumptionsTotal
-    ).toFixed(2)
-  );
-  const billingDraft = bookingDrawerState.draft?.billing || null;
-  const billingSummary = billingDraft?.financialSummary
-    ? billingDraft.financialSummary
-    : {
-        totalAmount: Number(totalPrice || 0),
-        paidAmount: Number(bookingFinancial?.paid || 0),
-        remainingAmount: Number(bookingFinancial ? bookingFinancial.remaining : Math.max(0, Number(totalPrice || 0))),
-        paymentStatus:
-          (bookingFinancial?.remaining || 0) <= 0.009
-            ? 'PAID'
-            : (bookingFinancial?.paid || 0) > 0.009
-      ? 'PARTIAL'
-              : 'UNPAID',
-      };
-  const simplifiedFinancialTotal = Number(
-    usesPersistedFinancialSummary
-      ? Number(bookingFinancial?.total || 0)
-      : billingSummary.totalAmount || 0
-  );
-  const simplifiedPaidAmount = Number(
-    usesPersistedFinancialSummary
-      ? Number(bookingFinancial?.paid || 0)
-      : billingSummary.paidAmount || 0
-  );
-  const simplifiedRemainingAmount = Number(
-    Math.max(
-      0,
-      usesPersistedFinancialSummary
-        ? Number(bookingFinancial?.remaining || 0)
-        : billingSummary.remainingAmount || 0
-    ).toFixed(2)
-  );
-  const simplifiedRemainingAfterQueue = simplifiedRemainingAmount;
-  const computeConceptBasedMaxAmount = useCallback((
-    conceptMode: PaymentConceptMode,
-    selectedItemIds?: string[],
-    customAmountDraftById?: Record<string, string>
-  ) => {
-    const selectedIds = new Set(
-      (Array.isArray(selectedItemIds) ? selectedItemIds : simplifiedPaymentSelectedItemIdsDraft)
-        .map((value) => String(value || '').trim())
-        .filter(Boolean)
-    );
-    if (conceptMode === 'CUSTOM') {
-      const customDrafts = customAmountDraftById ?? simplifiedPaymentCustomItemAmountDraftById;
-      const customSelectedAmount = Array.from(selectedIds).reduce((sum, itemId) => {
-        const item = pendingAccountItemById.get(itemId);
-        if (!item) return sum;
-        const fallback = Number(item.remainingAmount || 0);
-        const rawDraft = String(customDrafts[itemId] ?? '').trim();
-        const parsed = Number(rawDraft.replace(',', '.'));
-        const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
-        const bounded = Math.max(0, Math.min(fallback, resolved));
-        return sum + bounded;
-      }, 0);
-      return Number(
-        Math.max(0, Math.min(simplifiedRemainingAfterQueue, Number(customSelectedAmount.toFixed(2)))).toFixed(2)
-      );
-    }
-    const selectedItems = (() => {
-      if (conceptMode === 'AUTO') return pendingAccountItems;
-      if (conceptMode === 'COURT') return pendingCourtAccountItems;
-      if (conceptMode === 'CONSUMPTIONS') return pendingConsumptionAccountItems;
-      return pendingAccountItems.filter((item) => selectedIds.has(String(item.id)));
-    })();
-    const debt = Number(
-      selectedItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0).toFixed(2)
-    );
-    const conceptTarget = conceptMode === 'AUTO' ? simplifiedRemainingAfterQueue : debt;
-    return Number(
-      Math.max(0, Math.min(simplifiedRemainingAfterQueue, conceptTarget)).toFixed(2)
-    );
-  }, [
-    pendingAccountItemById,
-    pendingAccountItems,
-    pendingConsumptionAccountItems,
-    pendingCourtAccountItems,
-    simplifiedPaymentCustomItemAmountDraftById,
-    simplifiedPaymentSelectedItemIdsDraft,
-    simplifiedRemainingAfterQueue,
-  ]);
-  const formatPaymentAmountDraft = useCallback((amount: number) => {
-    return amount > 0.009 ? Number(amount.toFixed(2)).toFixed(2) : '';
-  }, []);
-  const computeCustomSelectedAmount = useCallback((
-    selectedItemIds: string[],
-    customAmountDraftById: Record<string, string>
-  ) => {
-    const total = selectedItemIds.reduce((sum, rawId) => {
-      const itemId = String(rawId || '').trim();
-      if (!itemId) return sum;
-      const item = pendingAccountItemById.get(itemId);
-      if (!item) return sum;
-      const fallback = Number(item.remainingAmount || 0);
-      const rawDraft = String(customAmountDraftById[itemId] ?? '').trim();
-      const parsed = Number(rawDraft.replace(',', '.'));
-      const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
-      const bounded = Math.max(0, Math.min(fallback, resolved));
-      return sum + bounded;
-    }, 0);
-    return Number(total.toFixed(2));
-  }, [pendingAccountItemById]);
-  const simplifiedPaymentStatusLabel = isFinancialDisplayPending
-    ? 'Cargando'
-    : simplifiedRemainingAmount <= 0.009
-    ? 'Pagado'
-    : simplifiedPaidAmount > 0.009
-      ? 'Parcial'
-      : 'Pendiente';
-  const isModernBillingEnabled = Boolean(
-    bookingKind !== 'block' &&
-    bookingDrawerState.draft
-  );
-  const isBillingModeSwitchLocked =
-    Boolean(editingBookingId) && (isRemoteBillingConfigLoading || !isBillingConfigHydrated);
-  const bookingDrawerDraftSnapshot = useMemo<NewBookingDrawerDraft | null>(() => {
-    if (!drawerOpen || bookingKind === 'block') return null;
-
-    const bookingId = Number(editingBookingId || 0) || undefined;
-    const bookingClientId = editingBooking?.clientId;
-    const bookingUserId = editingBooking?.userId;
-    const participantsDraftBase = participants.map((participant, index) => ({
-      id: String(participant.id || `participant-${index}`),
-      personId: undefined,
-      displayName: String(participant.name || ''),
-      contact: String(participant.contact || ''),
-      sourceType: participant.sourceType,
-      linked: participant.sourceType !== 'guest',
-      bookingRole: participant.isOwner ? 'BOOKING_RESPONSIBLE' as const : 'PARTICIPANT' as const,
-      archived: false,
-      archivedAt: undefined,
-    }));
-    const participantsDraft: NewBookingDrawerDraft['participants'] = [...participantsDraftBase];
-
-    const participantRefById = new Map<string, string>();
-    const participantIdByRef = new Map<string, string>();
-    participants.forEach((participant) => {
-      const ref = buildStableParticipantRef(participant, {
-        bookingClientId,
-        bookingUserId,
-      });
-      participantRefById.set(String(participant.id), ref);
-      participantIdByRef.set(ref, String(participant.id));
-    });
-
-    const totalAmount = Number(totalPrice || 0);
-    const paidAmount = Number(bookingFinancial?.paid || 0);
-    const paymentsDraft: NewBookingPayment[] = paidAmount > 0.009 && bookingId
-      ? [
-          {
-            id: `legacy-paid-${bookingId}`,
-            bookingId,
-            amount: paidAmount,
-            method: 'CASH',
-            status: 'CONFIRMED',
-            createdAt: new Date().toISOString(),
-            createdByUserId: 0,
-            assignmentId: undefined,
-            note: 'Pago ya registrado (legacy)',
-          },
-        ]
-      : [];
-
-    const owner = participants.find((participant) => participant.isOwner);
-    const ownerId = owner ? String(owner.id) : (participantsDraft[0]?.id || undefined);
-    let chargeMode: 'INDIVIDUAL' | 'SHARED' = paymentMode === 'Único' ? 'INDIVIDUAL' : 'SHARED';
-    let chargeResponsibleParticipantId = ownerId;
-    let assignments: NewBookingDrawerDraft['billing']['assignments'] =
-      paymentMode === 'Único'
-        ? participantsDraft.map((participant) => ({
-            id: `asg-${participant.id}`,
-            participantId: participant.id,
-            isChargeable: participant.id === ownerId,
-            assignedAmount: participant.id === ownerId ? totalAmount : 0,
-            participantLinkState: 'ACTIVE' as const,
-          }))
-        : participantsDraft.map((participant) => ({
-            id: `asg-${participant.id}`,
-            participantId: participant.id,
-            isChargeable: participant.displayName.trim().length > 0,
-            assignedAmount:
-              participant.displayName.trim().length > 0
-                ? Number(resolveParticipantPrice(participants.find((entry) => entry.id === participant.id) || participants[0] || initialParticipants[0]) || 0)
-                : 0,
-            participantLinkState: 'ACTIVE' as const,
-          }));
-
-    if (remoteBillingConfig && Number(remoteBillingConfig.bookingId || 0) === Number(bookingId || 0)) {
-      chargeMode = remoteBillingConfig.chargeMode === 'SHARED' ? 'SHARED' : 'INDIVIDUAL';
-      const mappedResponsible = remoteBillingConfig.chargeResponsibleRef
-        ? participantIdByRef.get(String(remoteBillingConfig.chargeResponsibleRef))
-        : undefined;
-      chargeResponsibleParticipantId = mappedResponsible || ownerId;
-
-      assignments = (Array.isArray(remoteBillingConfig.assignments) ? remoteBillingConfig.assignments : []).map((assignment, index) => {
-        const participantRef = String(assignment?.participantRef || '').trim();
-        let participantId = participantIdByRef.get(participantRef);
-        let participantLinkState: 'ACTIVE' | 'ARCHIVED_REFERENCE' =
-          assignment?.participantLinkState === 'ARCHIVED_REFERENCE' ? 'ARCHIVED_REFERENCE' : 'ACTIVE';
-        if (!participantId) {
-          participantId = `archived-ref-${index}`;
-          participantsDraft.push({
-            id: participantId,
-            personId: undefined,
-            displayName: participantRef || 'Participante archivado',
-            contact: '',
-            sourceType: 'guest',
-            linked: false,
-            bookingRole: 'PARTICIPANT',
-            archived: true,
-            archivedAt: undefined,
-          });
-          participantLinkState = 'ARCHIVED_REFERENCE';
-        }
-        return {
-          id: String(assignment?.id || `asg-${participantId}`),
-          participantId,
-          isChargeable: Boolean(assignment?.isChargeable),
-          assignedAmount: Number(assignment?.assignedAmount || 0),
-          participantLinkState,
-        };
-      });
-    }
-
-    return {
-      operational: {
-        bookingId,
-        clubId: Number(selectedClubIdState || 0),
-        courtId: Number(selectedCourtId || 0),
-        activityId: Number(selectedCourt?.activityTypeId || 0),
-        startDateTime: buildStartDateTimeFromSlot(selectedDate, selectedStartSlot).toISOString(),
-        endDateTime: buildStartDateTimeFromSlot(selectedDate, selectedEndSlot).toISOString(),
-        status:
-          editingBooking?.state === 'completed'
-            ? 'COMPLETED'
-            : editingBooking?.state === 'confirmed'
-              ? 'CONFIRMED'
-              : editingBooking?.state === 'blocked'
-                ? 'CANCELLED'
-                : 'PENDING',
-        bookingResponsibleParticipantId: ownerId,
-      },
-      participants: participantsDraft,
-      billing: {
-        chargeMode,
-        chargeResponsibleParticipantId,
-        assignments,
-        payments: paymentsDraft,
-        pendingPaymentsQueue: [],
-        financialSummary: {
-          totalAmount,
-          paidAmount,
-          remainingAmount: Math.max(0, totalAmount - paidAmount),
-          paymentStatus:
-            paidAmount <= 0.009 ? 'UNPAID' : Math.max(0, totalAmount - paidAmount) <= 0.009 ? 'PAID' : 'PARTIAL',
-          depositRequiredAmount: undefined,
-          depositPaidAmount: undefined,
-        },
-      },
-    };
-  }, [
-    bookingFinancial?.paid,
-    bookingKind,
-    drawerOpen,
-    editingBooking?.clientId,
-    editingBooking?.state,
-    editingBooking?.userId,
-    editingBookingId,
-    participants,
-    paymentMode,
-    remoteBillingConfig,
-    resolveParticipantPrice,
-    selectedClubIdState,
-    selectedCourt?.activityTypeId,
-    selectedCourtId,
-    selectedDate,
-    selectedEndSlot,
-    selectedStartSlot,
-    totalPrice,
-  ]);
-  useEffect(() => {
-    if (!drawerOpen || !bookingDrawerDraftSnapshot) return;
-    const requiresBillingHydration =
-      Boolean(editingBookingId) && bookingKind !== 'block';
-    const waitingBillingHydration =
-      requiresBillingHydration &&
-      !isBillingConfigHydrated &&
-      !billingConfigLoadError;
-    if (waitingBillingHydration) return;
-    const loadKey = `${editingBookingId || 'new'}-${bookingKind}-${remoteBillingConfig?.updatedAt || 'billing-none'}`;
-    if (bookingDrawerLoadKeyRef.current === loadKey) return;
-    bookingDrawerLoadKeyRef.current = loadKey;
-    bookingDrawerFormSyncSignatureRef.current = '';
-    bookingDrawerDispatch({ type: 'LOAD_SUCCESS', payload: bookingDrawerDraftSnapshot });
-  }, [
-    billingConfigLoadError,
-    bookingDrawerDraftSnapshot,
-    bookingKind,
-    drawerOpen,
-    editingBookingId,
-    isBillingConfigHydrated,
-    remoteBillingConfig?.updatedAt,
-  ]);
-
-  useEffect(() => {
-    if (!drawerOpen || bookingKind === 'block') return;
-    if (!bookingDrawerState.draft) return;
-
-    const activeParticipantsForSync = participants.map((participant, index) => ({
-      id: String(participant.id || `participant-${index}`),
-      personId: undefined,
-      displayName: String(participant.name || ''),
-      contact: String(participant.contact || ''),
-      sourceType: participant.sourceType,
-      linked: participant.sourceType !== 'guest',
-      bookingRole: participant.isOwner ? 'BOOKING_RESPONSIBLE' as const : 'PARTICIPANT' as const,
-      archived: false,
-      archivedAt: undefined,
-    }));
-    const bookingResponsibleParticipantId = activeParticipantsForSync.find(
-      (participant) => participant.bookingRole === 'BOOKING_RESPONSIBLE'
-    )?.id;
-    const isPersistedEdit = Boolean(editingBookingId);
-    const uiChargeMode = paymentMode === 'Único' ? 'INDIVIDUAL' as const : 'SHARED' as const;
-    const chargeModeForSync = isPersistedEdit
-      ? (bookingDrawerState.draft.billing.chargeMode === 'SHARED' ? 'SHARED' : 'INDIVIDUAL')
-      : uiChargeMode;
-    const syncTotalAmount = isPersistedEdit
-      ? Number(bookingDrawerState.draft.billing.financialSummary.totalAmount || 0)
-      : Number(totalPrice || 0);
-    const signature = JSON.stringify({
-      key: `${editingBookingId || 'new'}-${bookingKind}`,
-      chargeMode: isPersistedEdit ? 'persisted' : chargeModeForSync,
-      total: isPersistedEdit ? 'persisted' : syncTotalAmount.toFixed(2),
-      participants: activeParticipantsForSync.map((participant) => ({
-        id: participant.id,
-        displayName: participant.displayName,
-        contact: participant.contact,
-        sourceType: participant.sourceType,
-        bookingRole: participant.bookingRole,
-      })),
-    });
-
-    if (!bookingDrawerFormSyncSignatureRef.current) {
-      bookingDrawerFormSyncSignatureRef.current = signature;
-      return;
-    }
-    if (bookingDrawerFormSyncSignatureRef.current === signature) return;
-
-    bookingDrawerFormSyncSignatureRef.current = signature;
-    bookingDrawerDispatch({
-      type: 'SYNC_FROM_FORM',
-      payload: {
-        participants: activeParticipantsForSync,
-        bookingResponsibleParticipantId,
-        chargeMode: chargeModeForSync,
-        totalAmount: syncTotalAmount,
-      },
-    });
-  }, [bookingDrawerState.draft, bookingKind, drawerOpen, editingBookingId, participants, paymentMode, totalPrice]);
-
-  const shouldBlockSaveByQuote = useMemo(() => {
-    if (!shouldValidatePastSelection) return false;
-    if (!hasBlockingQuoteError) return false;
-    if (quoteLoading) return false;
-    if (editingBookingId && !hasScheduleChanges) return false;
-    return true;
-  }, [editingBookingId, hasBlockingQuoteError, hasScheduleChanges, quoteLoading, shouldValidatePastSelection]);
-  const blockingActionMessage = useMemo(() => {
-    if (formError) return formError;
-    if (isCompletedReservation && hasScheduleChanges) return 'No podés reprogramar una reserva completada.';
-    if (isSelectionInPastBlocking) return 'No se pueden reservar turnos en el pasado.';
-    if (shouldShowScheduleConflict) return 'Hay un turno superpuesto en ese rango de fecha y horario.';
-    if (hasDuplicateParticipants) return 'Hay participantes duplicados. Corregilo para poder guardar.';
-    if (shouldBlockSaveByQuote && !isSelectionInPastBlocking) return quoteError || 'Revisá los datos del turno.';
-    return '';
-  }, [
-    formError,
-    hasDuplicateParticipants,
-    hasScheduleChanges,
-    isCompletedReservation,
-    isSelectionInPastBlocking,
-    quoteError,
-    shouldBlockSaveByQuote,
-    shouldShowScheduleConflict,
-  ]);
-  const hasBlockingActionError = blockingActionMessage.length > 0;
-  const hasValidOwner = useMemo(
-    () => participants.some((participant) => participant.isOwner && participant.name.trim().length > 0),
-    [participants]
-  );
-  const dateFieldError = String(fieldErrors.date || '').trim();
-  const timeFieldError = useMemo(() => {
-    const fromField = String(fieldErrors.time || '').trim();
-    if (fromField.length > 0) return fromField;
-    if (isSelectionInPastBlocking) return 'No se pueden reservar turnos en el pasado.';
-    if (shouldShowScheduleConflict) return 'Hay un turno superpuesto en ese rango de fecha y horario.';
-    if (shouldBlockSaveByQuote && quoteError) return quoteError;
-    return '';
-  }, [fieldErrors.time, isSelectionInPastBlocking, quoteError, shouldBlockSaveByQuote, shouldShowScheduleConflict]);
-  const courtFieldError = useMemo(() => {
-    const fromField = String(fieldErrors.court || '').trim();
-    if (fromField.length > 0) return fromField;
-    if (shouldBlockSaveByQuote && quoteError && normalizeText(quoteError).includes('cancha')) {
-      return quoteError;
-    }
-    return '';
-  }, [fieldErrors.court, quoteError, shouldBlockSaveByQuote]);
-  const ownerFieldError = useMemo(() => {
-    const fromField = String(fieldErrors.owner || '').trim();
-    if (fromField.length > 0) return fromField;
-    if (!hasValidOwner) return 'Falta el responsable de la reserva.';
-    if (paymentMode === 'Único' && !simplifiedOwnerAdded) return 'Primero agregá el titular.';
-    return '';
-  }, [fieldErrors.owner, hasValidOwner, paymentMode, simplifiedOwnerAdded]);
-  const participantsFieldError = useMemo(() => {
-    const fromField = String(fieldErrors.participants || '').trim();
-    if (fromField.length > 0) return fromField;
-    if (hasDuplicateParticipants) return 'Hay participantes duplicados. Corregilo para poder guardar.';
-    return '';
-  }, [fieldErrors.participants, hasDuplicateParticipants]);
-  const paymentFieldError = String(fieldErrors.payment || '').trim();
-  const persistedSidebarParticipantsComparable = useMemo(() => {
-    if (!editingBookingId || bookingKind === 'block') return [];
-    if (!editingBooking) return [];
-    const persistedParticipants =
-      parseSidebarParticipantsFromMetadata(remoteBillingConfig?.metadata, editingBooking) ||
-      buildDefaultParticipantsForBooking(editingBooking);
-    return buildSidebarComparableParticipants(persistedParticipants);
-  }, [bookingKind, editingBooking, editingBookingId, remoteBillingConfig?.metadata]);
-  const currentSidebarParticipantsComparable = useMemo(
-    () => buildSidebarComparableParticipants(participants),
-    [participants]
-  );
-  const hasSidebarParticipantsChanges = useMemo(() => {
-    if (!editingBookingId || bookingKind === 'block') return false;
-    return (
-      JSON.stringify(currentSidebarParticipantsComparable) !==
-      JSON.stringify(persistedSidebarParticipantsComparable)
-    );
-  }, [
-    bookingKind,
-    currentSidebarParticipantsComparable,
-    editingBookingId,
-    persistedSidebarParticipantsComparable,
-  ]);
-  const sourceBillingComparable = useMemo(
-    () => buildComparableBillingFromDrawerDraft(bookingDrawerState.source as NewBookingDrawerDraft | null),
-    [bookingDrawerState.source]
-  );
-  const draftBillingComparable = useMemo(
-    () => buildComparableBillingFromDrawerDraft(bookingDrawerState.draft as NewBookingDrawerDraft | null),
-    [bookingDrawerState.draft]
-  );
-  const hasBillingConfigChanges = useMemo(() => {
-    if (!editingBookingId || bookingKind === 'block') return false;
-    if (!sourceBillingComparable || !draftBillingComparable) return false;
-    return JSON.stringify(sourceBillingComparable) !== JSON.stringify(draftBillingComparable);
-  }, [bookingKind, draftBillingComparable, editingBookingId, sourceBillingComparable]);
-  const hasUserBillingConfigChanges = hasBillingConfigChanges && billingConfigTouchedByUser;
-  const hasEditChanges = useMemo(() => {
-    if (!editingBookingId) return true;
-    if (bookingKind === 'block') return hasScheduleChanges;
-    return (
-      hasScheduleChanges ||
-      hasSidebarParticipantsChanges ||
-      hasUserBillingConfigChanges
-    );
-  }, [
-    bookingKind,
-    editingBookingId,
-    hasScheduleChanges,
-    hasSidebarParticipantsChanges,
-    hasUserBillingConfigChanges,
-  ]);
-  const primaryActionDisabled =
-    isSubmittingBooking ||
-    isDeletingBooking ||
-    !hasValidOwner ||
-    hasDuplicateParticipants ||
-    (isCompletedReservation && hasScheduleChanges) ||
-    isSelectionInPastBlocking ||
-    shouldBlockSaveByQuote ||
-    shouldShowScheduleConflict ||
-    (paymentMode === 'Único' && !simplifiedOwnerAdded) ||
-    simplifiedNewParticipantOpen ||
-    (Boolean(editingBookingId) && isRemoteBillingConfigLoading) ||
-    (Boolean(editingBookingId) && !hasEditChanges) ||
-    Boolean(formError);
-  const lockBookingDetails =
-    bookingKind !== 'block' &&
-    (
-      Boolean(formError) ||
-      isSelectionInPastBlocking ||
-      shouldShowScheduleConflict ||
-      hasDuplicateParticipants ||
-      (shouldBlockSaveByQuote && !isSelectionInPastBlocking)
-    );
-
-  const blockingBillingWarnings = useMemo(
-    () =>
-      new Set(
-        (bookingDrawerState.ui.warnings || []).filter(
-          (warning) =>
-            warning === 'ASSIGNMENT_SUM_MISMATCH' ||
-            warning === 'INDIVIDUAL_WITHOUT_CHARGE_RESPONSIBLE'
-        )
-      ),
-    [bookingDrawerState.ui.warnings]
-  );
-
-  const operationalChecklist = useMemo(() => {
-    const rows: Array<{ key: string; label: string; ok: boolean; detail?: string }> = [];
-
-    rows.push({
-      key: 'schedule',
-      label: 'Horario válido',
-      ok: !isSelectionInPastBlocking && !shouldShowScheduleConflict && !shouldBlockSaveByQuote,
-      detail: isSelectionInPastBlocking
-        ? 'No se puede reservar en el pasado.'
-        : shouldShowScheduleConflict
-          ? 'Se superpone con otra reserva.'
-          : shouldBlockSaveByQuote
-            ? quoteError || 'Horario no permitido por configuración.'
-            : undefined,
-    });
-
-    if (bookingKind !== 'block') {
-      rows.push({
-        key: 'owner',
-        label: 'Responsable de la reserva',
-        ok: hasValidOwner,
-        detail: hasValidOwner ? undefined : 'Falta nombre del responsable.',
-      });
-      rows.push({
-        key: 'participants',
-        label: 'Participantes sin duplicados',
-        ok: !hasDuplicateParticipants,
-        detail: hasDuplicateParticipants ? 'Hay participantes repetidos.' : undefined,
-      });
-      rows.push({
-        key: 'billing',
-        label: 'Cobro consistente',
-        ok: blockingBillingWarnings.size === 0,
-        detail:
-          blockingBillingWarnings.size > 0
-            ? 'Revisá la configuración de cobro.'
-            : undefined,
-      });
-    }
-
-    if (isRecurringKind) {
-      rows.push({
-        key: 'recurring-courts',
-        label: 'Canchas seleccionadas para la serie',
-        ok: recurringCourtIds.length > 0,
-        detail: recurringCourtIds.length > 0 ? undefined : 'Seleccioná al menos una cancha.',
-      });
-    }
-
-    return rows;
-  }, [
-    blockingBillingWarnings.size,
-    bookingKind,
-    hasDuplicateParticipants,
-    hasValidOwner,
-    isRecurringKind,
-    isSelectionInPastBlocking,
-    quoteError,
-    recurringCourtIds.length,
-    shouldBlockSaveByQuote,
-    shouldShowScheduleConflict,
-  ]);
-
-  const selectedBookingKindLabel = useMemo(
-    () => bookingKindOptions.find((option) => option.value === bookingKind)?.label || 'Reserva',
-    [bookingKind]
-  );
-
-  const quickSummaryCourtsLabel = useMemo(() => {
-    if (isRecurringKind) {
-      const selectedNames = effectiveCourts
-        .filter((court) => recurringCourtIds.includes(court.id))
-        .map((court) => court.name);
-      if (selectedNames.length === 0) return 'Sin canchas seleccionadas';
-      return selectedNames.join(', ');
-    }
-    return selectedCourt?.name || 'Cancha no definida';
-  }, [effectiveCourts, isRecurringKind, recurringCourtIds, selectedCourt?.name]);
-
-  const quickSummaryDateLabel = useMemo(
-    () =>
-      selectedDate.toLocaleDateString('es-AR', {
-        weekday: 'short',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }),
-    [selectedDate]
-  );
-
-  const primaryActionLabel = useMemo(() => {
-    if (isSubmittingBooking) {
-      if (editingBookingId) return 'Guardando cambios...';
-      if (isRecurringKind) return 'Creando serie...';
-      if (bookingKind === 'block') return 'Creando bloqueo...';
-      return 'Creando reserva...';
-    }
-    if (editingBookingId) return 'Guardar cambios';
-    if (isRecurringKind) return 'Crear serie';
-    if (bookingKind === 'block') return 'Crear bloqueo';
-    return 'Crear reserva';
-  }, [bookingKind, editingBookingId, isRecurringKind, isSubmittingBooking]);
-
-  const primaryActionMeta = useMemo(() => {
-    if (isRecurringKind) {
-      if (recurringCourtIds.length <= 0) return 'sin canchas';
-      return `${recurringCourtIds.length} cancha${recurringCourtIds.length === 1 ? '' : 's'}`;
-    }
-    return `${selectionMinutes} min`;
-  }, [isRecurringKind, recurringCourtIds.length, selectionMinutes]);
-
-  const nowLineTop = useMemo(() => {
-    const now = new Date(nowTick);
-    const sameDay =
-      now.getFullYear() === selectedDate.getFullYear() &&
-      now.getMonth() === selectedDate.getMonth() &&
-      now.getDate() === selectedDate.getDate();
-    if (!sameDay) return null;
-
-    const minutesFromGridStart =
-      now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 - startHour * 60;
-    const totalMinutes = (endHour - startHour) * 60;
-    if (minutesFromGridStart < 0 || minutesFromGridStart > totalMinutes) return null;
-
-    return Math.max(0, Math.min(gridHeight, (minutesFromGridStart / slotMinutes) * slotHeight));
-  }, [nowTick, selectedDate]);
-
-  useEffect(() => {
-    const timerId = window.setInterval(() => {
-      setNowTick(Date.now());
-    }, 30000);
-    return () => window.clearInterval(timerId);
-  }, []);
-
-  useEffect(() => {
-    if (nowLineTop == null) return;
-    const container = agendaScrollContainerRef.current;
-    if (!container) return;
-
-    const today = new Date();
-    const sameDay =
-      selectedDate.getFullYear() === today.getFullYear() &&
-      selectedDate.getMonth() === today.getMonth() &&
-      selectedDate.getDate() === today.getDate();
-    if (!sameDay) return;
-
-    const dateKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`;
-    if (lastAutoScrollDateKeyRef.current === dateKey) return;
-    lastAutoScrollDateKeyRef.current = dateKey;
-
-    const headerHeight = 40;
-    const rawTarget = nowLineTop + headerHeight - container.clientHeight * 0.35;
-    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-    const nextTop = Math.max(0, Math.min(maxTop, rawTarget));
-    container.scrollTo({ top: nextTop, behavior: 'smooth' });
-  }, [nowLineTop, selectedDate]);
-
-  useEffect(() => {
-    if (persistedEditingBookingId && bookingKind !== 'block' && !hasScheduleChanges) {
-      setQuoteLoading(false);
-      setQuotedListPrice(null);
-      setQuotedFinalPrice(null);
-      setQuotedDiscountAmount(0);
-      setQuoteError('');
-      clearFieldErrorsFor(['date', 'time', 'court', 'duration']);
-      return;
-    }
-
-    if (bookingKind === 'block') {
-      setQuoteLoading(false);
-      setQuotedListPrice(null);
-      setQuotedFinalPrice(null);
-      setQuotedDiscountAmount(0);
-      setQuoteError('');
-      clearFieldErrorsFor(['date', 'time', 'court', 'duration']);
-      return;
-    }
-
-    const activityId = Number(selectedCourt?.activityTypeId || 0);
-    if (!Number.isFinite(activityId) || activityId <= 0) {
-      setQuotedListPrice(null);
-      setQuotedFinalPrice(null);
-      setQuotedDiscountAmount(0);
-      setQuoteError('No se pudo resolver la actividad para cotizar.');
-      setFieldErrors((previous) => ({
-        ...previous,
-        court: 'No se pudo resolver la actividad para cotizar.',
-      }));
-      return;
-    }
-
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const run = async () => {
-      try {
-        setQuoteLoading(true);
-        setQuotedListPrice(null);
-        setQuotedFinalPrice(null);
-        setQuotedDiscountAmount(0);
-        setQuoteError('');
-        clearFieldErrorsFor(['date', 'time', 'court', 'duration']);
-        const bookingDate = new Date(selectedDate);
-        const quoteOwner = participants.find((participant) => participant.isOwner) || participants[0] || null;
-        const quoteOwnerClientId = resolveParticipantClientId(quoteOwner);
-        const quote = await getBookingQuote({
-          courtId: Number(selectedCourtId),
-          activityId,
-          date: bookingDate,
-          slotTime: slotToTime(selectedStartSlot),
-          durationMinutes: selectionMinutes,
-          ...(quoteOwnerClientId
-            ? { clientId: quoteOwnerClientId || undefined }
-            : {
-                clientPhone: resolvePlaygroundClientPhone(quoteOwner),
-                clientEmail: resolvePlaygroundClientEmail(quoteOwner) || undefined,
-                clientDni: resolvePlaygroundClientDni(quoteOwner) || undefined,
-              }),
-        });
-        if (cancelled) return;
-        setQuotedListPrice(Number(quote?.listPrice || 0));
-        setQuotedFinalPrice(Number(quote?.finalPrice || 0));
-        setQuotedDiscountAmount(Number(quote?.discountAmount || 0));
-        clearFieldErrorsFor(['date', 'time', 'court', 'duration']);
-      } catch (error: any) {
-        if (cancelled) return;
-        setQuotedListPrice(null);
-        setQuotedFinalPrice(null);
-        setQuotedDiscountAmount(0);
-        const normalized = normalizeApiError(error, 'No se pudo cotizar.');
-        const behavior = resolveBookingErrorBehavior(normalized);
-        const quoteMessage = toUserSafeMessage(
-          String(normalized.message || behavior.fallbackMessage || 'No se pudo cotizar.').trim(),
-          'No se pudo cotizar.'
-        );
-        const field = String(behavior.field || normalized.field || 'time').trim() || 'time';
-        setQuoteError(quoteMessage);
-        setFieldErrors((previous) => ({
-          ...previous,
-          [field]: quoteMessage,
-        }));
-      } finally {
-        if (!cancelled) setQuoteLoading(false);
-      }
-    };
-
-    timeoutId = setTimeout(() => {
-      void run();
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [
-    bookingKind,
-    selectedCourt,
-    selectedCourtId,
-    selectedDate,
-    clearFieldErrorsFor,
-    hasScheduleChanges,
-    participants,
-    selectedStartSlot,
-    selectionMinutes,
-    persistedEditingBookingId,
-  ]);
-
-  const moveDate = (days: number) => {
-    setSelectedDate((previous) => {
-      const next = new Date(previous);
-      next.setDate(previous.getDate() + days);
-      return next;
-    });
-  };
-
-  const queueRemainingPayment = useCallback(() => {
-    const draft = bookingDrawerState.draft;
-    if (!draft) return;
-    const remainingAmount = Number(draft.billing.financialSummary.remainingAmount || 0);
-    const amountToRegister = Number(remainingAmount.toFixed(2));
-    if (amountToRegister <= 0.009) {
-      setBillingHubTab('PAYMENTS');
-      showAgendaToast('El saldo ya está cubierto por pagos registrados.');
-      return;
-    }
-    void registerPaymentNow({
-      amount: amountToRegister,
-      method: 'CASH',
-      successMessage: `Pago registrado: ${amountToRegister.toFixed(2)} $.`,
-    });
-  }, [bookingDrawerState.draft, registerPaymentNow, showAgendaToast]);
-
-  const handleBillingModeChange = useCallback((mode: 'INDIVIDUAL' | 'SHARED') => {
-    if (editingBookingId && (isRemoteBillingConfigLoading || !isBillingConfigHydrated)) {
-      return;
-    }
-    if (isBillingConfigLockedByPayments) {
-      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
-      return;
-    }
-    const nextPaymentMode: PaymentMode = mode === 'SHARED' ? 'Dividido' : 'Único';
-    setBillingConfigTouchedByUser(true);
-    setPaymentMode(nextPaymentMode);
-    bookingDrawerDispatch({ type: 'SET_CHARGE_MODE', payload: { mode } });
-  }, [editingBookingId, isBillingConfigHydrated, isBillingConfigLockedByPayments, isRemoteBillingConfigLoading, showAgendaToast]);
-
-  const handleBillingResponsibleChange = useCallback((participantId: string) => {
-    if (isBillingConfigLockedByPayments) {
-      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
-      return;
-    }
-    setBillingConfigTouchedByUser(true);
-    bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId } });
-  }, [isBillingConfigLockedByPayments, showAgendaToast]);
-
-  const handleBillingAssignmentAmountChange = useCallback((assignmentId: string, amount: number) => {
-    if (isBillingConfigLockedByPayments) {
-      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
-      return;
-    }
-    setBillingConfigTouchedByUser(true);
-    bookingDrawerDispatch({ type: 'SET_ASSIGNMENT_AMOUNT', payload: { assignmentId, amount } });
-  }, [isBillingConfigLockedByPayments, showAgendaToast]);
-
-  const handleBillingToggleChargeable = useCallback((assignmentId: string, isChargeable: boolean) => {
-    if (isBillingConfigLockedByPayments) {
-      showAgendaToast('No podés cambiar la asignación de cobro porque ya hay pagos registrados.');
-      return;
-    }
-    setBillingConfigTouchedByUser(true);
-    bookingDrawerDispatch({ type: 'TOGGLE_ASSIGNMENT_CHARGEABLE', payload: { assignmentId, isChargeable } });
-  }, [isBillingConfigLockedByPayments, showAgendaToast]);
-
-  const closeSimplifiedPaymentModal = useCallback(() => {
-    setActivePaymentModal(null);
-    setSimplifiedPaymentModalVariant('PLAYTOMIC');
-    setSimplifiedPaymentPayerParticipantIdDraft('');
-    setSimplifiedPaymentCoveredParticipantIdDraft('');
-    setSimplifiedPaymentCoveredParticipantIdsDraft([]);
-    setSimplifiedPaymentAmountDraft('');
-    setSimplifiedPaymentMethodDraft('');
-    setSimplifiedPaymentQuickPreset('MY_SHARE');
-    setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
-    setSimplifiedPaymentConceptMode('AUTO');
-    setSimplifiedPaymentSelectedItemIdsDraft([]);
-    setSimplifiedPaymentCustomItemAmountDraftById({});
-    setSimplifiedSinglePaymentAdvancedOpen(false);
-    setPlaytomicResultModal(null);
-  }, []);
-
-  useEffect(() => {
-    if (activePaymentModal?.flow !== 'playtomicPayment') return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeSimplifiedPaymentModal();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activePaymentModal, closeSimplifiedPaymentModal]);
-
-  const modalBackdropPointerDownTargetRef = useRef<EventTarget | null>(null);
-  const handleModalBackdropPointerDown = useCallback((event: any) => {
-    modalBackdropPointerDownTargetRef.current = event.target;
-  }, []);
-  const handleModalBackdropPointerUp = useCallback((event: any, onClose: () => void) => {
-    const startedOnBackdrop = modalBackdropPointerDownTargetRef.current === event.currentTarget;
-    const endedOnBackdrop = event.target === event.currentTarget;
-    modalBackdropPointerDownTargetRef.current = null;
-    if (startedOnBackdrop && endedOnBackdrop) {
-      onClose();
-    }
-  }, []);
-
-  const openSimplifiedPaymentModal = useCallback(async () => {
-    if (!persistedEditingBookingId) {
-      showAgendaToast('Primero creá la reserva. Después podés registrar cobros.');
-      return;
-    }
-    if (isRemoteBillingConfigLoading) {
-      return;
-    }
-    if (isPaymentLockedByManualPending) {
-      showAgendaToast('Primero confirmá la reserva para poder registrar pagos.');
-      return;
-    }
-
-    const draft = bookingDrawerState.draft;
-    if (!draft) {
-      showAgendaToast('No se pudo preparar el cobro. Reabrí la reserva e intentá de nuevo.');
-      return;
-    }
-
-    if (participants.length === 0) {
-      showAgendaToast('Primero agregá al menos un participante.');
-      return;
-    }
-
-    const requestSeq = remoteBillingConfigRequestSeqRef.current + 1;
-    remoteBillingConfigRequestSeqRef.current = requestSeq;
-    let latestConfig: BookingBillingConfig | null = null;
-    let latestPaymentRemaining: number | null = null;
-    try {
-      setIsRemoteBillingConfigLoading(true);
-      setBillingConfigLoadError('');
-      const [config, latestFinancialSummary] = await Promise.all([
-        getBookingBillingConfig(persistedEditingBookingId),
-        refreshBookingFinancial(persistedEditingBookingId),
-        loadBookingConsumptions(persistedEditingBookingId),
-      ]);
-      if (remoteBillingConfigRequestSeqRef.current !== requestSeq) return;
-      latestConfig = config;
-      setRemoteBillingConfig(config);
-      setIsBillingConfigHydrated(true);
-      const latestRemaining = Number(latestFinancialSummary?.remaining ?? simplifiedRemainingAfterQueue);
-      if (Number.isFinite(latestRemaining)) {
-        latestPaymentRemaining = Number(latestRemaining.toFixed(2));
-      }
-    } catch (error: any) {
-      if (remoteBillingConfigRequestSeqRef.current !== requestSeq) return;
-      const normalized = normalizeApiError(error, 'No se pudo cargar la configuración de cobro.');
-      const message = toUserSafeMessage(normalized.message, 'No se pudo cargar la configuración de cobro.');
-      setIsBillingConfigHydrated(false);
-      setBillingConfigLoadError(message);
-      showAgendaToast(message);
-      return;
-    } finally {
-      if (remoteBillingConfigRequestSeqRef.current === requestSeq) {
-        setIsRemoteBillingConfigLoading(false);
-      }
-    }
-
-    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
-    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-    const bookingUserId =
-      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-        ? bookingUserIdRaw
-        : undefined;
-
-    const preferredPayerId = (() => {
-      if (paymentMode === 'Dividido' && latestPaymentPayerRef) {
-        const latestPayer = participants.find(
-          (participant) =>
-            buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === latestPaymentPayerRef
-        );
-        if (latestPayer) return String(latestPayer.id);
-      }
-      const persistedResponsibleRef = String(latestConfig?.chargeResponsibleRef || '').trim();
-      if (persistedResponsibleRef) {
-        const persistedResponsible = participants.find(
-          (participant) =>
-            buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === persistedResponsibleRef
-        );
-        if (persistedResponsible) return String(persistedResponsible.id);
-      }
-
-      const draftResponsible = String(draft.billing.chargeResponsibleParticipantId || '').trim();
-      if (draftResponsible && participants.some((participant) => participant.id === draftResponsible)) {
-        return draftResponsible;
-      }
-      const ownerParticipant = participants.find((participant) => participant.isOwner);
-      return ownerParticipant?.id || participants[0]?.id || '';
-    })();
-    const payer = participants.find((participant) => participant.id === preferredPayerId);
-    const preferredCoveredId = (() => {
-      if (paymentMode === 'Único') {
-        return String(singleChargeParticipantId || preferredPayerId || '');
-      }
-      return String(preferredPayerId || '').trim();
-    })();
-    const preferredAmount = Number((latestPaymentRemaining ?? simplifiedRemainingAfterQueue).toFixed(2));
-
-    setSimplifiedPaymentPayerParticipantIdDraft(preferredPayerId);
-    setSimplifiedPaymentCoveredParticipantIdDraft(preferredCoveredId);
-    setSimplifiedPaymentCoveredParticipantIdsDraft(
-      paymentMode === 'Dividido' && preferredCoveredId ? [preferredCoveredId] : []
-    );
-    setSimplifiedPaymentMethodDraft(payer?.paymentMethod || 'CASH');
-    setSimplifiedPaymentAmountDraft(
-      preferredAmount > 0.009 ? preferredAmount.toFixed(2) : ''
-    );
-    setSimplifiedPaymentQuickPreset('FULL');
-    setSimplifiedPaymentImputationMode('BY_CONCEPT');
-    setSimplifiedPaymentConceptMode('AUTO');
-    setSimplifiedPaymentSelectedItemIdsDraft([]);
-    setSimplifiedPaymentCustomItemAmountDraftById({});
-    setSimplifiedSinglePaymentAdvancedOpen(false);
-    setSimplifiedPaymentModalVariant('PLAYTOMIC');
-    setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
-    setFormError('');
-  }, [
-    bookingDrawerState.draft,
-    editingBooking?.clientId,
-    editingBooking?.userId,
-    isPaymentLockedByManualPending,
-    isRemoteBillingConfigLoading,
-    loadBookingConsumptions,
-    participants,
-    persistedEditingBookingId,
-    refreshBookingFinancial,
-    showAgendaToast,
-    simplifiedRemainingAfterQueue,
-    singleChargeParticipantId,
-    latestPaymentPayerRef,
-    paymentMode,
-  ]);
-
-  const queueSimplifiedPaymentFromModal = useCallback((options?: { skipPlaytomicPreconfirm?: boolean }) => {
-    if (isPaymentLockedByManualPending) {
-      showAgendaToast('Primero confirmá la reserva para poder registrar pagos.');
-      return;
-    }
-
-    const payerId = (() => {
-      const selectedPayerId = String(simplifiedPaymentPayerParticipantIdDraft || '').trim();
-      if (selectedPayerId) return selectedPayerId;
-      const responsiblePayerId = String(singleChargeParticipantId || '').trim();
-      if (responsiblePayerId) return responsiblePayerId;
-      const ownerPayerId = participants.find((participant) => participant.isOwner)?.id || '';
-      return String(ownerPayerId).trim();
-    })();
-    if (!payerId) {
-      showAgendaToast('Seleccioná quién paga esta reserva.');
-      return;
-    }
-    const isPlaytomicFlow = simplifiedPaymentModalVariant === 'PLAYTOMIC';
-    const isByConcept = isPlaytomicFlow || simplifiedPaymentImputationMode === 'BY_CONCEPT';
-    const coveredIds = (() => {
-      if (isPlaytomicFlow) {
-        return [payerId];
-      }
-      if (isByConcept) {
-        if (paymentMode === 'Único') {
-          return [String(singleChargeParticipantId || payerId).trim() || payerId].filter(Boolean);
-        }
-        const preferredCoveredId =
-          String(simplifiedPaymentCoveredParticipantIdDraft || '').trim() ||
-          payerId;
-        return [preferredCoveredId].filter(Boolean);
-      }
-      if (paymentMode === 'Único') {
-        return [String(singleChargeParticipantId || payerId).trim() || payerId].filter(Boolean);
-      }
-      const selectedMany = Array.from(
-        new Set(
-          (Array.isArray(simplifiedPaymentCoveredParticipantIdsDraft)
-            ? simplifiedPaymentCoveredParticipantIdsDraft
-            : []
-          )
-            .map((value) => String(value || '').trim())
-            .filter(
-              (value) =>
-                value.length > 0 &&
-                participants.some((participant) => participant.id === value) &&
-                Number(participantDebtAmountById.get(value) || 0) > 0.009
-            )
-        )
-      );
-      if (selectedMany.length > 0) {
-        return selectedMany;
-      }
-      const selectedCoveredId = String(simplifiedPaymentCoveredParticipantIdDraft || '').trim();
-      if (
-        selectedCoveredId &&
-        participants.some((participant) => participant.id === selectedCoveredId) &&
-        Number(participantDebtAmountById.get(selectedCoveredId) || 0) > 0.009
-      ) {
-        return [selectedCoveredId];
-      }
-      if (Number(participantDebtAmountById.get(payerId) || 0) > 0.009) {
-        return [payerId].filter(Boolean);
-      }
-      const firstWithDebt = participants.find(
-        (participant) => Number(participantDebtAmountById.get(participant.id) || 0) > 0.009
-      );
-      return firstWithDebt?.id ? [firstWithDebt.id] : [];
-    })();
-    if (!isPlaytomicFlow && !isByConcept && coveredIds.length === 0) {
-      showAgendaToast('Seleccioná por quién se imputa el pago.');
-      return;
-    }
-    if (!isPlaytomicFlow && paymentMode === 'Único') {
-      const confirmedFromDraft = Boolean(
-        bookingDrawerState.draft?.billing.payments.some(
-          (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
-        )
-      );
-      const confirmedFromFinancial = Number(bookingFinancial?.paid || 0) > 0.009;
-      const hasConfirmedPayments = confirmedFromDraft || confirmedFromFinancial;
-      const allowedPayerId = String(singleChargeParticipantId || '').trim() ||
-        participants.find((participant) => participant.isOwner)?.id ||
-        '';
-      if (hasConfirmedPayments && allowedPayerId && payerId !== allowedPayerId) {
-        showAgendaToast('En pago único, solo puede pagar el responsable de cobro.');
-        return;
-      }
-      if (!hasConfirmedPayments && payerId !== allowedPayerId) {
-        setBillingConfigTouchedByUser(true);
-        bookingDrawerDispatch({ type: 'SET_CHARGE_RESPONSIBLE', payload: { participantId: payerId } });
-      }
-    }
-    if (!isParticipantPaymentMethod(simplifiedPaymentMethodDraft)) {
-      showAgendaToast('Seleccioná un método de pago.');
-      return;
-    }
-    const selectedMethod = simplifiedPaymentMethodDraft as Participant['paymentMethod'];
-    const selectedMethodLabel =
-      selectedMethod === 'CASH'
-        ? 'Efectivo'
-        : selectedMethod === 'TRANSFER'
-          ? 'Transferencia'
-          : selectedMethod === 'CARD'
-            ? 'Tarjeta'
-            : 'Otro';
-
-    const amount = Number(String(simplifiedPaymentAmountDraft || '').replace(',', '.'));
-    if (!Number.isFinite(amount) || amount <= 0.009) {
-      showAgendaToast('Ingresá un monto mayor a 0.');
-      return;
-    }
-    const roundedAmount = Number(amount.toFixed(2));
-    let effectiveAmount = roundedAmount;
-    let appliedClampReason = '';
-    if (!isPlaytomicFlow && paymentMode === 'Dividido' && !isByConcept) {
-      const coveredDebtTotal = Number(
-        coveredIds.reduce((sum, participantId) => sum + Number(participantDebtAmountById.get(participantId) || 0), 0).toFixed(2)
-      );
-      if (coveredDebtTotal <= 0.009) {
-        showAgendaToast('Los participantes seleccionados no tienen deuda pendiente.');
-        return;
-      }
-      if (effectiveAmount > coveredDebtTotal + 0.009) {
-        if (!isPlaytomicFlow) {
-          showAgendaToast(`El monto supera la deuda de los participantes seleccionados (${coveredDebtTotal.toFixed(2)} $).`);
-          return;
-        }
-        effectiveAmount = coveredDebtTotal;
-        appliedClampReason = 'participantes';
-      }
-    }
-    if (effectiveAmount > simplifiedRemainingAfterQueue + 0.009) {
-      if (!isPlaytomicFlow) {
-        showAgendaToast(`El monto supera la deuda pendiente (${simplifiedRemainingAfterQueue.toFixed(2)} $).`);
-        return;
-      }
-      effectiveAmount = simplifiedRemainingAfterQueue;
-      appliedClampReason = 'reserva';
-    }
-    if (isPlaytomicFlow && !options?.skipPlaytomicPreconfirm) {
-      setActivePaymentModal({ flow: 'playtomicPayment', step: 'preconfirm' });
-      return;
-    }
-
-    const paymentAllocations = (() => {
-      if (isPlaytomicFlow) {
-        return [{ coveredParticipantId: payerId, amount: effectiveAmount }];
-      }
-      const firstCovered = String(coveredIds[0] || '').trim() || payerId;
-      if (!firstCovered) return [];
-      if (isByConcept || paymentMode === 'Único') {
-        return [{ coveredParticipantId: firstCovered, amount: effectiveAmount }];
-      }
-      return allocatePaymentProportionallyByDebt({
-        amount: effectiveAmount,
-        participantDebts: coveredIds.map((coveredParticipantId) => ({
-          participantId: coveredParticipantId,
-          debt: Number(participantDebtAmountById.get(coveredParticipantId) || 0),
-        })),
-      });
-    })();
-    if (paymentAllocations.length === 0) {
-      showAgendaToast('No se pudo distribuir el pago entre los participantes seleccionados.');
-      return;
-    }
-    const selectedConceptItems = (() => {
-      if (!isByConcept) {
-        return pendingAccountItems;
-      }
-      if (simplifiedPaymentConceptMode === 'AUTO') {
-        return pendingAccountItems;
-      }
-      if (simplifiedPaymentConceptMode === 'COURT') {
-        return pendingCourtAccountItems;
-      }
-      if (simplifiedPaymentConceptMode === 'CONSUMPTIONS') {
-        return pendingConsumptionAccountItems;
-      }
-      const selectedSet = new Set(
-        (Array.isArray(simplifiedPaymentSelectedItemIdsDraft)
-          ? simplifiedPaymentSelectedItemIdsDraft
-          : []
-        )
-          .map((value) => String(value || '').trim())
-          .filter(Boolean)
-      );
-      return pendingAccountItems.filter((item) => selectedSet.has(String(item.id)));
-    })();
-    if (isByConcept && simplifiedPaymentConceptMode !== 'AUTO' && selectedConceptItems.length === 0) {
-      showAgendaToast('Seleccioná al menos un concepto para imputar este pago.');
-      return;
-    }
-    const selectedConceptDebt = Number(
-      (
-        simplifiedPaymentConceptMode === 'CUSTOM'
-          ? computeCustomSelectedAmount(
-              selectedConceptItems.map((item) => String(item.id)),
-              simplifiedPaymentCustomItemAmountDraftById
-            )
-          : selectedConceptItems.reduce((sum, item) => sum + Number(item.remainingAmount || 0), 0)
-      ).toFixed(2)
-    );
-    if (isByConcept && simplifiedPaymentConceptMode !== 'AUTO' && effectiveAmount > selectedConceptDebt + 0.009) {
-      if (!isPlaytomicFlow) {
-        showAgendaToast(
-          `El monto supera la deuda de los conceptos seleccionados (${selectedConceptDebt.toFixed(2)} $).`
-        );
-        return;
-      }
-      effectiveAmount = selectedConceptDebt;
-      appliedClampReason = 'conceptos';
-      if (effectiveAmount <= 0.009) {
-        showAgendaToast('Los conceptos seleccionados no tienen deuda pendiente.');
-        return;
-      }
-    }
-    if (effectiveAmount <= 0.009) {
-      showAgendaToast('No hay deuda pendiente para el alcance seleccionado.');
-      return;
-    }
-    const remainingByItemId = new Map<string, number>();
-    const sortedConceptItems = [...selectedConceptItems].sort((a, b) => {
-      const aIsCourt = String(a.type || '').toUpperCase() === 'BOOKING';
-      const bIsCourt = String(b.type || '').toUpperCase() === 'BOOKING';
-      if (aIsCourt !== bIsCourt) return aIsCourt ? -1 : 1;
-      const aNumeric = Number(a.id);
-      const bNumeric = Number(b.id);
-      if (Number.isFinite(aNumeric) && Number.isFinite(bNumeric)) return aNumeric - bNumeric;
-      return String(a.id).localeCompare(String(b.id));
-    });
-    sortedConceptItems.forEach((item) => {
-      remainingByItemId.set(String(item.id), Number(item.remainingAmount || 0));
-    });
-    const buildItemAllocationsForAmount = (amount: number) => {
-      let remainingToAllocate = Number(amount.toFixed(2));
-      const allocations: Array<{ accountItemId: string; amount: number }> = [];
-      const desiredByItemId = new Map<string, number>();
-      sortedConceptItems.forEach((item) => {
-        const itemId = String(item.id);
-        const maxRemaining = Number(item.remainingAmount || 0);
-        if (simplifiedPaymentConceptMode === 'CUSTOM') {
-          const rawDraft = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
-          const parsed = Number(rawDraft.replace(',', '.'));
-          const fallback = maxRemaining;
-          const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
-          desiredByItemId.set(itemId, Number(Math.max(0, Math.min(maxRemaining, resolved)).toFixed(2)));
-          return;
-        }
-        desiredByItemId.set(itemId, maxRemaining);
-      });
-      sortedConceptItems.forEach((item) => {
-        if (remainingToAllocate <= 0.009) return;
-        const itemId = String(item.id);
-        const available = Number(remainingByItemId.get(itemId) || 0);
-        if (available <= 0.009) return;
-        const desired = Number(desiredByItemId.get(itemId) || 0);
-        if (desired <= 0.009) return;
-        const portion = Number(Math.min(available, desired, remainingToAllocate).toFixed(2));
-        if (portion <= 0.009) return;
-        allocations.push({ accountItemId: itemId, amount: portion });
-        remainingByItemId.set(itemId, Number((available - portion).toFixed(2)));
-        remainingToAllocate = Number((remainingToAllocate - portion).toFixed(2));
-      });
-      if (remainingToAllocate > 0.009) {
-        return null;
-      }
-      return allocations;
-    };
-
-    updateParticipant(payerId, { paymentMethod: selectedMethod });
-    if (isPlaytomicFlow && appliedClampReason) {
-      const reasonLabel =
-        appliedClampReason === 'conceptos'
-            ? 'la deuda de los conceptos seleccionados'
-            : 'la deuda pendiente';
-      showAgendaToast(`El monto se ajustó automáticamente al máximo permitido por ${reasonLabel}.`, 'warning');
-    }
-    const openPlaytomicResult = (result: PlaytomicPaymentResultModal) => {
-      setActivePaymentModal({ flow: 'playtomicPayment', step: 'result' });
-      setPlaytomicResultModal(result);
-    };
-    void (async () => {
-      let registeredAmount = 0;
-      const appliedByItemId = new Map<string, number>();
-      const conceptLabelById = new Map<string, string>(
-        sortedConceptItems.map((item) => [
-          String(item.id),
-          item.type === 'BOOKING' ? 'Cancha' : item.description,
-        ])
-      );
-      for (let index = 0; index < paymentAllocations.length; index += 1) {
-        const allocation = paymentAllocations[index];
-        const itemAllocations = buildItemAllocationsForAmount(allocation.amount);
-        if (!itemAllocations || itemAllocations.length === 0) {
-          if (isPlaytomicFlow) {
-            const appliedItems = Array.from(appliedByItemId.entries()).map(([itemId, itemAmount]) => ({
-              label: conceptLabelById.get(itemId) || 'Concepto',
-              amount: itemAmount,
-            }));
-            openPlaytomicResult({
-              variant: registeredAmount > 0.009 ? 'partial' : 'error',
-              title: registeredAmount > 0.009 ? 'Cobro parcial registrado' : 'No se pudo registrar el cobro',
-              detail:
-                registeredAmount > 0.009
-                  ? 'Parte del monto se registró, pero no se pudo imputar todo a conceptos pendientes.'
-                  : 'No se pudo imputar el cobro a los conceptos seleccionados.',
-              requestedAmount: roundedAmount,
-              appliedAmount: registeredAmount,
-              remainingAfter: Number(Math.max(0, simplifiedRemainingAfterQueue - registeredAmount).toFixed(2)),
-              methodLabel: selectedMethodLabel,
-              appliedItems,
-            });
-          } else if (registeredAmount > 0.009) {
-            showAgendaToast(
-              `Pago parcial registrado: ${registeredAmount.toFixed(2)} $. Faltó imputar parte del pago a conceptos.`
-            );
-          } else {
-            showAgendaToast('No se pudo imputar el pago a los conceptos seleccionados.');
-          }
-          return;
-        }
-        const ok = await registerPaymentNow({
-          amount: allocation.amount,
-          method: selectedMethod,
-          participantId: payerId,
-          coveredParticipantId: allocation.coveredParticipantId,
-          itemAllocations,
-          silentSuccessNotice: paymentAllocations.length > 1,
-        });
-        if (!ok) {
-          if (isPlaytomicFlow) {
-            const appliedItems = Array.from(appliedByItemId.entries()).map(([itemId, itemAmount]) => ({
-              label: conceptLabelById.get(itemId) || 'Concepto',
-              amount: itemAmount,
-            }));
-            openPlaytomicResult({
-              variant: registeredAmount > 0.009 ? 'partial' : 'error',
-              title: registeredAmount > 0.009 ? 'Cobro parcial registrado' : 'No se pudo registrar el cobro',
-              detail:
-                registeredAmount > 0.009
-                  ? 'Se registró una parte del cobro, pero falló la confirmación completa.'
-                  : 'No se pudo confirmar el cobro. Revisá e intentá nuevamente.',
-              requestedAmount: roundedAmount,
-              appliedAmount: registeredAmount,
-              remainingAfter: Number(Math.max(0, simplifiedRemainingAfterQueue - registeredAmount).toFixed(2)),
-              methodLabel: selectedMethodLabel,
-              appliedItems,
-            });
-          } else if (registeredAmount > 0.009) {
-            showAgendaToast(
-              `Pago parcial registrado: ${registeredAmount.toFixed(2)} $. Revisá el resto e intentá nuevamente.`
-            );
-          }
-          return;
-        }
-        itemAllocations.forEach((itemAllocation) => {
-          const itemId = String(itemAllocation.accountItemId);
-          const accumulated = Number(appliedByItemId.get(itemId) || 0);
-          appliedByItemId.set(itemId, Number((accumulated + Number(itemAllocation.amount || 0)).toFixed(2)));
-        });
-        registeredAmount = Number((registeredAmount + allocation.amount).toFixed(2));
-      }
-      if (isPlaytomicFlow) {
-        const appliedItems = Array.from(appliedByItemId.entries()).map(([itemId, itemAmount]) => ({
-          label: conceptLabelById.get(itemId) || 'Concepto',
-          amount: itemAmount,
-        }));
-        openPlaytomicResult({
-          variant: 'success',
-          title: 'Cobro registrado',
-          detail: 'El cobro se registró correctamente.',
-          requestedAmount: roundedAmount,
-          appliedAmount: registeredAmount,
-          remainingAfter: Number(Math.max(0, simplifiedRemainingAfterQueue - registeredAmount).toFixed(2)),
-          methodLabel: selectedMethodLabel,
-          appliedItems,
-        });
-        setFormError('');
-        return;
-      }
-      closeSimplifiedPaymentModal();
-      setFormError('');
-      showAgendaToast(
-        !isPlaytomicFlow && paymentAllocations.length > 1
-          ? `Pago registrado: ${registeredAmount.toFixed(2)} $ imputado a ${paymentAllocations.length} participantes.`
-          : `Pago registrado: ${registeredAmount.toFixed(2)} $.`,
-        'success'
-      );
-    })();
-  }, [
-    closeSimplifiedPaymentModal,
-    bookingDrawerState.draft,
-    bookingFinancial?.paid,
-    isPaymentLockedByManualPending,
-    registerPaymentNow,
-    showAgendaToast,
-    simplifiedPaymentAmountDraft,
-    simplifiedPaymentMethodDraft,
-    simplifiedPaymentImputationMode,
-    simplifiedPaymentPayerParticipantIdDraft,
-    simplifiedPaymentCoveredParticipantIdDraft,
-    simplifiedPaymentCoveredParticipantIdsDraft,
-    simplifiedPaymentConceptMode,
-    simplifiedPaymentCustomItemAmountDraftById,
-    simplifiedPaymentSelectedItemIdsDraft,
-    simplifiedPaymentModalVariant,
-    simplifiedRemainingAfterQueue,
-    singleChargeParticipantId,
-    paymentMode,
-    pendingAccountItems,
-    pendingCourtAccountItems,
-    pendingConsumptionAccountItems,
-    computeCustomSelectedAmount,
-    participantDebtAmountById,
-    participants,
-    updateParticipant,
-  ]);
-
-  const persistBillingConfig = useCallback(async (
-    bookingId: number,
-    options?: {
-      bookingClientId?: string;
-      bookingUserId?: number | null;
-      bookingClientName?: string;
-    }
-  ) => {
-    const draft = bookingDrawerState.draft;
-    if (!draft) return false;
-
-    try {
-      const bookingClientIdRaw = String(options?.bookingClientId || editingBooking?.clientId || '').trim();
-      const bookingClientId = bookingClientIdRaw.length > 0 ? bookingClientIdRaw : undefined;
-      const bookingUserIdRaw = Number(options?.bookingUserId ?? editingBooking?.userId ?? 0);
-      const bookingUserId =
-        Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-          ? bookingUserIdRaw
-          : undefined;
-      const bookingClientName = String(options?.bookingClientName || '').trim();
-      const participantsForPersist = participants.map((participant, index) => {
-        if (!participant.isOwner || !bookingClientId) return participant;
-        const normalizedRef = String(participant.entityRef || '').trim().toLowerCase();
-        const shouldCanonicalizeOwnerRef =
-          normalizedRef.length === 0 ||
-          normalizedRef.startsWith('guest:') ||
-          normalizedRef.startsWith('booking-user:');
-        if (!shouldCanonicalizeOwnerRef) return participant;
-        return {
-          ...participant,
-          name: bookingClientName || participant.name || `Titular ${index + 1}`,
-          sourceType: 'clubClient' as const,
-          entityRef: `booking-client:${bookingClientId}`,
-        };
-      });
-      const participantRefById = new Map<string, string>();
-      participantsForPersist.forEach((participant) => {
-        participantRefById.set(
-          String(participant.id),
-          buildStableParticipantRef(participant, { bookingClientId, bookingUserId })
-        );
-      });
-
-      const nextChargeMode: 'INDIVIDUAL' | 'SHARED' =
-        draft.billing.chargeMode === 'SHARED' ? 'SHARED' : 'INDIVIDUAL';
-      const nextMode: PaymentMode = nextChargeMode === 'SHARED' ? 'Dividido' : 'Único';
-      const confirmedByAssignment = new Map<string, number>();
-      draft.billing.payments
-        .filter((payment) => payment.status === 'CONFIRMED' && payment.assignmentId)
-        .forEach((payment) => {
-          const key = String(payment.assignmentId || '');
-          if (!key) return;
-          confirmedByAssignment.set(key, Number((confirmedByAssignment.get(key) || 0) + Number(payment.amount || 0)));
-        });
-
-      const nextParticipants: Participant[] = draft.participants
-        .filter((participant) => !participant.archived)
-        .map((participant, index) => {
-          const assignment = draft.billing.assignments.find((entry) => entry.participantId === participant.id);
-          const existing = participantsForPersist.find((entry) => String(entry.id) === String(participant.id));
-          const assignedAmount = Number(assignment?.assignedAmount || 0);
-          const confirmed = Number(confirmedByAssignment.get(String(assignment?.id || '')) || 0);
-          const paid = assignment?.isChargeable ? confirmed + 0.009 >= assignedAmount && assignedAmount > 0 : false;
-          const participantRef = participantRefById.get(String(participant.id)) || `guest:${participant.id}`;
-          return {
-            id: participant.id,
-            name: existing?.name || participant.displayName,
-            contact: existing?.contact || participant.contact || '',
-            paid,
-            isOwner:
-              participant.id === draft.operational.bookingResponsibleParticipantId ||
-              (!draft.operational.bookingResponsibleParticipantId && index === 0),
-            sourceType: existing?.sourceType || participant.sourceType,
-            entityRef: participantRef,
-            paymentMethod: existing?.paymentMethod || 'CASH',
-            customPrice: null,
-          } satisfies Participant;
-        });
-      if (nextParticipants.length > 0 && !nextParticipants.some((participant) => participant.isOwner)) {
-        nextParticipants[0] = { ...nextParticipants[0], isOwner: true };
-      }
-
-      const resolvedResponsibleParticipantId = (() => {
-        const draftResponsible = String(draft.billing.chargeResponsibleParticipantId || '').trim();
-        if (draftResponsible && participantRefById.has(draftResponsible)) return draftResponsible;
-
-        const operationalResponsible = String(draft.operational.bookingResponsibleParticipantId || '').trim();
-        if (operationalResponsible && participantRefById.has(operationalResponsible)) return operationalResponsible;
-
-        const ownerNamed = nextParticipants.find((participant) => participant.isOwner);
-        if (ownerNamed?.id && participantRefById.has(String(ownerNamed.id))) return String(ownerNamed.id);
-
-        const firstNamed = nextParticipants.find((participant) => participant.name.trim().length > 0);
-        if (firstNamed?.id && participantRefById.has(String(firstNamed.id))) return String(firstNamed.id);
-
-        return nextParticipants[0]?.id ? String(nextParticipants[0].id) : undefined;
-      })();
-
-      let totalChargeableAmount = Number(
-        Number(draft.billing.financialSummary.totalAmount || totalPrice || 0).toFixed(2)
-      );
-      try {
-        const latestFinancial = await getBookingFinancialSummary(bookingId);
-        const latestTotal = Number(latestFinancial?.total || 0);
-        if (Number.isFinite(latestTotal) && latestTotal >= 0) {
-          totalChargeableAmount = Number(latestTotal.toFixed(2));
-        }
-      } catch {
-      }
-      const assignmentRows = draft.billing.assignments.map((assignment) => ({
-        id: String(assignment.id || `asg-${String(assignment.participantId)}`),
-        participantId: String(assignment.participantId || ''),
-        participantRef:
-          participantRefById.get(String(assignment.participantId)) ||
-          `guest:${String(assignment.participantId)}`,
-        isChargeable: Boolean(assignment.isChargeable),
-        assignedAmount: Number(Number(assignment.assignedAmount || 0).toFixed(2)),
-        participantLinkState: (
-          assignment.participantLinkState === 'ARCHIVED_REFERENCE'
-            ? 'ARCHIVED_REFERENCE'
-            : 'ACTIVE'
-        ) as 'ACTIVE' | 'ARCHIVED_REFERENCE',
-      }));
-      let payloadAssignments: Array<{
-        id: string;
-        participantRef: string;
-        isChargeable: boolean;
-        assignedAmount: number;
-        participantLinkState: 'ACTIVE' | 'ARCHIVED_REFERENCE';
-      }> = [];
-      let chargeResponsibleRef: string | undefined;
-
-      if (nextChargeMode === 'INDIVIDUAL') {
-        const chargeableAssignmentId =
-          assignmentRows.find(
-            (assignment) =>
-              assignment.participantId === String(resolvedResponsibleParticipantId || '') &&
-              assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
-          )?.id ||
-          assignmentRows.find(
-            (assignment) => assignment.participantId === String(resolvedResponsibleParticipantId || '')
-          )?.id ||
-          assignmentRows.find((assignment) => assignment.participantLinkState !== 'ARCHIVED_REFERENCE')?.id ||
-          assignmentRows[0]?.id;
-
-        payloadAssignments = assignmentRows.map((assignment) => {
-          const isChargeable = Boolean(chargeableAssignmentId) && assignment.id === chargeableAssignmentId;
-          return {
-            id: assignment.id,
-            participantRef: assignment.participantRef,
-            isChargeable,
-            assignedAmount: isChargeable ? totalChargeableAmount : 0,
-            participantLinkState: assignment.participantLinkState,
-          };
-        });
-
-        chargeResponsibleRef =
-          (resolvedResponsibleParticipantId
-            ? participantRefById.get(String(resolvedResponsibleParticipantId))
-            : undefined) ||
-          payloadAssignments.find((assignment) => assignment.isChargeable)?.participantRef ||
-          payloadAssignments[0]?.participantRef;
-
-        if (!chargeResponsibleRef && resolvedResponsibleParticipantId) {
-          chargeResponsibleRef = `guest:${String(resolvedResponsibleParticipantId)}`;
-        }
-      } else {
-        const activeAmountByParticipantId = new Map<string, number>();
-        nextParticipants.forEach((participant) => {
-          activeAmountByParticipantId.set(
-            String(participant.id),
-            roundMoney(resolveParticipantPrice(participant))
-          );
-        });
-
-        payloadAssignments = assignmentRows.map((assignment) => {
-          const activeAmount = Number(activeAmountByParticipantId.get(assignment.participantId) || 0);
-          const isActiveAssignment = assignment.participantLinkState !== 'ARCHIVED_REFERENCE';
-          const isChargeable = isActiveAssignment && activeAmount > 0.009;
-          return {
-            id: assignment.id,
-            participantRef: assignment.participantRef,
-            isChargeable,
-            assignedAmount: isChargeable ? activeAmount : 0,
-            participantLinkState: assignment.participantLinkState,
-          };
-        });
-
-        const hasChargeable = payloadAssignments.some(
-          (assignment) =>
-            assignment.isChargeable && assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
-        );
-        if (!hasChargeable) {
-          const fallbackAssignmentId =
-            assignmentRows.find((assignment) => assignment.participantLinkState !== 'ARCHIVED_REFERENCE')?.id ||
-            assignmentRows[0]?.id;
-          payloadAssignments = payloadAssignments.map((assignment) => {
-            const isFallback = assignment.id === fallbackAssignmentId;
-            return {
-              ...assignment,
-              isChargeable: isFallback,
-              assignedAmount: isFallback ? totalChargeableAmount : 0,
-            };
-          });
-        }
-
-        const chargeableIndexes: number[] = [];
-        let chargeableSum = 0;
-        payloadAssignments.forEach((assignment, index) => {
-          if (!assignment.isChargeable) return;
-          chargeableIndexes.push(index);
-          chargeableSum += Number(assignment.assignedAmount || 0);
-        });
-        const normalizedSum = roundMoney(chargeableSum);
-        const delta = roundMoney(totalChargeableAmount - normalizedSum);
-        if (Math.abs(delta) > 0.009 && chargeableIndexes.length > 0) {
-          const firstIndex = chargeableIndexes[0];
-          const firstAssignment = payloadAssignments[firstIndex];
-          payloadAssignments[firstIndex] = {
-            ...firstAssignment,
-            assignedAmount: roundMoney(Math.max(0, Number(firstAssignment.assignedAmount || 0) + delta)),
-          };
-        }
-      }
-      const normalizedTotalCents = Math.max(0, Math.round(Number(totalChargeableAmount || 0) * 100));
-      let normalizedChargeableIndexes = payloadAssignments
-        .map((assignment, index) => ({ assignment, index }))
-        .filter(({ assignment }) => Boolean(assignment.isChargeable))
-        .map(({ index }) => index);
-      if (normalizedChargeableIndexes.length === 0 && payloadAssignments.length > 0) {
-        const fallbackIndex = payloadAssignments.findIndex(
-          (assignment) => assignment.participantLinkState !== 'ARCHIVED_REFERENCE'
-        );
-        const safeFallbackIndex = fallbackIndex >= 0 ? fallbackIndex : 0;
-        payloadAssignments[safeFallbackIndex] = {
-          ...payloadAssignments[safeFallbackIndex],
-          isChargeable: true,
-        };
-        normalizedChargeableIndexes = [safeFallbackIndex];
-      }
-      if (normalizedChargeableIndexes.length > 0) {
-        let assignedCents = 0;
-        payloadAssignments = payloadAssignments.map((assignment, index) => {
-          if (!normalizedChargeableIndexes.includes(index)) {
-            return {
-              ...assignment,
-              isChargeable: false,
-              assignedAmount: 0,
-            };
-          }
-          const nextCents = Math.max(0, Math.round(Number(assignment.assignedAmount || 0) * 100));
-          assignedCents += nextCents;
-          return {
-            ...assignment,
-            isChargeable: true,
-            assignedAmount: Number((nextCents / 100).toFixed(2)),
-          };
-        });
-        const deltaCents = normalizedTotalCents - assignedCents;
-        if (deltaCents !== 0) {
-          const firstIndex = normalizedChargeableIndexes[0];
-          const firstAssignment = payloadAssignments[firstIndex];
-          const firstCents = Math.max(0, Math.round(Number(firstAssignment?.assignedAmount || 0) * 100));
-          const nextCents = Math.max(0, firstCents + deltaCents);
-          payloadAssignments[firstIndex] = {
-            ...firstAssignment,
-            assignedAmount: Number((nextCents / 100).toFixed(2)),
-          };
-        }
-      }
-      const sidebarParticipantsMetadata = buildSidebarParticipantsMetadata(nextParticipants);
-
-      let backendPersisted = false;
-      try {
-        const savedConfig = await updateBookingBillingConfig(bookingId, {
-          chargeMode: nextChargeMode,
-          chargeResponsibleRef,
-          assignments: payloadAssignments,
-          metadata: {
-            schemaVersion: 1,
-            client: 'agenda-admin-v2',
-            sidebarParticipants: sidebarParticipantsMetadata,
-            sidebar: {
-              participants: sidebarParticipantsMetadata,
-            },
-          },
-        });
-        remoteBillingConfigRequestSeqRef.current += 1;
-        setRemoteBillingConfig(savedConfig);
-        backendPersisted = true;
-      } catch (error: any) {
-        reportUiError({ area: 'AgendaPlayground', action: 'updateBillingConfig' }, error);
-        const normalized = normalizeApiError(error, 'No se pudo guardar la configuración de cobro.');
-        const message = toUserSafeMessage(normalized.message, 'No se pudo guardar la configuración de cobro.');
-        showAgendaToast(message);
-      }
-
-      setPaymentMode(nextMode);
-      setParticipants(nextParticipants.length > 0 ? nextParticipants : initialParticipants.map((participant) => ({ ...participant })));
-      setParticipantPriceDraftById({});
-      return backendPersisted;
-    } catch (error) {
-      reportUiError({ area: 'AgendaPlayground', action: 'persistBillingConfig' }, error);
-      return false;
-    }
-  }, [
-    bookingDrawerState.draft,
-    editingBooking?.clientId,
-    editingBooking?.userId,
-    participants,
-    resolveParticipantPrice,
-    showAgendaToast,
-    totalPrice,
-  ]);
-
-  const persistNewBookingDraftState = useCallback(
-    async (
-      bookingId: number,
-      options?: {
-        bookingClientId?: string;
-        bookingUserId?: number | null;
-        bookingClientName?: string;
-      }
-    ) => {
-      if (!Number.isFinite(bookingId) || bookingId <= 0) return;
-
-      if (bookingKind === 'block') return;
-      if (!bookingDrawerState.draft) return;
-
-      try {
-        await persistBillingConfig(bookingId, options);
-      } catch (error) {
-        reportUiError({ area: 'AgendaPlayground', action: 'persistNewBookingDraftState' }, error);
-      }
-    },
-    [bookingDrawerState.draft, bookingKind, persistBillingConfig]
-  );
 
   const handleAddConsumption = useCallback(async () => {
     if (!persistedEditingBookingId) {
@@ -7596,11 +4626,12 @@ export default function AdminAgendaPlaygroundPage() {
         'CASH',
         { applyDiscount: consumptionApplyDiscountDraft }
       );
-      await Promise.all([
-        loadBookingConsumptions(persistedEditingBookingId),
-        refreshBookingFinancial(persistedEditingBookingId),
-        reloadSchedule(),
-      ]);
+      await refreshPersistedBookingView(persistedEditingBookingId, {
+        consumptions: true,
+        financial: true,
+        schedule: true,
+        history: true,
+      });
       setConsumptionQuantityDraft('1');
       setConsumptionQuote(null);
       setConsumptionQuoteError('');
@@ -7617,10 +4648,8 @@ export default function AdminAgendaPlaygroundPage() {
     consumptionProductDraft,
     consumptionProducts,
     consumptionQuantityDraft,
-    loadBookingConsumptions,
     persistedEditingBookingId,
-    refreshBookingFinancial,
-    reloadSchedule,
+    refreshPersistedBookingView,
     showAgendaToast,
   ]);
 
@@ -7630,11 +4659,12 @@ export default function AdminAgendaPlaygroundPage() {
     setBookingConsumptionError('');
     try {
       await ClubAdminService.removeItemFromBooking(itemId);
-      await Promise.all([
-        loadBookingConsumptions(persistedEditingBookingId),
-        refreshBookingFinancial(persistedEditingBookingId),
-        reloadSchedule(),
-      ]);
+      await refreshPersistedBookingView(persistedEditingBookingId, {
+        consumptions: true,
+        financial: true,
+        schedule: true,
+        history: true,
+      });
       showAgendaToast('Consumo eliminado.', 'success');
     } catch (error: any) {
       reportUiError({ area: 'AgendaPlayground', action: 'handleRemoveConsumption' }, error);
@@ -7643,7 +4673,7 @@ export default function AdminAgendaPlaygroundPage() {
     } finally {
       setConsumptionRemovingId((previous) => (previous === itemId ? null : previous));
     }
-  }, [loadBookingConsumptions, persistedEditingBookingId, refreshBookingFinancial, reloadSchedule, showAgendaToast]);
+  }, [persistedEditingBookingId, refreshPersistedBookingView, showAgendaToast]);
 
   const handleCreateBooking = async (forceCreateRecurring = false, editSeriesScope?: EditSeriesScope) => {
     if (isSubmittingBooking || isDeletingBooking || confirmingBooking) return;
@@ -7655,11 +4685,6 @@ export default function AdminAgendaPlaygroundPage() {
 
     if (!owner || owner.name.trim().length === 0) {
       setBlockingFieldError('owner', 'Falta el responsable de la reserva.');
-      return;
-    }
-
-    if (paymentMode === 'Único' && !simplifiedOwnerAdded) {
-      setBlockingFieldError('owner', 'Primero agregá el titular.');
       return;
     }
 
@@ -7695,6 +4720,10 @@ export default function AdminAgendaPlaygroundPage() {
       setBlockingFieldError('participants', 'No podés guardar con participantes duplicados.');
       return;
     }
+
+    const pendingParticipantDrafts = participants
+      .filter((participant) => !participant.isOwner && participant.name.trim().length > 0)
+      .map((participant) => ({ ...participant }));
 
     if (selectedEndSlot <= selectedStartSlot) {
       setBlockingFieldError('time', 'La hora de fin debe ser mayor a la de inicio.');
@@ -7770,6 +4799,7 @@ export default function AdminAgendaPlaygroundPage() {
     }
 
     if (editingBookingId) {
+      // Draft-only: dentro del drawer estos cambios se persisten recién al guardar.
       const editingFixedBookingId = Number(editingBooking?.fixedBookingId || 0);
       const isEditingRecurringSeries =
         Number.isFinite(editingFixedBookingId) &&
@@ -7785,7 +4815,7 @@ export default function AdminAgendaPlaygroundPage() {
         return;
       }
 
-      if (!hasScheduleChanges && !hasUserBillingConfigChanges && !hasSidebarParticipantsChanges) {
+      if (!hasScheduleChanges) {
         setDrawerOpen(false);
         setFormError('');
         setEditingBookingId(null);
@@ -7797,8 +4827,6 @@ export default function AdminAgendaPlaygroundPage() {
         setIsWaitingQueuedPaymentConfirmation(false);
         bookingDrawerDispatch({ type: 'SAVE_START' });
         const numericBookingId = numericEditingBookingId;
-        let operationalSaved = true;
-        let billingSaved = true;
         let recurringRescheduleResult: any = null;
         if (hasScheduleChanges) {
           if (isEditingRecurringSeries && editSeriesScope) {
@@ -7826,94 +4854,14 @@ export default function AdminAgendaPlaygroundPage() {
           }
         }
         if (Number.isFinite(numericBookingId) && numericBookingId > 0) {
-          billingSaved = await persistBillingConfig(numericBookingId);
-        }
-        const failedPaymentTempIds: string[] = [];
-
-        await reloadSchedule();
-        let latestFinancialSummary:
-          | {
-              total?: number;
-              paid?: number;
-              remaining?: number;
-            }
-          | null = null;
-        if (Number.isFinite(numericBookingId) && numericBookingId > 0) {
-          latestFinancialSummary = await refreshBookingFinancial(numericBookingId);
-        }
-
-        if (!billingSaved) {
-          const partialIssues = [
-            !billingSaved ? 'configuración de cobro' : '',
-            failedPaymentTempIds.length > 0 ? `${failedPaymentTempIds.length} pagos` : '',
-          ].filter(Boolean);
-          bookingDrawerDispatch({
-            type: 'SAVE_PARTIAL',
-            payload: {
-              message: `Guardado parcial: faltó guardar ${partialIssues.join(' y ')}.`,
-              operationalSaved,
-              billingSaved,
-              failedPaymentTempIds,
-            },
+          await refreshPersistedBookingView(numericBookingId, {
+            schedule: true,
+            financial: true,
+            history: true,
           });
-          setFormError(
-            !billingSaved
-              ? 'Guardado parcial: no se pudo persistir toda la configuración de cobro.'
-              : 'Guardado parcial.'
-          );
-          showAgendaToast(
-            !billingSaved
-              ? 'Guardado parcial: configuración de cobro pendiente'
-              : 'Guardado parcial'
-          );
-          return;
         }
-
-        if (Number.isFinite(numericBookingId) && numericBookingId > 0) {
-          const timelineRequestSeq = bookingTimelineRequestSeqRef.current + 1;
-          bookingTimelineRequestSeqRef.current = timelineRequestSeq;
-          setBookingTimelineLoading(true);
-          setBookingTimelineError('');
-          try {
-            const events = await getBookingTimelineEvents(numericBookingId, { take: 200 });
-            if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-              setBookingTimelineEvents(Array.isArray(events) ? events : []);
-            }
-          } catch (timelineError: any) {
-            if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-              setBookingTimelineEvents([]);
-              const normalized = normalizeApiError(timelineError, 'No se pudo cargar el historial de la reserva.');
-              setBookingTimelineError(
-                toUserSafeMessage(
-                  normalized.message,
-                  'No se pudo cargar el historial de la reserva.'
-                )
-              );
-            }
-          } finally {
-            if (bookingTimelineRequestSeqRef.current === timelineRequestSeq) {
-              setBookingTimelineLoading(false);
-            }
-          }
-        }
-
-        if (latestFinancialSummary) {
-          setParticipants((previous) =>
-            distributePaidByParticipants(
-              previous,
-              paymentMode,
-              Number(latestFinancialSummary?.total || 0),
-              Number(latestFinancialSummary?.paid || 0)
-            )
-          );
-        }
-        setBillingConfigTouchedByUser(false);
         bookingDrawerDispatch({ type: 'SAVE_SUCCESS' });
         const shouldClose = hasScheduleChanges;
-        const pendingParticipantNotice = String(pendingParticipantSaveNoticeRef.current || '').trim();
-        if (pendingParticipantNotice) {
-          pendingParticipantSaveNoticeRef.current = '';
-        }
         if (shouldClose) {
           setDrawerOpen(false);
           setEditingBookingId(null);
@@ -7921,9 +4869,7 @@ export default function AdminAgendaPlaygroundPage() {
         }
         setFormError('');
         const baseSuccessMessage = shouldClose ? 'Reserva actualizada correctamente.' : 'Cambios guardados.';
-        showAgendaToast(
-          pendingParticipantNotice ? `${baseSuccessMessage} ${pendingParticipantNotice}` : baseSuccessMessage
-        );
+        showAgendaToast(baseSuccessMessage, 'success');
         if (isEditingRecurringSeries && editSeriesScope && recurringRescheduleResult) {
           const overlapItemsRaw = Array.isArray(recurringRescheduleResult?.overlaps) ? recurringRescheduleResult.overlaps : [];
           const updatedItemsRaw = Array.isArray(recurringRescheduleResult?.updatedItems)
@@ -8398,11 +5344,6 @@ export default function AdminAgendaPlaygroundPage() {
             Number.isFinite(createdBookingUserIdRaw) && createdBookingUserIdRaw > 0
               ? createdBookingUserIdRaw
               : undefined;
-          await persistNewBookingDraftState(maybeId, {
-            bookingClientId: createdBookingClientId,
-            bookingUserId: createdBookingUserId,
-            bookingClientName: createdBookingClientName || undefined,
-          });
         }
       }
 
@@ -8421,6 +5362,33 @@ export default function AdminAgendaPlaygroundPage() {
         );
         if (createdBooking) {
           openBookingInDrawer(createdBooking);
+          if (pendingParticipantDrafts.length > 0) {
+            const syncResult = await syncDraftParticipantsToPersistedBooking(
+              Number(createdBooking.id),
+              pendingParticipantDrafts
+            );
+            await refreshPersistedBookingView(Number(createdBooking.id), {
+              schedule: true,
+              participants: true,
+              financial: true,
+              consumptions: true,
+              history: true,
+              forceDrawerSections: true,
+            });
+            if (syncResult === 'deferred') {
+              showAgendaToast('Reserva creada. Completá la decisión para agregar el participante.', 'warning');
+              return;
+            }
+          } else {
+            await refreshPersistedBookingView(Number(createdBooking.id), {
+              schedule: true,
+              participants: true,
+              financial: true,
+              consumptions: true,
+              history: true,
+              forceDrawerSections: true,
+            });
+          }
           setBookingCreatedModalOpen(true);
           showAgendaToast('Reserva creada.', 'success');
           return;
@@ -8429,7 +5397,6 @@ export default function AdminAgendaPlaygroundPage() {
       setDrawerOpen(false);
       setFormError('');
       setParticipants(initialParticipants.map((participant) => ({ ...participant })));
-      setParticipantPriceDraftById({});
       setEditingBookingId(null);
       setEditingBaseline(null);
       showAgendaToast('Reserva creada.', 'success');
@@ -8447,21 +5414,136 @@ export default function AdminAgendaPlaygroundPage() {
           const ownerEmail = resolvePlaygroundClientEmail(owner);
           const ownerDni = resolvePlaygroundClientDni(owner);
           const bookingDate = new Date(selectedDate);
-          setDuplicateDecisionPendingPayload({
-            courtId: Number(selectedCourtId),
-            activityId: selectedActivityId,
-            bookingDate,
-            slotTime,
-            durationMinutes: selectionMinutes,
-            ownerName,
-            ownerPhone,
-            ownerEmail,
-            ownerDni,
+          openDuplicateDecisionModal({
+            candidates: candidateRows,
+            selectedClientId: String(normalized.meta?.primaryClientId || candidateRows[0]?.id || ''),
+            onUseExisting: async (selectedClientId) => {
+              const createdPayload: any = await createBooking(
+                Number(selectedCourtId),
+                selectedActivityId,
+                bookingDate,
+                slotTime,
+                {
+                  durationMinutes: selectionMinutes,
+                  clientId: selectedClientId,
+                }
+              );
+
+              const maybeId = Number(
+                createdPayload?.booking?.id ?? createdPayload?.id ?? createdPayload?.bookingId
+              );
+              if (Number.isFinite(maybeId) && maybeId > 0) {
+                const bookingPayload =
+                  createdPayload?.booking && typeof createdPayload.booking === 'object'
+                    ? createdPayload.booking
+                    : createdPayload;
+                let createdBookingClientIdRaw = String(
+                  bookingPayload?.clientId || bookingPayload?.client?.id || ''
+                ).trim();
+                let createdBookingClientName = String(
+                  bookingPayload?.client?.name || bookingPayload?.clientName || ''
+                ).trim();
+                let createdBookingUserIdRaw = Number(
+                  bookingPayload?.userId || bookingPayload?.user?.id || 0
+                );
+                if (
+                  !createdBookingClientIdRaw &&
+                  !(Number.isFinite(createdBookingUserIdRaw) && createdBookingUserIdRaw > 0)
+                ) {
+                  try {
+                    const hydratedBooking = await getBookingById(maybeId);
+                    createdBookingClientIdRaw = String(
+                      hydratedBooking?.clientId || hydratedBooking?.client?.id || ''
+                    ).trim();
+                    createdBookingClientName = String(
+                      hydratedBooking?.client?.name || hydratedBooking?.clientName || createdBookingClientName
+                    ).trim();
+                    createdBookingUserIdRaw = Number(
+                      hydratedBooking?.userId || hydratedBooking?.user?.id || 0
+                    );
+                  } catch {
+                  }
+                }
+                const createdBookingClientId =
+                  createdBookingClientIdRaw.length > 0 ? createdBookingClientIdRaw : undefined;
+                const createdBookingUserId =
+                  Number.isFinite(createdBookingUserIdRaw) && createdBookingUserIdRaw > 0
+                    ? createdBookingUserIdRaw
+                    : undefined;
+              }
+
+              await reloadSchedule();
+              setFormError('');
+              setDrawerOpen(false);
+              showAgendaToast('Reserva creada con el cliente existente seleccionado.', 'success');
+            },
+            onCreateNew: async () => {
+              const createdPayload: any = await createBooking(
+                Number(selectedCourtId),
+                selectedActivityId,
+                bookingDate,
+                slotTime,
+                {
+                  durationMinutes: selectionMinutes,
+                  client: {
+                    name: ownerName,
+                    phone: ownerPhone,
+                    email: ownerEmail,
+                    dni: ownerDni || undefined,
+                    duplicateResolution: 'CREATE_NEW',
+                  },
+                }
+              );
+
+              const maybeId = Number(
+                createdPayload?.booking?.id ?? createdPayload?.id ?? createdPayload?.bookingId
+              );
+              if (Number.isFinite(maybeId) && maybeId > 0) {
+                const bookingPayload =
+                  createdPayload?.booking && typeof createdPayload.booking === 'object'
+                    ? createdPayload.booking
+                    : createdPayload;
+                let createdBookingClientIdRaw = String(
+                  bookingPayload?.clientId || bookingPayload?.client?.id || ''
+                ).trim();
+                let createdBookingClientName = String(
+                  bookingPayload?.client?.name || bookingPayload?.clientName || ''
+                ).trim();
+                let createdBookingUserIdRaw = Number(
+                  bookingPayload?.userId || bookingPayload?.user?.id || 0
+                );
+                if (
+                  !createdBookingClientIdRaw &&
+                  !(Number.isFinite(createdBookingUserIdRaw) && createdBookingUserIdRaw > 0)
+                ) {
+                  try {
+                    const hydratedBooking = await getBookingById(maybeId);
+                    createdBookingClientIdRaw = String(
+                      hydratedBooking?.clientId || hydratedBooking?.client?.id || ''
+                    ).trim();
+                    createdBookingClientName = String(
+                      hydratedBooking?.client?.name || hydratedBooking?.clientName || createdBookingClientName
+                    ).trim();
+                    createdBookingUserIdRaw = Number(
+                      hydratedBooking?.userId || hydratedBooking?.user?.id || 0
+                    );
+                  } catch {
+                  }
+                }
+                const createdBookingClientId =
+                  createdBookingClientIdRaw.length > 0 ? createdBookingClientIdRaw : undefined;
+                const createdBookingUserId =
+                  Number.isFinite(createdBookingUserIdRaw) && createdBookingUserIdRaw > 0
+                    ? createdBookingUserIdRaw
+                    : undefined;
+              }
+
+              await reloadSchedule();
+              setFormError('');
+              setDrawerOpen(false);
+              showAgendaToast('Reserva creada como cliente nuevo (duplicado permitido).', 'success');
+            },
           });
-          setDuplicateDecisionCandidates(candidateRows);
-          setDuplicateDecisionSelectedClientId(String(candidateRows[0]?.id || ''));
-          setDuplicateDecisionError('');
-          setDuplicateDecisionOpen(true);
           setFormError('');
           return;
         }
@@ -8524,23 +5606,13 @@ export default function AdminAgendaPlaygroundPage() {
     if (!drawerOpen) return;
     if (!editingBookingId) {
       setSimplifiedOwnerAdded(false);
-      setSimplifiedOwnerPaymentMethodDraft('');
       setSimplifiedEditingParticipantId(null);
-      setSimplifiedEditPaymentMethodDraft('');
       setSimplifiedOwnerSuggestionsOpen(false);
       setSimplifiedOwnerSearchLoading(false);
       setSimplifiedOwnerSuggestions([]);
-      setSimplifiedNewParticipantOpen(false);
-      setSimplifiedNewParticipantName('');
-      setSimplifiedNewParticipantContact('');
-      setSimplifiedNewParticipantSourceTypeDraft('guest');
-      setSimplifiedNewParticipantEntityRefDraft('');
-      setSimplifiedNewParticipantSuggestionsOpen(false);
-      setSimplifiedNewParticipantSearchLoading(false);
-      setSimplifiedNewParticipantSuggestions([]);
-      closeSimplifiedPaymentModal();
+      resetSimplifiedNewParticipantDraft();
     }
-  }, [closeSimplifiedPaymentModal, drawerOpen, editingBookingId]);
+  }, [drawerOpen, editingBookingId, resetSimplifiedNewParticipantDraft]);
 
   useEffect(() => {
     if (!drawerOpen || !editingBookingId) return;
@@ -8549,61 +5621,30 @@ export default function AdminAgendaPlaygroundPage() {
     );
     if (!namedOwner) return;
     setSimplifiedOwnerAdded(true);
-    setSimplifiedOwnerPaymentMethodDraft(String(namedOwner.paymentMethod || ''));
     setSimplifiedEditingParticipantId(null);
-    setSimplifiedEditPaymentMethodDraft('');
     setSimplifiedOwnerSuggestionsOpen(false);
     setSimplifiedOwnerSearchLoading(false);
     setSimplifiedOwnerSuggestions([]);
-    setSimplifiedNewParticipantOpen(false);
-    setSimplifiedNewParticipantName('');
-    setSimplifiedNewParticipantContact('');
-    setSimplifiedNewParticipantSourceTypeDraft('guest');
-    setSimplifiedNewParticipantEntityRefDraft('');
-    setSimplifiedNewParticipantSuggestionsOpen(false);
-    setSimplifiedNewParticipantSearchLoading(false);
-    setSimplifiedNewParticipantSuggestions([]);
-  }, [drawerOpen, editingBookingId, participants]);
-
-  const simplifiedParticipantWithPaymentControlsIdSet = useMemo(() => {
-    return new Set(chargedParticipantIdSet);
-  }, [chargedParticipantIdSet]);
+    resetSimplifiedNewParticipantDraft();
+  }, [drawerOpen, editingBookingId, participants, resetSimplifiedNewParticipantDraft]);
 
   useEffect(() => {
     if (!simplifiedEditingParticipantId) return;
-    const stillExistsAndCharged = participants.some(
-      (participant) =>
-        participant.id === simplifiedEditingParticipantId &&
-        simplifiedParticipantWithPaymentControlsIdSet.has(participant.id)
+    const stillExists = participants.some(
+      (participant) => participant.id === simplifiedEditingParticipantId
     );
-    if (stillExistsAndCharged && simplifiedOwnerAdded && !isBookingFullyPaid) return;
+    if (stillExists) return;
     setSimplifiedEditingParticipantId(null);
-    setSimplifiedEditPaymentMethodDraft('');
   }, [
-    isBookingFullyPaid,
     participants,
     simplifiedEditingParticipantId,
-    simplifiedOwnerAdded,
-    simplifiedParticipantWithPaymentControlsIdSet,
   ]);
 
   useEffect(() => {
     if (!simplifiedNewParticipantOpen) return;
     if (simplifiedOwnerAdded) return;
-    setSimplifiedNewParticipantOpen(false);
-    setSimplifiedNewParticipantName('');
-    setSimplifiedNewParticipantContact('');
-    setSimplifiedNewParticipantSourceTypeDraft('guest');
-    setSimplifiedNewParticipantEntityRefDraft('');
-    setSimplifiedNewParticipantSuggestionsOpen(false);
-    setSimplifiedNewParticipantSearchLoading(false);
-    setSimplifiedNewParticipantSuggestions([]);
-  }, [simplifiedNewParticipantOpen, simplifiedOwnerAdded]);
-
-  useEffect(() => {
-    if (drawerOpen) return;
-    closeSimplifiedPaymentModal();
-  }, [closeSimplifiedPaymentModal, drawerOpen]);
+    resetSimplifiedNewParticipantDraft();
+  }, [resetSimplifiedNewParticipantDraft, simplifiedNewParticipantOpen, simplifiedOwnerAdded]);
 
   const resolveSuggestionPlacement = useCallback((
     anchor: HTMLDivElement | null,
@@ -8679,43 +5720,6 @@ export default function AdminAgendaPlaygroundPage() {
     };
   }, [simplifiedNewParticipantSuggestionsOpen, simplifiedOwnerSuggestionsOpen]);
 
-  useEffect(() => {
-    if (!drawerOpen || bookingKind === 'block' || paymentMode !== 'Único') return;
-    if (!latestPaymentCoveredRef) return;
-
-    const bookingClientId = String(editingBooking?.clientId || '').trim() || undefined;
-    const bookingUserIdRaw = Number(editingBooking?.userId || 0);
-    const bookingUserId =
-      Number.isFinite(bookingUserIdRaw) && bookingUserIdRaw > 0
-        ? bookingUserIdRaw
-        : undefined;
-
-    setParticipants((previous) => {
-      const matchedPayer = previous.find(
-        (participant) =>
-          buildStableParticipantRef(participant, { bookingClientId, bookingUserId }) === latestPaymentCoveredRef
-      );
-      if (!matchedPayer) return previous;
-
-      let changed = false;
-      const next = previous.map((participant) => {
-        const shouldBePaid = participant.id === matchedPayer.id;
-        if (participant.paid === shouldBePaid) return participant;
-        changed = true;
-        return { ...participant, paid: shouldBePaid };
-      });
-      return changed ? next : previous;
-    });
-  }, [
-    bookingKind,
-    drawerOpen,
-    editingBooking?.clientId,
-    editingBooking?.userId,
-    latestPaymentCoveredRef,
-    participants,
-    paymentMode,
-  ]);
-
   if (!authChecked || !user) return <RouteTransitionScreen message={authChecked ? 'Redirigiendo...' : 'Validando acceso...'} />;
   if (!hasOperatorAccess(user)) return <NotFound message="No tenés permiso para acceder al panel de administración." />;
   const recurringCourtSelectionLabel =
@@ -8763,15 +5767,31 @@ export default function AdminAgendaPlaygroundPage() {
     if (useSimplifiedBookingSidebar) return `Crear reserva para ${simplifiedHeaderDateLabel}`;
     return 'Crear reserva';
   })();
-  const simplifiedNamedParticipants = participants.filter((participant) => participant.name.trim().length > 0);
+  const ownerEntries = participants.filter((participant) => participant.isOwner);
+  const otherEntries = participants.filter((participant) => !participant.isOwner);
+  const orderedParticipants = [...ownerEntries, ...otherEntries];
+  const simplifiedNamedParticipants = orderedParticipants.filter((participant) => participant.name.trim().length > 0);
   const simplifiedNewParticipantHasLinkedSelection =
     String(simplifiedNewParticipantEntityRefDraft || '').trim().length > 0 &&
     simplifiedNewParticipantSourceTypeDraft !== 'guest';
   const simplifiedNewParticipantPhoneDraft = extractPhoneFromParticipantContact(simplifiedNewParticipantContact);
   const simplifiedNewParticipantEmailDraft = extractEmailFromParticipantContact(simplifiedNewParticipantContact);
+  const simplifiedNewParticipantHasUserSelection =
+    Number.isFinite(Number(simplifiedNewParticipantSelectedUserIdDraft || 0)) &&
+    Number(simplifiedNewParticipantSelectedUserIdDraft) > 0 &&
+    String(simplifiedNewParticipantPersonKeyDraft || '').trim().length > 0 &&
+    String(simplifiedNewParticipantPersonSearchQueryDraft || '').trim().length >= 2;
   const hasValidSimplifiedNewParticipantName =
-    simplifiedNewParticipantName.trim().length > 0 &&
-    simplifiedNewParticipantEntityRefDraft.trim().length > 0;
+    (
+      simplifiedNewParticipantName.trim().length > 0 &&
+      (
+        simplifiedNewParticipantEntityRefDraft.trim().length > 0 ||
+        simplifiedNewParticipantHasUserSelection
+      )
+    ) || (
+      simplifiedNewParticipantName.trim().length >= 2 &&
+      simplifiedNewParticipantPhoneDraft.length >= 8
+    );
   const simplifiedOwnerSuggestionsFloatingStyle = (() => {
     if (
       !simplifiedOwnerSuggestionsOpen ||
@@ -8816,362 +5836,24 @@ export default function AdminAgendaPlaygroundPage() {
       zIndex: 90,
     };
   })();
-  const ownerPaymentMethodOptions: Array<{ value: Participant['paymentMethod']; label: string }> = [
-    { value: 'CASH', label: 'Efectivo' },
-    { value: 'TRANSFER', label: 'Transferencia' },
-    { value: 'CARD', label: 'Tarjeta' },
-    { value: 'OTHER', label: 'Otro' },
-  ];
-  const simplifiedHasConfirmedPayments =
-    Boolean(
-      bookingDrawerState.draft?.billing.payments.some(
-        (payment) => payment.status === 'CONFIRMED' && Number(payment.amount || 0) > 0.009
-      )
-    ) || Number(bookingFinancial?.paid || 0) > 0.009;
-  const simplifiedLockedSinglePayerId = (() => {
-    if (paymentMode !== 'Único' || !simplifiedHasConfirmedPayments) return '';
-    const explicitResponsibleId = String(singleChargeParticipantId || '').trim();
-    if (explicitResponsibleId && participants.some((participant) => participant.id === explicitResponsibleId)) {
-      return explicitResponsibleId;
-    }
-    const ownerParticipant = participants.find((participant) => participant.isOwner);
-    return ownerParticipant?.id || participants[0]?.id || '';
-  })();
-  const simplifiedPayerCandidates = (() => {
-    return participants.map((participant, index) => ({
-      ...participant,
-      optionLabel:
-        String(participant.name || '').trim() ||
-        (participant.isOwner ? 'Titular sin nombre' : `Participante ${index + 1}`),
-    }));
-  })();
-  const simplifiedPayerComboOptions: ComboOption[] = (() => {
-    const lockedSinglePayer =
-      paymentMode === 'Único' && simplifiedLockedSinglePayerId
-        ? simplifiedPayerCandidates.filter((participant) => participant.id === simplifiedLockedSinglePayerId)
-        : simplifiedPayerCandidates;
-    const resolved = lockedSinglePayer.map((participant) => ({
-      value: participant.id,
-      label: `${participant.optionLabel}${participant.isOwner ? ' (titular)' : ''}`,
-      secondary: String(participant.contact || '').trim() || undefined,
-    }));
-    return resolved;
-  })();
-  const simplifiedPaymentMethodComboOptions: ComboOption[] = [
-    ...ownerPaymentMethodOptions.map((option) => ({ value: option.value, label: option.label })),
-  ];
-  const simplifiedPaymentMethodLabel = (() => {
-    const selected = ownerPaymentMethodOptions.find(
-      (option) => option.value === simplifiedPaymentMethodDraft
-    );
-    return selected?.label || 'Sin método';
-  })();
-  const simplifiedCoveredParticipantComboOptions: ComboOption[] = simplifiedPayerCandidates.map((participant) => {
-    const debt = Number(participantDebtAmountById.get(participant.id) || 0);
-    return {
-      value: participant.id,
-      label: participant.optionLabel,
-      secondary: `Deuda ${debt.toFixed(2)} $`,
-    };
-  });
-  const handleSimplifiedPayerChange = (nextParticipantId: string) => {
-    if (
-      paymentMode === 'Único' &&
-      simplifiedLockedSinglePayerId &&
-      nextParticipantId &&
-      nextParticipantId !== simplifiedLockedSinglePayerId
-    ) {
-      showAgendaToast('En pago único, después del primer pago queda fijo el pagador.');
-      return;
-    }
-    setSimplifiedPaymentPayerParticipantIdDraft(nextParticipantId);
-    if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'MY_SHARE') {
-      const preselectedCoveredId = String(nextParticipantId || '').trim();
-      setSimplifiedPaymentCoveredParticipantIdDraft(preselectedCoveredId);
-      setSimplifiedPaymentCoveredParticipantIdsDraft(preselectedCoveredId ? [preselectedCoveredId] : []);
-      const nextDebt = Number(participantDebtAmountById.get(preselectedCoveredId) || 0);
-      const nextAmount = Number(Math.max(0, Math.min(simplifiedRemainingAfterQueue, nextDebt)).toFixed(2));
-      setSimplifiedPaymentAmountDraft(nextAmount > 0.009 ? nextAmount.toFixed(2) : '');
-    } else if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'FULL') {
-      const idsWithDebt = simplifiedPayerCandidates
-        .map((participant) => participant.id)
-        .filter((participantId) => Number(participantDebtAmountById.get(participantId) || 0) > 0.009);
-      setSimplifiedPaymentCoveredParticipantIdsDraft(idsWithDebt);
-      setSimplifiedPaymentCoveredParticipantIdDraft(idsWithDebt[0] || nextParticipantId);
-      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(simplifiedRemainingAfterQueue));
-    } else if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'COURT_ONLY') {
-      setSimplifiedPaymentCoveredParticipantIdsDraft(nextParticipantId ? [nextParticipantId] : []);
-      setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
-      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('COURT')));
-    } else if (paymentMode === 'Dividido' && simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS') {
-      setSimplifiedPaymentCoveredParticipantIdsDraft(nextParticipantId ? [nextParticipantId] : []);
-      setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
-      setSimplifiedPaymentAmountDraft(
-        formatPaymentAmountDraft(
-          computeConceptBasedMaxAmount(
-            'CUSTOM',
-            simplifiedPaymentSelectedItemIdsDraft,
-            simplifiedPaymentCustomItemAmountDraftById
-          )
-        )
-      );
-    } else if (!String(simplifiedPaymentCoveredParticipantIdDraft || '').trim()) {
-      setSimplifiedPaymentCoveredParticipantIdDraft(nextParticipantId);
-    }
-    const nextPayer = participants.find((participant) => participant.id === nextParticipantId);
-    if (nextPayer) {
-      setSimplifiedPaymentMethodDraft(nextPayer.paymentMethod || 'CASH');
-    }
-  };
-  const simplifiedResolvedPayerParticipantId = (() => {
-    if (paymentMode === 'Único' && simplifiedLockedSinglePayerId) {
-      return simplifiedLockedSinglePayerId;
-    }
-    const draftSelection = String(simplifiedPaymentPayerParticipantIdDraft || '').trim();
-    if (draftSelection && simplifiedPayerCandidates.some((participant) => participant.id === draftSelection)) {
-      return draftSelection;
-    }
-    const draftResponsible = String(bookingDrawerState.draft?.billing.chargeResponsibleParticipantId || '').trim();
-    if (draftResponsible && simplifiedPayerCandidates.some((participant) => participant.id === draftResponsible)) {
-      return draftResponsible;
-    }
-    const ownerNamed = simplifiedPayerCandidates.find((participant) => participant.isOwner);
-    return ownerNamed?.id || simplifiedPayerCandidates[0]?.id || '';
-  })();
-  const simplifiedResolvedPayerParticipant = participants.find(
-    (participant) => participant.id === simplifiedResolvedPayerParticipantId
-  ) || null;
-  const simplifiedResolvedCoveredParticipantIds = (() => {
-    if (paymentMode === 'Único') {
-      const explicitResponsible = String(singleChargeParticipantId || '').trim();
-      if (explicitResponsible && simplifiedPayerCandidates.some((participant) => participant.id === explicitResponsible)) {
-        return [explicitResponsible];
-      }
-      return simplifiedResolvedPayerParticipantId ? [simplifiedResolvedPayerParticipantId] : [];
-    }
-
-    const draftManyIdSet = new Set(
-      (Array.isArray(simplifiedPaymentCoveredParticipantIdsDraft)
-        ? simplifiedPaymentCoveredParticipantIdsDraft
-        : []
-      )
-        .map((value) => String(value || '').trim())
-        .filter(
-          (value) =>
-            value.length > 0 &&
-            simplifiedPayerCandidates.some((participant) => participant.id === value) &&
-            Number(participantDebtAmountById.get(value) || 0) > 0.009
-        )
-    );
-    if (draftManyIdSet.size > 0) {
-      return simplifiedPayerCandidates
-        .map((participant) => participant.id)
-        .filter((participantId) => draftManyIdSet.has(participantId));
-    }
-
-    const draftCovered = String(simplifiedPaymentCoveredParticipantIdDraft || '').trim();
-    if (
-      draftCovered &&
-      simplifiedPayerCandidates.some((participant) => participant.id === draftCovered) &&
-      Number(participantDebtAmountById.get(draftCovered) || 0) > 0.009
-    ) {
-      return [draftCovered];
-    }
-    if (
-      simplifiedResolvedPayerParticipantId &&
-      Number(participantDebtAmountById.get(simplifiedResolvedPayerParticipantId) || 0) > 0.009
-    ) {
-      return [simplifiedResolvedPayerParticipantId];
-    }
-    const firstWithDebt = simplifiedPayerCandidates.find(
-      (participant) => Number(participantDebtAmountById.get(participant.id) || 0) > 0.009
-    );
-    return firstWithDebt?.id ? [firstWithDebt.id] : [];
-  })();
-  const simplifiedResolvedCoveredParticipantId = simplifiedResolvedCoveredParticipantIds[0] || '';
-  const simplifiedResolvedCoveredParticipant = participants.find(
-    (participant) => participant.id === simplifiedResolvedCoveredParticipantId
-  ) || null;
-  const simplifiedResolvedCoveredParticipantsDebt = Number(
-    simplifiedResolvedCoveredParticipantIds
-      .reduce((sum, participantId) => sum + Number(participantDebtAmountById.get(participantId) || 0), 0)
-      .toFixed(2)
-  );
-  const isPlaytomicPaymentModal = simplifiedPaymentModalVariant === 'PLAYTOMIC';
-  const isConceptImputationMode =
-    isPlaytomicPaymentModal || simplifiedPaymentImputationMode === 'BY_CONCEPT';
-  const simplifiedParticipantBasedMaxAmount = Number(
-    (
-      isPlaytomicPaymentModal
-        ? simplifiedRemainingAfterQueue
-        : paymentMode === 'Dividido'
-        ? Math.max(
-            0,
-            Math.min(
-              simplifiedRemainingAfterQueue,
-              simplifiedResolvedCoveredParticipantsDebt > 0.009
-                ? simplifiedResolvedCoveredParticipantsDebt
-                : simplifiedRemainingAfterQueue
-            )
-          )
-        : simplifiedRemainingAfterQueue
-    ).toFixed(2)
-  );
-  const simplifiedConceptBasedMaxAmount = Number(
-    computeConceptBasedMaxAmount(simplifiedPaymentConceptMode).toFixed(2)
-  );
-  const simplifiedPaymentMaxAmount = Number(
-    (isConceptImputationMode ? simplifiedConceptBasedMaxAmount : simplifiedParticipantBasedMaxAmount).toFixed(2)
-  );
-  const simplifiedPaymentAmountParsed = Number(String(simplifiedPaymentAmountDraft || '').replace(',', '.'));
-  const hasValidSimplifiedPaymentAmount =
-    Number.isFinite(simplifiedPaymentAmountParsed) &&
-    simplifiedPaymentAmountParsed > 0.009 &&
-    simplifiedPaymentAmountParsed <= simplifiedPaymentMaxAmount + 0.009;
-  const hasValidSimplifiedPaymentMethod = isParticipantPaymentMethod(simplifiedPaymentMethodDraft);
+  const simplifiedPaymentStatusLabel = isFinancialDisplayPending
+    ? 'Cargando'
+    : simplifiedRemainingAmount <= 0.009
+      ? 'Pagado'
+      : simplifiedPaidAmount > 0.009
+        ? 'Parcial'
+        : 'Pendiente';
   const simplifiedCanRegisterPayment =
     Boolean(persistedEditingBookingId) &&
-    !isRemoteBillingConfigLoading &&
     !isPaymentLockedByManualPending &&
-    simplifiedRemainingAfterQueue > 0.009;
-  const playtomicPreviewRequestedAmount = Number(
-    Math.max(
-      0,
-      Math.min(
-        Number.isFinite(simplifiedPaymentAmountParsed) ? simplifiedPaymentAmountParsed : 0,
-        simplifiedPaymentMaxAmount
-      )
-    ).toFixed(2)
-  );
-  const playtomicPreviewRemainingAfter = Number(
-    Math.max(0, simplifiedRemainingAfterQueue - playtomicPreviewRequestedAmount).toFixed(2)
-  );
-  const playtomicPreviewConceptRows = (() => {
-    const selectedItems =
-      simplifiedPaymentConceptMode === 'AUTO'
-        ? pendingAccountItems
-        : simplifiedPaymentConceptMode === 'COURT'
-          ? pendingCourtAccountItems
-          : simplifiedPaymentConceptMode === 'CONSUMPTIONS'
-            ? pendingConsumptionAccountItems
-            : pendingAccountItems.filter((item) =>
-                simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id))
-              );
-    const customDesiredAmountById = new Map<string, number>();
-    if (simplifiedPaymentConceptMode === 'CUSTOM') {
-      selectedItems.forEach((item) => {
-        const itemId = String(item.id);
-        const fallback = Number(item.remainingAmount || 0);
-        const rawDraft = String(simplifiedPaymentCustomItemAmountDraftById[itemId] ?? '').trim();
-        const parsed = Number(rawDraft.replace(',', '.'));
-        const resolved = rawDraft === '' ? 0 : Number.isFinite(parsed) ? parsed : fallback;
-        customDesiredAmountById.set(itemId, Number(Math.max(0, Math.min(fallback, resolved)).toFixed(2)));
-      });
-    }
-    let remaining = playtomicPreviewRequestedAmount;
-    return selectedItems
-      .map((item) => {
-        const available = Number(item.remainingAmount || 0);
-        const desired =
-          simplifiedPaymentConceptMode === 'CUSTOM'
-            ? Number(customDesiredAmountById.get(String(item.id)) || 0)
-            : available;
-        const amount = Number(Math.max(0, Math.min(available, desired, remaining)).toFixed(2));
-        remaining = Number(Math.max(0, remaining - amount).toFixed(2));
-        return {
-          id: String(item.id),
-          label: item.type === 'BOOKING' ? 'Cancha' : item.description,
-          amount,
-        };
-      })
-      .filter((row) => row.amount > 0.009);
-  })();
-  const participantIdsWithDebt = simplifiedPayerCandidates
-    .map((participant) => participant.id)
-    .filter((participantId) => Number(participantDebtAmountById.get(participantId) || 0) > 0.009);
-  const applySimplifiedPaymentQuickPreset = (preset: PaymentQuickPreset) => {
-    setSimplifiedPaymentQuickPreset(preset);
-    const payerId = String(simplifiedResolvedPayerParticipantId || '').trim();
-    if (isPlaytomicPaymentModal) {
-      setSimplifiedPaymentImputationMode('BY_CONCEPT');
-      setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
-      setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
-      if (preset === 'COURT_ONLY') {
-        setSimplifiedPaymentConceptMode('COURT');
-        setSimplifiedPaymentSelectedItemIdsDraft([]);
-        setSimplifiedPaymentCustomItemAmountDraftById({});
-        setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('COURT')));
-        return;
-      }
-      if (preset === 'CUSTOM_ITEMS') {
-        setSimplifiedPaymentConceptMode('CUSTOM');
-        setSimplifiedPaymentAmountDraft(
-          formatPaymentAmountDraft(
-            computeConceptBasedMaxAmount(
-              'CUSTOM',
-              simplifiedPaymentSelectedItemIdsDraft,
-              simplifiedPaymentCustomItemAmountDraftById
-            )
-          )
-        );
-        return;
-      }
-      setSimplifiedPaymentConceptMode('AUTO');
-      setSimplifiedPaymentSelectedItemIdsDraft([]);
-      setSimplifiedPaymentCustomItemAmountDraftById({});
-      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(computeConceptBasedMaxAmount('AUTO')));
-      return;
-    }
-    if (preset === 'MY_SHARE') {
-      setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
-      setSimplifiedPaymentConceptMode('AUTO');
-      setSimplifiedPaymentSelectedItemIdsDraft([]);
-      setSimplifiedPaymentCustomItemAmountDraftById({});
-      setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
-      setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
-      const payerDebt = Number(participantDebtAmountById.get(payerId) || 0);
-      const nextAmount = Number(Math.max(0, Math.min(simplifiedRemainingAfterQueue, payerDebt)).toFixed(2));
-      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
-      return;
-    }
-    if (preset === 'FULL') {
-      setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
-      setSimplifiedPaymentConceptMode('AUTO');
-      setSimplifiedPaymentSelectedItemIdsDraft([]);
-      setSimplifiedPaymentCustomItemAmountDraftById({});
-      setSimplifiedPaymentCoveredParticipantIdsDraft(participantIdsWithDebt);
-      setSimplifiedPaymentCoveredParticipantIdDraft(participantIdsWithDebt[0] || payerId);
-      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(simplifiedRemainingAfterQueue));
-      return;
-    }
-    if (preset === 'COURT_ONLY') {
-      setSimplifiedPaymentImputationMode('BY_CONCEPT');
-      setSimplifiedPaymentConceptMode('COURT');
-      setSimplifiedPaymentSelectedItemIdsDraft([]);
-      setSimplifiedPaymentCustomItemAmountDraftById({});
-      setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
-      setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
-      const nextAmount = computeConceptBasedMaxAmount('COURT');
-      setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
-      return;
-    }
-    setSimplifiedPaymentImputationMode('BY_CONCEPT');
-    setSimplifiedPaymentConceptMode('CUSTOM');
-    setSimplifiedPaymentCoveredParticipantIdsDraft(payerId ? [payerId] : []);
-    setSimplifiedPaymentCoveredParticipantIdDraft(payerId);
-    const nextAmount = computeConceptBasedMaxAmount(
-      'CUSTOM',
-      simplifiedPaymentSelectedItemIdsDraft,
-      simplifiedPaymentCustomItemAmountDraftById
-    );
-    setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
-  };
+    simplifiedRemainingAmount > 0.009;
+
   const simplifiedSectionTabs: Array<{ id: SimplifiedSidebarSection; label: string }> = [
     { id: 'DETAILS', label: 'Detalle' },
     ...(bookingKind === 'block'
       ? []
       : [{ id: 'CONSUMPTIONS' as const, label: 'Consumos' }]),
-    { id: 'BILLING', label: 'Cobros y participantes' },
+    { id: 'BILLING', label: 'Participantes y cuenta' },
     { id: 'HISTORY', label: 'Historial' },
   ];
   const consumptionProductOptions: ComboOption[] = consumptionProducts.map((product) => ({
@@ -9182,6 +5864,127 @@ export default function AdminAgendaPlaygroundPage() {
         ? `${product.price.toFixed(2)} $`
         : `${product.price.toFixed(2)} $ · Stock ${Math.max(0, Math.floor(product.stock))}`,
   }));
+  const previewSeriesEditScope = async (scope: EditSeriesScope) => {
+    const fixedBookingId = Number(editingBooking?.fixedBookingId || 0);
+    const occurrenceBookingId = Number(editingBookingId || 0);
+    const courtId = Number(selectedCourtId || 0);
+    if (!Number.isFinite(fixedBookingId) || fixedBookingId <= 0) return;
+    if (!Number.isFinite(courtId) || courtId <= 0) {
+      setFormError('Seleccioná una cancha válida para previsualizar la serie.');
+      return;
+    }
+
+    setSeriesEditPreviewLoading(true);
+    setSeriesEditPreviewScope(scope);
+    setSeriesEditPreviewSummary(null);
+    try {
+      const startDateTime = buildStartDateTimeFromSlot(selectedDate, selectedStartSlot);
+      const durationMinutes = Math.max(15, (selectedEndSlot - selectedStartSlot) * slotMinutes);
+      const result = await rescheduleFixedBooking(fixedBookingId, {
+        scope,
+        occurrenceBookingId: Number.isFinite(occurrenceBookingId) && occurrenceBookingId > 0
+          ? occurrenceBookingId
+          : undefined,
+        courtId,
+        startDateTime,
+        durationMinutes,
+        previewOnly: true,
+      });
+      const overlapItemsRaw = Array.isArray((result as any)?.overlaps) ? (result as any).overlaps : [];
+      const applicableItemsRaw = Array.isArray((result as any)?.applicableItems)
+        ? (result as any).applicableItems
+        : [];
+      const failureMessages = Array.isArray((result as any)?.failures)
+        ? (result as any).failures
+            .map((item: any) => String(item?.reason || '').trim())
+            .filter((reason: string) => reason.length > 0)
+        : [];
+      setSeriesEditPreviewSummary({
+        scope,
+        totalCandidates: Number((result as any)?.totalCandidates || applicableItemsRaw.length || overlapItemsRaw.length || 0),
+        applicableCount: Number((result as any)?.willUpdateCount ?? applicableItemsRaw.length ?? 0),
+        applicableItems: applicableItemsRaw
+          .map((item: any) => mapSeriesAppliedItem(item, selectedCourt?.name || 'Cancha'))
+          .sort((a, b) => Number(a.sortStartMs || 0) - Number(b.sortStartMs || 0)),
+        skippedCount: Number((result as any)?.skippedCount || overlapItemsRaw.length),
+        overlapItems: overlapItemsRaw.map((item: any) => mapSeriesImpactItem(item, selectedCourt?.name || 'Cancha')),
+        failureMessages,
+      });
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'previewSeriesEditScope' }, error);
+      const normalized = normalizeApiError(error, 'No se pudo previsualizar la edición de la serie.');
+      setSeriesEditPreviewSummary({
+        scope,
+        totalCandidates: 0,
+        applicableCount: 0,
+        applicableItems: [],
+        skippedCount: 0,
+        overlapItems: [],
+        failureMessages: [toUserSafeMessage(normalized.message, 'No se pudo previsualizar la edición de la serie.')],
+      });
+    } finally {
+      setSeriesEditPreviewLoading(false);
+    }
+  };
+
+  const previewSeriesDeleteScope = async (scope: EditSeriesScope) => {
+    const fixedBookingId = Number(editingBooking?.fixedBookingId || 0);
+    const occurrenceBookingId = Number(editingBookingId || 0);
+    if (!Number.isFinite(fixedBookingId) || fixedBookingId <= 0) return;
+
+    setSeriesDeletePreviewLoading(true);
+    setSeriesDeletePreviewScope(scope);
+    setSeriesDeletePreviewSummary(null);
+    try {
+      const result = await cancelFixedBooking(fixedBookingId, {
+        scope,
+        occurrenceBookingId: Number.isFinite(occurrenceBookingId) && occurrenceBookingId > 0
+          ? occurrenceBookingId
+          : undefined,
+        previewOnly: true,
+      });
+      const applicableItemsRaw = Array.isArray((result as any)?.applicableItems)
+        ? (result as any).applicableItems
+        : [];
+      const skippedRaw = Array.isArray((result as any)?.skipped) ? (result as any).skipped : [];
+      setSeriesDeletePreviewSummary({
+        scope,
+        totalCandidates: Number((result as any)?.totalCandidates || applicableItemsRaw.length || skippedRaw.length || 0),
+        applicableCount: Number((result as any)?.cancelledCount ?? applicableItemsRaw.length ?? 0),
+        applicableItems: applicableItemsRaw
+          .map((item: any) => mapSeriesAppliedItem(item, selectedCourt?.name || 'Cancha'))
+          .sort((a, b) => Number(a.sortStartMs || 0) - Number(b.sortStartMs || 0)),
+        skippedCount: Number((result as any)?.skippedCount || skippedRaw.length),
+        overlapItems: skippedRaw.map((item: any) =>
+          mapSeriesImpactItem(
+            {
+              requestedStartDateTime: item?.startDateTime,
+              conflictingCourtName: selectedCourt?.name || 'Cancha',
+              conflictingActivityName: String(item?.reason || '').trim() || 'Ocurrencia omitida',
+            },
+            selectedCourt?.name || 'Cancha'
+          )
+        ),
+        failureMessages: skippedRaw
+          .map((item: any) => String(item?.reason || '').trim())
+          .filter((reason: string) => reason.length > 0),
+      });
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'previewSeriesDeleteScope' }, error);
+      const normalized = normalizeApiError(error, 'No se pudo previsualizar la cancelación de la serie.');
+      setSeriesDeletePreviewSummary({
+        scope,
+        totalCandidates: 0,
+        applicableCount: 0,
+        applicableItems: [],
+        skippedCount: 0,
+        overlapItems: [],
+        failureMessages: [toUserSafeMessage(normalized.message, 'No se pudo previsualizar la cancelación de la serie.')],
+      });
+    } finally {
+      setSeriesDeletePreviewLoading(false);
+    }
+  };
   const selectedConsumptionProduct = consumptionProducts.find(
     (product) => String(product.id) === String(consumptionProductDraft)
   ) || null;
@@ -9234,8 +6037,8 @@ export default function AdminAgendaPlaygroundPage() {
     };
     const formatBillingModeLabel = (mode: unknown): string => {
       const normalized = String(mode || '').trim().toUpperCase();
-      if (normalized === 'INDIVIDUAL') return 'Pago único';
-      if (normalized === 'SHARED') return 'Pago dividido';
+      if (normalized === 'INDIVIDUAL') return 'Modo individual';
+      if (normalized === 'SHARED') return 'Modo compartido';
       return 'Sin definir';
     };
     const formatTimelineSourceLabel = (source: unknown): string => {
@@ -9318,15 +6121,23 @@ export default function AdminAgendaPlaygroundPage() {
       if (ref.startsWith('guest:')) return 'Invitado';
       return 'Referencia interna';
     };
-    const domainEvents = Array.isArray(bookingTimelineEvents) ? bookingTimelineEvents : [];
+    const domainEvents = Array.isArray(bookingHistoryEntries) ? bookingHistoryEntries : [];
 
     domainEvents.forEach((event, index) => {
       const payload =
-        event.payload && typeof event.payload === 'object'
-          ? event.payload
+        event.detail && typeof event.detail === 'object'
+          ? event.detail
           : {};
-      const normalizedType = String(event.type || '').trim().toUpperCase();
-      const rawCreatedAt = String(event.createdAt || '');
+      const previousState =
+        event.previousState && typeof event.previousState === 'object'
+          ? event.previousState
+          : {};
+      const nextState =
+        event.nextState && typeof event.nextState === 'object'
+          ? event.nextState
+          : {};
+      const normalizedType = String(event.action || '').trim().toUpperCase();
+      const rawCreatedAt = String(event.occurredAt || '');
       const createdAt = rawCreatedAt ? new Date(rawCreatedAt) : null;
       const hasValidDate = Boolean(createdAt && Number.isFinite(createdAt.getTime()));
       const eventDate = hasValidDate ? (createdAt as Date) : reservationDate;
@@ -9370,14 +6181,14 @@ export default function AdminAgendaPlaygroundPage() {
         title = 'Reserva creada';
         detail = detailParts.length > 0 ? detailParts.join(' - ') : 'Reserva creada.';
       } else if (normalizedType === 'BOOKING_CANCELLED' || normalizedType === 'CANCELLED') {
-        const source = formatTimelineSourceLabel((payload as any)?.source);
+        const source = formatTimelineSourceLabel(event.source || (payload as any)?.source);
         title = 'Reserva cancelada';
         detail = source ? `Origen: ${source}` : 'Reserva cancelada.';
       } else if (normalizedType === 'BOOKING_RESCHEDULED') {
-        const previousStart = formatTimelineDateTime((payload as any)?.previousStartDateTime);
-        const nextStart = formatTimelineDateTime((payload as any)?.startDateTime);
-        const previousCourtId = Number((payload as any)?.previousCourtId || 0);
-        const courtId = Number((payload as any)?.courtId || 0);
+        const previousStart = formatTimelineDateTime((previousState as any)?.startDateTime);
+        const nextStart = formatTimelineDateTime((nextState as any)?.startDateTime);
+        const previousCourtId = Number((previousState as any)?.courtId || (payload as any)?.previousCourtId || 0);
+        const courtId = Number((nextState as any)?.courtId || (payload as any)?.courtId || 0);
         title = 'Reserva reprogramada';
         const detailParts = [
           previousStart ? `Desde: ${previousStart}` : '',
@@ -9386,11 +6197,11 @@ export default function AdminAgendaPlaygroundPage() {
         ].filter(Boolean);
         detail = detailParts.length > 0 ? detailParts.join(' - ') : 'Reserva reprogramada.';
       } else if (normalizedType === 'BOOKING_CONFIRMED' || normalizedType === 'CONFIRMED') {
-        const source = formatTimelineSourceLabel((payload as any)?.source);
+        const source = formatTimelineSourceLabel(event.source || (payload as any)?.source);
         title = 'Reserva confirmada';
         detail = source ? `Origen: ${source}` : 'Reserva confirmada.';
       } else if (normalizedType === 'BOOKING_COMPLETED' || normalizedType === 'COMPLETED') {
-        const source = formatTimelineSourceLabel((payload as any)?.source);
+        const source = formatTimelineSourceLabel(event.source || (payload as any)?.source);
         title = 'Reserva finalizada';
         detail = source ? `Origen: ${source}` : 'Reserva finalizada.';
       } else if (normalizedType === 'BOOKING_PARTICIPANT_ADDED') {
@@ -9428,9 +6239,9 @@ export default function AdminAgendaPlaygroundPage() {
           );
         }
         detail = detailParts.join(' - ');
-      } else if (normalizedType === 'BOOKING_CLIENT_CHANGED') {
-        const oldClientName = String((payload as any)?.oldClientName || '').trim();
-        const newClientName = String((payload as any)?.newClientName || '').trim();
+      } else if (normalizedType === 'BOOKING_OWNER_CHANGED' || normalizedType === 'BOOKING_CLIENT_CHANGED') {
+        const oldClientName = String((previousState as any)?.clientName || (payload as any)?.oldClientName || '').trim();
+        const newClientName = String((nextState as any)?.clientName || (payload as any)?.newClientName || '').trim();
         title = 'Titular cambiado';
         if (oldClientName && newClientName) {
           detail = `${oldClientName} -> ${newClientName}`;
@@ -9439,7 +6250,7 @@ export default function AdminAgendaPlaygroundPage() {
         } else {
           detail = 'Se actualizó el titular de la reserva.';
         }
-      } else if (normalizedType === 'PRODUCT_SOLD') {
+      } else if (normalizedType === 'BOOKING_CONSUMPTION_ADDED' || normalizedType === 'PRODUCT_SOLD') {
         const productName = String((payload as any)?.productName || '').trim() || 'Consumo';
         const quantity = Number((payload as any)?.quantity || 0);
         const totalAmount = Number((payload as any)?.totalAmount || 0);
@@ -9449,7 +6260,7 @@ export default function AdminAgendaPlaygroundPage() {
           Number.isFinite(totalAmount) && totalAmount > 0.009 ? `Total: ${totalAmount.toFixed(2)} $` : '',
         ].filter(Boolean);
         detail = detailParts.length > 0 ? detailParts.join(' - ') : 'Consumo agregado.';
-      } else if (normalizedType === 'PRODUCT_REMOVED') {
+      } else if (normalizedType === 'BOOKING_CONSUMPTION_REMOVED' || normalizedType === 'PRODUCT_REMOVED') {
         const productName = String((payload as any)?.productName || '').trim() || 'Consumo';
         const quantity = Number((payload as any)?.quantity || 0);
         const totalAmount = Number((payload as any)?.totalAmount || 0);
@@ -9461,7 +6272,7 @@ export default function AdminAgendaPlaygroundPage() {
         detail = detailParts.length > 0 ? detailParts.join(' - ') : 'Consumo eliminado.';
       } else if (normalizedType === 'BOOKING_NOTES_UPDATED') {
         title = 'Notas actualizadas';
-        const notes = String((payload as any)?.notes || '').trim();
+        const notes = String((nextState as any)?.notes || (payload as any)?.notes || '').trim();
         detail = notes.length > 0 ? 'Se actualizó el detalle interno de la reserva.' : 'Se quitaron las notas internas.';
       } else {
         detail = 'Se registró una actualización.';
@@ -9511,6 +6322,119 @@ export default function AdminAgendaPlaygroundPage() {
     !simplifiedIsEditingReservation || simplifiedSidebarSection === 'BILLING';
   const showSimplifiedHistorySection =
     simplifiedIsEditingReservation && simplifiedSidebarSection === 'HISTORY';
+  const cancelBookingPaidAmount = roundMoney(
+    Number(bookingFinancial?.paid ?? editingBooking?.hoverPayment?.paidAmount ?? 0)
+  );
+  const cancelBookingHasPayments = cancelBookingPaidAmount > 0.009;
+  const normalizedCancelRefundAmount = roundMoney(
+    Math.max(0, Number(cancelRefundAmountInput || 0))
+  );
+  const buildCancelBookingOptions = () => {
+    if (!cancelBookingHasPayments || !cancelRefundExecuteNow) {
+      return { options: undefined as Parameters<typeof cancelBooking>[1] | undefined };
+    }
+    const amount = Number(cancelRefundAmountInput || 0);
+    if (!Number.isFinite(amount) || amount < 0) {
+      return { error: 'Ingresá un monto de devolución válido.' };
+    }
+    if (amount - cancelBookingPaidAmount > 0.009) {
+      return { error: 'La devolución no puede superar lo pagado.' };
+    }
+    return {
+      options: {
+        refund: {
+          amount,
+          executeNow: true,
+          reasonType: cancelRefundReasonType,
+          executionNotes: String(cancelRefundExecutionNotes || '').trim() || undefined,
+        },
+      } satisfies Parameters<typeof cancelBooking>[1],
+    };
+  };
+  const handleDeleteBooking = async (scope?: EditSeriesScope) => {
+    const bookingId = Number(editingBookingId || 0);
+    const fixedBookingId = Number(editingBooking?.fixedBookingId || 0);
+    if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+    setIsDeletingBooking(true);
+    setCancelBookingFlowError('');
+    try {
+      if (Number.isFinite(fixedBookingId) && fixedBookingId > 0 && scope) {
+        await cancelFixedBooking(fixedBookingId, {
+          scope,
+          occurrenceBookingId: bookingId,
+        });
+      } else {
+        const result = buildCancelBookingOptions();
+        if ('error' in result && result.error) {
+          setCancelBookingFlowError(result.error);
+          return;
+        }
+        await cancelBooking(bookingId, result.options);
+      }
+      await reloadSchedule();
+      setDrawerOpen(false);
+      setEditingBookingId(null);
+      setEditingBaseline(null);
+      closeDeleteBookingFlow();
+      showAgendaToast('Reserva cancelada.', 'success');
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'handleDeleteBooking' }, error);
+      const normalized = normalizeApiError(error, 'No se pudo cancelar la reserva.');
+      setCancelBookingFlowError(toUserSafeMessage(normalized.message, 'No se pudo cancelar la reserva.'));
+    } finally {
+      setIsDeletingBooking(false);
+    }
+  };
+  const handleConfirmPendingBooking = async () => {
+    const bookingId = Number(editingBookingId || 0);
+    if (!Number.isFinite(bookingId) || bookingId <= 0 || confirmingBooking) return;
+    try {
+      setConfirmingBooking(true);
+      await confirmBooking(bookingId);
+      await refreshPersistedBookingView(bookingId, {
+        schedule: true,
+        financial: true,
+        consumptions: true,
+        history: true,
+      });
+      showAgendaToast('Reserva confirmada.', 'success');
+    } catch (error: any) {
+      reportUiError({ area: 'AgendaPlayground', action: 'handleConfirmPendingBooking' }, error);
+      applyBookingError(error, 'No se pudo confirmar la reserva.');
+    } finally {
+      setConfirmingBooking(false);
+    }
+  };
+  const openDeleteBookingFlow = () => {
+    setCancelBookingFlowError('');
+    setDeleteBookingFinalConfirmOpen(false);
+    if (editingBooking?.fixedBookingId) {
+      setSeriesDeletePreviewScope(null);
+      setSeriesDeletePreviewSummary(null);
+      setDeleteSeriesScopeModalOpen(true);
+      return;
+    }
+    setDeleteBookingConfirmOpen(true);
+  };
+  const addParticipantRow = () => {
+    setParticipants((previous) => [
+      ...previous,
+      {
+        id: `participant-${Date.now()}-${previous.length + 1}`,
+        name: '',
+        contact: '',
+        paid: false,
+        isOwner: false,
+        sourceType: 'guest',
+        paymentMethod: 'CASH',
+        customPrice: null,
+      },
+    ]);
+  };
+  const confirmCancelBookingFromDrawer = async () => {
+    setDeleteBookingFinalConfirmOpen(false);
+    await handleDeleteBooking();
+  };
   const seriesDeletePaidItems = seriesDeletePreviewSummary?.paidItems || [];
   const seriesDeleteHasPaidItems = seriesDeletePaidItems.length > 0;
   const seriesDeleteBlocksMassCancel =
@@ -9631,7 +6555,7 @@ export default function AdminAgendaPlaygroundPage() {
                                       const top = bookingDropPreview.startSlot * slotHeight + 2;
                                       const height = (bookingDropPreview.endSlot - bookingDropPreview.startSlot) * slotHeight - 4;
                                       const visibility = blockContentVisibility(height);
-                                      const isDropConflicted = bookingDropHasConflict;
+                                      const isDropConflicted = false;
                                       return (
                                         <AgendaBookingBlock
                                           title={draggingBookingMeta.title}
@@ -10857,12 +7781,6 @@ export default function AdminAgendaPlaygroundPage() {
                     <p className="text-[14px] text-p-text-secondary">
                       ¿Querés eliminar a <strong>{deleteParticipantConfirm.participantName}</strong> de esta reserva?
                     </p>
-                    {deleteParticipantContext.isChargeResponsible && (
-                      <p className="rounded-lg border border-p-warning bg-p-warning-bg px-3 py-2 text-[12px] text-p-warning">
-                        Este participante es el responsable de pago actual. Al eliminarlo, el responsable pasará a{' '}
-                        <strong>{deleteParticipantContext.nextResponsibleLabel || 'otro participante disponible'}</strong>.
-                      </p>
-                    )}
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
@@ -10876,7 +7794,7 @@ export default function AdminAgendaPlaygroundPage() {
                         onClick={() => {
                           const participantId = deleteParticipantConfirm.participantId;
                           if (participantId) {
-                            removeParticipant(participantId);
+                            void removeParticipant(participantId);
                           }
                           setDeleteParticipantConfirm({ open: false, participantId: null, participantName: '' });
                         }}
@@ -11579,60 +8497,6 @@ export default function AdminAgendaPlaygroundPage() {
                             </div>
                           )}
 
-                          {simplifiedIsEditingReservation && (
-                            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px]">
-                              <div>
-                                <p className="text-[12px] font-medium text-p-text-muted">Tipo de pago</p>
-                                <div className="mt-1 grid grid-cols-2 rounded-xl border border-p-border bg-p-surface-2 p-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleBillingModeChange('INDIVIDUAL')}
-                                    disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
-                                    className={`h-11 rounded-lg text-[15px] font-semibold transition ${
-                                      paymentMode === 'Único'
-                                        ? 'bg-ink-900 text-ink-50'
-                                        : 'text-p-text-muted hover:bg-p-surface-2'
-                                    } disabled:opacity-55`}
-                                  >
-                                    Pago único
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleBillingModeChange('SHARED')}
-                                    disabled={isBillingModeSwitchLocked || isBillingConfigLockedByPayments}
-                                    className={`h-11 rounded-lg text-[15px] font-semibold transition ${
-                                      paymentMode === 'Dividido'
-                                        ? 'bg-ink-900 text-ink-50'
-                                        : 'text-p-text-muted hover:bg-p-surface-2'
-                                    } disabled:opacity-55`}
-                                  >
-                                    Pago dividido
-                                  </button>
-                                </div>
-                              </div>
-                              <div>
-                                <p className="text-[12px] font-medium text-p-text-muted">
-                                  {paymentMode === 'Único' ? 'Precio' : 'Precio por persona'}
-                                </p>
-                                <div className="mt-1 h-12 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
-                                  <input
-                                    type="number"
-                                    readOnly
-                                    value={isFinancialDisplayPending
-                                      ? ''
-                                      : paymentMode === 'Único'
-                                        ? Number(totalPrice.toFixed(2))
-                                        : Number((totalPrice / Math.max(chargedParticipantsCount, 1)).toFixed(2))}
-                                    className="w-full bg-transparent text-[18px] font-semibold text-p-text outline-none"
-                                  />
-                                  <span className="ml-2 text-[18px] font-semibold text-p-text-muted">$</span>
-                                </div>
-                                {paymentFieldError && (
-                                  <p className="mt-1 text-[12px] font-medium text-p-error">{paymentFieldError}</p>
-                                )}
-                              </div>
-                            </div>
-                          )}
                         </>
                       ))}
 
@@ -11875,7 +8739,7 @@ export default function AdminAgendaPlaygroundPage() {
                       {simplifiedIsEditingReservation && (
                         <section className="rounded-xl border border-p-border bg-p-surface-2 p-4">
                           <div className="flex items-center justify-between">
-                            <p className="text-[18px] font-semibold text-p-text">Cobro</p>
+                            <p className="text-[18px] font-semibold text-p-text">Cuenta</p>
                             <span
                               className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                                 simplifiedPaymentStatusLabel === 'Pagado'
@@ -11914,19 +8778,24 @@ export default function AdminAgendaPlaygroundPage() {
                           <div className="mt-3 flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={openSimplifiedPaymentModal}
+                              onClick={() => void openAgendaAccountDrawer(persistedEditingBookingId || 0, 'overview')}
+                              disabled={!persistedEditingBookingId}
+                              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[14px] font-semibold text-p-text-secondary hover:bg-p-surface-2 disabled:opacity-50"
+                            >
+                              <Receipt size={14} />
+                              Ver cuenta
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void openAgendaAccountDrawer(persistedEditingBookingId || 0, 'payment')}
                               disabled={!simplifiedCanRegisterPayment}
                               className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-4 text-[14px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                             >
                               <CreditCard size={14} />
-                              Registrar pago
+                              Cobrar
                             </button>
                             {!persistedEditingBookingId ? (
                               <p className="text-[12px] text-p-text-muted">Primero creá la reserva.</p>
-                            ) : billingConfigLoadError ? (
-                              <AdminFeedbackBanner tone="error" compact>
-                                {billingConfigLoadError}
-                              </AdminFeedbackBanner>
                             ) : isPaymentLockedByManualPending ? (
                               <p className="text-[12px] text-p-text-muted">Confirmá la reserva para habilitar pagos.</p>
                             ) : null}
@@ -11939,23 +8808,28 @@ export default function AdminAgendaPlaygroundPage() {
                           <div className="flex items-center justify-between gap-3">
                             <p className="text-[18px] font-semibold text-p-text">Participantes</p>
                             {simplifiedOwnerAdded && !simplifiedNewParticipantOpen && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSimplifiedNewParticipantOpen(true);
-                                  setSimplifiedNewParticipantName('');
-                                  setSimplifiedNewParticipantContact('');
-                                  setSimplifiedNewParticipantSourceTypeDraft('guest');
-                                  setSimplifiedNewParticipantEntityRefDraft('');
-                                  setSimplifiedNewParticipantSuggestionsOpen(false);
-                                  setSimplifiedNewParticipantSearchLoading(false);
-                                  setSimplifiedNewParticipantSuggestions([]);
-                                  setFormError('');
-                                }}
-                                className="text-[14px] font-semibold text-p-accent hover:text-p-accent"
-                              >
-                                + Nuevo participante
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSimplifiedNewParticipantOpen(true);
+                                    setSimplifiedNewParticipantName('');
+                                    setSimplifiedNewParticipantContact('');
+                                    setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                    setSimplifiedNewParticipantEntityRefDraft('');
+                                    setSimplifiedNewParticipantSelectedUserIdDraft(undefined);
+                                    setSimplifiedNewParticipantPersonKindDraft(undefined);
+                                    setSimplifiedNewParticipantPersonKeyDraft(undefined);
+                                    setSimplifiedNewParticipantPersonSearchQueryDraft(undefined);
+                                    setSimplifiedNewParticipantBadgesDraft(undefined);
+                                    setSimplifiedNewParticipantSuggestionsOpen(false);
+                                    setSimplifiedNewParticipantSearchLoading(false);
+                                    setSimplifiedNewParticipantSuggestions([]);
+                                    setFormError('');
+                                  }}
+                                  className="text-[14px] font-semibold text-p-accent hover:text-p-accent"
+                                >
+                                  + Nuevo participante
+                                </button>
                             )}
                           </div>
                           {participantsFieldError && (
@@ -11964,37 +8838,16 @@ export default function AdminAgendaPlaygroundPage() {
                           {simplifiedOwnerAdded && simplifiedNamedParticipants.length > 0 ? (
                             <div className="mt-3 space-y-3">
                               {simplifiedNamedParticipants.map((participant, index) => {
+                                const participantOrdinal = participant.isOwner
+                                  ? null
+                                  : simplifiedNamedParticipants
+                                      .slice(0, index + 1)
+                                      .filter((entry) => !entry.isOwner).length;
                                 const normalizedParticipantRef = String(participant.entityRef || '').trim().toLowerCase();
                                 const participantIsLinkedRecord =
                                   participant.sourceType !== 'guest' ||
                                   normalizedParticipantRef.startsWith('client:') ||
                                   normalizedParticipantRef.startsWith('user:');
-                                const participantHasPaymentControls = simplifiedParticipantWithPaymentControlsIdSet.has(participant.id);
-                                const participantPaidComputed = participantPaidComputedIdSet.has(participant.id);
-                                const participantAssignedAmount = Number(participantAssignedAmountById.get(participant.id) || 0);
-                                const participantCoveredAmount = Number(participantCoverageAmountById.get(participant.id) || 0);
-                                const participantPayerAmount = Number(participantPayerAmountById.get(participant.id) || 0);
-                                const participantDebtAmount = Number(participantDebtAmountById.get(participant.id) || 0);
-                                const participantHasPayerActivity =
-                                  paymentMode === 'Único' &&
-                                  !participantHasPaymentControls &&
-                                  participantPayerAmount > 0.009;
-                                const participantPaymentStatusLabel =
-                                  participantPaidComputed
-                                    ? 'Pagado'
-                                    : participantCoveredAmount > 0.009 && participantDebtAmount > 0.009
-                                      ? 'Parcial'
-                                      : 'Pendiente';
-                                const participantPaymentStatusTone =
-                                  participantPaymentStatusLabel === 'Pagado'
-                                    ? 'bg-p-positive-bg text-p-positive'
-                                    : participantPaymentStatusLabel === 'Parcial'
-                                      ? 'bg-p-warning-bg text-p-warning'
-                                      : 'bg-p-surface-3 text-p-text-secondary';
-                                const participantDisplayedPrice = Number(
-                                  (participantHasPaymentControls ? participantAssignedAmount : participantPayerAmount).toFixed(2)
-                                );
-                                const shouldShowParticipantAmount = participantHasPaymentControls;
                                 const showParticipantActions = !(participant.isOwner && (participantIsLinkedRecord || !persistedEditingBookingId));
                                 return (
                                   <div
@@ -12002,51 +8855,18 @@ export default function AdminAgendaPlaygroundPage() {
                                     data-participant-shell-id={participant.id}
                                     className="rounded-xl border border-p-border bg-p-surface px-3 py-3"
                                   >
-                                    <div className={`grid ${shouldShowParticipantAmount ? 'grid-cols-[42px_minmax(0,1fr)_auto_32px]' : 'grid-cols-[42px_minmax(0,1fr)_32px]'} gap-2 items-start`}>
+                                    <div className="grid grid-cols-[42px_minmax(0,1fr)_32px] gap-2 items-start">
                                       <div className="h-10 w-10 rounded-full bg-p-surface-2 text-p-text-secondary text-[14px] font-semibold grid place-items-center">
                                         {participant.name.trim().charAt(0).toUpperCase() || 'P'}
                                       </div>
                                       <div>
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className="inline-flex items-center rounded-full bg-p-positive-bg px-2.5 py-1 text-[11px] font-semibold text-p-accent">
-                                            {participant.isOwner ? 'Titular' : `Participante ${index + 1}`}
+                                            {participant.isOwner ? 'Titular' : `Participante ${participantOrdinal}`}
                                           </span>
-                                          <span
-                                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                                              participant.sourceType === 'guest'
-                                                ? 'bg-p-surface-2 text-p-text-secondary'
-                                                : 'bg-p-positive-bg text-p-positive'
-                                            }`}
-                                          >
-                                            {participant.sourceType === 'guest' ? 'Invitado' : 'Vinculado'}
-                                          </span>
-                                          {participantHasPaymentControls && (
-                                            <span
-                                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${participantPaymentStatusTone}`}
-                                            >
-                                              {participantPaymentStatusLabel}
-                                            </span>
-                                          )}
-                                          {participantHasPayerActivity && (
-                                            <span className="inline-flex items-center rounded-full bg-p-positive-bg px-2.5 py-1 text-[11px] font-semibold text-p-accent">
-                                              Pagador
-                                            </span>
-                                          )}
                                         </div>
                                         <p className="text-[15px] font-semibold text-p-text">{participant.name}</p>
-                                        {participantHasPayerActivity && (
-                                          <p className="mt-0.5 text-[12px] text-p-text-secondary">
-                                            Pagó {participantPayerAmount.toFixed(2)} $
-                                          </p>
-                                        )}
                                       </div>
-                                      {shouldShowParticipantAmount && (
-                                        <div className="pt-0.5 text-right">
-                                          <p className="text-[15px] font-semibold text-p-text">
-                                            {participantDisplayedPrice} $
-                                          </p>
-                                        </div>
-                                      )}
                                       {showParticipantActions && (
                                         <button
                                           type="button"
@@ -12271,9 +9091,7 @@ export default function AdminAgendaPlaygroundPage() {
                                           badges: undefined,
                                         });
                                         setSimplifiedOwnerAdded(false);
-                                        setSimplifiedOwnerPaymentMethodDraft('');
                                         setSimplifiedEditingParticipantId(null);
-                                        setSimplifiedEditPaymentMethodDraft('');
                                         setSimplifiedOwnerSuggestionsOpen(false);
                                         setSimplifiedOwnerSearchLoading(false);
                                         setSimplifiedOwnerSuggestions([]);
@@ -12375,7 +9193,7 @@ export default function AdminAgendaPlaygroundPage() {
                                           >
                                             <span className="block text-[12px] font-semibold text-p-text">Cargar nuevo titular</span>
                                             <span className="block text-[11px] text-p-text-muted">
-                                              Usar &quot;{ownerParticipant.name.trim()}&quot; y completar teléfono, email o DNI acá mismo.
+                                              Usar &quot;{ownerParticipant.name.trim()}&quot;, cargar teléfono y, si querés, sumar email o DNI acá mismo.
                                             </span>
                                           </button>
                                         </>
@@ -12490,7 +9308,6 @@ export default function AdminAgendaPlaygroundPage() {
                                   if (!ownerHasName) return;
                                   setSimplifiedOwnerAdded(true);
                                   setSimplifiedEditingParticipantId(null);
-                                  setSimplifiedEditPaymentMethodDraft('');
                                   setSimplifiedOwnerSuggestionsOpen(false);
                                   setSimplifiedOwnerSearchLoading(false);
                                   setSimplifiedOwnerSuggestions([]);
@@ -12576,11 +9393,55 @@ export default function AdminAgendaPlaygroundPage() {
                                                 className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
                                               >
                                                 <span className="block text-[12px] font-semibold text-p-text">{suggestion.label}</span>
+                                                {Array.isArray(suggestion.badges) && suggestion.badges.length > 0 && (
+                                                  <span className="mt-1 flex flex-wrap gap-1">
+                                                    {suggestion.badges.map((badge) => (
+                                                      <span
+                                                        key={`${suggestion.id}-${badge}`}
+                                                        className="inline-flex items-center rounded-full border border-p-border bg-p-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-p-text-muted"
+                                                      >
+                                                        {badge}
+                                                      </span>
+                                                    ))}
+                                                  </span>
+                                                )}
                                                 {suggestion.secondary && (
                                                   <span className="block text-[11px] text-p-text-muted">{suggestion.secondary}</span>
                                                 )}
                                               </button>
                                             ))}
+                                            {simplifiedNewParticipantName.trim().length > 0 && (
+                                              <>
+                                                {simplifiedNewParticipantSuggestions.length === 0 && !simplifiedNewParticipantSearchLoading && (
+                                                  <p className="px-2 py-1 text-[11px] text-p-text-muted">
+                                                    No encontramos personas con ese dato.
+                                                  </p>
+                                                )}
+                                                <button
+                                                  type="button"
+                                                  onMouseDown={(event) => event.preventDefault()}
+                                                  onClick={() => {
+                                                    setSimplifiedNewParticipantSourceTypeDraft('guest');
+                                                    setSimplifiedNewParticipantEntityRefDraft('');
+                                                    setSimplifiedNewParticipantSelectedUserIdDraft(undefined);
+                                                    setSimplifiedNewParticipantPersonKindDraft(undefined);
+                                                    setSimplifiedNewParticipantPersonKeyDraft(undefined);
+                                                    setSimplifiedNewParticipantPersonSearchQueryDraft(undefined);
+                                                    setSimplifiedNewParticipantBadgesDraft(undefined);
+                                                    setSimplifiedNewParticipantSuggestionsOpen(false);
+                                                    setSimplifiedNewParticipantSearchLoading(false);
+                                                    setSimplifiedNewParticipantSuggestions([]);
+                                                    setFormError('');
+                                                  }}
+                                                  className="mt-1 w-full rounded-lg border border-dashed border-p-border px-2 py-2 text-left shadow-p-md hover:bg-p-surface-2 hover:shadow-p-md"
+                                                >
+                                                  <span className="block text-[12px] font-semibold text-p-text">Crear nuevo cliente</span>
+                                                  <span className="block text-[11px] text-p-text-muted">
+                                                    Usar &quot;{simplifiedNewParticipantName.trim()}&quot;, cargar teléfono y, si querés, sumar email o DNI acá mismo.
+                                                  </span>
+                                                </button>
+                                              </>
+                                            )}
                                           </div>
                                         </div>,
                                         document.body
@@ -12599,7 +9460,7 @@ export default function AdminAgendaPlaygroundPage() {
                                           );
                                         }}
                                         readOnly={simplifiedNewParticipantHasLinkedSelection}
-                                        placeholder="Teléfono (opcional)"
+                                        placeholder="Teléfono"
                                         className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${
                                           simplifiedNewParticipantHasLinkedSelection
                                             ? 'border-p-border bg-p-surface-2 text-p-text-secondary cursor-not-allowed'
@@ -12630,20 +9491,26 @@ export default function AdminAgendaPlaygroundPage() {
                                   </div>
                                   {simplifiedNewParticipantHasLinkedSelection && (
                                     <div className="mt-2 flex items-center justify-between gap-2">
-                                      <p className="text-[12px] text-p-text-muted">
-                                        Registro asociado seleccionado. No se puede editar manualmente.
-                                      </p>
+                                      <div>
+                                        <p className="text-[12px] text-p-text-muted">
+                                          Registro asociado seleccionado. No se puede editar manualmente.
+                                        </p>
+                                        {Array.isArray(simplifiedNewParticipantBadgesDraft) && simplifiedNewParticipantBadgesDraft.length > 0 && (
+                                          <div className="mt-1 flex flex-wrap gap-1">
+                                            {simplifiedNewParticipantBadgesDraft.map((badge) => (
+                                              <span
+                                                key={`draft-badge-${badge}`}
+                                                className="inline-flex items-center rounded-full border border-p-border bg-p-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-p-text-muted"
+                                              >
+                                                {badge}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          setSimplifiedNewParticipantName('');
-                                          setSimplifiedNewParticipantContact('');
-                                          setSimplifiedNewParticipantSourceTypeDraft('guest');
-                                          setSimplifiedNewParticipantEntityRefDraft('');
-                                          setSimplifiedNewParticipantSuggestionsOpen(false);
-                                          setSimplifiedNewParticipantSearchLoading(false);
-                                          setSimplifiedNewParticipantSuggestions([]);
-                                        }}
+                                        onClick={resetSimplifiedNewParticipantDraft}
                                         className="shrink-0 text-[12px] font-semibold text-p-accent hover:text-[var(--accent-hover)]"
                                       >
                                         Cambiar selección
@@ -12652,46 +9519,64 @@ export default function AdminAgendaPlaygroundPage() {
                                   )}
                                   {simplifiedNewParticipantName.trim().length > 0 && !hasValidSimplifiedNewParticipantName && (
                                     <p className="mt-2 text-[12px] text-p-text-muted">
-                                      Seleccioná un registro de la lista (o Invitado) antes de agregar.
+                                      Seleccioná una persona existente o cargá teléfono para crear un cliente nuevo.
                                     </p>
                                   )}
                                   <div className="mt-3 flex items-center gap-3">
                                     <button
                                       type="button"
-                                      onClick={() => {
+                                      onClick={async () => {
                                         if (!hasValidSimplifiedNewParticipantName) return;
                                         const normalizedEntityRef = simplifiedNewParticipantEntityRefDraft.trim();
                                         const duplicateLinked = participants.some(
                                           (participant) =>
+                                            !participant.isOwner &&
                                             String(participant.entityRef || '').trim() === normalizedEntityRef
                                         );
                                         if (normalizedEntityRef && duplicateLinked) {
                                           setFormError('Ese participante ya está agregado en esta reserva.');
                                           return;
                                         }
-                                        setParticipants((previous) => [
-                                          ...previous,
-                                          {
-                                            id: `player-${Date.now()}`,
-                                            name: simplifiedNewParticipantName.trim(),
-                                            contact: simplifiedNewParticipantContact.trim(),
-                                            paid: false,
-                                            isOwner: false,
-                                            sourceType: simplifiedNewParticipantSourceTypeDraft,
-                                            paymentMethod: 'CASH',
-                                            entityRef: simplifiedNewParticipantEntityRefDraft,
-                                            customPrice: null,
-                                          },
-                                        ]);
-                                        setSimplifiedNewParticipantOpen(false);
-                                        setSimplifiedNewParticipantName('');
-                                        setSimplifiedNewParticipantContact('');
-                                        setSimplifiedNewParticipantSourceTypeDraft('guest');
-                                        setSimplifiedNewParticipantEntityRefDraft('');
-                                        setSimplifiedNewParticipantSuggestionsOpen(false);
-                                        setSimplifiedNewParticipantSearchLoading(false);
-                                        setSimplifiedNewParticipantSuggestions([]);
-                                        setFormError('');
+                                        const participantDraft: Participant = {
+                                          id: `player-${Date.now()}`,
+                                          name: simplifiedNewParticipantName.trim(),
+                                          contact: simplifiedNewParticipantContact.trim(),
+                                          dni: undefined,
+                                          paid: false,
+                                          isOwner: false,
+                                          sourceType: simplifiedNewParticipantSourceTypeDraft,
+                                          entityRef: simplifiedNewParticipantEntityRefDraft || undefined,
+                                          selectedUserId: simplifiedNewParticipantSelectedUserIdDraft,
+                                          personKind: simplifiedNewParticipantPersonKindDraft,
+                                          personKey: simplifiedNewParticipantPersonKeyDraft,
+                                          personSearchQuery: simplifiedNewParticipantPersonSearchQueryDraft,
+                                          badges: simplifiedNewParticipantBadgesDraft,
+                                          paymentMethod: 'CASH',
+                                          customPrice: null,
+                                        };
+                                        try {
+                                          if (persistedEditingBookingId) {
+                                            const result = await addParticipantToExistingBooking(
+                                              persistedEditingBookingId,
+                                              participantDraft,
+                                              {
+                                                successMessage: 'Participante agregado correctamente.',
+                                                onSuccess: () => {
+                                                  resetSimplifiedNewParticipantDraft();
+                                                  setFormError('');
+                                                },
+                                              }
+                                            );
+                                            if (result === 'deferred') return;
+                                          } else {
+                                            setParticipants((previous) => [...previous, participantDraft]);
+                                            resetSimplifiedNewParticipantDraft();
+                                            setFormError('');
+                                          }
+                                        } catch (error: any) {
+                                          const normalized = normalizeApiError(error, 'No se pudo agregar el participante.');
+                                          setFormError(toUserSafeMessage(normalized.message, 'No se pudo agregar el participante.'));
+                                        }
                                       }}
                                       disabled={!hasValidSimplifiedNewParticipantName}
                                       className={`h-10 min-w-[100px] rounded-xl px-4 text-[14px] font-semibold ${
@@ -12704,16 +9589,7 @@ export default function AdminAgendaPlaygroundPage() {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setSimplifiedNewParticipantOpen(false);
-                                        setSimplifiedNewParticipantName('');
-                                        setSimplifiedNewParticipantContact('');
-                                        setSimplifiedNewParticipantSourceTypeDraft('guest');
-                                        setSimplifiedNewParticipantEntityRefDraft('');
-                                        setSimplifiedNewParticipantSuggestionsOpen(false);
-                                        setSimplifiedNewParticipantSearchLoading(false);
-                                        setSimplifiedNewParticipantSuggestions([]);
-                                      }}
+                                      onClick={resetSimplifiedNewParticipantDraft}
                                       className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[14px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
                                     >
                                       Cancelar
@@ -12937,91 +9813,40 @@ export default function AdminAgendaPlaygroundPage() {
                         <div className="mt-3 flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={openSimplifiedPaymentModal}
+                            onClick={() => void openAgendaAccountDrawer(persistedEditingBookingId || 0, 'overview')}
+                            disabled={!persistedEditingBookingId}
+                            className="h-10 rounded-xl border border-p-border bg-p-surface px-4 text-[14px] font-semibold text-p-text-secondary hover:bg-p-surface-2 disabled:opacity-50"
+                          >
+                            Ver cuenta
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openAgendaAccountDrawer(persistedEditingBookingId || 0, 'payment')}
                             disabled={!simplifiedCanRegisterPayment}
                             className="h-10 rounded-xl bg-ink-900 px-4 text-[14px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
                           >
-                            Registrar pago
+                            Cobrar
                           </button>
                           {!persistedEditingBookingId ? (
                             <p className="text-[12px] text-p-text-muted">Primero creá la reserva.</p>
-                          ) : billingConfigLoadError ? (
-                            <AdminFeedbackBanner tone="error" compact>
-                              {billingConfigLoadError}
-                            </AdminFeedbackBanner>
                           ) : isPaymentLockedByManualPending ? (
                             <p className="text-[12px] text-p-text-muted">Confirmá la reserva para habilitar pagos.</p>
                           ) : null}
                         </div>
                       </div>
                     )}
-                    {!isModernBillingEnabled && (
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div className={isBookingFullyPaid ? 'col-span-2' : ''}>
-                        <p className="text-[13px] text-p-text-muted">{priceFieldLabel}</p>
-                        <div className="mt-2 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between text-[16px] text-p-text">
-                          <input
-                            type="number"
-                            min={0}
-                            max={MAX_MANUAL_PARTICIPANT_PRICE}
-                            step="0.01"
-                            value={isFinancialDisplayPending ? '' : Number(totalPrice.toFixed(2))}
-                            readOnly
-                            className="w-full bg-transparent outline-none text-p-text"
-                          />
-                          <span className="text-p-text-muted">$</span>
-                        </div>
-                        <p className="mt-1 text-[11px] text-p-text-muted">
-                          Precio turno ({selectionMinutes} min):{' '}
-                          <strong>{isFinancialDisplayPending ? '--' : `${totalPrice.toFixed(2)} $`}</strong>
-                        </p>
-                        <p className="mt-1 text-[11px] text-p-text-muted">{priceFieldHint}</p>
-                        {isFinancialDisplayPending && (
-                          <p className="mt-1 text-[11px] text-p-text-muted">Cargando precio...</p>
-                        )}
-                        {quoteLoading && <p className="mt-1 text-[11px] text-p-text-muted">Cotizando...</p>}
-                        {quoteError && !isBlockingQuoteError(quoteError) && (
-                          <p className="mt-1 text-[11px] text-p-error">{quoteError}</p>
-                        )}
-                        {bookingFinancial && (
-                          <p className="mt-1 text-[11px] text-p-text-muted">
-                            Pagado: <strong>{bookingFinancial.paid.toFixed(2)} $</strong> · Restante:{' '}
-                            <strong>{bookingFinancial.remaining.toFixed(2)} $</strong>
-                          </p>
-                        )}
-                        {exceedsRemainingWarning && (
-                          <p className="mt-1 text-[11px] text-p-error">
-                            El precio configurado supera el saldo pendiente. Al cobrar se ajustará al restante.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    )}
                   </section>
 
                   <section className="py-6 border-b border-p-border">
                     <div className="flex items-end justify-between">
                       <p className="text-[19px] font-semibold tracking-[-0.01em] text-p-text">Participantes</p>
-                      {!isModernBillingEnabled && (
-                        <div className="grid grid-cols-[1fr_86px_132px_20px] gap-2 text-[12px] text-p-text-muted">
-                          <span />
-                          <span>Precio</span>
-                          <span>Pago</span>
-                          <span />
-                        </div>
-                      )}
                     </div>
-                    {isModernBillingEnabled && (
-                      <p className="mt-2 text-[12px] text-p-text-muted">
-                        Acá gestionás personas de la reserva. La lógica de cobro está en la sección <strong>Cobro</strong>.
-                      </p>
-                    )}
+                    <p className="mt-2 text-[12px] text-p-text-muted">
+                      Acá gestionás personas de la reserva. La cuenta y los cobros se manejan desde <strong>Cuenta</strong>.
+                    </p>
 
                     <div className="mt-3 space-y-3">
-                      {participants.map((participant) => {
-                        const participantIsCharged = chargedParticipantIdSet.has(participant.id);
-                        const participantPaidComputed = participantPaidComputedIdSet.has(participant.id);
-                        const displayPrice = participantIsCharged ? resolveParticipantPrice(participant) : 0;
+                      {orderedParticipants.map((participant) => {
                         const isDuplicateParticipant = duplicateParticipantIds.has(participant.id);
                         const normalizedParticipantRef = String((participant as any).entityRef || '').trim().toLowerCase();
                         const participantIsLinkedRecord =
@@ -13040,7 +9865,7 @@ export default function AdminAgendaPlaygroundPage() {
                             <p className="text-[13px] text-p-text-muted mb-2">
                               {participant.isOwner ? 'Responsable de la reserva' : 'Participante'}
                             </p>
-                            <div className={`grid ${isModernBillingEnabled ? 'grid-cols-[1fr_20px]' : 'grid-cols-[1fr_86px_132px_20px]'} gap-2 items-center`}>
+                            <div className="grid grid-cols-[1fr_20px] gap-2 items-center">
                               <div className="relative">
                                 <div className="h-11 rounded-xl border border-p-border px-3 flex items-center gap-2 text-p-text-muted">
                                   <Search size={14} />
@@ -13078,102 +9903,6 @@ export default function AdminAgendaPlaygroundPage() {
                                   </div>
                                 )}
                               </div>
-                              {!isModernBillingEnabled && (
-                              <div className="h-11 rounded-xl border border-p-border px-3 flex items-center justify-between text-[15px]">
-                                {!participantIsCharged ? (
-                                  <span>-</span>
-                                ) : (
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={MAX_MANUAL_PARTICIPANT_PRICE}
-                                    step="0.01"
-                                    value={
-                                      participantPriceDraftById[participant.id] != null
-                                        ? participantPriceDraftById[participant.id]
-                                        : Number(displayPrice.toFixed(2))
-                                    }
-                                    onFocus={() => {
-                                      setParticipantPriceDraftById((previous) => ({
-                                        ...previous,
-                                        [participant.id]: displayPrice.toFixed(2),
-                                      }));
-                                    }}
-                                    onChange={(event) => {
-                                      const raw = event.target.value;
-                                      setParticipantPriceDraftById((previous) => ({
-                                        ...previous,
-                                        [participant.id]: raw,
-                                      }));
-                                      const next = parseMoneyInput(raw);
-                                      if (next == null) return;
-                                      if (paymentMode === 'Dividido') {
-                                        applySplitParticipantManualPrice(participant.id, next);
-                                        return;
-                                      }
-                                      updateParticipant(participant.id, { customPrice: next });
-                                    }}
-                                    onBlur={() => {
-                                      const raw = participantPriceDraftById[participant.id];
-                                      if (raw != null) {
-                                        const parsed = parseMoneyInput(raw);
-                                        if (parsed == null) {
-                                          if (paymentMode === 'Dividido') {
-                                            setParticipants((previous) =>
-                                              previous.map((entry) =>
-                                                entry.id === participant.id
-                                                  ? { ...entry, customPrice: null }
-                                                  : entry
-                                              )
-                                            );
-                                          } else {
-                                            updateParticipant(participant.id, { customPrice: null });
-                                          }
-                                        } else if (paymentMode === 'Dividido') {
-                                          applySplitParticipantManualPrice(participant.id, parsed);
-                                        } else {
-                                          updateParticipant(participant.id, { customPrice: parsed });
-                                        }
-                                      }
-                                      setParticipantPriceDraftById((previous) => {
-                                        const next = { ...previous };
-                                        delete next[participant.id];
-                                        return next;
-                                      });
-                                    }}
-                                    className="w-full bg-transparent outline-none"
-                                  />
-                                )}
-                                <span className="text-p-text-muted">$</span>
-                              </div>
-                              )}
-                              {!isModernBillingEnabled && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!isPaymentsTabActive || isBookingFullyPaid || !participantIsCharged) return;
-                                  void toggleParticipantPaid(participant.id);
-                                }}
-                                disabled={!isPaymentsTabActive || isBookingFullyPaid || !participantIsCharged || isPaymentLockedByManualPending || paymentInFlightId === participant.id}
-                                className={`h-11 rounded-xl border text-[15px] font-semibold ${
-                                  isBookingFullyPaid || participantPaidComputed || !participantIsCharged
-                                    ? 'border-p-positive bg-p-positive-bg text-p-positive'
-                                    : 'border-p-accent bg-p-positive-bg text-p-accent'
-                                } disabled:opacity-60`}
-                              >
-                                {!participantIsCharged
-                                  ? 'Sin cargo'
-                                  : !isPaymentsTabActive
-                                  ? 'Ir a Pagos'
-                                  : isBookingFullyPaid
-                                  ? 'Pagado'
-                                  : paymentInFlightId === participant.id
-                                  ? 'Procesando...'
-                                  : participantPaidComputed
-                                    ? 'Pagado'
-                                    : 'Pagar su parte'}
-                              </button>
-                              )}
                               {showParticipantActions && (
                                 <button
                                   type="button"
@@ -13260,25 +9989,6 @@ export default function AdminAgendaPlaygroundPage() {
                                     ? 'Finalizar edición'
                                     : 'Editar participante (nombre/contacto)'}
                                 </button>
-                                {!isModernBillingEnabled && !isBookingFullyPaid && participantIsCharged && isPaymentsTabActive && (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (participantPaidComputed) {
-                                          markParticipantAsPending(participant.id);
-                                        } else {
-                                          if (isPaymentLockedByManualPending) return;
-                                          void toggleParticipantPaid(participant.id);
-                                        }
-                                        setParticipantMenuId(null);
-                                      }}
-                                      className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-p-surface-2"
-                                    >
-                                      {participantPaidComputed ? 'Marcar como pendiente' : 'Pagar su parte'}
-                                    </button>
-                                  </>
-                                )}
                                 <div className="mt-1 border-t border-p-border pt-1">
                                   <button
                                     type="button"
@@ -13305,21 +10015,6 @@ export default function AdminAgendaPlaygroundPage() {
                     </div>
 
                     <div className="mt-3 flex items-center gap-2">
-                      {!isModernBillingEnabled && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setParticipantPriceDraftById({});
-                            setDefaultPricePerParticipant(0);
-                            setParticipants((previous) =>
-                              previous.map((participant) => ({ ...participant, customPrice: null }))
-                            );
-                          }}
-                          className="h-7 rounded-full px-3 border border-p-border text-p-text-secondary text-[12px] font-semibold"
-                        >
-                          Recalcular precios
-                        </button>
-                      )}
                       <button
                         type="button"
                         onClick={addParticipantRow}
@@ -13583,936 +10278,23 @@ export default function AdminAgendaPlaygroundPage() {
         onSubmit={() => void submitChangeTitular()}
       />
 
-      {activePaymentModal?.flow === 'playtomicPayment' &&
-        activePaymentModal.step === 'form' &&
-        isPlaytomicPaymentModal && (
-        <AdminDrawer
-          open={true}
-          onClose={closeSimplifiedPaymentModal}
-          title="Registrar cobro"
-          subtitle="Elegi método y monto. Si hace falta, ajusta conceptos."
-          size="lg"
-          footer={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={closeSimplifiedPaymentModal}
-                className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
-              >
-                Cancelar
-              </button>
-              <div className="flex-1" />
-              <button
-                type="button"
-                disabled={
-                  !simplifiedResolvedPayerParticipantId ||
-                  !hasValidSimplifiedPaymentMethod ||
-                  !hasValidSimplifiedPaymentAmount ||
-                  simplifiedRemainingAfterQueue <= 0.009
-                }
-                onClick={() => queueSimplifiedPaymentFromModal()}
-                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900 disabled:opacity-40"
-              >
-                Continuar
-              </button>
-            </div>
-          }
-        >
-          <PaymentRegistrationDrawer
-            methodOptions={ownerPaymentMethodOptions}
-            methodValue={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
-            onMethodChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
-            presetOptions={[
-              { id: 'FULL', label: 'Todo pendiente' },
-              { id: 'COURT_ONLY', label: 'Solo cancha' },
-              { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
-            ]}
-            selectedPreset={
-              simplifiedPaymentQuickPreset === 'MY_SHARE'
-                ? 'FULL'
-                : simplifiedPaymentQuickPreset
-            }
-            onPresetChange={applySimplifiedPaymentQuickPreset}
-            pendingItems={pendingAccountItems}
-            selectedItemIds={simplifiedPaymentSelectedItemIdsDraft}
-            customAmountById={simplifiedPaymentCustomItemAmountDraftById}
-            customSelectedTotal={computeCustomSelectedAmount(
-              simplifiedPaymentSelectedItemIdsDraft,
-              simplifiedPaymentCustomItemAmountDraftById
-            )}
-            onSelectAll={() => {
-              const nextIds = pendingAccountItems.map((item) => String(item.id));
-              const nextCustomDrafts: Record<string, string> = {};
-              pendingAccountItems.forEach((item) => {
-                nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
-              });
-              setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-              setSimplifiedPaymentCustomItemAmountDraftById(nextCustomDrafts);
-              setSimplifiedPaymentAmountDraft(
-                formatPaymentAmountDraft(
-                  computeConceptBasedMaxAmount('CUSTOM', nextIds, nextCustomDrafts)
-                )
-              );
-            }}
-            onClear={() => {
-              setSimplifiedPaymentSelectedItemIdsDraft([]);
-              setSimplifiedPaymentCustomItemAmountDraftById({});
-              setSimplifiedPaymentAmountDraft('');
-            }}
-            onToggleItem={(itemId, nextChecked) => {
-              const nextSet = new Set(
-                simplifiedPaymentSelectedItemIdsDraft
-                  .map((value) => String(value || '').trim())
-                  .filter(Boolean)
-              );
-              const nextDrafts: Record<string, string> = {
-                ...simplifiedPaymentCustomItemAmountDraftById,
-              };
-              if (nextChecked) {
-                nextSet.add(itemId);
-                const item = pendingAccountItemById.get(itemId);
-                const fallback = Number(item?.remainingAmount || 0);
-                const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-                if (!prevDraft) {
-                  nextDrafts[itemId] = fallback.toFixed(2);
-                }
-              } else {
-                nextSet.delete(itemId);
-                delete nextDrafts[itemId];
-              }
-              const nextIds = Array.from(nextSet);
-              setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-              setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-              setSimplifiedPaymentAmountDraft(
-                formatPaymentAmountDraft(computeCustomSelectedAmount(nextIds, nextDrafts))
-              );
-            }}
-            onItemAmountChange={(itemId, value) => {
-              const nextDrafts: Record<string, string> = {
-                ...simplifiedPaymentCustomItemAmountDraftById,
-                [itemId]: value,
-              };
-              setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-              setSimplifiedPaymentAmountDraft(
-                formatPaymentAmountDraft(
-                  computeCustomSelectedAmount(
-                    simplifiedPaymentSelectedItemIdsDraft,
-                    nextDrafts
-                  )
-                )
-              );
-            }}
-            amountDraft={simplifiedPaymentAmountDraft}
-            onAmountChange={setSimplifiedPaymentAmountDraft}
-            maxInlineLabel={`Maximo: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
-            maxFooterLabel={`Máximo para este cobro: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
-          />
-        </AdminDrawer>
-      )}
-
-      {activePaymentModal?.flow === 'playtomicPayment' &&
-        activePaymentModal.step === 'form' &&
-        !isPlaytomicPaymentModal && (
-        <div
-          className={`fixed inset-0 ${ADMIN_Z_INDEX_CLASS.modal} flex items-center justify-center bg-[var(--overlay)] p-4`}
-          role="presentation"
-          onPointerDown={handleModalBackdropPointerDown}
-          onPointerUp={(event) => handleModalBackdropPointerUp(event, closeSimplifiedPaymentModal)}
-        >
-          <div
-            className="flex max-h-[calc(100vh-2rem)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-p-border bg-p-surface shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-              <div className="flex items-center justify-between border-b border-p-border px-4 py-3">
-                <div>
-                  <p className="text-[18px] font-semibold text-p-text">
-                    {isPlaytomicPaymentModal ? 'Registrar cobro' : 'Registrar pago'}
-                  </p>
-                  <p className="text-[12px] text-p-text-secondary">
-                    {isPlaytomicPaymentModal
-                      ? 'Elegi metodo y monto. Si hace falta, ajusta conceptos.'
-                      : paymentMode === 'Único'
-                        ? 'Pago único: una persona paga el total en uno o varios pagos parciales.'
-                        : 'Pago dividido: cualquier participante puede registrar pagos y cubrir saldo del grupo.'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeSimplifiedPaymentModal}
-                  className="h-8 w-8 rounded-full text-p-text-muted grid place-items-center hover:bg-p-surface-2"
-                  aria-label="Cerrar"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="space-y-3 overflow-hidden px-4 py-3">
-                {!isPlaytomicPaymentModal && (
-                  <div className="grid grid-cols-3 gap-2 text-[11px] text-p-text-muted">
-                    <div className="rounded-lg border border-p-border bg-p-surface-2 px-2 py-1.5">
-                      <p>Total</p>
-                      <p className="text-[13px] font-semibold text-p-text">
-                        {isFinancialDisplayPending ? '--' : `${simplifiedFinancialTotal.toFixed(2)} $`}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-p-border bg-p-surface-2 px-2 py-1.5">
-                      <p>Pagado</p>
-                      <p className="text-[13px] font-semibold text-p-positive">
-                        {isFinancialDisplayPending ? '--' : `${simplifiedPaidAmount.toFixed(2)} $`}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-p-border bg-p-surface-2 px-2 py-1.5">
-                      <p>Deuda</p>
-                      <p className="text-[13px] font-semibold text-p-warning">
-                        {isFinancialDisplayPending ? '--' : `${simplifiedRemainingAmount.toFixed(2)} $`}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {isPlaytomicPaymentModal ? (
-                  <>
-                    <div className="grid grid-cols-1 gap-3">
-                      <div className="block">
-                        <span className="text-[12px] font-medium text-p-text-muted">Método</span>
-                        <select
-                          value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
-                          onChange={(event) => setSimplifiedPaymentMethodDraft(String(event.target.value || ''))}
-                          className="mt-1 h-11 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[14px] text-p-text outline-none focus:border-p-accent"
-                        >
-                          {ownerPaymentMethodOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
-                      <p className="text-[12px] font-semibold text-p-text-secondary">Conceptos a cobrar</p>
-                      <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-                        {[
-                          { id: 'FULL', label: 'Todo pendiente' },
-                          { id: 'COURT_ONLY', label: 'Solo cancha' },
-                          { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
-                        ].map((option) => {
-                          const isActive = simplifiedPaymentQuickPreset === option.id;
-                          return (
-                            <button
-                              key={`payment-playtomic-preset-${option.id}`}
-                              type="button"
-                              onClick={() => applySimplifiedPaymentQuickPreset(option.id as PaymentQuickPreset)}
-                              className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
-                                isActive
-                                  ? 'border-p-accent bg-p-positive-bg text-p-accent'
-                                  : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
-                      <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[12px] font-semibold text-p-text-secondary">Selección manual</p>
-                          <span className="text-[11px] font-semibold text-p-text-muted">
-                            Total: {computeCustomSelectedAmount(
-                              simplifiedPaymentSelectedItemIdsDraft,
-                              simplifiedPaymentCustomItemAmountDraftById
-                            ).toFixed(2)} $
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextIds = pendingAccountItems.map((item) => String(item.id));
-                                const nextCustomDrafts: Record<string, string> = {};
-                                pendingAccountItems.forEach((item) => {
-                                  nextCustomDrafts[String(item.id)] = Number(item.remainingAmount || 0).toFixed(2);
-                                });
-                                setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                setSimplifiedPaymentCustomItemAmountDraftById(nextCustomDrafts);
-                                setSimplifiedPaymentAmountDraft(
-                                  formatPaymentAmountDraft(
-                                    computeConceptBasedMaxAmount('CUSTOM', nextIds, nextCustomDrafts)
-                                  )
-                                );
-                              }}
-                              className="h-7 rounded-md border border-p-border bg-p-surface px-2 text-[11px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
-                            >
-                              Seleccionar todo
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSimplifiedPaymentSelectedItemIdsDraft([]);
-                                setSimplifiedPaymentCustomItemAmountDraftById({});
-                                setSimplifiedPaymentAmountDraft('');
-                              }}
-                              className="h-7 rounded-md border border-p-border bg-p-surface px-2 text-[11px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
-                            >
-                              Limpiar
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-2 max-h-[180px] overflow-auto rounded-lg border border-p-border bg-p-surface p-2">
-                          {pendingAccountItems.length === 0 ? (
-                            <p className="px-1 py-2 text-[12px] text-p-text-muted">
-                              No hay conceptos con deuda pendiente.
-                            </p>
-                          ) : (
-                            <div className="space-y-1">
-                              {pendingAccountItems.map((item) => {
-                                const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
-                                return (
-                                  <div
-                                    key={`payment-playtomic-concept-item-${item.id}`}
-                                    onClick={() => {
-                                      const nextChecked = !checked;
-                                      const nextSet = new Set(
-                                        simplifiedPaymentSelectedItemIdsDraft
-                                          .map((value) => String(value || '').trim())
-                                          .filter(Boolean)
-                                      );
-                                      const itemId = String(item.id);
-                                      const nextDrafts: Record<string, string> = {
-                                        ...simplifiedPaymentCustomItemAmountDraftById,
-                                      };
-                                      if (nextChecked) {
-                                        nextSet.add(itemId);
-                                        const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-                                        if (!prevDraft) {
-                                          nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
-                                        }
-                                      } else {
-                                        nextSet.delete(itemId);
-                                        delete nextDrafts[itemId];
-                                      }
-                                      const nextIds = Array.from(nextSet);
-                                      setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                      setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                      setSimplifiedPaymentAmountDraft(
-                                        formatPaymentAmountDraft(
-                                          computeCustomSelectedAmount(nextIds, nextDrafts)
-                                        )
-                                      );
-                                    }}
-                                    className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-p-surface-2"
-                                  >
-                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-p-text">
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onClick={(event) => event.stopPropagation()}
-                                        onChange={(event) => {
-                                          const nextChecked = event.target.checked;
-                                          const nextSet = new Set(
-                                            simplifiedPaymentSelectedItemIdsDraft
-                                              .map((value) => String(value || '').trim())
-                                              .filter(Boolean)
-                                          );
-                                          if (nextChecked) {
-                                            nextSet.add(String(item.id));
-                                            const itemId = String(item.id);
-                                            const nextDrafts: Record<string, string> = {
-                                              ...simplifiedPaymentCustomItemAmountDraftById,
-                                            };
-                                            const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-                                            if (!prevDraft) {
-                                              nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
-                                            }
-                                            const nextIds = Array.from(nextSet);
-                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                            setSimplifiedPaymentAmountDraft(
-                                              formatPaymentAmountDraft(
-                                                computeCustomSelectedAmount(nextIds, nextDrafts)
-                                              )
-                                            );
-                                            return;
-                                          } else {
-                                            nextSet.delete(String(item.id));
-                                            const nextDrafts: Record<string, string> = {
-                                              ...simplifiedPaymentCustomItemAmountDraftById,
-                                            };
-                                            delete nextDrafts[String(item.id)];
-                                            const nextIds = Array.from(nextSet);
-                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                            setSimplifiedPaymentAmountDraft(
-                                              formatPaymentAmountDraft(
-                                                computeCustomSelectedAmount(nextIds, nextDrafts)
-                                              )
-                                            );
-                                            return;
-                                          }
-                                        }}
-                                        className="h-4 w-4 accent-p-brand"
-                                      />
-                                      <span className="truncate">
-                                        {item.type === 'BOOKING' ? 'Cancha' : item.description}
-                                      </span>
-                                    </span>
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-p-border bg-p-surface px-2">
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          step="0.01"
-                                          disabled={!checked}
-                                          onClick={(event) => event.stopPropagation()}
-                                          value={
-                                            checked
-                                              ? String(
-                                                  simplifiedPaymentCustomItemAmountDraftById[String(item.id)] ??
-                                                    Number(item.remainingAmount || 0).toFixed(2)
-                                                )
-                                              : ''
-                                          }
-                                          onChange={(event) => {
-                                            const itemId = String(item.id);
-                                            const nextDrafts: Record<string, string> = {
-                                              ...simplifiedPaymentCustomItemAmountDraftById,
-                                              [itemId]: event.target.value,
-                                            };
-                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                            setSimplifiedPaymentAmountDraft(
-                                              formatPaymentAmountDraft(
-                                                computeCustomSelectedAmount(
-                                                  simplifiedPaymentSelectedItemIdsDraft,
-                                                  nextDrafts
-                                                )
-                                              )
-                                            );
-                                          }}
-                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-p-text outline-none disabled:text-p-text-muted"
-                                        />
-                                        <span className="ml-1 text-[11px] font-semibold text-p-text-muted">$</span>
-                                      </div>
-                                      <span className="w-[88px] text-right text-[11px] font-semibold text-p-text-secondary">
-                                        {Number(item.remainingAmount || 0).toFixed(2)} $
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    <label className="block">
-                      <span className="text-[12px] font-medium text-p-text-muted">Monto final</span>
-                      <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={simplifiedPaymentAmountDraft}
-                          onChange={(event) => setSimplifiedPaymentAmountDraft(event.target.value)}
-                          className="w-full bg-transparent text-[16px] text-p-text outline-none"
-                        />
-                        <span className="text-[15px] font-semibold text-p-text-muted">$</span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-p-text-muted">
-                        Maximo: {simplifiedPaymentMaxAmount.toFixed(2)} $
-                      </p>
-                    </label>
-
-                  </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div className="block">
-                        <span className="text-[12px] font-medium text-p-text-muted">Pagador</span>
-                        <PlaygroundCombo
-                          value={simplifiedResolvedPayerParticipantId || simplifiedPayerComboOptions[0]?.value || ''}
-                          onChange={handleSimplifiedPayerChange}
-                          options={simplifiedPayerComboOptions}
-                          variant="participant"
-                          className="mt-1"
-                        />
-                        {simplifiedLockedSinglePayerId && (
-                          <p className="mt-1 text-[11px] text-p-text-muted">
-                            El pagador queda fijo después del primer pago confirmado.
-                          </p>
-                        )}
-                      </div>
-                      <div className="block">
-                        <span className="text-[12px] font-medium text-p-text-muted">Imputar pago a</span>
-                        {paymentMode === 'Único' ? (
-                          <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface-2 px-3 flex items-center text-[14px] font-medium text-p-text-secondary">
-                            {simplifiedResolvedCoveredParticipant?.name || simplifiedResolvedPayerParticipant?.name || 'Titular'}
-                          </div>
-                        ) : (
-                          <PlaygroundCombo
-                            value={simplifiedResolvedCoveredParticipantId || simplifiedCoveredParticipantComboOptions[0]?.value || ''}
-                            onChange={(value) => {
-                              const nextCoveredId = String(value || '').trim();
-                              setSimplifiedPaymentCoveredParticipantIdDraft(nextCoveredId);
-                              setSimplifiedPaymentCoveredParticipantIdsDraft(nextCoveredId ? [nextCoveredId] : []);
-                              setSimplifiedPaymentQuickPreset('MY_SHARE');
-                              setSimplifiedPaymentImputationMode('BY_PARTICIPANT');
-                              setSimplifiedPaymentConceptMode('AUTO');
-                              const nextDebt = Number(participantDebtAmountById.get(nextCoveredId) || 0);
-                              const nextAmount = Number(
-                                Math.max(0, Math.min(simplifiedRemainingAfterQueue, nextDebt)).toFixed(2)
-                              );
-                              setSimplifiedPaymentAmountDraft(formatPaymentAmountDraft(nextAmount));
-                            }}
-                            options={simplifiedCoveredParticipantComboOptions}
-                            variant="participant"
-                            className="mt-1"
-                          />
-                        )}
-                      </div>
-                      <div className="block">
-                        <span className="text-[12px] font-medium text-p-text-muted">Método</span>
-                        <PlaygroundCombo
-                          value={simplifiedPaymentMethodDraft || ownerPaymentMethodOptions[0]?.value || ''}
-                          onChange={(value) => setSimplifiedPaymentMethodDraft(String(value || ''))}
-                          options={simplifiedPaymentMethodComboOptions}
-                          variant="participant"
-                          className="mt-1"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
-                      <p className="text-[12px] font-semibold text-p-text-secondary">Qué quiere pagar</p>
-                      <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                        {[
-                          { id: 'MY_SHARE', label: 'Mi parte' },
-                          { id: 'FULL', label: 'Todo pendiente' },
-                          { id: 'COURT_ONLY', label: 'Solo cancha' },
-                          { id: 'CUSTOM_ITEMS', label: 'Personalizado' },
-                        ].map((option) => {
-                          const isActive = simplifiedPaymentQuickPreset === option.id;
-                          return (
-                            <button
-                              key={`payment-quick-preset-${option.id}`}
-                              type="button"
-                              onClick={() => applySimplifiedPaymentQuickPreset(option.id as PaymentQuickPreset)}
-                              className={`h-9 rounded-lg border text-[12px] font-semibold transition ${
-                                isActive
-                                  ? 'border-p-accent bg-p-positive-bg text-p-accent'
-                                  : 'border-p-border bg-p-surface text-p-text-secondary hover:bg-p-surface-2'
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <p className="mt-2 text-[11px] text-p-text-muted">
-                        {simplifiedPaymentQuickPreset === 'MY_SHARE'
-                          ? 'Cobra la deuda del participante imputado.'
-                          : simplifiedPaymentQuickPreset === 'FULL'
-                            ? 'Imputa el pago sobre todo el saldo pendiente de la reserva.'
-                            : simplifiedPaymentQuickPreset === 'COURT_ONLY'
-                              ? 'Imputa únicamente el saldo de cancha.'
-                              : 'Seleccioná manualmente los conceptos que quiere pagar.'}
-                      </p>
-                    </div>
-
-                    {simplifiedPaymentQuickPreset === 'CUSTOM_ITEMS' && (
-                      <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-2.5">
-                        <p className="text-[12px] font-semibold text-p-text-secondary">Conceptos a pagar</p>
-                        <p className="mt-2 text-[11px] text-p-text-muted">
-                          Total seleccionado: {computeCustomSelectedAmount(
-                            simplifiedPaymentSelectedItemIdsDraft,
-                            simplifiedPaymentCustomItemAmountDraftById
-                          ).toFixed(2)} $
-                        </p>
-
-                        <div className="mt-2 max-h-[160px] overflow-auto rounded-lg border border-p-border bg-p-surface p-2">
-                          {pendingAccountItems.length === 0 ? (
-                            <p className="px-1 py-2 text-[12px] text-p-text-muted">No hay conceptos con deuda pendiente.</p>
-                          ) : (
-                            <div className="space-y-1">
-                              {pendingAccountItems.map((item) => {
-                                const checked = simplifiedPaymentSelectedItemIdsDraft.includes(String(item.id));
-                                return (
-                                  <div
-                                    key={`payment-concept-item-${item.id}`}
-                                    onClick={() => {
-                                      const nextChecked = !checked;
-                                      const nextSet = new Set(
-                                        simplifiedPaymentSelectedItemIdsDraft
-                                          .map((value) => String(value || '').trim())
-                                          .filter(Boolean)
-                                      );
-                                      const itemId = String(item.id);
-                                      const nextDrafts: Record<string, string> = {
-                                        ...simplifiedPaymentCustomItemAmountDraftById,
-                                      };
-                                      if (nextChecked) {
-                                        nextSet.add(itemId);
-                                        const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-                                        if (!prevDraft) {
-                                          nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
-                                        }
-                                      } else {
-                                        nextSet.delete(itemId);
-                                        delete nextDrafts[itemId];
-                                      }
-                                      const nextIds = Array.from(nextSet);
-                                      setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                      setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                      setSimplifiedPaymentAmountDraft(
-                                        formatPaymentAmountDraft(
-                                          computeCustomSelectedAmount(nextIds, nextDrafts)
-                                        )
-                                      );
-                                    }}
-                                    className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-p-surface-2"
-                                  >
-                                    <span className="min-w-0 flex items-center gap-2 text-[12px] text-p-text">
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onClick={(event) => event.stopPropagation()}
-                                        onChange={(event) => {
-                                          const nextChecked = event.target.checked;
-                                          const nextSet = new Set(
-                                            simplifiedPaymentSelectedItemIdsDraft
-                                              .map((value) => String(value || '').trim())
-                                              .filter(Boolean)
-                                          );
-                                          if (nextChecked) {
-                                            nextSet.add(String(item.id));
-                                            const itemId = String(item.id);
-                                            const nextDrafts: Record<string, string> = {
-                                              ...simplifiedPaymentCustomItemAmountDraftById,
-                                            };
-                                            const prevDraft = String(nextDrafts[itemId] ?? '').trim();
-                                            if (!prevDraft) {
-                                              nextDrafts[itemId] = Number(item.remainingAmount || 0).toFixed(2);
-                                            }
-                                            const nextIds = Array.from(nextSet);
-                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                            setSimplifiedPaymentAmountDraft(
-                                              formatPaymentAmountDraft(
-                                                computeCustomSelectedAmount(nextIds, nextDrafts)
-                                              )
-                                            );
-                                            return;
-                                          } else {
-                                            nextSet.delete(String(item.id));
-                                            const nextDrafts: Record<string, string> = {
-                                              ...simplifiedPaymentCustomItemAmountDraftById,
-                                            };
-                                            delete nextDrafts[String(item.id)];
-                                            const nextIds = Array.from(nextSet);
-                                            setSimplifiedPaymentSelectedItemIdsDraft(nextIds);
-                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                            setSimplifiedPaymentAmountDraft(
-                                              formatPaymentAmountDraft(
-                                                computeCustomSelectedAmount(nextIds, nextDrafts)
-                                              )
-                                            );
-                                            return;
-                                          }
-                                        }}
-                                        className="h-4 w-4 accent-p-brand"
-                                      />
-                                      <span className="truncate">
-                                        {item.type === 'BOOKING' ? 'Cancha' : item.description}
-                                      </span>
-                                    </span>
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex h-8 w-[116px] items-center rounded-md border border-p-border bg-p-surface px-2">
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          step="0.01"
-                                          disabled={!checked}
-                                          onClick={(event) => event.stopPropagation()}
-                                          value={
-                                            checked
-                                              ? String(
-                                                  simplifiedPaymentCustomItemAmountDraftById[String(item.id)] ??
-                                                    Number(item.remainingAmount || 0).toFixed(2)
-                                                )
-                                              : ''
-                                          }
-                                          onChange={(event) => {
-                                            const itemId = String(item.id);
-                                            const nextDrafts: Record<string, string> = {
-                                              ...simplifiedPaymentCustomItemAmountDraftById,
-                                              [itemId]: event.target.value,
-                                            };
-                                            setSimplifiedPaymentCustomItemAmountDraftById(nextDrafts);
-                                            setSimplifiedPaymentAmountDraft(
-                                              formatPaymentAmountDraft(
-                                                computeCustomSelectedAmount(
-                                                  simplifiedPaymentSelectedItemIdsDraft,
-                                                  nextDrafts
-                                                )
-                                              )
-                                            );
-                                          }}
-                                          className="w-full bg-transparent text-right text-[12px] font-semibold text-p-text outline-none disabled:text-p-text-muted"
-                                        />
-                                        <span className="ml-1 text-[11px] font-semibold text-p-text-muted">$</span>
-                                      </div>
-                                      <span className="w-[88px] text-right text-[11px] font-semibold text-p-text-secondary">
-                                        {Number(item.remainingAmount || 0).toFixed(2)} $
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <label className="block">
-                  <span className="text-[12px] font-medium text-p-text-muted">Monto</span>
-                  <div className="mt-1 h-11 rounded-xl border border-p-border bg-p-surface px-3 flex items-center justify-between">
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={simplifiedPaymentAmountDraft}
-                      onChange={(event) => setSimplifiedPaymentAmountDraft(event.target.value)}
-                      className="w-full bg-transparent text-[16px] text-p-text outline-none"
-                    />
-                    <span className="text-[15px] font-semibold text-p-text-muted">$</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-p-text-muted">
-                    {isPlaytomicPaymentModal
-                      ? `Máximo para este cobro: ${simplifiedPaymentMaxAmount.toFixed(2)} $`
-                      : simplifiedPaymentImputationMode === 'BY_CONCEPT'
-                        ? `Máximo por conceptos seleccionados: ${simplifiedPaymentMaxAmount.toFixed(2)} $`
-                        : paymentMode === 'Único'
-                          ? `Saldo pendiente de la reserva: ${simplifiedRemainingAfterQueue.toFixed(2)} $`
-                          : `Máximo por participantes seleccionados: ${simplifiedPaymentMaxAmount.toFixed(2)} $`}
-                  </p>
-                  {!isPlaytomicPaymentModal &&
-                    paymentMode === 'Dividido' &&
-                    simplifiedPaymentImputationMode === 'BY_PARTICIPANT' && (
-                      <p className="mt-0.5 text-[11px] text-p-text-muted">
-                        Deuda seleccionada ({simplifiedResolvedCoveredParticipantIds.length}):{' '}
-                        {simplifiedResolvedCoveredParticipantsDebt.toFixed(2)} $
-                      </p>
-                    )}
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 border-t border-p-border px-4 py-3">
-                <button
-                  type="button"
-                  onClick={closeSimplifiedPaymentModal}
-                  className="h-10 rounded-xl border border-p-border px-4 text-[14px] font-semibold text-p-text-secondary hover:bg-p-surface-2"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => queueSimplifiedPaymentFromModal()}
-                  disabled={
-                    !simplifiedResolvedPayerParticipantId ||
-                    (!isPlaytomicPaymentModal &&
-                      simplifiedPaymentImputationMode !== 'BY_CONCEPT' &&
-                      !simplifiedResolvedCoveredParticipantId) ||
-                    !hasValidSimplifiedPaymentMethod ||
-                    !hasValidSimplifiedPaymentAmount ||
-                    simplifiedRemainingAfterQueue <= 0.009
-                  }
-                  className="h-10 rounded-xl bg-ink-900 px-4 text-[14px] font-semibold text-ink-50 hover:bg-ink-900 disabled:opacity-50"
-                >
-                  {isPlaytomicPaymentModal ? 'Continuar' : 'Registrar pago'}
-                </button>
-              </div>
-            </div>
-        </div>
-      )}
-
-      {activePaymentModal?.flow === 'playtomicPayment' &&
-        activePaymentModal.step === 'preconfirm' &&
-        isPlaytomicPaymentModal && (
-        <AdminDrawer
-          open={true}
-          onClose={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
-          title="Confirmar cobro"
-          subtitle="Revisá los datos antes de confirmar."
-          size="lg"
-          footer={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' })}
-                className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
-              >
-                Volver
-              </button>
-              <div className="flex-1" />
-              <button
-                type="button"
-                onClick={() => queueSimplifiedPaymentFromModal({ skipPlaytomicPreconfirm: true })}
-                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900 disabled:opacity-40"
-              >
-                Confirmar cobro
-              </button>
-            </div>
-          }
-        >
-          <AdminDrawerSection title="Resumen del cobro" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
-            <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
-              <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                <span className="text-[13px] text-p-text-muted">Monto</span>
-                <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicPreviewRequestedAmount.toFixed(2)} $`}</span>
-              </div>
-              <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                <span className="text-[13px] text-p-text-muted">Método</span>
-                <span className="text-right text-[13px] font-medium text-p-text">{simplifiedPaymentMethodLabel}</span>
-              </div>
-              <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                <span className="text-[13px] text-p-text-muted">Saldo luego del cobro</span>
-                <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicPreviewRemainingAfter.toFixed(2)} $`}</span>
-              </div>
-            </div>
-          </AdminDrawerSection>
-
-          {playtomicPreviewConceptRows.length > 0 && (
-            <AdminDrawerSection title="Conceptos cubiertos" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
-              <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
-                {playtomicPreviewConceptRows.map((row) => (
-                  <div key={`playtomic-preview-row-${row.id}`} className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                    <span className="text-[13px] text-p-text">{row.label}</span>
-                    <span className="text-right text-[13px] font-medium text-p-text">{`${row.amount.toFixed(2)} $`}</span>
-                  </div>
-                ))}
-              </div>
-            </AdminDrawerSection>
-          )}
-
-          <div className="rounded-xl border border-p-warning bg-p-warning-bg px-4 py-3">
-            <p className="text-[13px] text-p-warning">
-              Revisá los datos antes de confirmar. Esta acción no se puede deshacer directamente.
-            </p>
-          </div>
-        </AdminDrawer>
-      )}
-
-      {activePaymentModal?.flow === 'playtomicPayment' &&
-        activePaymentModal.step === 'result' &&
-        playtomicResultModal &&
-        isPlaytomicPaymentModal && (
-        <AdminDrawer
-          open={true}
-          onClose={closeSimplifiedPaymentModal}
-          title={playtomicResultModal.title}
-          subtitle={playtomicResultModal.detail}
-          size="lg"
-          footer={
-            <div className="flex items-center gap-2">
-              {playtomicResultModal.variant !== 'success' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePaymentModal({ flow: 'playtomicPayment', step: 'form' });
-                    void openSimplifiedPaymentModal();
-                  }}
-                  className="flex h-10 items-center gap-1.5 rounded-xl border border-p-border bg-p-surface px-4 text-[13px] font-medium text-p-text-muted transition hover:bg-p-surface-2"
-                >
-                  Reintentar
-                </button>
-              )}
-              <div className="flex-1" />
-              <button
-                type="button"
-                onClick={closeSimplifiedPaymentModal}
-                className="h-10 rounded-xl bg-ink-900 px-5 text-[13px] font-semibold text-ink-50 transition hover:bg-ink-900"
-              >
-                {playtomicResultModal.variant === 'success' ? 'Ver cuenta' : 'Cerrar'}
-              </button>
-            </div>
-          }
-        >
-          {(() => {
-            const isSuccess = playtomicResultModal.variant === 'success';
-            return (
-              <>
-                <div
-                  className={[
-                    'flex flex-col items-center gap-3 rounded-2xl border p-6 text-center',
-                    isSuccess ? 'account-success-card account-success-glow-bold' : '',
-                    isSuccess
-                      ? 'border-emerald-500/35 bg-p-surface text-p-text'
-                      : 'bg-p-error-bg text-[var(--error-fg)]',
-                  ].join(' ')}
-                >
-                  <div
-                    className={[
-                      'grid h-12 w-12 place-items-center rounded-full',
-                      isSuccess ? 'account-success-icon account-success-icon-bold' : '',
-                      isSuccess ? 'bg-emerald-500/20' : 'bg-[var(--error-fg)]',
-                    ].join(' ')}
-                  >
-                    {isSuccess ? (
-                      <Check size={24} className="text-emerald-300" />
-                    ) : (
-                      <X size={24} className="text-ink-50" />
-                    )}
-                  </div>
-                  <p className={`text-[18px] font-bold ${isSuccess ? 'text-p-text account-success-title' : ''}`}>
-                    {playtomicResultModal.title}
-                  </p>
-                  <p className={`text-[13px] ${isSuccess ? 'text-p-text-muted account-success-detail' : 'opacity-80'}`}>
-                    {playtomicResultModal.detail}
-                  </p>
-                </div>
-
-                {isSuccess && (
-                  <AdminDrawerSection title="Detalle" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
-                    <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
-                      <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-[13px] text-p-text-muted">Cobrado</span>
-                        <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicResultModal.appliedAmount.toFixed(2)} $`}</span>
-                      </div>
-                      <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-[13px] text-p-text-muted">Método</span>
-                        <span className="text-right text-[13px] font-medium text-p-text">{playtomicResultModal.methodLabel}</span>
-                      </div>
-                      <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-[13px] text-p-text-muted">Saldo restante</span>
-                        <span className="text-right text-[13px] font-medium text-p-text">{`${playtomicResultModal.remainingAfter.toFixed(2)} $`}</span>
-                      </div>
-                    </div>
-                  </AdminDrawerSection>
-                )}
-
-                {isSuccess && playtomicResultModal.appliedItems.length > 0 && (
-                  <AdminDrawerSection title="Conceptos" className="rounded-2xl border border-p-border bg-p-surface-2 p-4">
-                    <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
-                      {playtomicResultModal.appliedItems.map((row, index) => (
-                        <div key={`playtomic-result-row-${index}`} className="flex min-h-11 items-center justify-between gap-3 px-4 py-3">
-                          <span className="text-[13px] text-p-text">{row.label}</span>
-                          <span className="text-right text-[13px] font-semibold text-p-positive">{`${row.amount.toFixed(2)} $`}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </AdminDrawerSection>
-                )}
-              </>
-            );
-          })()}
-        </AdminDrawer>
-      )}
-
+      <AccountDrawer
+        accountId={accountDrawerAccountId}
+        open={accountDrawerOpen}
+        initialView={accountDrawerInitialView}
+        context={accountDrawerContext}
+        onClose={closeAgendaAccountDrawer}
+        onSuccess={() => {
+          const bookingId = Number(accountDrawerBookingIdRef.current || persistedEditingBookingId || 0);
+          if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+          void refreshPersistedBookingView(bookingId, {
+            schedule: true,
+            financial: true,
+            consumptions: true,
+            history: true,
+          });
+        }}
+      />
       <style jsx global>{`
         @media (prefers-reduced-motion: no-preference) {
           .account-success-card {
