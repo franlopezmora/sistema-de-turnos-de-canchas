@@ -9,6 +9,7 @@ import { metricsService } from './MetricsService';
 import { BookingDomainService } from './BookingDomainService';
 import { AccountService } from './AccountService';
 import { generateDisplayCode } from '../utils/displayCode';
+import { BookingHistoryService } from './BookingHistoryService';
 
 const EPSILON = 0.009;
 
@@ -52,6 +53,7 @@ export class PaymentService {
   private readonly projectionService = new ProjectionService();
   private readonly bookingDomainService = new BookingDomainService();
   private readonly accountService = new AccountService();
+  private readonly bookingHistoryService = new BookingHistoryService();
 
   private roundMoney(value: number) {
     return Number((Number(value || 0)).toFixed(2));
@@ -496,6 +498,38 @@ export class PaymentService {
         coveredParticipantRef,
         coveredParticipantName
       }, tx);
+
+      if (account.sourceType === 'BOOKING') {
+        await this.bookingHistoryService.appendBookingHistoryEntryTx(tx, {
+          bookingId: Number(account.sourceId),
+          clubId: account.clubId,
+          action: 'PAYMENT_RECEIVED',
+          category: 'PAYMENT',
+          source: source === 'ONLINE' ? 'PAYMENT_ONLINE' : 'PAYMENT_POS',
+          summary: 'Pago recibido',
+          actorUserId: input.createdByUserId ?? null,
+          paymentId: payment.id,
+          accountId: account.id,
+          detail: {
+            amount: input.amount,
+            method: input.method,
+            channel,
+            source,
+            payerParticipantRef,
+            payerParticipantName,
+            coveredParticipantRef,
+            coveredParticipantName,
+          },
+          nextState: {
+            amount: input.amount,
+            method: input.method,
+            channel,
+            source,
+          },
+          idempotencyKey: `payment-history:${payment.id}`,
+          occurredAt: payment.createdAt,
+        });
+      }
 
       let notificationUserId: number | null = null;
       if (account.sourceType === 'BOOKING') {

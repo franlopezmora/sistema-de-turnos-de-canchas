@@ -26,6 +26,11 @@ type TxMock = {
   bookingBillingConfig: {
     upsert: (args: any) => Promise<any>;
   };
+  bookingParticipant: {
+    findFirst: (args: any) => Promise<any>;
+    create: (args: any) => Promise<any>;
+    update: (args: any) => Promise<any>;
+  };
 };
 
 function buildServiceHarness() {
@@ -108,6 +113,9 @@ function buildServiceHarness() {
     bookingCreated: async () => null,
     bookingParticipantAdded: async () => null
   };
+  service.bookingHistoryService = {
+    appendBookingHistoryEntryTx: async () => null
+  };
   service.outboxService = {
     enqueueMany: async () => null
   };
@@ -124,6 +132,29 @@ function withMockedTransaction(tx: TxMock, run: () => Promise<void>) {
   return run().finally(() => {
     (prisma as any).$transaction = originalTransaction;
   });
+}
+
+function createBookingParticipantRepo(state?: {
+  existingOrganizer?: any;
+  created?: any[];
+  updated?: Array<{ where: any; data: any }>;
+}) {
+  return {
+    findFirst: async ({ where }: any) => {
+      if (where?.role === 'ORGANIZER') {
+        return state?.existingOrganizer ?? null;
+      }
+      return null;
+    },
+    create: async ({ data }: any) => {
+      state?.created?.push(data);
+      return { id: 'bp-org-created', ...data };
+    },
+    update: async ({ where, data }: any) => {
+      state?.updated?.push({ where, data });
+      return { id: where?.id ?? 'bp-org-updated', ...data };
+    }
+  };
 }
 
 test('no permite crear booking sin cliente en flujo sin usuario', async () => {
@@ -146,6 +177,15 @@ test('no permite crear booking sin cliente en flujo sin usuario', async () => {
 test('usuario autenticado crea booking con clientId resuelto', async () => {
   const service = buildServiceHarness();
   let createdData: any = null;
+  const organizerCreates: any[] = [];
+  const historyEntries: any[] = [];
+
+  service.bookingHistoryService = {
+    appendBookingHistoryEntryTx: async (_tx: any, input: any) => {
+      historyEntries.push(input);
+      return { id: `bhe-${historyEntries.length}`, ...input };
+    }
+  };
 
   const tx: TxMock = {
     booking: {
@@ -225,7 +265,8 @@ test('usuario autenticado crea booking con clientId resuelto', async () => {
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-901' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo({ created: organizerCreates })
   };
 
   await withMockedTransaction(tx, async () => {
@@ -241,6 +282,12 @@ test('usuario autenticado crea booking con clientId resuelto', async () => {
 
     assert.equal(result.id, 901);
     assert.equal(createdData.clientId, 'client-user');
+    assert.equal(organizerCreates.length, 1);
+    assert.equal(organizerCreates[0].role, 'ORGANIZER');
+    assert.equal(organizerCreates[0].clientId, 'client-user');
+    assert.equal(organizerCreates[0].userId, 7);
+    assert.equal(historyEntries.length, 1);
+    assert.equal(historyEntries[0].action, 'BOOKING_CREATED');
   });
 });
 
@@ -249,6 +296,7 @@ test('reserva pública con usuario logueado conserva Booking.userId y no auto-li
   let createdBookingData: any = null;
   let createdClientData: any = null;
   let clientUpdateCalls = 0;
+  const organizerCreates: any[] = [];
 
   const tx: TxMock = {
     booking: {
@@ -340,7 +388,8 @@ test('reserva pública con usuario logueado conserva Booking.userId y no auto-li
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-905' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo({ created: organizerCreates })
   };
 
   await withMockedTransaction(tx, async () => {
@@ -359,12 +408,16 @@ test('reserva pública con usuario logueado conserva Booking.userId y no auto-li
     assert.equal(createdBookingData.clientId, 'client-preexisting');
     assert.equal(createdClientData, null);
     assert.equal(clientUpdateCalls, 0);
+    assert.equal(organizerCreates.length, 1);
+    assert.equal(organizerCreates[0].clientId, 'client-preexisting');
+    assert.equal(organizerCreates[0].userId, 7);
   });
 });
 
 test('admin crea booking con clientId explícito', async () => {
   const service = buildServiceHarness();
   let createdData: any = null;
+  const organizerCreates: any[] = [];
 
   const tx: TxMock = {
     booking: {
@@ -443,7 +496,8 @@ test('admin crea booking con clientId explícito', async () => {
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-902' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo({ created: organizerCreates })
   };
 
   await withMockedTransaction(tx, async () => {
@@ -459,6 +513,9 @@ test('admin crea booking con clientId explícito', async () => {
 
     assert.equal(result.id, 902);
     assert.equal(createdData.clientId, 'client-admin');
+    assert.equal(organizerCreates.length, 1);
+    assert.equal(organizerCreates[0].clientId, 'client-admin');
+    assert.equal(organizerCreates[0].userId, null);
   });
 });
 
@@ -540,7 +597,8 @@ test('booking admin reutiliza client existente por identidad fuerte y no crea du
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-903' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo()
   };
 
   await withMockedTransaction(tx, async () => {
@@ -694,7 +752,8 @@ test('si clientId es de otro club, no crea booking ni side effects', async () =>
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-should-not-run' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo()
   };
 
   // 13:00 UTC = 10:00 Buenos Aires (UTC-3). El slot 10:00 existe en el schedule FIXED del harness.

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BookingService } from '../src/services/BookingService';
+import { AppError } from '../src/errors';
 
 type MemoryClient = {
   id: string;
@@ -241,7 +242,51 @@ test('si ya existe client vinculado al user se reutiliza ese mismo client', asyn
   assert.ok(auditLogs.some((row) => row.payload?.reason === 'ALREADY_LINKED'));
 });
 
-test('si existen dos clients duplicados reutiliza uno canónico y no crea un tercero', async () => {
+test('si existen dos clients candidatos por identidad fuerte no elige uno arbitrariamente', async () => {
+  const { tx, clients } = buildTx([
+    {
+      id: 'c-old',
+      clubId: 10,
+      userId: null,
+      name: 'Admin Las Tejas',
+      phone: '+5493571359791',
+      email: 'admin@lastejas.com',
+      dni: null,
+      createdAt: new Date('2026-05-19T20:00:00.000Z')
+    },
+    {
+      id: 'c-new',
+      clubId: 10,
+      userId: null,
+      name: 'Admin Las Tejas',
+      phone: '+5493571359791',
+      email: 'admin@lastejas.com',
+      dni: null,
+      createdAt: new Date('2026-05-19T21:02:15.856Z')
+    }
+  ]);
+  const service = createService();
+
+  await assert.rejects(
+    () => (service as any).resolveOrCreateClient(tx, {
+      clubId: 10,
+      userId: null,
+      name: 'Admin Las Tejas',
+      phone: '+54 9 357 135 9791',
+      email: 'admin@lastejas.com',
+      dni: ''
+    }),
+    (error: any) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'CLIENT_POSSIBLE_DUPLICATE');
+      assert.deepEqual(error.meta?.candidateClientIds, ['c-old', 'c-new']);
+      return true;
+    }
+  );
+  assert.equal(clients.length, 2);
+});
+
+test('si el admin fuerza crear nuevo, resolveOrCreateClient permite crear aun con candidatos fuertes múltiples', async () => {
   const { tx, clients } = buildTx([
     {
       id: 'c-old',
@@ -272,11 +317,12 @@ test('si existen dos clients duplicados reutiliza uno canónico y no crea un ter
     name: 'Admin Las Tejas',
     phone: '+54 9 357 135 9791',
     email: 'admin@lastejas.com',
-    dni: ''
+    dni: '',
+    forceCreateNew: true
   });
 
-  assert.equal(resolved.id, 'c-old');
-  assert.equal(clients.length, 2);
+  assert.equal(clients.length, 3);
+  assert.equal(resolved.id, 'c-3');
 });
 
 test('clientes de otros clubes no se mezclan al resolver identidad fuerte', async () => {

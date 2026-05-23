@@ -41,6 +41,7 @@ enum BookingParticipantStatus {
 }
 
 enum BookingParticipantRole {
+  ORGANIZER
   PARTICIPANT
 }
 
@@ -263,6 +264,7 @@ model User {
   dni       String?
 
   bookings      Booking[]
+  bookingHistoryEntries BookingHistoryEntry[] @relation("BookingHistoryActor")
   bookingParticipants BookingParticipant[]
   bookingParticipantInvitationsSent BookingParticipant[] @relation("BookingParticipantInvitedBy")
   paymentIntegrationsConnected ClubPaymentIntegration[] @relation("ClubPaymentIntegrationConnectedBy")
@@ -388,6 +390,7 @@ model Club {
   paymentIntegrations ClubPaymentIntegration[]
   paymentProviderOAuthStates PaymentProviderOAuthState[]
   onlinePaymentAttempts OnlinePaymentAttempt[]
+  bookingHistoryEntries BookingHistoryEntry[]
 }
 
 model ClubFavorite {
@@ -584,6 +587,7 @@ model Client {
   updatedAt DateTime @updatedAt
 
   bookings  Booking[]
+  bookingParticipants BookingParticipant[]
   fixedBookings FixedBooking[]
   discountAssignments ClientDiscountAssignment[]
   accountItemDiscounts AccountItemDiscount[]
@@ -677,6 +681,7 @@ model Booking {
   fixedBooking   FixedBooking? @relation(fields: [fixedBookingId], references: [id])
   billingConfig  BookingBillingConfig?
   participants   BookingParticipant[]
+  historyEntries BookingHistoryEntry[]
   onlinePaymentAttempts OnlinePaymentAttempt[]
   reviews        ClubReview[]
 
@@ -692,14 +697,20 @@ model BookingParticipant {
   id              String                   @id @default(cuid())
   bookingId       Int
   booking         Booking                  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  clientId        String?
+  client          Client?                  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   userId          Int?
   user            User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  displayName     String?
+  email           String?
+  phone           String?
   invitedEmail    String?
   invitedName     String?
   status          BookingParticipantStatus @default(INVITED)
   role            BookingParticipantRole   @default(PARTICIPANT)
   invitedByUserId Int?
   invitedByUser   User?                    @relation("BookingParticipantInvitedBy", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  historyEntries  BookingHistoryEntry[]
   acceptedAt      DateTime?                @db.Timestamptz(3)
   declinedAt      DateTime?                @db.Timestamptz(3)
   leftAt          DateTime?                @db.Timestamptz(3)
@@ -709,6 +720,8 @@ model BookingParticipant {
 
   @@unique([bookingId, userId])
   @@index([bookingId, status])
+  @@index([bookingId, role])
+  @@index([clientId])
   @@index([userId, status])
   @@index([invitedEmail, status])
 }
@@ -811,6 +824,7 @@ model Account {
   paymentAllocations PaymentAllocation[]
   refunds       Refund[]
   ledgerEntries LedgerEntry[]
+  bookingHistoryEntries BookingHistoryEntry[]
 
   @@index([clubId])
   @@index([sourceType, sourceId])
@@ -977,6 +991,7 @@ model Payment {
   allocations  PaymentAllocation[]
   refunds      Refund[]
   ledgerEntries LedgerEntry[]
+  bookingHistoryEntries BookingHistoryEntry[]
 
   @@index([accountId])
   @@index([channel])
@@ -1105,6 +1120,44 @@ model AuditLog {
 
   @@index([clubId])
   @@index([entity, entityId])
+}
+
+model BookingHistoryEntry {
+  id                   String   @id @default(cuid())
+  clubId               Int
+  club                 Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  bookingId            Int
+  booking              Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actorUserId          Int?
+  actorUser            User?    @relation("BookingHistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorLabel           String?
+  action               String
+  category             String
+  source               String
+  summary              String
+  detail               Json?
+  previousState        Json?
+  nextState            Json?
+  bookingParticipantId String?
+  bookingParticipant   BookingParticipant? @relation(fields: [bookingParticipantId], references: [id], onDelete: SetNull)
+  paymentId            String?
+  payment              Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  accountId            String?
+  account              Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  sourceEventId        String?  @unique
+  idempotencyKey       String?  @unique
+  metadata             Json?
+  occurredAt           DateTime @default(now()) @db.Timestamptz(3)
+  createdAt            DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([clubId, bookingId, occurredAt])
+  @@index([bookingId, occurredAt])
+  @@index([action, occurredAt])
+  @@index([category, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([bookingParticipantId, occurredAt])
+  @@index([paymentId, occurredAt])
+  @@index([accountId, occurredAt])
 }
 
 model Event {

@@ -73,6 +73,11 @@ function buildServiceHarness() {
       snapshots: []
     })
   };
+  service.bookingHistoryService = {
+    appendBookingHistoryEntryTx: async () => {
+      throw new Error('quote no debería escribir historial');
+    }
+  };
 
   return service;
 }

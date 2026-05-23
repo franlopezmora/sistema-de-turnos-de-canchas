@@ -2,10 +2,12 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../prisma';
 import { EventService } from '../services/EventService';
+import { BookingHistoryService } from '../services/BookingHistoryService';
 import { sendAppError } from '../errors';
 
 export class EventController {
   private readonly eventService = new EventService();
+  private readonly bookingHistoryService = new BookingHistoryService();
 
   list = async (req: Request, res: Response) => {
     try {
@@ -40,32 +42,32 @@ export class EventController {
         });
         if (!booking) return res.status(404).json({ error: 'Reserva no encontrada en el club activo' });
 
-        const bookingAccounts = await prisma.account.findMany({
-          where: {
-            clubId,
-            sourceType: 'BOOKING',
-            sourceId: String(bookingId)
-          },
-          select: { id: true }
+        const bookingHistory = await this.bookingHistoryService.listByBooking({
+          clubId,
+          bookingId,
+          take: parsed.data.take ?? 100,
         });
 
-        const bookingEventOrFilters: any[] = [
-          { payload: { path: ['bookingId'], equals: bookingId } },
-          { payload: { path: ['bookingId'], equals: String(bookingId) } },
-          { payload: { path: ['sourceBookingId'], equals: bookingId } },
-          { payload: { path: ['sourceBookingId'], equals: String(bookingId) } }
-        ];
-
-        bookingAccounts.forEach((account) => {
-          bookingEventOrFilters.push({
-            payload: {
-              path: ['accountId'],
-              equals: account.id
-            }
-          });
-        });
-
-        where.AND = [{ OR: bookingEventOrFilters }];
+        return res.json(
+          bookingHistory.map((entry) => ({
+            id: entry.id,
+            action: entry.action,
+            category: entry.category,
+            source: entry.source,
+            summary: entry.summary,
+            detail: entry.detail,
+            previousState: entry.previousState,
+            nextState: entry.nextState,
+            metadata: entry.metadata,
+            actorUserId: entry.actorUserId,
+            actorLabel: entry.actorLabel,
+            bookingParticipantId: entry.bookingParticipantId,
+            paymentId: entry.paymentId,
+            accountId: entry.accountId,
+            occurredAt: entry.occurredAt,
+            createdAt: entry.createdAt,
+          }))
+        );
       }
 
       const events = await prisma.event.findMany({

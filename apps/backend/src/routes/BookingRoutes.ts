@@ -54,6 +54,10 @@ router.delete('/items/:itemId', authMiddleware, setAdminClubFromUser, requireTen
 // Historial y Estados
 router.get('/history/:userId', authMiddleware, (req, res) => bookingController.getHistory(req, res));
 router.get('/:id', authMiddleware, setAdminClubFromUser, requireTenantRole(['ADMIN', 'STAFF']), (req, res) => bookingController.getById(req, res));
+router.get('/:id/history', authMiddleware, setAdminClubFromUser, requireTenantRole(['ADMIN', 'STAFF']), (req, res) => bookingController.getAdminBookingHistory(req, res));
+router.get('/:id/participants', authMiddleware, setAdminClubFromUser, requireTenantRole(['ADMIN', 'STAFF']), (req, res) => bookingController.getAdminBookingParticipants(req, res));
+router.post('/:id/participants', authMiddleware, setAdminClubFromUser, requireTenantRole(['ADMIN', 'STAFF']), (req, res) => bookingController.addAdminBookingParticipant(req, res));
+router.delete('/:id/participants/:participantId', authMiddleware, setAdminClubFromUser, requireTenantRole(['ADMIN', 'STAFF']), (req, res) => bookingController.removeAdminBookingParticipant(req, res));
 
 // Commit 3 — Cambio explícito de titular (solo OWNER/ADMIN, bloqueado si hay pagos/devoluciones)
 router.patch('/:id/client', authMiddleware, setAdminClubFromUser, requireTenantRole(['OWNER', 'ADMIN']), (req, res) => bookingController.changeBookingClient(req, res));

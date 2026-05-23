@@ -28,6 +28,11 @@ type TxMock = {
     findUnique?: (args: any) => Promise<any>;
     update?: (args: any) => Promise<any>;
   };
+  bookingParticipant: {
+    findFirst: (args: any) => Promise<any>;
+    create: (args: any) => Promise<any>;
+    update: (args: any) => Promise<any>;
+  };
   account?: {
     findFirst: (args: any) => Promise<any>;
   };
@@ -114,6 +119,9 @@ function buildServiceHarness() {
     bookingParticipantAdded: async () => null,
     bookingClientChanged: async () => null
   };
+  service.bookingHistoryService = {
+    appendBookingHistoryEntryTx: async () => null
+  };
   service.outboxService = {
     enqueueMany: async () => null
   };
@@ -130,6 +138,29 @@ function withMockedTransaction(tx: TxMock, run: () => Promise<void>) {
   return run().finally(() => {
     (prisma as any).$transaction = originalTransaction;
   });
+}
+
+function createBookingParticipantRepo(state?: {
+  existingOrganizer?: any;
+  created?: any[];
+  updated?: Array<{ where: any; data: any }>;
+}) {
+  return {
+    findFirst: async ({ where }: any) => {
+      if (where?.role === 'ORGANIZER') {
+        return state?.existingOrganizer ?? null;
+      }
+      return null;
+    },
+    create: async ({ data }: any) => {
+      state?.created?.push(data);
+      return { id: 'bp-org-created', ...data };
+    },
+    update: async ({ where, data }: any) => {
+      state?.updated?.push({ where, data });
+      return { id: where?.id ?? 'bp-org-updated', ...data };
+    }
+  };
 }
 
 function bookingCreateResult(data: any) {
@@ -196,6 +227,7 @@ test('admin puede crear reserva con clubClient existente sin usar ensureClientFo
   const service = buildServiceHarness();
   let createdData: any = null;
   let ensureCalls = 0;
+  const organizerCreates: any[] = [];
 
   (service as any).personService = {
     ensureClientForUser: async () => {
@@ -229,7 +261,8 @@ test('admin puede crear reserva con clubClient existente sin usar ensureClientFo
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-1' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo({ created: organizerCreates })
   };
 
   await withMockedTransaction(tx, async () => {
@@ -250,6 +283,10 @@ test('admin puede crear reserva con clubClient existente sin usar ensureClientFo
     assert.equal(createdData.clientId, 'client-1');
     assert.equal(createdData.userId, null);
     assert.equal(ensureCalls, 0);
+    assert.equal(organizerCreates.length, 1);
+    assert.equal(organizerCreates[0].role, 'ORGANIZER');
+    assert.equal(organizerCreates[0].clientId, 'client-1');
+    assert.equal(organizerCreates[0].userId, null);
   });
 });
 
@@ -258,6 +295,7 @@ test('admin puede crear reserva con systemUser permitido y asegura client del cl
   let createdData: any = null;
   let validateCalls = 0;
   let ensureCalls = 0;
+  const organizerCreates: any[] = [];
 
   (service as any).personService = {
     validateSearchSelection: async (_clubId: number, input: any) => {
@@ -301,7 +339,8 @@ test('admin puede crear reserva con systemUser permitido y asegura client del cl
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-2' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo({ created: organizerCreates })
   };
 
   await withMockedTransaction(tx, async () => {
@@ -327,6 +366,10 @@ test('admin puede crear reserva con systemUser permitido y asegura client del cl
     assert.equal(createdData.userId, 77);
     assert.equal(validateCalls, 1);
     assert.equal(ensureCalls, 1);
+    assert.equal(organizerCreates.length, 1);
+    assert.equal(organizerCreates[0].role, 'ORGANIZER');
+    assert.equal(organizerCreates[0].clientId, 'client-user-77');
+    assert.equal(organizerCreates[0].userId, 77);
   });
 });
 
@@ -349,7 +392,8 @@ test('admin no puede crear reserva con clientId de otro club', async () => {
     },
     bookingBillingConfig: {
       upsert: async () => ({ id: 'cfg-3' })
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo()
   };
 
   await withMockedTransaction(tx, async () => {
@@ -374,6 +418,8 @@ test('admin no puede crear reserva con clientId de otro club', async () => {
 test('changeBookingClient puede cambiar titular a systemUser permitido y asegurar client', async () => {
   const service = buildServiceHarness();
   let bookingUpdateData: any = null;
+  const organizerUpdates: Array<{ where: any; data: any }> = [];
+  const historyEntries: any[] = [];
 
   (service as any).personService = {
     validateSearchSelection: async () => ({
@@ -388,6 +434,12 @@ test('changeBookingClient puede cambiar titular a systemUser permitido y asegura
       userId: 77
     })
   } as any;
+  (service as any).bookingHistoryService = {
+    appendBookingHistoryEntryTx: async (_tx: any, input: any) => {
+      historyEntries.push(input);
+      return { id: `bhe-${historyEntries.length}`, ...input };
+    }
+  };
 
   const tx: any = {
     booking: {
@@ -418,9 +470,22 @@ test('changeBookingClient puede cambiar titular a systemUser permitido y asegura
     client: {
       findFirst: async () => null
     },
+    user: {
+      findUnique: async () => ({
+        id: 77,
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        email: 'ana@pique.test',
+        phoneNumber: '+5493511231234'
+      })
+    },
     bookingBillingConfig: {
       findUnique: async () => null
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo({
+      existingOrganizer: { id: 'bp-org-existing', role: 'ORGANIZER', userId: null, status: 'JOINED' },
+      updated: organizerUpdates
+    })
   };
 
   await withMockedTransaction(tx, async () => {
@@ -437,12 +502,105 @@ test('changeBookingClient puede cambiar titular a systemUser permitido y asegura
 
     assert.equal(result.clientId, 'client-ensured');
     assert.deepEqual(bookingUpdateData, { clientId: 'client-ensured', userId: 77 });
+    assert.equal(organizerUpdates.length, 1);
+    assert.equal(organizerUpdates[0].data.clientId, 'client-ensured');
+    assert.equal(organizerUpdates[0].data.userId, 77);
+    assert.equal(historyEntries.length, 1);
+    assert.equal(historyEntries[0].action, 'BOOKING_OWNER_CHANGED');
+    assert.equal(historyEntries[0].previousState.clientId, 'client-old');
+    assert.equal(historyEntries[0].previousState.userId, null);
+    assert.equal(historyEntries[0].nextState.clientId, 'client-ensured');
+    assert.equal(historyEntries[0].nextState.userId, 77);
+  });
+});
+
+test('changeBookingClient conserva booking.userId al elegir un client explicitamente vinculado', async () => {
+  const service = buildServiceHarness();
+  let bookingUpdateData: any = null;
+  const organizerUpdates: Array<{ where: any; data: any }> = [];
+
+  const tx: any = {
+    booking: {
+      findFirst: async () => ({
+        id: 302,
+        clubId: 5,
+        clientId: 'client-old',
+        userId: null,
+        status: 'PENDING'
+      }),
+      update: async (args: any) => {
+        bookingUpdateData = args.data;
+        return {
+          id: 302,
+          clientId: args.data.clientId,
+          userId: args.data.userId,
+          client: { id: args.data.clientId, name: 'Cliente Vinculado' }
+        };
+      }
+    },
+    account: {
+      findFirst: async () => ({
+        id: 'acc-3',
+        status: 'OPEN',
+        _count: { payments: 0, refunds: 0 }
+      })
+    },
+    client: {
+      findFirst: async (args: any) => {
+        if (args?.where?.id === 'client-linked' && args?.where?.clubId === 5) {
+          return {
+            id: 'client-linked',
+            name: 'Cliente Vinculado',
+            userId: 88,
+            email: 'linked@pique.test',
+            phone: '+5493510002222'
+          };
+        }
+        return null;
+      }
+    },
+    user: {
+      findUnique: async (args: any) => {
+        if (Number(args?.where?.id || 0) !== 88) return null;
+        return {
+          id: 88,
+          firstName: 'Lola',
+          lastName: 'Suárez',
+          email: 'linked@pique.test',
+          phoneNumber: '+5493510002222'
+        };
+      }
+    },
+    bookingBillingConfig: {
+      findUnique: async () => null
+    },
+    bookingParticipant: createBookingParticipantRepo({
+      existingOrganizer: { id: 'bp-org-existing', role: 'ORGANIZER', userId: null, status: 'JOINED' },
+      updated: organizerUpdates
+    })
+  };
+
+  await withMockedTransaction(tx, async () => {
+    const result = await service.changeBookingClient({
+      bookingId: 302,
+      actorUserId: 9,
+      clubId: 5,
+      newClientId: 'client-linked'
+    });
+
+    assert.equal(result.clientId, 'client-linked');
+    assert.deepEqual(bookingUpdateData, { clientId: 'client-linked', userId: 88 });
+    assert.equal(organizerUpdates.length, 1);
+    assert.equal(organizerUpdates[0].data.clientId, 'client-linked');
+    assert.equal(organizerUpdates[0].data.userId, 88);
+    assert.equal(organizerUpdates[0].data.displayName, 'Cliente Vinculado');
   });
 });
 
 test('changeBookingClient puede cambiar titular a newClient reutilizando resolveOrCreateClient', async () => {
   const service = buildServiceHarness();
   let bookingUpdateData: any = null;
+  const organizerCreates: any[] = [];
 
   (service as any).resolveOrCreateClient = async () => ({
     id: 'client-new',
@@ -479,9 +637,13 @@ test('changeBookingClient puede cambiar titular a newClient reutilizando resolve
     client: {
       findFirst: async () => null
     },
+    user: {
+      findUnique: async () => null
+    },
     bookingBillingConfig: {
       findUnique: async () => null
-    }
+    },
+    bookingParticipant: createBookingParticipantRepo({ created: organizerCreates })
   };
 
   await withMockedTransaction(tx, async () => {
@@ -499,5 +661,8 @@ test('changeBookingClient puede cambiar titular a newClient reutilizando resolve
 
     assert.equal(result.clientId, 'client-new');
     assert.deepEqual(bookingUpdateData, { clientId: 'client-new', userId: null });
+    assert.equal(organizerCreates.length, 1);
+    assert.equal(organizerCreates[0].clientId, 'client-new');
+    assert.equal(organizerCreates[0].userId, null);
   });
 });

@@ -36,6 +36,7 @@ import { MercadoPagoService } from './MercadoPagoService';
 import { mercadoPagoConfig } from '../utils/mercadoPagoConfig';
 import { PaymentService } from './PaymentService';
 import { PersonService } from './PersonService';
+import { BookingHistoryService } from './BookingHistoryService';
 import { AppError, ErrorCodes, badRequest, conflict, forbidden, notFound } from '../errors';
 
 type CancelBookingReason = 'MANUAL' | 'AUTO_CANCEL_UNCONFIRMED';
@@ -133,10 +134,24 @@ export type PlayerBookingParticipantDto = {
     id: string;
     displayName: string;
     status: 'INVITED' | 'JOINED' | 'DECLINED' | 'LEFT' | 'REMOVED';
-    role: 'PARTICIPANT';
+    role: 'ORGANIZER' | 'PARTICIPANT';
     isMe: boolean;
     invitedEmail?: string | null;
     canManage: boolean;
+};
+
+export type AdminBookingParticipantDto = {
+    id: string;
+    bookingId: number;
+    clientId: string | null;
+    userId: number | null;
+    displayName: string;
+    email?: string | null;
+    phone?: string | null;
+    status: 'INVITED' | 'JOINED' | 'DECLINED' | 'LEFT' | 'REMOVED';
+    role: 'ORGANIZER' | 'PARTICIPANT';
+    invitedEmail?: string | null;
+    invitedName?: string | null;
 };
 
 export type PlayerBookingInvitationDto = {
@@ -276,6 +291,7 @@ export class BookingService {
     private readonly pricingService = new PricingService();
     private readonly eventService = new EventService();
     private readonly auditLogService = new AuditLogService();
+    private readonly bookingHistoryService = new BookingHistoryService();
     private readonly outboxService = new OutboxService();
     private readonly accountingService = new AccountingService();
     private readonly accountService = new AccountService();
@@ -413,10 +429,20 @@ export class BookingService {
     private isExplicitBookingOwner(booking: {
         userId?: number | null;
         client?: { userId?: number | null } | null;
+        participants?: Array<{
+            userId?: number | null;
+            role?: string | null;
+            status?: string | null;
+        }> | null;
     }, userId: number) {
         if (!Number.isInteger(userId) || userId <= 0) return false;
         if (Number(booking.userId || 0) === Number(userId)) return true;
-        return Number(booking.client?.userId || 0) === Number(userId);
+        if (Number(booking.client?.userId || 0) === Number(userId)) return true;
+        return Array.isArray(booking.participants)
+            ? booking.participants.some((participant) =>
+                Number(participant?.userId || 0) === Number(userId) && this.isOrganizerParticipant(participant)
+            )
+            : false;
     }
 
     private isBookingParticipantJoined(booking: {
@@ -426,6 +452,7 @@ export class BookingService {
         return Array.isArray(booking.participants)
             ? booking.participants.some((participant) =>
                 Number(participant?.userId || 0) === Number(userId) &&
+                !this.isOrganizerParticipant(participant) &&
                 String(participant?.status || '') === 'JOINED'
             )
             : false;
@@ -517,10 +544,13 @@ export class BookingService {
     }
 
     private resolveParticipantDisplayName(input: {
+        displayName?: string | null;
         invitedName?: string | null;
         invitedEmail?: string | null;
         user?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
     }) {
+        const snapshotName = String(input.displayName || '').trim();
+        if (snapshotName) return snapshotName;
         const fullName = [String(input.user?.firstName || '').trim(), String(input.user?.lastName || '').trim()]
             .filter(Boolean)
             .join(' ')
@@ -531,6 +561,247 @@ export class BookingService {
         const email = String(input.user?.email || input.invitedEmail || '').trim();
         if (email) return email;
         return 'Jugador invitado';
+    }
+
+    private isOrganizerParticipant(input: {
+        role?: string | null;
+        status?: string | null;
+    } | null | undefined) {
+        if (!input) return false;
+        if (String(input.role || '').trim() !== 'ORGANIZER') return false;
+        return String(input.status || '').trim() !== 'REMOVED';
+    }
+
+    private buildOrganizerParticipantSnapshot(input: {
+        client: {
+            id: string;
+            name?: string | null;
+            email?: string | null;
+            phone?: string | null;
+        };
+        user?: {
+            id?: number | null;
+            firstName?: string | null;
+            lastName?: string | null;
+            email?: string | null;
+            phoneNumber?: string | null;
+        } | null;
+        userId?: number | null;
+    }) {
+        const userFullName = [
+            String(input.user?.firstName || '').trim(),
+            String(input.user?.lastName || '').trim()
+        ].filter(Boolean).join(' ').trim();
+        const parsedUserId = Number(input.userId ?? input.user?.id ?? 0);
+        const normalizedUserId = Number.isInteger(parsedUserId) && parsedUserId > 0
+            ? parsedUserId
+            : null;
+
+        return {
+            clientId: String(input.client.id),
+            userId: normalizedUserId,
+            displayName:
+                String(input.client.name || '').trim()
+                || userFullName
+                || String(input.user?.email || '').trim()
+                || 'Titular',
+            email:
+                String(input.client.email || '').trim()
+                || String(input.user?.email || '').trim()
+                || null,
+            phone:
+                String(input.client.phone || '').trim()
+                || String(input.user?.phoneNumber || '').trim()
+                || null
+        };
+    }
+
+    private buildManagedParticipantSnapshot(input: {
+        client: {
+            id: string;
+            name?: string | null;
+            email?: string | null;
+            phone?: string | null;
+        };
+        user?: {
+            id?: number | null;
+            firstName?: string | null;
+            lastName?: string | null;
+            email?: string | null;
+            phoneNumber?: string | null;
+        } | null;
+        userId?: number | null;
+        role: 'ORGANIZER' | 'PARTICIPANT';
+    }) {
+        const base = this.buildOrganizerParticipantSnapshot({
+            client: input.client,
+            user: input.user,
+            userId: input.userId
+        });
+        return {
+            ...base,
+            role: input.role,
+        } as const;
+    }
+
+    private mapAdminBookingParticipantDto(input: {
+        id: string;
+        bookingId: number;
+        clientId?: string | null;
+        userId?: number | null;
+        displayName?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        invitedEmail?: string | null;
+        invitedName?: string | null;
+        status: BookingParticipantStatus | string;
+        role: string;
+        user?: {
+            firstName?: string | null;
+            lastName?: string | null;
+            email?: string | null;
+        } | null;
+    }): AdminBookingParticipantDto {
+        return {
+            id: String(input.id),
+            bookingId: Number(input.bookingId),
+            clientId: input.clientId ? String(input.clientId) : null,
+            userId: Number.isInteger(Number(input.userId || 0)) && Number(input.userId) > 0 ? Number(input.userId) : null,
+            displayName: this.resolveParticipantDisplayName(input),
+            email: input.email ?? input.user?.email ?? null,
+            phone: input.phone ?? null,
+            status: String(input.status || '').trim() === 'REMOVED'
+                ? 'REMOVED'
+                : String(input.status || '').trim() === 'DECLINED'
+                    ? 'DECLINED'
+                    : String(input.status || '').trim() === 'LEFT'
+                        ? 'LEFT'
+                        : String(input.status || '').trim() === 'JOINED'
+                            ? 'JOINED'
+                            : 'INVITED',
+            role: String(input.role || '').trim() === 'ORGANIZER' ? 'ORGANIZER' : 'PARTICIPANT',
+            invitedEmail: input.invitedEmail ?? null,
+            invitedName: input.invitedName ?? null,
+        };
+    }
+
+    private async ensureOrganizerParticipantTx(
+        tx: Prisma.TransactionClient,
+        input: {
+            bookingId: number;
+            client: {
+                id: string;
+                name?: string | null;
+                email?: string | null;
+                phone?: string | null;
+            };
+            user?: {
+                id?: number | null;
+                firstName?: string | null;
+                lastName?: string | null;
+                email?: string | null;
+                phoneNumber?: string | null;
+            } | null;
+            userId?: number | null;
+        }
+    ) {
+        const organizerData = this.buildOrganizerParticipantSnapshot(input);
+        const existingOrganizer = await tx.bookingParticipant.findFirst({
+            where: {
+                bookingId: input.bookingId,
+                role: 'ORGANIZER'
+            },
+            orderBy: { createdAt: 'asc' }
+        });
+
+        const conflictingParticipant = organizerData.userId
+            ? await tx.bookingParticipant.findFirst({
+                where: {
+                    bookingId: input.bookingId,
+                    userId: organizerData.userId,
+                    NOT: existingOrganizer ? { id: existingOrganizer.id } : undefined
+                },
+                select: {
+                    id: true,
+                    role: true,
+                    status: true
+                }
+            })
+            : null;
+
+        const safeOrganizerUserId = conflictingParticipant ? null : organizerData.userId;
+        const baseData = {
+            clientId: organizerData.clientId,
+            userId: safeOrganizerUserId,
+            displayName: organizerData.displayName,
+            email: organizerData.email,
+            phone: organizerData.phone,
+            invitedName: null,
+            invitedEmail: null,
+            status: 'JOINED' as BookingParticipantStatus,
+            role: 'ORGANIZER' as const,
+            acceptedAt: new Date(),
+            declinedAt: null,
+            leftAt: null,
+            removedAt: null
+        };
+
+        if (existingOrganizer) {
+            return tx.bookingParticipant.update({
+                where: { id: existingOrganizer.id },
+                data: baseData
+            });
+        }
+
+        return tx.bookingParticipant.create({
+            data: {
+                bookingId: input.bookingId,
+                ...baseData
+            }
+        });
+    }
+
+    private async appendBookingHistoryEntryTx(
+        tx: Prisma.TransactionClient,
+        input: {
+            bookingId: number;
+            clubId: number;
+            action: string;
+            category: 'BOOKING' | 'PARTICIPANT' | 'PAYMENT' | 'CONSUMPTION' | 'BILLING';
+            source: string;
+            summary: string;
+            actorUserId?: number | null;
+            actorLabel?: string | null;
+            detail?: Prisma.InputJsonValue | null;
+            previousState?: Prisma.InputJsonValue | null;
+            nextState?: Prisma.InputJsonValue | null;
+            bookingParticipantId?: string | null;
+            paymentId?: string | null;
+            accountId?: string | null;
+            metadata?: Prisma.InputJsonValue | null;
+            idempotencyKey?: string | null;
+            occurredAt?: Date | null;
+        }
+    ) {
+        return this.bookingHistoryService.appendBookingHistoryEntryTx(tx, {
+            bookingId: input.bookingId,
+            clubId: input.clubId,
+            action: input.action,
+            category: input.category,
+            source: input.source,
+            summary: input.summary,
+            actorUserId: input.actorUserId ?? null,
+            actorLabel: input.actorLabel ?? null,
+            detail: input.detail ?? null,
+            previousState: input.previousState ?? null,
+            nextState: input.nextState ?? null,
+            bookingParticipantId: input.bookingParticipantId ?? null,
+            paymentId: input.paymentId ?? null,
+            accountId: input.accountId ?? null,
+            metadata: input.metadata ?? null,
+            idempotencyKey: input.idempotencyKey ?? null,
+            occurredAt: input.occurredAt ?? null,
+        });
     }
 
     async resolveClubIdForUser(userId: number, preferredClubId?: number) {
@@ -608,6 +879,34 @@ export class BookingService {
                     startDateTime: input.startDateTime?.toISOString?.() || null,
                     endDateTime: endDateTime?.toISOString?.() || null,
                 }, tx as any);
+
+                await this.appendBookingHistoryEntryTx(tx, {
+                    bookingId: input.bookingId,
+                    clubId: input.clubId,
+                    action: 'BOOKING_RESCHEDULED',
+                    category: 'BOOKING',
+                    source: 'ADMIN',
+                    summary: 'Reserva reprogramada',
+                    actorUserId: input.actorUserId ?? null,
+                    previousState: {
+                        courtId: booking.courtId,
+                        activityId: booking.activityId,
+                        startDateTime: booking.startDateTime?.toISOString?.() || null,
+                        endDateTime: booking.endDateTime?.toISOString?.() || null,
+                    },
+                    nextState: {
+                        courtId: targetCourt.id,
+                        activityId: Number(targetCourt.activityTypeId || booking.activityId),
+                        startDateTime: input.startDateTime?.toISOString?.() || null,
+                        endDateTime: endDateTime?.toISOString?.() || null,
+                    },
+                    detail: {
+                        previousCourtId: booking.courtId,
+                        courtId: targetCourt.id,
+                        previousActivityId: booking.activityId,
+                        activityId: Number(targetCourt.activityTypeId || booking.activityId),
+                    },
+                });
 
                 return persisted;
             });
@@ -1009,6 +1308,8 @@ export class BookingService {
                 }
                 : this.buildDefaultBillingConfig(booking);
             const previousAssignments = previousConfig.assignments;
+            const previousMetadata = (previousConfig as any)?.metadata as Record<string, unknown> | undefined;
+            const bootstrapInitializer = String(previousMetadata?.initializedBy || '').trim().toUpperCase();
             const effectiveChargeResponsibleRef = (() => {
                 const explicit = String(input.chargeResponsibleRef || '').trim();
                 if (explicit) return explicit;
@@ -1284,6 +1585,13 @@ export class BookingService {
             const previousNotes = this.extractSidebarNotesFromMetadata(previousConfig.metadata as Record<string, unknown>);
             const nextNotes = this.extractSidebarNotesFromMetadata((input.metadata || {}) as Record<string, unknown>);
             const notesChanged = previousNotes !== nextNotes;
+            const isBootstrapNormalizationSync =
+                (bootstrapInitializer === 'BOOKING_CREATED' || bootstrapInitializer === 'AUTO_INITIALIZE_ON_READ') &&
+                !chargeModeChanged &&
+                !chargeResponsibleChanged &&
+                !notesChanged &&
+                addedParticipantRefs.every((ref) => ref === 'booking:responsible') &&
+                removedParticipantRefs.every((ref) => ref === 'booking:responsible');
 
             this.validateBillingConfig({
                 chargeMode: input.chargeMode,
@@ -1332,25 +1640,7 @@ export class BookingService {
                 },
             });
 
-            if (addedParticipantRefs.length > 0) {
-                await this.eventService.bookingParticipantAdded(input.clubId, {
-                    bookingId: booking.id,
-                    addedParticipantRefs,
-                    addedParticipantsCount: addedParticipantRefs.length,
-                    actorUserId: input.actorUserId || null,
-                    chargeMode: input.chargeMode,
-                }, tx as any);
-            }
-            if (removedParticipantRefs.length > 0) {
-                await this.eventService.bookingParticipantRemoved(input.clubId, {
-                    bookingId: booking.id,
-                    removedParticipantRefs,
-                    removedParticipantsCount: removedParticipantRefs.length,
-                    actorUserId: input.actorUserId || null,
-                    chargeMode: input.chargeMode,
-                }, tx as any);
-            }
-            if (billingConfigChanged) {
+            if (!isBootstrapNormalizationSync && billingConfigChanged) {
                 const stableResponsibleForEvent =
                     String(previousConfig.chargeResponsibleRef || '').trim() ||
                     String(effectiveChargeResponsibleRef || '').trim() ||
@@ -1369,14 +1659,50 @@ export class BookingService {
                     addedParticipantsCount: addedParticipantRefs.length,
                     removedParticipantsCount: removedParticipantRefs.length,
                 }, tx as any);
+                await this.appendBookingHistoryEntryTx(tx, {
+                    bookingId: booking.id,
+                    clubId: input.clubId,
+                    action: 'BOOKING_BILLING_CONFIG_UPDATED',
+                    category: 'BILLING',
+                    source: 'ADMIN',
+                    summary: 'Configuración de cobro actualizada',
+                    actorUserId: input.actorUserId || null,
+                    previousState: {
+                        chargeMode: previousConfig.chargeMode,
+                        chargeResponsibleRef: previousConfig.chargeResponsibleRef || null,
+                    },
+                    nextState: {
+                        chargeMode: input.chargeMode,
+                        chargeResponsibleRef: effectiveChargeResponsibleRef || null,
+                    },
+                    detail: {
+                        addedParticipantsCount: addedParticipantRefs.length,
+                        removedParticipantsCount: removedParticipantRefs.length,
+                    },
+                });
             }
-            if (notesChanged) {
+            if (!isBootstrapNormalizationSync && notesChanged) {
                 await this.eventService.bookingNotesUpdated(input.clubId, {
                     bookingId: booking.id,
                     actorUserId: input.actorUserId || null,
                     previousNotes: previousNotes || '',
                     notes: nextNotes || '',
                 }, tx as any);
+                await this.appendBookingHistoryEntryTx(tx, {
+                    bookingId: booking.id,
+                    clubId: input.clubId,
+                    action: 'BOOKING_NOTES_UPDATED',
+                    category: 'BOOKING',
+                    source: 'ADMIN',
+                    summary: 'Notas actualizadas',
+                    actorUserId: input.actorUserId || null,
+                    previousState: { notes: previousNotes || '' },
+                    nextState: { notes: nextNotes || '' },
+                    detail: {
+                        hadPreviousNotes: Boolean(previousNotes),
+                        hasNotes: Boolean(nextNotes),
+                    },
+                });
             }
 
             return {
@@ -2329,7 +2655,28 @@ export class BookingService {
             phone: safePhone
         });
 
-        if (strongMatches.canonical) {
+        if (strongMatches.canonical && !input.forceCreateNew) {
+            if (strongMatches.matches.length > 1) {
+                const matchedSignals = Array.isArray((strongMatches.canonical as any).matchedBy)
+                    ? (strongMatches.canonical as any).matchedBy.filter((value: unknown) => typeof value === 'string')
+                    : [];
+                throw this.clientPossibleDuplicate({
+                    userId: safeUserId,
+                    reasonType: matchedSignals.length === 1 ? matchedSignals[0] : 'MULTI_SIGNAL_CONFLICT',
+                    primaryClientId: String(strongMatches.canonical.id),
+                    candidateClientIds: strongMatches.matches.map((match) => String(match.id)),
+                    candidates: strongMatches.matches.map((match) => ({
+                        id: String(match.id),
+                        name: String(match.name || '').trim() || 'Cliente sin nombre',
+                        phone: match.phone || null,
+                        email: match.email || null,
+                        dni: match.dni || null,
+                        userId: Number(match.userId || 0) > 0 ? Number(match.userId) : null
+                    })),
+                    signals: matchedSignals
+                });
+            }
+
             const matchedBy = Array.isArray((strongMatches.canonical as any).matchedBy)
                 ? (strongMatches.canonical as any).matchedBy
                 : [];
@@ -3035,6 +3382,12 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     if (!resolvedClient) {
                         throw this.clientNotFound('Cliente no encontrado para el club seleccionado');
                     }
+                    if (!resolvedBookingUserId) {
+                        const linkedClientUserId = Number(resolvedClient.userId || 0);
+                        if (Number.isInteger(linkedClientUserId) && linkedClientUserId > 0) {
+                            resolvedBookingUserId = linkedClientUserId;
+                        }
+                    }
                 }
 
                 if (!resolvedClient && requestedOwnerUserSelection) {
@@ -3108,6 +3461,26 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     include: { user: true, client: true, court: { include: { club: true } }, activity: true }
                 });
 
+                await this.ensureOrganizerParticipantTx(tx, {
+                    bookingId: saved.id,
+                    client: {
+                        id: String(resolvedClient.id),
+                        name: resolvedClient.name ?? null,
+                        email: resolvedClient.email ?? null,
+                        phone: resolvedClient.phone ?? null
+                    },
+                    user: resolvedBookingUserId && bookingOwnerUser && Number(bookingOwnerUser.id) === Number(resolvedBookingUserId)
+                        ? {
+                            id: Number(bookingOwnerUser.id),
+                            firstName: bookingOwnerUser.firstName ?? null,
+                            lastName: bookingOwnerUser.lastName ?? null,
+                            email: bookingOwnerUser.email ?? null,
+                            phoneNumber: bookingOwnerUser.phoneNumber ?? null
+                        }
+                        : null,
+                    userId: resolvedBookingUserId
+                });
+
                 // Estrategia lazy: para turnos simples no abrimos cuenta al crear.
                 // Solo se crea al confirmar, agregar consumos o registrar pagos.
                 if (initialStatus === 'CONFIRMED' || options?.skipAccountCreation === false) {
@@ -3178,6 +3551,32 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     activityId,
                     amount: Number(saved.price || 0)
                 }, tx);
+                await this.appendBookingHistoryEntryTx(tx, {
+                    bookingId: saved.id,
+                    clubId: bookingClubId,
+                    action: 'BOOKING_CREATED',
+                    category: 'BOOKING',
+                    source: 'ADMIN',
+                    summary: 'Reserva creada',
+                    actorUserId: Number(options?.actorUserId || user?.id || 0) || null,
+                    nextState: {
+                        status: String(saved.status || initialStatus || 'PENDING'),
+                        clientId: saved.clientId,
+                        userId: resolvedBookingUserId,
+                        courtId,
+                        activityId,
+                        amount: Number(saved.price || 0),
+                        startDateTime: saved.startDateTime?.toISOString?.() || null,
+                        endDateTime: saved.endDateTime?.toISOString?.() || null,
+                    },
+                    detail: {
+                        amount: Number(saved.price || 0),
+                        clientId: saved.clientId,
+                        userId: resolvedBookingUserId,
+                    },
+                    idempotencyKey: `booking:${saved.id}:created`,
+                    occurredAt: saved.createdAt ?? new Date(),
+                });
                 await this.eventService.bookingParticipantAdded(bookingClubId, {
                     bookingId: saved.id,
                     addedParticipantRefs: [bookingResponsibleRef],
@@ -3576,6 +3975,22 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 cancelledByUserId: cancelledByUserId ?? null,
                 clubId: booking.court.club.id
             }, tx);
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId,
+                clubId: booking.court.club.id,
+                action: 'BOOKING_CANCELLED',
+                category: 'BOOKING',
+                source: isAutoCancel ? 'SYSTEM' : 'ADMIN',
+                summary: 'Reserva cancelada',
+                actorUserId: cancelledByUserId ?? null,
+                previousState: { status: currentBooking.status },
+                nextState: { status: 'CANCELLED' },
+                detail: {
+                    reason,
+                    triggeredBy: options?.triggeredBy ?? (isAutoCancel ? 'SYSTEM' : clubId != null ? 'ADMIN' : 'USER'),
+                    refundedAmount: refundedAmount,
+                },
+            });
 
             const clubPhone = (booking.court.club as any)?.phone ?? null;
             const clientPhone =
@@ -3718,16 +4133,37 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 );
             }
 
-            let nextClient: { id: string; name: string; userId?: number | null } | null = null;
+            let nextClient: { id: string; name: string; userId?: number | null; email?: string | null; phone?: string | null } | null = null;
             let nextBookingUserId: number | null = null;
+            let nextBookingUserSnapshot: {
+                id: number;
+                firstName?: string | null;
+                lastName?: string | null;
+                email?: string | null;
+                phoneNumber?: string | null;
+            } | null = null;
 
             if (newClientId) {
                 nextClient = await tx.client.findFirst({
                     where: { id: newClientId, clubId },
-                    select: { id: true, name: true, userId: true }
+                    select: { id: true, name: true, userId: true, email: true, phone: true }
                 });
                 if (!nextClient) {
                     throw this.clientNotFound('El cliente seleccionado no existe en este club');
+                }
+                const linkedClientUserId = Number(nextClient.userId || 0);
+                if (Number.isInteger(linkedClientUserId) && linkedClientUserId > 0) {
+                    nextBookingUserId = linkedClientUserId;
+                    nextBookingUserSnapshot = await tx.user.findUnique({
+                        where: { id: linkedClientUserId },
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            phoneNumber: true
+                        }
+                    });
                 }
             } else if (parsedOwnerUserSelection) {
                 await this.personService.validateSearchSelection(clubId, {
@@ -3749,9 +4185,21 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 nextClient = {
                     id: String(ensuredClient.id),
                     name: String(ensuredClient.name || '').trim() || 'Cliente',
-                    userId: Number.isInteger(Number(ensuredClient.userId)) ? Number(ensuredClient.userId) : null
+                    userId: Number.isInteger(Number(ensuredClient.userId)) ? Number(ensuredClient.userId) : null,
+                    email: ensuredClient.email ?? null,
+                    phone: ensuredClient.phone ?? null
                 };
                 nextBookingUserId = parsedOwnerUserSelection.userId;
+                nextBookingUserSnapshot = await tx.user.findUnique({
+                    where: { id: parsedOwnerUserSelection.userId },
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        phoneNumber: true
+                    }
+                });
             } else {
                 const resolvedClient = await this.resolveOrCreateClient(tx, {
                     clubId,
@@ -3765,7 +4213,9 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 nextClient = {
                     id: String(resolvedClient.id),
                     name: String(resolvedClient.name || '').trim() || 'Cliente',
-                    userId: Number.isInteger(Number(resolvedClient.userId)) ? Number(resolvedClient.userId) : null
+                    userId: Number.isInteger(Number(resolvedClient.userId)) ? Number(resolvedClient.userId) : null,
+                    email: resolvedClient.email ?? null,
+                    phone: resolvedClient.phone ?? null
                 };
             }
 
@@ -3787,6 +4237,18 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     userId: true,
                     client: { select: { id: true, name: true } }
                 }
+            });
+
+            await this.ensureOrganizerParticipantTx(tx, {
+                bookingId,
+                client: {
+                    id: nextClient.id,
+                    name: nextClient.name,
+                    email: nextClient.email ?? null,
+                    phone: nextClient.phone ?? null
+                },
+                user: nextBookingUserSnapshot,
+                userId: nextBookingUserId
             });
 
             // 4.1 Sincronizar billing config para evitar inconsistencias
@@ -3880,6 +4342,29 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 reason: reason ?? null,
                 source: 'MANUAL'
             }, tx as any);
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId,
+                clubId,
+                action: 'BOOKING_OWNER_CHANGED',
+                category: 'BOOKING',
+                source: 'ADMIN',
+                summary: 'Titular cambiado',
+                actorUserId,
+                previousState: {
+                    clientId: oldClientId,
+                    userId: booking.userId ?? null,
+                },
+                nextState: {
+                    clientId: nextClient.id,
+                    userId: nextBookingUserId,
+                },
+                detail: {
+                    oldClientId,
+                    newClientId: nextClient.id,
+                    newClientName: nextClient.name,
+                    reason: reason ?? null,
+                },
+            });
 
             // 5. Auditoría
             await this.auditLogService.create({
@@ -3931,6 +4416,25 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 previousStatus: booking.status,
                 status: nextStatus
             }, tx as any);
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId,
+                clubId,
+                action: 'BOOKING_CONFIRMED',
+                category: 'BOOKING',
+                source: 'ADMIN',
+                summary: 'Reserva confirmada',
+                actorUserId,
+                previousState: { status: booking.status },
+                nextState: { status: nextStatus },
+                detail: {
+                    previousStatus: booking.status,
+                    status: nextStatus,
+                    source: 'MANUAL',
+                },
+                metadata: {
+                    kind: 'STATUS_TRANSITION',
+                },
+            });
             return nextStatus;
         });
 
@@ -3980,6 +4484,24 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 previousStatus: booking.status,
                 status: 'COMPLETED'
             }, tx as any);
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId,
+                clubId,
+                action: 'BOOKING_COMPLETED',
+                category: 'BOOKING',
+                source: 'ADMIN',
+                summary: 'Reserva finalizada',
+                actorUserId: Number.isInteger(actorUserId) && actorUserId > 0 ? actorUserId : null,
+                previousState: { status: booking.status },
+                nextState: { status: 'COMPLETED' },
+                detail: {
+                    previousStatus: booking.status,
+                    status: 'COMPLETED',
+                },
+                metadata: {
+                    kind: 'STATUS_TRANSITION',
+                },
+            });
             // Mantener la cuenta abierta tras finalizar la reserva permite
             // seguir cargando consumos post-cancha (ej. bar) hasta cierre manual.
             await this.projectionService.refreshAccountSummary(account.id, tx);
@@ -4104,7 +4626,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     select: {
                         id: true,
                         userId: true,
-                        status: true
+                        status: true,
+                        role: true
                     }
                 }
             },
@@ -4211,7 +4734,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 participants: {
                     select: {
                         userId: true,
-                        status: true
+                        status: true,
+                        role: true
                     }
                 }
             }
@@ -4381,7 +4905,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 participants: {
                     select: {
                         userId: true,
-                        status: true
+                        status: true,
+                        role: true
                     }
                 }
             }
@@ -4646,6 +5171,13 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         id: true,
                         userId: true
                     }
+                },
+                participants: {
+                    select: {
+                        userId: true,
+                        status: true,
+                        role: true
+                    }
                 }
             }
         });
@@ -4732,6 +5264,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         }
 
         const visibleParticipants = booking.participants.filter((participant) => {
+            if (this.isOrganizerParticipant(participant)) return false;
             if (isOwner) return participant.status !== 'REMOVED';
             return participant.status === 'JOINED';
         });
@@ -4740,11 +5273,447 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             id: participant.id,
             displayName: this.resolveParticipantDisplayName(participant),
             status: participant.status,
-            role: 'PARTICIPANT',
+            role: String(participant.role || '') === 'ORGANIZER' ? 'ORGANIZER' : 'PARTICIPANT',
             isMe: Number(participant.userId || 0) === Number(userId),
-            invitedEmail: isOwner ? participant.invitedEmail ?? null : null,
-            canManage: isOwner && participant.status !== 'REMOVED'
+            invitedEmail: isOwner ? (participant.invitedEmail ?? participant.email ?? null) : null,
+            canManage: isOwner && participant.status !== 'REMOVED' && String(participant.role || '') !== 'ORGANIZER'
         }));
+    }
+
+    async getAdminBookingParticipants(bookingId: number, clubId: number): Promise<AdminBookingParticipantDto[]> {
+        if (!Number.isInteger(bookingId) || bookingId <= 0) {
+            throw this.invalidInput('Reserva inválida.');
+        }
+        if (!Number.isInteger(clubId) || clubId <= 0) {
+            throw this.invalidInput('Club inválido.');
+        }
+
+        const booking = await prisma.booking.findFirst({
+            where: { id: bookingId, clubId },
+            select: { id: true }
+        });
+        if (!booking) {
+            throw this.bookingNotFound('La reserva no existe.');
+        }
+
+        const participants = await prisma.bookingParticipant.findMany({
+            where: {
+                bookingId,
+                status: { not: 'REMOVED' }
+            },
+            include: {
+                user: {
+                    select: {
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                    }
+                }
+            },
+            orderBy: [
+                { role: 'asc' },
+                { createdAt: 'asc' }
+            ]
+        });
+
+        return participants.map((participant) => this.mapAdminBookingParticipantDto({
+            ...participant,
+            bookingId
+        }));
+    }
+
+    async getAdminBookingHistory(bookingId: number, clubId: number) {
+        if (!Number.isInteger(bookingId) || bookingId <= 0) {
+            throw this.invalidInput('Reserva inválida.');
+        }
+        if (!Number.isInteger(clubId) || clubId <= 0) {
+            throw this.invalidInput('Club inválido.');
+        }
+
+        const booking = await prisma.booking.findFirst({
+            where: { id: bookingId, clubId },
+            select: { id: true }
+        });
+        if (!booking) {
+            throw this.bookingNotFound('La reserva no existe.');
+        }
+
+        return this.bookingHistoryService.listByBooking({ bookingId, clubId, take: 500 });
+    }
+
+    async addAdminBookingParticipant(input: {
+        bookingId: number;
+        clubId: number;
+        actorUserId?: number | null;
+        personSelection:
+            | { kind: 'clubClient'; clientId: string }
+            | { kind: 'linked' | 'systemUser'; userId: number; personKey: string; searchQuery: string }
+            | { kind: 'newClient'; name: string; phone?: string | null; email?: string | null; dni?: string | null; forceCreateNew?: boolean };
+    }): Promise<AdminBookingParticipantDto> {
+        const bookingId = Number(input.bookingId || 0);
+        const clubId = Number(input.clubId || 0);
+        if (!Number.isInteger(bookingId) || bookingId <= 0) {
+            throw this.invalidInput('Reserva inválida.');
+        }
+        if (!Number.isInteger(clubId) || clubId <= 0) {
+            throw this.invalidInput('Club inválido.');
+        }
+
+        const selection = input.personSelection;
+        if (!selection || typeof selection !== 'object') {
+            throw this.invalidInput('Seleccioná una persona válida.');
+        }
+
+        return prisma.$transaction(async (tx) => {
+            const booking = await tx.booking.findFirst({
+                where: { id: bookingId, clubId },
+                select: {
+                    id: true,
+                    clubId: true,
+                    clientId: true,
+                    userId: true,
+                    status: true
+                }
+            });
+            if (!booking) {
+                throw this.bookingNotFound('La reserva no existe.');
+            }
+            if (String(booking.status || '') === 'CANCELLED') {
+                throw this.bookingInvalidStatus('No se pueden agregar participantes a una reserva cancelada.');
+            }
+
+            let resolvedClient: {
+                id: string;
+                name?: string | null;
+                userId?: number | null;
+                email?: string | null;
+                phone?: string | null;
+            } | null = null;
+            let resolvedUserId: number | null = null;
+            let resolvedUserSnapshot: {
+                id: number;
+                firstName?: string | null;
+                lastName?: string | null;
+                email?: string | null;
+                phoneNumber?: string | null;
+            } | null = null;
+
+            if (selection.kind === 'clubClient') {
+                const selectedClientId = String(selection.clientId || '').trim();
+                if (!selectedClientId) {
+                    throw this.invalidInput('Seleccioná un cliente válido.');
+                }
+                resolvedClient = await tx.client.findFirst({
+                    where: { id: selectedClientId, clubId },
+                    select: { id: true, name: true, userId: true, email: true, phone: true }
+                });
+                if (!resolvedClient) {
+                    throw this.clientNotFound('El cliente seleccionado no existe en este club');
+                }
+                const linkedUserId = Number(resolvedClient.userId || 0);
+                if (Number.isInteger(linkedUserId) && linkedUserId > 0) {
+                    resolvedUserId = linkedUserId;
+                    resolvedUserSnapshot = await tx.user.findUnique({
+                        where: { id: linkedUserId },
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                            phoneNumber: true
+                        }
+                    });
+                }
+            } else if (selection.kind === 'linked' || selection.kind === 'systemUser') {
+                await this.personService.validateSearchSelection(clubId, {
+                    query: selection.searchQuery,
+                    personKey: selection.personKey,
+                    userId: selection.userId,
+                    allowedKinds: ['linked', 'systemUser']
+                });
+
+                const ensuredClient = await this.personService.ensureClientForUser(
+                    clubId,
+                    Number(selection.userId),
+                    {
+                        actorUserId: Number(input.actorUserId || 0) || null,
+                        source: 'ADMIN_SELECTED_USER',
+                        tx,
+                    }
+                );
+                resolvedClient = {
+                    id: String(ensuredClient.id),
+                    name: ensuredClient.name ?? null,
+                    userId: Number.isInteger(Number(ensuredClient.userId)) ? Number(ensuredClient.userId) : null,
+                    email: ensuredClient.email ?? null,
+                    phone: ensuredClient.phone ?? null
+                };
+                resolvedUserId = Number(selection.userId);
+                resolvedUserSnapshot = await tx.user.findUnique({
+                    where: { id: resolvedUserId },
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        phoneNumber: true
+                    }
+                });
+            } else if (selection.kind === 'newClient') {
+                const draftName = String(selection.name || '').trim();
+                const draftPhone = this.normalizePhone(selection.phone ?? null);
+                if (draftName.length < 2) {
+                    throw this.invalidInput('Ingresá un nombre válido para el participante.');
+                }
+                if (!draftPhone) {
+                    throw this.invalidInput('El teléfono es obligatorio para crear un participante nuevo.');
+                }
+                const createdClient = await this.resolveOrCreateClient(tx, {
+                    clubId,
+                    userId: null,
+                    name: draftName,
+                    phone: draftPhone,
+                    email: selection.email ?? null,
+                    dni: selection.dni ?? null,
+                    forceCreateNew: Boolean(selection.forceCreateNew)
+                });
+                resolvedClient = {
+                    id: String(createdClient.id),
+                    name: createdClient.name ?? null,
+                    userId: Number.isInteger(Number(createdClient.userId)) ? Number(createdClient.userId) : null,
+                    email: createdClient.email ?? null,
+                    phone: createdClient.phone ?? null
+                };
+                resolvedUserId = null;
+                resolvedUserSnapshot = null;
+            } else {
+                throw this.invalidInput('Seleccioná una persona válida.');
+            }
+
+            if (!resolvedClient?.id) {
+                throw this.clientNotFound('No se pudo resolver la persona seleccionada.');
+            }
+
+            if (String(booking.clientId || '') === String(resolvedClient.id)) {
+                throw this.bookingParticipantAlreadyExists('Esa persona ya es el titular de la reserva.');
+            }
+            if (
+                resolvedUserId &&
+                Number.isInteger(Number(booking.userId || 0)) &&
+                Number(booking.userId) === Number(resolvedUserId)
+            ) {
+                throw this.bookingParticipantAlreadyExists('Esa persona ya es el titular de la reserva.');
+            }
+
+            const activeParticipant = await tx.bookingParticipant.findFirst({
+                where: {
+                    bookingId,
+                    status: { not: 'REMOVED' },
+                    OR: [
+                        { clientId: resolvedClient.id },
+                        ...(resolvedUserId ? [{ userId: resolvedUserId }] : [])
+                    ]
+                },
+                select: { id: true }
+            });
+            if (activeParticipant) {
+                throw this.bookingParticipantAlreadyExists('Esa persona ya está agregada en esta reserva.');
+            }
+
+            const archivedParticipant = await tx.bookingParticipant.findFirst({
+                where: {
+                    bookingId,
+                    OR: [
+                        { clientId: resolvedClient.id },
+                        ...(resolvedUserId ? [{ userId: resolvedUserId }] : [])
+                    ]
+                },
+                orderBy: { createdAt: 'asc' }
+            });
+
+            const snapshot = this.buildManagedParticipantSnapshot({
+                client: {
+                    id: resolvedClient.id,
+                    name: resolvedClient.name ?? null,
+                    email: resolvedClient.email ?? null,
+                    phone: resolvedClient.phone ?? null,
+                },
+                user: resolvedUserSnapshot,
+                userId: resolvedUserId,
+                role: 'PARTICIPANT'
+            });
+
+            const data = {
+                clientId: snapshot.clientId,
+                userId: resolvedUserId,
+                displayName: snapshot.displayName,
+                email: snapshot.email,
+                phone: snapshot.phone,
+                invitedName: null,
+                invitedEmail: null,
+                invitedByUserId: Number(input.actorUserId || 0) || null,
+                status: 'JOINED' as BookingParticipantStatus,
+                role: 'PARTICIPANT' as const,
+                acceptedAt: new Date(),
+                declinedAt: null,
+                leftAt: null,
+                removedAt: null
+            };
+
+            const participant = archivedParticipant
+                ? await tx.bookingParticipant.update({
+                    where: { id: archivedParticipant.id },
+                    data
+                })
+                : await tx.bookingParticipant.create({
+                    data: {
+                        bookingId,
+                        ...data
+                    }
+                });
+
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId,
+                clubId,
+                action: 'BOOKING_PARTICIPANT_ADDED',
+                category: 'PARTICIPANT',
+                source: 'ADMIN',
+                summary: 'Participante agregado',
+                actorUserId: Number(input.actorUserId || 0) || null,
+                bookingParticipantId: participant.id,
+                detail: {
+                    clientId: resolvedClient.id,
+                    userId: resolvedUserId,
+                    displayName: snapshot.displayName,
+                    email: snapshot.email,
+                    phone: snapshot.phone,
+                    restoredArchivedParticipant: Boolean(archivedParticipant),
+                },
+                nextState: {
+                    status: 'JOINED',
+                    role: 'PARTICIPANT',
+                    clientId: resolvedClient.id,
+                    userId: resolvedUserId,
+                },
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    clubId,
+                    userId: Number(input.actorUserId || 0) || null,
+                    entity: 'BookingParticipant',
+                    entityId: participant.id,
+                    action: 'BOOKING_PARTICIPANT_ADDED_BY_ADMIN',
+                    payload: {
+                        bookingId,
+                        clientId: resolvedClient.id,
+                        userId: resolvedUserId
+                    }
+                }
+            });
+
+            return this.mapAdminBookingParticipantDto({
+                ...participant,
+                bookingId,
+                user: resolvedUserSnapshot
+            });
+        });
+    }
+
+    async removeAdminBookingParticipant(input: {
+        bookingId: number;
+        participantId: string;
+        clubId: number;
+        actorUserId?: number | null;
+    }) {
+        const bookingId = Number(input.bookingId || 0);
+        const clubId = Number(input.clubId || 0);
+        const participantId = String(input.participantId || '').trim();
+        if (!Number.isInteger(bookingId) || bookingId <= 0) {
+            throw this.invalidInput('Reserva inválida.');
+        }
+        if (!participantId) {
+            throw this.invalidInput('Seleccioná un participante válido.');
+        }
+        if (!Number.isInteger(clubId) || clubId <= 0) {
+            throw this.invalidInput('Club inválido.');
+        }
+
+        const booking = await prisma.booking.findFirst({
+            where: { id: bookingId, clubId },
+            select: { id: true, clubId: true }
+        });
+        if (!booking) {
+            throw this.bookingNotFound('La reserva no existe.');
+        }
+
+        const participant = await prisma.bookingParticipant.findFirst({
+            where: {
+                id: participantId,
+                bookingId
+            }
+        });
+        if (!participant) {
+            throw this.bookingParticipantNotFound();
+        }
+        if (String(participant.role || '') === 'ORGANIZER') {
+            throw this.bookingParticipantForbidden('No se puede remover al titular de la reserva desde participantes.');
+        }
+        if (participant.status === 'REMOVED') {
+            throw this.bookingParticipantNotFound('Ese participante ya no está activo en la reserva.');
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.bookingParticipant.update({
+                where: { id: participant.id },
+                data: {
+                    status: 'REMOVED',
+                    removedAt: new Date()
+                }
+            });
+
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId,
+                clubId,
+                action: 'BOOKING_PARTICIPANT_REMOVED',
+                category: 'PARTICIPANT',
+                source: 'ADMIN',
+                summary: 'Participante eliminado',
+                actorUserId: Number(input.actorUserId || 0) || null,
+                bookingParticipantId: participant.id,
+                detail: {
+                    clientId: participant.clientId ?? null,
+                    userId: participant.userId ?? null,
+                    displayName: participant.displayName ?? participant.invitedName ?? null,
+                    previousStatus: participant.status,
+                },
+                previousState: {
+                    status: participant.status,
+                    role: participant.role,
+                    clientId: participant.clientId ?? null,
+                    userId: participant.userId ?? null,
+                },
+                nextState: {
+                    status: 'REMOVED',
+                },
+            });
+
+            await tx.auditLog.create({
+                data: {
+                    clubId,
+                    userId: Number(input.actorUserId || 0) || null,
+                    entity: 'BookingParticipant',
+                    entityId: participant.id,
+                    action: 'BOOKING_PARTICIPANT_REMOVED_BY_ADMIN',
+                    payload: {
+                        bookingId,
+                        previousStatus: participant.status
+                    }
+                }
+            });
+        });
+
+        return { success: true };
     }
 
     async invitePlayerBookingParticipant(input: {
@@ -4781,7 +5750,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         id: true,
                         userId: true,
                         invitedEmail: true,
-                        status: true
+                        status: true,
+                        role: true
                     }
                 }
             }
@@ -4816,6 +5786,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             const participant = await tx.bookingParticipant.create({
                 data: {
                     bookingId: booking.id,
+                    clientId: null,
+                    displayName: invitedName,
+                    email: invitedEmail,
+                    phone: null,
                     invitedEmail,
                     invitedName,
                     invitedByUserId: input.ownerUserId,
@@ -4832,6 +5806,29 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                         }
                     }
                 }
+            });
+
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId: booking.id,
+                clubId: booking.clubId,
+                action: 'BOOKING_PARTICIPANT_ADDED',
+                category: 'PARTICIPANT',
+                source: 'PLAYER',
+                summary: 'Participante agregado',
+                actorUserId: input.ownerUserId,
+                bookingParticipantId: participant.id,
+                detail: {
+                    invitedEmail,
+                    invitedName,
+                    status: 'INVITED',
+                    role: 'PARTICIPANT',
+                },
+                nextState: {
+                    status: 'INVITED',
+                    role: 'PARTICIPANT',
+                    invitedEmail,
+                    invitedName,
+                },
             });
 
             await tx.auditLog.create({
@@ -4877,6 +5874,13 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             include: {
                 client: {
                     select: { userId: true }
+                },
+                participants: {
+                    select: {
+                        userId: true,
+                        status: true,
+                        role: true
+                    }
                 }
             }
         });
@@ -4900,6 +5904,10 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             throw this.bookingParticipantNotFound();
         }
 
+        if (String(participant.role || '') === 'ORGANIZER') {
+            throw this.bookingParticipantForbidden('No se puede remover al titular de la reserva desde participantes.');
+        }
+
         if (participant.status === 'REMOVED') {
             throw this.bookingParticipantNotFound('Ese participante ya no está activo en la reserva.');
         }
@@ -4911,6 +5919,30 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     status: 'REMOVED',
                     removedAt: new Date()
                 }
+            });
+
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId: booking.id,
+                clubId: booking.clubId,
+                action: 'BOOKING_PARTICIPANT_REMOVED',
+                category: 'PARTICIPANT',
+                source: 'PLAYER',
+                summary: 'Participante eliminado',
+                actorUserId: input.ownerUserId,
+                bookingParticipantId: participant.id,
+                detail: {
+                    invitedEmail: participant.invitedEmail ?? null,
+                    displayName: participant.displayName ?? participant.invitedName ?? null,
+                    previousStatus: participant.status,
+                },
+                previousState: {
+                    status: participant.status,
+                    role: participant.role,
+                    userId: participant.userId ?? null,
+                },
+                nextState: {
+                    status: 'REMOVED',
+                },
             });
 
             await tx.auditLog.create({
@@ -5063,6 +6095,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 where: { id: invitation.id },
                 data: {
                     userId,
+                    displayName: invitation.invitedName ?? null,
+                    email: invitation.invitedEmail ?? null,
                     status: 'JOINED',
                     acceptedAt: new Date(),
                     declinedAt: null,
@@ -7302,6 +8336,24 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 actorUserId: options?.actorUserId ?? null,
                 source: 'BOOKING_CONSUMPTION'
             }, tx as any);
+            await this.appendBookingHistoryEntryTx(tx, {
+                bookingId,
+                clubId,
+                action: 'BOOKING_CONSUMPTION_ADDED',
+                category: 'CONSUMPTION',
+                source: 'BOOKING_CONSUMPTION',
+                summary: 'Consumo agregado',
+                actorUserId: options?.actorUserId ?? null,
+                accountId: account.id,
+                detail: {
+                    accountItemId: createdItem.id,
+                    productId: txProduct.id,
+                    productName: txProduct.name,
+                    quantity: normalizedQty,
+                    unitPrice: Number(createdItem.unitPrice || 0),
+                    totalAmount: Number(createdItem.total || 0),
+                },
+            });
 
             const stockUpdate = await tx.product.updateMany({
                 where: { id: productId, clubId, stock: { gte: normalizedQty } },
@@ -7477,6 +8529,25 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 actorUserId: null,
                 source: 'BOOKING_CONSUMPTION'
             }, tx as any);
+            if (bookingIdFromAccount) {
+                await this.appendBookingHistoryEntryTx(tx, {
+                    bookingId: bookingIdFromAccount,
+                    clubId,
+                    action: 'BOOKING_CONSUMPTION_REMOVED',
+                    category: 'CONSUMPTION',
+                    source: 'BOOKING_CONSUMPTION',
+                    summary: 'Consumo eliminado',
+                    accountId: item.accountId,
+                    detail: {
+                        accountItemId: item.id,
+                        productId: item.productId ?? null,
+                        productName: item.description || null,
+                        quantity: Number(item.quantity || 0),
+                        unitPrice: Number(item.unitPrice || 0),
+                        totalAmount: Number(item.total || 0),
+                    },
+                });
+            }
 
             const deleted = await tx.accountItem.delete({ where: { id: itemId } });
             await this.projectionService.refreshAccountSummary(item.accountId, tx);

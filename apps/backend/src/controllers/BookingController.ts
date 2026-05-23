@@ -890,6 +890,195 @@ export class BookingController {
         }
     }
 
+    getAdminBookingParticipants = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const clubId = Number((req as any).clubId || 0);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return sendAppError(res, badRequest('No se pudo resolver el club activo.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const items = await this.bookingService.getAdminBookingParticipants(bookingId, clubId);
+            return res.json({ items });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos cargar los participantes de la reserva.');
+        }
+    }
+
+    getAdminBookingHistory = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const clubId = Number((req as any).clubId || 0);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return sendAppError(res, badRequest('Club inválido.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const items = await this.bookingService.getAdminBookingHistory(bookingId, clubId);
+            return res.json(
+                items.map((entry: any) => ({
+                    id: entry.id,
+                    bookingId: entry.bookingId,
+                    clubId: entry.clubId,
+                    action: entry.action,
+                    category: entry.category,
+                    source: entry.source,
+                    summary: entry.summary,
+                    occurredAt: entry.occurredAt,
+                    actorUserId: entry.actorUserId ?? null,
+                    actorLabel: entry.actorLabel ?? null,
+                    detail: entry.detail ?? null,
+                    previousState: entry.previousState ?? null,
+                    nextState: entry.nextState ?? null,
+                    bookingParticipantId: entry.bookingParticipantId ?? null,
+                    paymentId: entry.paymentId ?? null,
+                    accountId: entry.accountId ?? null,
+                    metadata: entry.metadata ?? null,
+                }))
+            );
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos cargar el historial de la reserva.');
+        }
+    }
+
+    addAdminBookingParticipant = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const clubId = Number((req as any).clubId || 0);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return sendAppError(res, badRequest('No se pudo resolver el club activo.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const optionalTrimmedString = (minLength?: number) =>
+                z.preprocess(
+                    (v) => {
+                        if (typeof v !== 'string') return v;
+                        const trimmed = v.trim();
+                        return trimmed.length === 0 ? undefined : trimmed;
+                    },
+                    minLength ? z.string().min(minLength).optional() : z.string().optional()
+                );
+
+            const bodySchema = z.object({
+                personSelection: z.discriminatedUnion('kind', [
+                    z.object({
+                        kind: z.literal('clubClient'),
+                        clientId: optionalTrimmedString(1),
+                    }),
+                    z.object({
+                        kind: z.literal('linked'),
+                        userId: z.preprocess((v) => Number(v), z.number().int().positive()),
+                        personKey: optionalTrimmedString(2),
+                        searchQuery: optionalTrimmedString(2),
+                    }),
+                    z.object({
+                        kind: z.literal('systemUser'),
+                        userId: z.preprocess((v) => Number(v), z.number().int().positive()),
+                        personKey: optionalTrimmedString(2),
+                        searchQuery: optionalTrimmedString(2),
+                    }),
+                    z.object({
+                        kind: z.literal('newClient'),
+                        name: optionalTrimmedString(2),
+                        phone: optionalTrimmedString(),
+                        email: z.preprocess(
+                            (v) => {
+                                if (typeof v !== 'string') return v;
+                                const trimmed = v.trim();
+                                return trimmed.length === 0 ? undefined : trimmed;
+                            },
+                            z.string().email().optional()
+                        ),
+                        dni: optionalTrimmedString(),
+                        forceCreateNew: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional()
+                    })
+                ])
+            });
+
+            const parsed = bodySchema.safeParse(req.body || {});
+            if (!parsed.success) {
+                return sendZodControllerError(res, parsed.error, 'Revisá los campos marcados.');
+            }
+
+            const actorUserId = Number((req as any)?.user?.userId || 0) || null;
+            const personSelection =
+                parsed.data.personSelection.kind === 'clubClient'
+                    ? {
+                        kind: 'clubClient' as const,
+                        clientId: sanitizeString(String(parsed.data.personSelection.clientId || ''), 64)
+                    }
+                    : parsed.data.personSelection.kind === 'newClient'
+                        ? {
+                            kind: 'newClient' as const,
+                            name: sanitizeString(String(parsed.data.personSelection.name || ''), 200),
+                            phone: parsed.data.personSelection.phone ? sanitizeString(String(parsed.data.personSelection.phone), 30) : undefined,
+                            email: parsed.data.personSelection.email ? sanitizeString(String(parsed.data.personSelection.email), 254) : undefined,
+                            dni: parsed.data.personSelection.dni ? sanitizeString(String(parsed.data.personSelection.dni), 20) : undefined,
+                            forceCreateNew: Boolean(parsed.data.personSelection.forceCreateNew)
+                        }
+                        : {
+                            kind: parsed.data.personSelection.kind,
+                            userId: Number(parsed.data.personSelection.userId),
+                            personKey: sanitizeString(String(parsed.data.personSelection.personKey || ''), 255),
+                            searchQuery: sanitizeString(String(parsed.data.personSelection.searchQuery || ''), 255)
+                        };
+
+            const participant = await this.bookingService.addAdminBookingParticipant({
+                bookingId,
+                clubId,
+                actorUserId,
+                personSelection
+            });
+            return res.status(201).json({
+                message: 'Participante agregado.',
+                participant
+            });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos agregar al participante.');
+        }
+    }
+
+    removeAdminBookingParticipant = async (req: Request, res: Response) => {
+        try {
+            const bookingId = Number(req.params.id);
+            if (!Number.isInteger(bookingId) || bookingId <= 0) {
+                return sendAppError(res, badRequest('Seleccioná una reserva válida.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const participantId = String(req.params.participantId || '').trim();
+            if (!participantId) {
+                return sendAppError(res, badRequest('Seleccioná un participante válido.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const clubId = Number((req as any).clubId || 0);
+            if (!Number.isInteger(clubId) || clubId <= 0) {
+                return sendAppError(res, badRequest('No se pudo resolver el club activo.', ErrorCodes.INVALID_INPUT));
+            }
+
+            const actorUserId = Number((req as any)?.user?.userId || 0) || null;
+            await this.bookingService.removeAdminBookingParticipant({
+                bookingId,
+                participantId,
+                clubId,
+                actorUserId
+            });
+            return res.json({ message: 'Participante removido.' });
+        } catch (error: any) {
+            return sendAppError(res, error, 'No pudimos remover al participante.');
+        }
+    }
+
     inviteMyBookingParticipant = async (req: Request, res: Response) => {
         try {
             const bookingId = Number(req.params.id);

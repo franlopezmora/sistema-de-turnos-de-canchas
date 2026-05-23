@@ -29,7 +29,7 @@ export class EventService {
     tx?: DbClient
   ) {
     const client = tx ?? prisma;
-    return client.event.create({
+    const created = await client.event.create({
       data: {
         clubId,
         type,
@@ -37,6 +37,8 @@ export class EventService {
         processed: true
       }
     });
+
+    return created;
   }
 
   async bookingCreated(clubId: number, payload: Record<string, any>, tx?: DbClient) {
