@@ -15,6 +15,99 @@ import AgendaToolbar from '../../components/admin/agenda/AgendaToolbar';
 import BookingHoverCard from '../../components/admin/agenda/BookingHoverCard';
 import ChangeTitularModal, { type ChangeTitularCandidate } from '../../components/admin/agenda/ChangeTitularModal';
 import DuplicateClientDecisionModal from '../../components/admin/agenda/DuplicateClientDecisionModal';
+import type {
+  Booking,
+  BookingConsumptionItem,
+  BookingDropPreview,
+  BookingKind,
+  CancelRefundReasonType,
+  ClubProductOption,
+  ComboOption,
+  Court,
+  DraggingBookingMeta,
+  DraftSelection,
+  DuplicateClientCandidate,
+  DuplicateDecisionActions,
+  EditSeriesScope,
+  EditingBaseline,
+  Participant,
+  ParticipantSuggestion,
+  ParticipantUiState,
+  PendingBookingPointer,
+  RecurringCreatedItem,
+  RecurringExecutionPlan,
+  RecurringFrequencyPreset,
+  RecurringOverlapItem,
+  SeriesOperationResult,
+  SeriesPaidOccurrence,
+  SeriesScopePreviewSummary,
+  SimplifiedSidebarSection,
+  SportFilter,
+  SuggestionPlacement,
+} from '../../components/admin/agenda/types/agendaTypes';
+import {
+  buildSelectionDateTime,
+  buildStartDateTimeFromSlot,
+  endHour,
+  formatLocalDate,
+  getNextDateForDay,
+  gridHeight,
+  minutesToHourLabel,
+  rowHeight,
+  slotHeight,
+  slotMinutes,
+  slotsPerHour,
+  slotToTime,
+  slotToTimeAmPm,
+  startHour,
+  timeToSlot,
+  totalSlots,
+  toSelectionRange,
+} from '../../components/admin/agenda/utils/agendaDateUtils';
+import {
+  blockContentVisibility,
+  bookingBadgeColor,
+  bookingColor,
+  bookingPaymentBadgeColor,
+  bookingPaymentLabel,
+  bookingStatusLabel,
+  formatPaymentMethodLabel,
+  humanizeClubSlug,
+  inferCourtSport,
+  localizeLegacyUiText,
+  normalizeBookingDisplayTitle,
+  toUserSafeMessage,
+} from '../../components/admin/agenda/utils/agendaDisplayUtils';
+import {
+  formatSeriesDateLabel,
+  formatSeriesTimeLabel,
+  mapSeriesAppliedItem,
+  mapSeriesImpactItem,
+} from '../../components/admin/agenda/utils/bookingHistoryDisplay';
+import {
+  buildParticipantContactFromFields,
+  extractEmailFromParticipantContact,
+  extractPhoneFromParticipantContact,
+  resolvePlaygroundClientDni,
+  resolvePlaygroundClientEmail,
+  resolvePlaygroundClientPhone,
+} from '../../components/admin/agenda/utils/bookingParticipantDisplay';
+import {
+  buildDefaultParticipantsForBooking,
+  buildStableParticipantRef,
+  createInitialParticipants,
+  findExistingParticipantMatch,
+  mapAdminParticipantToPlaygroundParticipant,
+  mapPersonSearchResultToParticipantSuggestion,
+  participantExplicitIdentityKeys,
+  resolveParticipantClientId,
+  resolveParticipantSelectedUserId,
+} from '../../components/admin/agenda/utils/bookingParticipantMappers';
+import {
+  isBlockingQuoteError,
+  isOwnerLikeParticipantId,
+  isOwnerLikeParticipantRef,
+} from '../../components/admin/agenda/utils/bookingValidation';
 import { getPendingLogoutRedirect } from '../../services/AuthService';
 import { ClubAdminService } from '../../services/ClubAdminService';
 import { addAdminBookingParticipant, cancelBooking, cancelFixedBooking, changeBookingClient, confirmBooking, createBooking, createFixedBooking, getAdminBookingHistory, getAdminBookingParticipants, getAdminSchedule, getBookingById, getBookingFinancialSummary, getBookingQuote, removeAdminBookingParticipant, rescheduleFixedBooking, type AdminBookingParticipantDto, type BookingHistoryEntryDto } from '../../services/BookingService';
@@ -33,248 +126,6 @@ import { normalizeApiError } from '../../utils/apiError';
 import { resolveBookingErrorBehavior } from '../../utils/bookingErrorMap';
 import BookingDrawerShell from '../../modules/admin/bookingDrawer/components/BookingDrawerShell';
 import { bookingDrawerReducer, initialBookingDrawerState } from '../../modules/admin/bookingDrawer/reducer';
-
-type SportFilter = string;
-
-type Court = {
-  id: string;
-  name: string;
-  sport: string;
-  activityTypeId?: number;
-  defaultDurationMinutes?: number;
-};
-
-type Booking = {
-  id: string;
-  courtId: string;
-  startSlot: number;
-  endSlot: number;
-  title: string;
-  state: 'pending' | 'confirmed' | 'completed' | 'blocked';
-  paymentState: 'paid' | 'partial' | 'unpaid';
-  isRecurring?: boolean;
-  participantsCount?: number;
-  hasPendingNotification?: boolean;
-  fixedBookingId?: number;
-  clientId?: string;
-  userId?: number;
-  hoverPayment?: {
-    status: 'UNPAID' | 'PARTIAL' | 'PAID';
-    totalAmount: number;
-    paidAmount: number;
-    remainingAmount: number;
-    chargeMode?: string;
-    chargeResponsibleRef?: string | null;
-    chargeResponsibleName?: string | null;
-    latestPayerRef?: string | null;
-    latestPayerName?: string | null;
-    latestCoveredRef?: string | null;
-    latestCoveredName?: string | null;
-    participants?: Array<{
-      ref: string;
-      name: string;
-      isOwner?: boolean;
-    }>;
-    payerParticipants?: Array<{
-      ref?: string | null;
-      name?: string | null;
-      amount?: number;
-    }>;
-    coveredParticipants?: Array<{
-      ref?: string | null;
-      name?: string | null;
-      amount?: number;
-    }>;
-  };
-};
-
-type DraftSelection = {
-  courtId: string;
-  startSlot: number;
-  endSlot: number;
-};
-
-type BookingDropPreview = {
-  courtId: string;
-  startSlot: number;
-  endSlot: number;
-};
-
-type EditSeriesScope = 'THIS_OCCURRENCE' | 'NEXT_OCCURRENCES' | 'ALL_OCCURRENCES';
-
-type RecurringOverlapItem = {
-  courtName: string;
-  requestedDateLabel: string;
-  requestedTimeLabel: string;
-  conflictingDateLabel?: string;
-  conflictingTimeLabel?: string;
-  activityName?: string;
-  clientName?: string;
-};
-
-type RecurringCreatedItem = {
-  bookingId?: number;
-  courtName: string;
-  requestedDateLabel: string;
-  requestedTimeLabel: string;
-  activityName?: string;
-  sortStartMs?: number;
-};
-
-type SeriesPaidOccurrence = Omit<RecurringCreatedItem, 'bookingId'> & {
-  bookingId: number;
-  paidAmount: number;
-};
-
-type SeriesScopePreviewSummary = {
-  scope: EditSeriesScope;
-  totalCandidates: number;
-  applicableCount: number;
-  applicableItems: RecurringCreatedItem[];
-  skippedCount: number;
-  overlapItems: RecurringOverlapItem[];
-  failureMessages: string[];
-  paidItems?: SeriesPaidOccurrence[];
-  paidAmountTotal?: number;
-};
-
-type SeriesOperationResult = {
-  mode: 'edit' | 'delete';
-  title: string;
-  detail: string;
-  appliedCount: number;
-  appliedItems: RecurringCreatedItem[];
-  skippedCount: number;
-  overlapItems: RecurringOverlapItem[];
-};
-
-type RecurringExecutionPlan = {
-  recurrenceDays: number[];
-  frequencyDays: number;
-  repetitionsPerDay?: number;
-  error?: string;
-};
-
-type DraggingBookingMeta = {
-  bookingId: string;
-  durationSlots: number;
-  title: string;
-  state: Booking['state'];
-  paymentState: Booking['paymentState'];
-  isRecurring?: boolean;
-  participantsCount?: number;
-  hasPendingNotification?: boolean;
-  courtId: string;
-  startSlot: number;
-};
-
-type PendingBookingPointer = {
-  booking: Booking;
-  startX: number;
-  startY: number;
-};
-
-type EditingBaseline = {
-  id: string;
-  courtId: string;
-  startSlot: number;
-  endSlot: number;
-  title: string;
-};
-
-type Participant = {
-  id: string;
-  bookingParticipantId?: string;
-  name: string;
-  contact: string;
-  dni?: string;
-  paid: boolean;
-  isOwner: boolean;
-  sourceType: 'clubClient' | 'systemUser' | 'guest';
-  entityRef?: string;
-  selectedUserId?: number;
-  personKind?: 'linked' | 'clubClient' | 'systemUser' | 'newClientSuggestion';
-  personKey?: string;
-  personSearchQuery?: string;
-  badges?: string[];
-  paymentMethod: 'CASH' | 'TRANSFER' | 'CARD' | 'OTHER';
-  customPrice: number | null;
-};
-
-type ParticipantSuggestion = {
-  id: string;
-  label: string;
-  secondary?: string;
-  sourceType: Participant['sourceType'];
-  entityRef?: string;
-  name: string;
-  contact?: string;
-  dni?: string;
-  personKind?: Participant['personKind'];
-  personKey?: string;
-  personSearchQuery?: string;
-  badges?: string[];
-  selectedUserId?: number;
-};
-
-type BookingKind = 'regular' | 'recurringV2' | 'privateClass' | 'courseClass' | 'block';
-type RecurringFrequencyPreset = 'weekly' | 'biweekly' | 'custom';
-type CancelRefundReasonType = 'FULL' | 'PARTIAL_COMMERCIAL' | 'PARTIAL_SERVICE_FAILURE' | 'PARTIAL_PRICING_ERROR' | 'OTHER';
-type ComboOption = { value: string; label: string; secondary?: string };
-type SimplifiedSidebarSection = 'DETAILS' | 'CONSUMPTIONS' | 'BILLING' | 'HISTORY';
-type ClubProductOption = {
-  id: number;
-  name: string;
-  price: number;
-  stock: number | null;
-  isActive: boolean;
-};
-type BookingConsumptionItem = {
-  id: string;
-  productId: number | null;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  paidAmount: number;
-  remainingAmount: number;
-  type: string;
-};
-type ParticipantUiState =
-  | { mode: 'idle'; participantId: null }
-  | { mode: 'menu'; participantId: string }
-  | { mode: 'editing'; participantId: string };
-type SuggestionPlacement = {
-  openUp: boolean;
-  maxHeight: number;
-};
-
-type DuplicateClientCandidate = {
-  id: string;
-  name: string;
-  phone?: string;
-  email?: string;
-};
-
-type DuplicateDecisionActions = {
-  onUseExisting: (clientId: string) => Promise<void>;
-  onCreateNew: () => Promise<void>;
-};
-
-
-const rowHeight = 120; // visual height per hour (zoom vertical para diferenciar mejor 15m vs 30m)
-const startHour = 8;
-const endHour = 23;
-const slotMinutes = 15;
-const slotsPerHour = 60 / slotMinutes;
-const totalSlots = (endHour - startHour) * slotsPerHour;
-const slotHeight = rowHeight / slotsPerHour; // selectable 15-min blocks
-const gridHeight = totalSlots * slotHeight;
-
-
-const initialParticipants: Participant[] = [
-  { id: 'owner', name: '', contact: '', paid: false, isOwner: true, sourceType: 'guest', paymentMethod: 'CASH', customPrice: null },
-];
 
 const MAX_MANUAL_PARTICIPANT_PRICE = 100000;
 const DRAWER_CLOSE_RESET_DELAY_MS = 320;
@@ -346,89 +197,6 @@ const CUSTOM_DAY_OPTIONS = [
   { value: 0, short: 'Do' },
 ];
 
-function formatPaymentMethodLabel(method: string): string {
-  if (method === 'CASH') return 'Efectivo';
-  if (method === 'TRANSFER') return 'Transferencia';
-  if (method === 'CARD') return 'Tarjeta';
-  if (method === 'OTHER') return 'Otro';
-  return 'Pago';
-}
-
-const LEGACY_UI_EXACT_LABELS: Record<string, string> = {
-  owner: 'Titular',
-  date: 'Fecha',
-  court: 'Cancha',
-  time: 'Hora',
-  locked: 'Bloqueada',
-  add: 'Agregar',
-  price: 'Precio',
-  payment: 'Pago',
-  payments: 'Pagos',
-};
-
-const LEGACY_UI_INLINE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
-  { pattern: /\bOwner\b/gi, replacement: 'Titular' },
-  { pattern: /\bDate\b/gi, replacement: 'Fecha' },
-  { pattern: /\bCourt\b/gi, replacement: 'Cancha' },
-  { pattern: /\bTime\b/gi, replacement: 'Hora' },
-  { pattern: /\bLocked\b/gi, replacement: 'Bloqueada' },
-  { pattern: /\bAdd\b/gi, replacement: 'Agregar' },
-  { pattern: /\bPrice\b/gi, replacement: 'Precio' },
-  { pattern: /\bPayments?\b/gi, replacement: 'Pago' },
-];
-
-function localizeLegacyUiText(rawValue: unknown): string {
-  const raw = String(rawValue || '').trim();
-  if (!raw) return '';
-
-  const exact = LEGACY_UI_EXACT_LABELS[raw.toLowerCase()];
-  if (exact) return exact;
-
-  const courtNumber = raw.match(/^court\s+(\d+)$/i);
-  if (courtNumber) return `Cancha ${courtNumber[1]}`;
-
-  return LEGACY_UI_INLINE_REPLACEMENTS.reduce(
-    (accumulator, item) => accumulator.replace(item.pattern, item.replacement),
-    raw
-  );
-}
-
-function toUserSafeMessage(rawValue: unknown, fallback: string): string {
-  const fallbackMessage = String(fallback || '').trim() || 'Ocurrio un error inesperado.';
-  const localizedFallback = localizeLegacyUiText(fallbackMessage) || fallbackMessage;
-  const raw = String(rawValue || '').trim();
-  if (!raw) return localizedFallback;
-
-  const normalized = raw.toLowerCase();
-  const hasInternalKeywords = [
-    'backend',
-    'frontend',
-    'payload',
-    'table',
-    'column',
-    'sql',
-    'prisma',
-    'stack',
-    'booking-client:',
-    'booking-user:',
-    'guest:',
-    'accountid',
-    'assignmentid',
-    'chargeresponsibleref',
-    'entityref',
-  ].some((keyword) => normalized.includes(keyword));
-
-  if (hasInternalKeywords) return localizedFallback;
-
-  const cleaned = raw
-    .replace(/\b(TypeError|ReferenceError|SyntaxError)\b:?/gi, '')
-    .replace(/\bBOOKING_[A-Z_]+\b/g, 'reserva')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-
-  const localized = localizeLegacyUiText(cleaned);
-  return localized || localizedFallback;
-}
 function PlaygroundCombo({
   value,
   options,
@@ -542,212 +310,6 @@ function PlaygroundCombo({
   );
 }
 
-function slotToTime(slot: number) {
-  const totalMinutes = startHour * 60 + slot * slotMinutes;
-  const hours = Math.floor(totalMinutes / 60)
-    .toString()
-    .padStart(2, '0');
-  const minutes = (totalMinutes % 60).toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
-
-function slotToTimeAmPm(slot: number) {
-  const [hoursRaw, minutesRaw] = slotToTime(slot).split(':').map(Number);
-  const hours = Number.isFinite(hoursRaw) ? hoursRaw : 0;
-  const minutes = Number.isFinite(minutesRaw) ? minutesRaw : 0;
-  const period = hours >= 12 ? 'p. m.' : 'a. m.';
-  const hours12 = ((hours + 11) % 12) + 1;
-  return `${String(hours12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
-}
-
-function normalizeBookingDisplayTitle(rawTitle: unknown, fallback = 'Reserva') {
-  const title = String(rawTitle || '').trim();
-  if (!title) return fallback;
-
-  const normalized = title.toLowerCase();
-  if (normalized === 'locked' || normalized === 'block' || normalized === 'blocked') {
-    return 'Bloqueo';
-  }
-
-  return title;
-}
-
-function timeToSlot(time: string) {
-  const [hours, minutes] = time.split(':').map(Number);
-  const total = hours * 60 + minutes;
-  const start = startHour * 60;
-  return Math.max(0, Math.min(totalSlots, Math.round((total - start) / slotMinutes)));
-}
-
-function buildSelectionDateTime(baseDate: Date, slot: number) {
-  const next = new Date(baseDate);
-  next.setHours(0, 0, 0, 0);
-  const totalMinutes = startHour * 60 + slot * slotMinutes;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  next.setHours(hours, minutes, 0, 0);
-  return next;
-}
-
-function minutesToHourLabel(totalMinutes: number) {
-  const safeMinutes = Math.max(0, Math.floor(totalMinutes));
-  const hours = Math.floor(safeMinutes / 60)
-    .toString()
-    .padStart(2, '0');
-  const minutes = (safeMinutes % 60).toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-}
-
-function toSelectionRange(selection: DraftSelection) {
-  return {
-    start: Math.min(selection.startSlot, selection.endSlot),
-    end: Math.max(selection.startSlot, selection.endSlot) + 1,
-  };
-}
-
-function formatSeriesDateLabel(value: unknown) {
-  const parsed = new Date(String(value || ''));
-  if (!Number.isFinite(parsed.getTime())) return '';
-  return parsed.toLocaleDateString('es-AR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function formatSeriesTimeLabel(value: unknown) {
-  const parsed = new Date(String(value || ''));
-  if (!Number.isFinite(parsed.getTime())) return '';
-  return parsed.toLocaleTimeString('es-AR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function mapSeriesImpactItem(item: any, fallbackCourtName: string): RecurringOverlapItem {
-  const requestedAt = item?.requestedStartDateTime || item?.startDateTime || item?.requestedAt;
-  const conflictingAt = item?.conflictingStartDateTime || item?.conflictStartDateTime || item?.overlapStartDateTime;
-  return {
-    courtName: String(item?.courtName || item?.requestedCourtName || fallbackCourtName || 'Cancha').trim(),
-    requestedDateLabel: formatSeriesDateLabel(requestedAt),
-    requestedTimeLabel: formatSeriesTimeLabel(requestedAt),
-    conflictingDateLabel: formatSeriesDateLabel(conflictingAt) || undefined,
-    conflictingTimeLabel: formatSeriesTimeLabel(conflictingAt) || undefined,
-    activityName: String(item?.activityName || '').trim() || undefined,
-    clientName: String(item?.clientName || '').trim() || undefined,
-  };
-}
-
-function mapSeriesAppliedItem(item: any, fallbackCourtName: string): RecurringCreatedItem {
-  const requestedAt = item?.requestedStartDateTime || item?.startDateTime || item?.requestedAt;
-  const parsed = new Date(String(requestedAt || ''));
-  return {
-    bookingId: Number.isFinite(Number(item?.bookingId || item?.id))
-      ? Number(item?.bookingId || item?.id)
-      : undefined,
-    courtName: String(item?.courtName || item?.requestedCourtName || fallbackCourtName || 'Cancha').trim(),
-    requestedDateLabel: formatSeriesDateLabel(requestedAt),
-    requestedTimeLabel: formatSeriesTimeLabel(requestedAt),
-    activityName: String(item?.activityName || '').trim() || undefined,
-    sortStartMs: Number.isFinite(parsed.getTime()) ? parsed.getTime() : undefined,
-  };
-}
-
-function bookingColor(state: Booking['state']) {
-  // Pasteles sólidos 100% — texto siempre ink-900 para máxima legibilidad.
-  if (state === 'completed') return 'bg-blue-100 text-ink-900';
-  if (state === 'confirmed') return 'bg-lima-100 text-ink-900';
-  if (state === 'blocked')   return 'bg-red-100 text-ink-900';
-  return 'bg-amber-200 text-ink-900';  // pending
-}
-
-function bookingStatusLabel(state: Booking['state']) {
-  if (state === 'completed') return 'COMPLETADA';
-  if (state === 'confirmed') return 'CONFIRMADA';
-  if (state === 'blocked') return 'BLOQUEADO';
-  return 'PENDIENTE';
-}
-
-function bookingBadgeColor(state: Booking['state']) {
-  if (state === 'completed') return 'bg-blue-200 text-ink-900';
-  if (state === 'confirmed') return 'bg-lima-200 text-ink-900';
-  if (state === 'blocked')   return 'bg-red-200 text-ink-900';
-  return 'bg-amber-300 text-ink-900';
-}
-
-function bookingPaymentLabel(state: Booking['paymentState']) {
-  if (state === 'paid') return 'PAGADA';
-  if (state === 'partial') return 'PARCIAL';
-  return 'SIN PAGO';
-}
-
-function bookingPaymentBadgeColor(state: Booking['paymentState']) {
-  if (state === 'paid')    return 'bg-lima-200 text-ink-900';
-  if (state === 'partial') return 'bg-amber-300 text-ink-900';
-  return 'bg-ink-300 text-ink-900';
-}
-
-function blockContentVisibility(height: number) {
-  return {
-    showDurationOnly: height < 30,
-    showBadge: height >= 52,
-    showTitle: height >= 34,
-    showTimeRange: height >= 42,
-    inlineTimeWithBadges: height >= 52 && height < 70,
-  };
-}
-
-function formatLocalDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getNextDateForDay(baseDate: Date, targetDayIndex: number, timeStr: string) {
-  const resultDate = new Date(baseDate);
-  const currentDay = resultDate.getDay();
-  let daysUntilTarget = targetDayIndex - currentDay;
-  if (daysUntilTarget < 0) daysUntilTarget += 7;
-  resultDate.setDate(resultDate.getDate() + daysUntilTarget);
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  resultDate.setHours(hours, minutes, 0, 0);
-  const now = new Date();
-  if (daysUntilTarget === 0 && resultDate.getTime() <= now.getTime()) {
-    resultDate.setDate(resultDate.getDate() + 7);
-  }
-  return resultDate;
-}
-
-function humanizeClubSlug(slug: string) {
-  const safe = String(slug || '').trim();
-  if (!safe) return '';
-  return safe
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function isOwnerLikeParticipantRef(participantRef: string | null | undefined) {
-  const normalized = String(participantRef || '').trim().toLowerCase();
-  if (!normalized) return false;
-  return (
-    normalized === 'owner' ||
-    normalized.startsWith('owner-') ||
-    normalized.startsWith('owner_') ||
-    normalized.startsWith('guest:owner') ||
-    normalized.startsWith('guest:booking-responsible') ||
-    normalized.startsWith('booking-client:') ||
-    normalized.startsWith('booking-user:')
-  );
-}
-
-function isOwnerLikeParticipantId(participantId: string | null | undefined) {
-  const normalized = String(participantId || '').trim().toLowerCase();
-  if (!normalized) return false;
-  return normalized === 'owner' || normalized.startsWith('owner-') || normalized.startsWith('owner_');
-}
 
 function resolveHoverParticipantsForBooking(booking: Booking) {
   const ownerName = String(booking.title || '').trim();
@@ -973,62 +535,6 @@ function estimateBookingHoverTarjetaHeight(participantsCount: number) {
   const rows = Math.max(1, participantsCount);
   // Header + paddings + rows (estimación más cercana al tamaño real del hover).
   return 40 + 12 + rows * 48 + 8;
-}
-
-function normalizeParticipantText(value: string) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function participantIdentityTokens(input: Pick<Participant, 'sourceType' | 'name' | 'contact'> & { dni?: string }) {
-  const name = normalizeParticipantText(input.name);
-  const contact = normalizeParticipantText(input.contact);
-  const email = contact.includes('@') ? contact : '';
-  const phone = contact.replace(/\D/g, '');
-  const dni = String(input.dni || '').replace(/\D/g, '');
-  const tokens: string[] = [];
-  if (email) tokens.push(`${input.sourceType}:email:${email}`);
-  if (phone.length >= 6) tokens.push(`${input.sourceType}:phone:${phone}`);
-  if (dni.length >= 6) tokens.push(`${input.sourceType}:dni:${dni}`);
-  if (contact) tokens.push(`${input.sourceType}:contact:${contact}`);
-  if (name) tokens.push(`${input.sourceType}:name:${name}`);
-  return Array.from(new Set(tokens));
-}
-
-function participantExplicitIdentityKeys(input: {
-  entityRef?: string;
-  selectedUserId?: number;
-  personKind?: Participant['personKind'];
-}) {
-  const keys: string[] = [];
-  const normalizedEntityRef = String(input.entityRef || '').trim().toLowerCase();
-  if (normalizedEntityRef) {
-    if (
-      normalizedEntityRef.startsWith('client:') ||
-      normalizedEntityRef.startsWith('user:') ||
-      normalizedEntityRef.startsWith('booking-client:') ||
-      normalizedEntityRef.startsWith('booking-user:')
-    ) {
-      keys.push(`ref:${normalizedEntityRef}`);
-    }
-  }
-  const selectedUserId = Number(input.selectedUserId || 0);
-  if (Number.isInteger(selectedUserId) && selectedUserId > 0) {
-    keys.push(`user:${selectedUserId}`);
-  }
-  return Array.from(new Set(keys));
-}
-
-function buildStartDateTimeFromSlot(baseDate: Date, slot: number) {
-  const [hh, mm] = slotToTime(slot).split(':').map(Number);
-  return new Date(
-    baseDate.getFullYear(),
-    baseDate.getMonth(),
-    baseDate.getDate(),
-    Number.isFinite(hh) ? hh : 0,
-    Number.isFinite(mm) ? mm : 0,
-    0,
-    0
-  );
 }
 
 function resolveBookingParticipantsCount(
@@ -1401,334 +907,6 @@ function allocatePaymentProportionallyByDebt(input: {
     }));
 }
 
-function resolvePlaygroundClientPhone(owner?: Participant | null) {
-  const fromContact = extractPhoneFromParticipantContact(owner?.contact);
-  if (fromContact.length >= 8) {
-    return fromContact.startsWith('54') ? `+${fromContact}` : `+54${fromContact}`;
-  }
-
-  return '';
-}
-
-function resolvePlaygroundClientEmail(owner?: Participant | null) {
-  return extractEmailFromParticipantContact(owner?.contact);
-}
-
-function resolvePlaygroundClientDni(owner?: Participant | null) {
-  return String(owner?.dni || '').trim();
-}
-
-function splitParticipantContactFields(contact: unknown) {
-  const raw = String(contact || '').trim();
-  if (!raw) return { phone: '', email: '' };
-
-  if (raw.includes('·')) {
-    const [phonePart, ...emailParts] = raw.split('·');
-    return {
-      phone: String(phonePart || '').replace(/\D/g, ''),
-      email: emailParts.join('·').trim().toLowerCase(),
-    };
-  }
-
-  const phoneLike = raw.replace(/[\d\s()+-]/g, '').length === 0;
-  if (phoneLike) {
-    return { phone: raw.replace(/\D/g, ''), email: '' };
-  }
-
-  if (raw.includes('@')) {
-    return { phone: '', email: raw.toLowerCase() };
-  }
-
-  return { phone: '', email: raw.toLowerCase() };
-}
-
-function extractEmailFromParticipantContact(contact: unknown) {
-  return splitParticipantContactFields(contact).email;
-}
-
-function extractPhoneFromParticipantContact(contact: unknown) {
-  return splitParticipantContactFields(contact).phone;
-}
-
-function buildParticipantContactFromFields(phone: unknown, email: unknown) {
-  const safePhone = String(phone || '').trim();
-  const safeEmail = String(email || '').trim().toLowerCase();
-  if (safePhone && safeEmail) return `${safePhone} · ${safeEmail}`;
-  return safePhone || safeEmail || '';
-}
-
-function mapPersonSearchResultToParticipantSuggestion(
-  row: any,
-  query: string,
-  prefix: string
-): ParticipantSuggestion | null {
-  const kind = String(row?.kind || '').trim();
-  if (!kind || kind === 'newClientSuggestion') return null;
-
-  const clientId = String(row?.clientId || '').trim();
-  const userIdRaw = Number(row?.userId || 0);
-  const userId = Number.isFinite(userIdRaw) && userIdRaw > 0 ? userIdRaw : undefined;
-  const phone = String(row?.phone || '').trim();
-  const email = String(row?.email || '').trim().toLowerCase();
-  const sourceType: Participant['sourceType'] =
-    kind === 'systemUser' && !clientId ? 'systemUser' : 'clubClient';
-  const entityRef =
-    clientId
-      ? `client:${clientId}`
-      : userId
-        ? `user:${userId}`
-        : undefined;
-
-  return {
-    id: `${prefix}-${String(row?.personKey || clientId || userId || query)}`,
-    label: String(row?.displayName || query).trim() || query,
-    secondary:
-      phone || email || String(row?.dni || '').trim() || (kind === 'systemUser' ? 'Usuario Pique' : 'Cliente del club'),
-    sourceType,
-    entityRef,
-    name: String(row?.displayName || query).trim() || query,
-    contact: buildParticipantContactFromFields(phone, email),
-    dni: String(row?.dni || '').trim() || undefined,
-    personKind: kind as Participant['personKind'],
-    personKey: String(row?.personKey || '').trim() || undefined,
-    personSearchQuery: String(query || '').trim() || undefined,
-    badges: Array.isArray(row?.badges) ? row.badges.filter(Boolean).map(String) : undefined,
-    selectedUserId: userId,
-  } satisfies ParticipantSuggestion;
-}
-
-function mapAdminParticipantToPlaygroundParticipant(
-  dto: AdminBookingParticipantDto,
-  existing?: Participant | null
-): Participant {
-  const clientId = String(dto.clientId || '').trim();
-  const userIdRaw = Number(dto.userId || 0);
-  const userId = Number.isFinite(userIdRaw) && userIdRaw > 0 ? userIdRaw : undefined;
-  const entityRef = clientId ? `client:${clientId}` : userId ? `user:${userId}` : undefined;
-  const sourceType: Participant['sourceType'] = clientId ? 'clubClient' : userId ? 'systemUser' : 'guest';
-  const isOwner = String(dto.role || '') === 'ORGANIZER';
-  const displayName = String(dto.displayName || dto.invitedName || '').trim() || (isOwner ? 'Titular' : 'Participante');
-
-  return {
-    id: isOwner ? 'owner' : (existing?.id || `booking-participant:${dto.id}`),
-    bookingParticipantId: dto.id,
-    name: displayName,
-    contact: buildParticipantContactFromFields(dto.phone, dto.email),
-    dni: existing?.dni,
-    paid: existing?.paid ?? false,
-    isOwner,
-    sourceType,
-    entityRef,
-    selectedUserId: userId,
-    personKind:
-      clientId && userId
-        ? 'linked'
-        : clientId
-          ? 'clubClient'
-          : userId
-            ? 'systemUser'
-            : undefined,
-    personKey: existing?.personKey,
-    personSearchQuery: existing?.personSearchQuery,
-    badges:
-      clientId && userId
-        ? ['Cliente del club', 'Usuario Pique']
-        : clientId
-          ? ['Cliente del club']
-          : userId
-            ? ['Usuario Pique']
-            : undefined,
-    paymentMethod: existing?.paymentMethod || 'CASH',
-    customPrice: existing?.customPrice ?? null,
-  };
-}
-
-function findExistingParticipantMatch(
-  participant: AdminBookingParticipantDto,
-  currentParticipants: Participant[]
-) {
-  const participantId = String(participant.id || '').trim();
-  const clientId = String(participant.clientId || '').trim();
-  const userIdRaw = Number(participant.userId || 0);
-  const userId = Number.isFinite(userIdRaw) && userIdRaw > 0 ? userIdRaw : 0;
-
-  return (
-    currentParticipants.find((entry) => String(entry.bookingParticipantId || '').trim() === participantId) ||
-    currentParticipants.find((entry) => {
-      if (String(participant.role || '') === 'ORGANIZER') return entry.isOwner;
-      const entryClientId = resolveParticipantClientId(entry);
-      const entryUserId = resolveParticipantSelectedUserId(entry);
-      if (clientId && entryClientId === clientId) return true;
-      if (userId > 0 && entryUserId === userId) return true;
-      return false;
-    }) ||
-    null
-  );
-}
-
-function resolveParticipantClientId(participant?: Participant | null) {
-  const ref = String(participant?.entityRef || '').trim();
-  if (ref.startsWith('client:')) {
-    const raw = ref.slice('client:'.length).trim();
-    return raw.startsWith('client-') ? raw.slice('client-'.length).trim() : raw;
-  }
-  if (ref.startsWith('booking-client:')) return ref.slice('booking-client:'.length).trim();
-  return '';
-}
-
-function resolveParticipantSelectedUserId(participant?: Participant | null) {
-  const direct = Number(participant?.selectedUserId || 0);
-  if (Number.isInteger(direct) && direct > 0) return direct;
-  const ref = String(participant?.entityRef || '').trim();
-  if (ref.startsWith('user:')) {
-    const raw = Number(ref.slice('user:'.length).trim());
-    return Number.isInteger(raw) && raw > 0 ? raw : 0;
-  }
-  if (ref.startsWith('booking-user:')) {
-    const raw = Number(ref.slice('booking-user:'.length).trim());
-    return Number.isInteger(raw) && raw > 0 ? raw : 0;
-  }
-  return 0;
-}
-
-function normalizeText(value: unknown) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-}
-
-function toSlugToken(value: string) {
-  return normalizeText(value).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'guest';
-}
-
-function buildStableParticipantRef(
-  participant: Participant,
-  options?: {
-    bookingClientId?: string;
-    bookingUserId?: number;
-  }
-) {
-  if (participant.entityRef && String(participant.entityRef).trim().length > 0) {
-    return String(participant.entityRef).trim();
-  }
-  if (participant.isOwner && options?.bookingClientId) {
-    return `booking-client:${String(options.bookingClientId)}`;
-  }
-  if (participant.isOwner && options?.bookingUserId) {
-    return `booking-user:${Number(options.bookingUserId)}`;
-  }
-  if (participant.sourceType === 'systemUser') {
-    const fromContact = String(participant.contact || '').trim();
-    if (fromContact) return `user:${toSlugToken(fromContact)}`;
-  }
-  if (participant.sourceType === 'clubClient') {
-    const fromContact = String(participant.contact || '').trim();
-    if (fromContact) return `client:${toSlugToken(fromContact)}`;
-  }
-  return `guest:${String(participant.id)}`;
-}
-
-function normalizeParticipantSourceType(value: unknown): Participant['sourceType'] {
-  if (value === 'clubClient' || value === 'systemUser') return value;
-  return 'guest';
-}
-
-function buildDefaultParticipantsForBooking(booking: Booking): Participant[] {
-  const ownerEntityRef =
-    booking.clientId
-      ? `booking-client:${booking.clientId}`
-      : booking.userId
-        ? `booking-user:${Number(booking.userId)}`
-        : undefined;
-  const ownerSourceType: Participant['sourceType'] =
-    booking.clientId ? 'clubClient' : booking.userId ? 'systemUser' : 'guest';
-  return initialParticipants.map((participant) =>
-    participant.isOwner
-      ? {
-          ...participant,
-          id: 'owner',
-          name: String(booking.title || ''),
-          dni: undefined,
-          paid: booking.paymentState === 'paid',
-          sourceType: ownerSourceType,
-          entityRef: ownerEntityRef,
-          selectedUserId: Number.isFinite(Number(booking.userId || 0)) && Number(booking.userId) > 0 ? Number(booking.userId) : undefined,
-          personKind:
-            booking.clientId && booking.userId
-              ? 'linked'
-              : booking.clientId
-                ? 'clubClient'
-                : booking.userId
-                  ? 'systemUser'
-                  : undefined,
-          badges:
-            booking.clientId && booking.userId
-              ? ['Cliente del club', 'Usuario Pique']
-              : booking.clientId
-                ? ['Cliente del club']
-                : booking.userId
-                  ? ['Usuario Pique']
-                  : undefined,
-        }
-      : { ...participant, paid: booking.paymentState === 'paid' }
-  );
-}
-
-function inferParticipantSourceTypeFromEntityRef(entityRef: string | undefined): Participant['sourceType'] {
-  const ref = String(entityRef || '').trim().toLowerCase();
-  if (!ref) return 'guest';
-  if (ref.startsWith('booking-client:') || ref.startsWith('client:')) return 'clubClient';
-  if (ref.startsWith('booking-user:') || ref.startsWith('user:')) return 'systemUser';
-  return 'guest';
-}
-
-function isBlockingQuoteError(message: string) {
-  const normalized = normalizeText(message);
-  if (!normalized) return false;
-  const blockers = [
-    'no se pueden reservar turnos en el pasado',
-    'duracion no permitida por el club',
-    'horario no permitido por el club',
-    'el club esta cerrado ese dia',
-    'el club esta cerrado para la fecha seleccionada',
-    'la actividad esta cerrada para la fecha seleccionada',
-    'la actividad esta cerrada para la fecha solicitada',
-    'la reserva excede el horario de apertura del club',
-    'limite de anticipacion excedido',
-    'precio de cancha no configurado',
-    'cancha en mantenimiento',
-    'actividad no existe',
-    'la actividad no pertenece al club de la cancha',
-  ];
-  return blockers.some((token) => normalized.includes(token));
-}
-
-function inferCourtSport(courtLike: any): string {
-  const candidates = [
-    courtLike?.sport,
-    courtLike?.surface,
-    courtLike?.surfaceType,
-    courtLike?.activityType?.name,
-    courtLike?.activity?.name,
-    courtLike?.name,
-  ]
-    .map(normalizeText)
-    .filter((value) => value.length > 0);
-
-  const full = candidates.join(' ');
-
-  if (full.includes('tenis') || full.includes('tennis')) return 'Tenis';
-  if (full.includes('pickle')) return 'Pickleball';
-  if (full.includes('squash')) return 'Squash';
-  if (full.includes('voley') || full.includes('beach volley') || full.includes('volley playa')) return 'Voley playa';
-  if (full.includes('futbol') || full.includes('futbol 5')) return 'Fútbol';
-  if (full.includes('padel') || full.includes('paddle')) return 'Pádel';
-
-  return String(courtLike?.activityType?.name || courtLike?.sport || courtLike?.surface || 'Pádel');
-}
-
 export default function AdminAgendaPlaygroundPage() {
   const router = useRouter();
   const { authChecked, user } = useValidateAuth({ requireAdmin: true });
@@ -1758,7 +936,7 @@ export default function AdminAgendaPlaygroundPage() {
   const [selectedCourtId, setSelectedCourtId] = useState<string>('');
   const [selectedStartSlot, setSelectedStartSlot] = useState(2);
   const [selectedEndSlot, setSelectedEndSlot] = useState(4);
-  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
+  const [participants, setParticipants] = useState<Participant[]>(() => createInitialParticipants());
   const [simplifiedOwnerAdded, setSimplifiedOwnerAdded] = useState(false);
   const [simplifiedEditingParticipantId, setSimplifiedEditingParticipantId] = useState<string | null>(null);
   const [simplifiedNewParticipantOpen, setSimplifiedNewParticipantOpen] = useState(false);
@@ -3659,7 +2837,7 @@ export default function AdminAgendaPlaygroundPage() {
         setSelectedStartSlot(range.start);
         setSelectedEndSlot(range.end);
         resetRecurringDraft(selectedDate, draftSelectionSnapshot.courtId);
-        setParticipants(initialParticipants.map((participant) => ({ ...participant })));
+        setParticipants(createInitialParticipants());
         setSimplifiedSidebarSection('DETAILS');
         bookingFinancialRequestSeqRef.current += 1;
         bookingTimelineRequestSeqRef.current += 1;
@@ -3769,7 +2947,7 @@ export default function AdminAgendaPlaygroundPage() {
       setSelectedStartSlot(suggestedStartSlot);
       setSelectedEndSlot(suggestedEndSlot);
       resetRecurringDraft(selectedDate, fallbackCourtId);
-      setParticipants(initialParticipants.map((participant) => ({ ...participant })));
+      setParticipants(createInitialParticipants());
       setSimplifiedSidebarSection('DETAILS');
       bookingFinancialRequestSeqRef.current += 1;
       bookingTimelineRequestSeqRef.current += 1;
@@ -4092,12 +3270,13 @@ export default function AdminAgendaPlaygroundPage() {
   const shouldShowSeriesScopeHint = Boolean(
     editingBooking?.fixedBookingId && hasScheduleChanges && !pendingSeriesScopeSave
   );
+  const hasDeferredEditChanges = Boolean(editingBookingId ? hasScheduleChanges : selectedCourtId);
   const primaryActionDisabled = Boolean(
     isSubmittingBooking ||
     isDeletingBooking ||
     confirmingBooking ||
     hasBlockingActionError ||
-    (editingBookingId ? false : !selectedCourtId)
+    !hasDeferredEditChanges
   );
   const primaryActionLabel = editingBookingId ? 'Guardar cambios' : 'Crear reserva';
   const primaryActionMeta = editingBookingId
@@ -4397,36 +3576,10 @@ export default function AdminAgendaPlaygroundPage() {
       const rows = await ClubAdminService.searchPeople(slug, query);
       const ownerSuggestions: ParticipantSuggestion[] = (Array.isArray(rows) ? rows : [])
         .slice(0, 8)
-        .flatMap((row: any, index: number) => {
-          const kind = String(row?.kind || '').trim();
-          if (kind === 'newClientSuggestion') return [];
-          const phone = String(row?.phone || '').trim();
-          const email = String(row?.email || '').trim().toLowerCase();
-          const sourceType: Participant['sourceType'] =
-            kind === 'clubClient' ? 'clubClient' : 'systemUser';
-          const clientId = String(row?.clientId || '').trim();
-          const userId = Number(row?.userId || 0);
-          return [{
-            id: `owner-${String(row?.personKey || row?.clientId || row?.userId || index)}`,
-            label: String(row?.displayName || query),
-            secondary: phone || email || String(row?.dni || '').trim() || 'Persona de Pique',
-            sourceType,
-            entityRef:
-              sourceType === 'clubClient' && clientId
-                ? `client:${clientId}`
-                : Number.isFinite(userId) && userId > 0
-                  ? `user:${userId}`
-                  : undefined,
-            name: String(row?.displayName || query),
-            contact: buildParticipantContactFromFields(phone, email),
-            dni: String(row?.dni || '').trim() || undefined,
-            personKind: kind as Participant['personKind'],
-            personKey: String(row?.personKey || '').trim() || undefined,
-            personSearchQuery: query,
-            badges: Array.isArray(row?.badges) ? row.badges.filter(Boolean).map(String) : undefined,
-            selectedUserId: Number.isFinite(userId) && userId > 0 ? userId : undefined,
-          } satisfies ParticipantSuggestion];
-        });
+        .map((row: any, index: number) =>
+          mapPersonSearchResultToParticipantSuggestion(row, query, `owner-${index}`)
+        )
+        .filter((suggestion): suggestion is ParticipantSuggestion => Boolean(suggestion));
       setSimplifiedOwnerSuggestions(ownerSuggestions);
     } catch {
       setSimplifiedOwnerSuggestions([]);
@@ -5396,7 +4549,7 @@ export default function AdminAgendaPlaygroundPage() {
       }
       setDrawerOpen(false);
       setFormError('');
-      setParticipants(initialParticipants.map((participant) => ({ ...participant })));
+      setParticipants(createInitialParticipants());
       setEditingBookingId(null);
       setEditingBaseline(null);
       showAgendaToast('Reserva creada.', 'success');
