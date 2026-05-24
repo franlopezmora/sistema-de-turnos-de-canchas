@@ -355,6 +355,7 @@ export class ClassEnrollmentAdminService {
       data: {
         enrollmentStatus: 'CANCELLED',
         attendanceStatus: isLate ? 'CANCELLED_LATE' : 'CANCELLED_ON_TIME',
+        attendedAt: null,
         cancelledAt: new Date(),
       },
       include: {
