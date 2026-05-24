@@ -3,6 +3,8 @@ import { Pencil, Plus, Search, UserPlus, Users, XCircle } from 'lucide-react';
 import AdminRouteShell from '../../components/admin/AdminRouteShell';
 import {
   AdminDataTable,
+  AdminDrawer,
+  AdminDrawerSection,
   type AdminDataTableColumn,
   AdminFeedbackBanner,
   AdminFilterToolbar,
@@ -1068,7 +1070,7 @@ function AdminClassesPageContent({ user }: { user: any }) {
               className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-p-border bg-p-surface px-2.5 text-[11px] font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
             >
               <Users size={13} />
-              Alumnos
+              Gestionar
             </button>
             <button
               type="button"
@@ -1196,7 +1198,7 @@ function AdminClassesPageContent({ user }: { user: any }) {
   const cancelledEnrollmentCount = enrollmentCancelledCount(enrollments);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4 pb-0 lg:p-6 lg:pb-0">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4 pb-4 lg:p-6 lg:pb-6">
       <AdminPageHeader
         eyebrow="Academia"
         title="Clases"
@@ -1303,20 +1305,32 @@ function AdminClassesPageContent({ user }: { user: any }) {
         />
       </AdminPanel>
 
-      <AdminPanel
-        title={selectedClass ? `Clase seleccionada · ${selectedClass.teacher?.displayName || 'Sin profesor'}` : 'Clase seleccionada'}
-        description={
+      <AdminDrawer
+        open={Boolean(selectedClass)}
+        onClose={() => setSelectedClassId(null)}
+        title={selectedClass ? selectedClass.teacher?.displayName || 'Clase sin profesor' : 'Clase'}
+        subtitle={
           selectedClass
-            ? 'Administrá inscripciones del grupo o clase individual sin abrir todavía asistencia ni cobros.'
-            : 'Seleccioná una clase del listado para ver el detalle y gestionar alumnos.'
+            ? 'Gestioná inscripciones, asistencia y contexto operativo desde este panel lateral.'
+            : undefined
         }
-        actions={
+        statusChip={selectedClass ? statusLabel(selectedClass.status) : undefined}
+        statusChipClassName={selectedClass ? statusToneClasses(selectedClass.status) : undefined}
+        size="lg"
+        footer={
           selectedClass ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => openEnrollmentCreateModal()}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-800"
+                onClick={() => setSelectedClassId(null)}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-p-border px-3 text-sm font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={openEnrollmentCreateModal}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 text-sm font-semibold text-ink-50 transition hover:bg-ink-800"
               >
                 <UserPlus size={14} />
                 Agregar alumno
@@ -1324,7 +1338,7 @@ function AdminClassesPageContent({ user }: { user: any }) {
               <button
                 type="button"
                 onClick={() => void openEditModal(selectedClass.id)}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-p-border bg-p-surface px-3 text-sm font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
               >
                 <Pencil size={14} />
                 Editar clase
@@ -1333,110 +1347,23 @@ function AdminClassesPageContent({ user }: { user: any }) {
           ) : null
         }
       >
-        {!selectedClass ? (
-          <div className="rounded-xl border border-dashed border-p-border px-4 py-8 text-center text-[13px] text-p-text-muted">
-            Elegí una clase para ver cupo, alumnos inscriptos y responsables de pago.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <AdminPanel title="Cupo usado" bodyClassName="px-4 py-4">
-                <p className="text-[28px] font-semibold text-p-text">
-                  {activeEnrollmentCount}/{selectedClass.capacity}
-                </p>
-                <p className="mt-1 text-[12px] text-p-text-muted">{classTypeLabel(selectedClass.classType)}</p>
-              </AdminPanel>
-              <AdminPanel title="En espera" bodyClassName="px-4 py-4">
-                <p className="text-[28px] font-semibold text-p-text">{waitlistedCount}</p>
-                <p className="mt-1 text-[12px] text-p-text-muted">No consume cupo por ahora</p>
-              </AdminPanel>
-              <AdminPanel title="Cancelados" bodyClassName="px-4 py-4">
-                <p className="text-[28px] font-semibold text-[var(--error-fg)]">{cancelledEnrollmentCount}</p>
-                <p className="mt-1 text-[12px] text-p-text-muted">Conservados por trazabilidad</p>
-              </AdminPanel>
-              <AdminPanel title="Precio" bodyClassName="px-4 py-4">
-                <p className="text-[28px] font-semibold text-p-text">{formatCurrency(selectedClass.pricePerStudent)}</p>
-                <p className="mt-1 text-[12px] text-p-text-muted">Por alumno en esta clase</p>
-              </AdminPanel>
-            </div>
-
-            <div className="rounded-xl border border-p-border bg-p-surface-2 px-4 py-4">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-p-text-muted">
-                <span className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${statusToneClasses(selectedClass.status)}`}>
-                  {statusLabel(selectedClass.status)}
-                </span>
-                <span className="inline-flex rounded-full border border-p-border bg-p-surface px-2 py-0.5 font-semibold text-p-text-secondary">
-                  Visibilidad: {visibilityLabel(selectedClass.visibility)}
-                </span>
-                <span className="inline-flex rounded-full border border-p-border bg-p-surface px-2 py-0.5 font-semibold text-p-text-secondary">
-                  Formato: {classTypeLabel(selectedClass.classType)}
-                </span>
-              </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <SummaryBlock label="Profesor" value={selectedClass.teacher?.displayName || 'Sin profesor'} />
-                <SummaryBlock label="Horario" value={formatDateRange(selectedClass.startsAt, selectedClass.endsAt)} />
-                <SummaryBlock label="Cancha" value={selectedClass.court?.name || 'Sin cancha asignada'} />
-                <SummaryBlock label="Actividad" value={selectedClass.activityType?.name || 'Sin actividad específica'} />
-              </div>
-              {selectedClass.level || selectedClass.description ? (
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <SummaryBlock label="Nivel" value={selectedClass.level || 'Sin nivel definido'} />
-                  <SummaryBlock label="Descripción" value={selectedClass.description || 'Sin descripción'} />
-                </div>
-              ) : null}
-            </div>
-
-            {enrollmentsError ? (
-              <AdminFeedbackBanner tone="error" title="Error">
-                {enrollmentsError}
-              </AdminFeedbackBanner>
-            ) : null}
-
-            <AdminPanel
-              title="Alumnos"
-              description="Inscripciones de la clase, con alumno, responsable opcional y estados informativos."
-              bodyClassName="p-0"
-              actions={
-                <AdminFilterToolbar className="border-0 bg-transparent p-0 gap-2 sm:flex-nowrap sm:justify-end">
-                  <AdminSegmentedControl
-                    options={[
-                      { value: 'active', label: 'Activos' },
-                      { value: 'all', label: 'Todos' },
-                      { value: 'cancelled', label: 'Cancelados' },
-                    ]}
-                    value={enrollmentFilter}
-                    onChange={(value) => setEnrollmentFilter(value as EnrollmentFilter)}
-                    ariaLabel="Filtro de inscripciones"
-                    className="w-fit"
-                  />
-                </AdminFilterToolbar>
-              }
-            >
-              <AdminDataTable
-                columns={enrollmentColumns}
-                data={filteredEnrollments}
-                rowKey={(row) => row.id}
-                loading={enrollmentsLoading}
-                onRowClick={(row) => openEnrollmentEditModal(row)}
-                empty={{
-                  title: 'Todavía no hay alumnos en esta clase',
-                  description: 'Agregá el primer alumno con búsqueda explícita, sin mezclar todavía asistencia ni pagos.',
-                  action: (
-                    <button
-                      type="button"
-                      onClick={openEnrollmentCreateModal}
-                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-800"
-                    >
-                      <UserPlus size={14} />
-                      Agregar alumno
-                    </button>
-                  ),
-                }}
-              />
-            </AdminPanel>
-          </div>
-        )}
-      </AdminPanel>
+        {selectedClass ? (
+          <ClassSessionDrawerContent
+            selectedClass={selectedClass}
+            activeEnrollmentCount={activeEnrollmentCount}
+            waitlistedCount={waitlistedCount}
+            cancelledEnrollmentCount={cancelledEnrollmentCount}
+            enrollmentsError={enrollmentsError}
+            enrollmentFilter={enrollmentFilter}
+            onEnrollmentFilterChange={(value) => setEnrollmentFilter(value)}
+            enrollmentColumns={enrollmentColumns}
+            filteredEnrollments={filteredEnrollments}
+            enrollmentsLoading={enrollmentsLoading}
+            onEnrollmentRowClick={openEnrollmentEditModal}
+            onAddEnrollment={openEnrollmentCreateModal}
+          />
+        ) : null}
+      </AdminDrawer>
 
       <AdminModal
         open={modalOpen}
@@ -1936,6 +1863,124 @@ function SummaryBlock({ label, value }: { label: string; value: string }) {
       <p className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">{label}</p>
       <p className="text-[13px] text-p-text">{value}</p>
     </div>
+  );
+}
+
+function ClassSessionDrawerContent({
+  selectedClass,
+  activeEnrollmentCount,
+  waitlistedCount,
+  cancelledEnrollmentCount,
+  enrollmentsError,
+  enrollmentFilter,
+  onEnrollmentFilterChange,
+  enrollmentColumns,
+  filteredEnrollments,
+  enrollmentsLoading,
+  onEnrollmentRowClick,
+  onAddEnrollment,
+}: {
+  selectedClass: AdminClassSession;
+  activeEnrollmentCount: number;
+  waitlistedCount: number;
+  cancelledEnrollmentCount: number;
+  enrollmentsError: string;
+  enrollmentFilter: EnrollmentFilter;
+  onEnrollmentFilterChange: (value: EnrollmentFilter) => void;
+  enrollmentColumns: AdminDataTableColumn<AdminClassEnrollment>[];
+  filteredEnrollments: AdminClassEnrollment[];
+  enrollmentsLoading: boolean;
+  onEnrollmentRowClick: (row: AdminClassEnrollment) => void;
+  onAddEnrollment: () => void;
+}) {
+  const drawerSectionCardClass = 'rounded-xl border border-p-border bg-p-surface-2 px-4 py-4';
+
+  return (
+    <>
+      <AdminDrawerSection title="Resumen" className={drawerSectionCardClass}>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-p-text-muted">
+          <span className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${statusToneClasses(selectedClass.status)}`}>
+            {statusLabel(selectedClass.status)}
+          </span>
+          <span className="inline-flex rounded-full border border-p-border bg-p-surface px-2 py-0.5 font-semibold text-p-text-secondary">
+            Visibilidad: {visibilityLabel(selectedClass.visibility)}
+          </span>
+          <span className="inline-flex rounded-full border border-p-border bg-p-surface px-2 py-0.5 font-semibold text-p-text-secondary">
+            Formato: {classTypeLabel(selectedClass.classType)}
+          </span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <SummaryBlock label="Profesor" value={selectedClass.teacher?.displayName || 'Sin profesor'} />
+          <SummaryBlock label="Horario" value={formatDateRange(selectedClass.startsAt, selectedClass.endsAt)} />
+          <SummaryBlock label="Cancha" value={selectedClass.court?.name || 'Sin cancha asignada'} />
+          <SummaryBlock label="Actividad" value={selectedClass.activityType?.name || 'Sin actividad específica'} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <SummaryBlock label="Cupo usado" value={`${activeEnrollmentCount}/${selectedClass.capacity}`} />
+          <SummaryBlock label="En espera" value={String(waitlistedCount)} />
+          <SummaryBlock label="Cancelados" value={String(cancelledEnrollmentCount)} />
+          <SummaryBlock label="Precio" value={formatCurrency(selectedClass.pricePerStudent)} />
+        </div>
+
+        {(selectedClass.level || selectedClass.description) && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <SummaryBlock label="Nivel" value={selectedClass.level || 'Sin nivel definido'} />
+            <SummaryBlock label="Descripción" value={selectedClass.description || 'Sin descripción'} />
+          </div>
+        )}
+      </AdminDrawerSection>
+
+      {enrollmentsError ? (
+        <AdminFeedbackBanner tone="error" title="Error">
+          {enrollmentsError}
+        </AdminFeedbackBanner>
+      ) : null}
+
+      <AdminDrawerSection title="Alumnos" className={drawerSectionCardClass}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[13px] text-p-text-secondary">
+            Inscripciones, responsable opcional y estados informativos de la clase.
+          </p>
+          <AdminFilterToolbar className="border-0 bg-transparent p-0 gap-2 sm:flex-nowrap sm:justify-end">
+            <AdminSegmentedControl
+              options={[
+                { value: 'active', label: 'Activos' },
+                { value: 'all', label: 'Todos' },
+                { value: 'cancelled', label: 'Cancelados' },
+              ]}
+              value={enrollmentFilter}
+              onChange={(value) => onEnrollmentFilterChange(value as EnrollmentFilter)}
+              ariaLabel="Filtro de inscripciones"
+              className="w-fit"
+            />
+          </AdminFilterToolbar>
+        </div>
+
+        <AdminDataTable
+          columns={enrollmentColumns}
+          data={filteredEnrollments}
+          rowKey={(row) => row.id}
+          loading={enrollmentsLoading}
+          onRowClick={onEnrollmentRowClick}
+          empty={{
+            title: 'Todavía no hay alumnos en esta clase',
+            description: 'Agregá el primer alumno con búsqueda explícita, sin mezclar todavía asistencia ni pagos.',
+            action: (
+              <button
+                type="button"
+                onClick={onAddEnrollment}
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-800"
+              >
+                <UserPlus size={14} />
+                Agregar alumno
+              </button>
+            ),
+          }}
+        />
+      </AdminDrawerSection>
+    </>
   );
 }
 
