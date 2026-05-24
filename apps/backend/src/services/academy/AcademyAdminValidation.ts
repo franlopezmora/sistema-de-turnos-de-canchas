@@ -143,4 +143,51 @@ export class AcademyAdminValidationService {
     }
     return classSession;
   }
+
+  async assertClassEnrollmentBelongsToClub(clubId: number, enrollmentId: string) {
+    const enrollment = await prisma.classEnrollment.findFirst({
+      where: { id: String(enrollmentId), clubId: Number(clubId) },
+      select: {
+        id: true,
+        clubId: true,
+        classSessionId: true,
+        studentClientId: true,
+        studentUserId: true,
+        enrollmentStatus: true,
+        attendanceStatus: true,
+        paymentStatus: true,
+      },
+    });
+    if (!enrollment) {
+      throw notFound('Inscripción no encontrada para este club.', ErrorCodes.CLASS_ENROLLMENT_NOT_FOUND);
+    }
+    return enrollment;
+  }
+
+  async assertClassPassBelongsToClub(clubId: number, classPassId: string) {
+    const classPass = await prisma.classPass.findFirst({
+      where: { id: String(classPassId), clubId: Number(clubId) },
+      select: {
+        id: true,
+        clubId: true,
+        ownerClientId: true,
+        ownerUserId: true,
+        beneficiaryClientId: true,
+        beneficiaryUserId: true,
+        activityTypeId: true,
+        classType: true,
+        teacherId: true,
+        totalCredits: true,
+        usedCredits: true,
+        remainingCredits: true,
+        expiresAt: true,
+        transferable: true,
+        status: true,
+      },
+    });
+    if (!classPass) {
+      throw notFound('Pack de clases no encontrado para este club.', ErrorCodes.CLASS_PASS_NOT_FOUND);
+    }
+    return classPass;
+  }
 }

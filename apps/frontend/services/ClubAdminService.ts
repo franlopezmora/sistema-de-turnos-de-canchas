@@ -190,6 +190,75 @@ export type AdminClassEnrollment = {
   updatedAt: string;
 };
 
+export type AdminClassPassStatus = 'ACTIVE' | 'EXPIRED' | 'DEPLETED' | 'CANCELLED';
+export type AdminClassCreditUsageReason =
+  | 'ATTENDANCE'
+  | 'LATE_CANCEL'
+  | 'NO_SHOW'
+  | 'MANUAL_ADJUSTMENT'
+  | 'REFUND_REVERSAL';
+
+export type AdminClassPass = {
+  id: string;
+  clubId: number;
+  ownerClientId: string;
+  ownerUserId: number | null;
+  beneficiaryClientId: string;
+  beneficiaryUserId: number | null;
+  packageName: string;
+  totalCredits: number;
+  usedCredits: number;
+  remainingCredits: number;
+  expiresAt: string | null;
+  activityTypeId: number | null;
+  classType: AdminClassSessionType | null;
+  teacherId: string | null;
+  transferable: boolean;
+  status: AdminClassPassStatus;
+  purchasedAt: string;
+  notes: string | null;
+  createdByUserId: number;
+  ownerClient: { id: string; name: string } | null;
+  beneficiaryClient: { id: string; name: string } | null;
+  ownerUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  beneficiaryUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  activityType: { id: number; name: string } | null;
+  teacher: { id: string; displayName: string; isActive: boolean } | null;
+  createdByUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminClassCreditUsage = {
+  id: string;
+  clubId: number;
+  classPassId: string;
+  classEnrollmentId: string;
+  creditsUsed: number;
+  usedAt: string;
+  reason: AdminClassCreditUsageReason;
+  notes: string | null;
+  createdByUserId: number;
+  classPass: {
+    id: string;
+    packageName: string;
+    beneficiaryClientId: string;
+    remainingCredits: number;
+    status: AdminClassPassStatus | string;
+  } | null;
+  classEnrollment: {
+    id: string;
+    studentClientId: string;
+    snapshotName: string;
+    enrollmentStatus: AdminClassEnrollmentStatus | string;
+    paymentStatus: AdminClassPaymentStatus | string;
+    classSessionId: string;
+  } | null;
+  createdByUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AuditLogUser = {
   id: number;
   firstName?: string | null;
@@ -1173,6 +1242,145 @@ export class ClubAdminService {
     );
     if (!res.ok) {
       throw await parseApiErrorResponse(res, 'Error al actualizar la asistencia');
+    }
+    return res.json();
+  }
+
+  static async getClassPasses(
+    slug: string,
+    filters?: { beneficiaryClientId?: string; status?: AdminClassPassStatus }
+  ): Promise<AdminClassPass[]> {
+    const query = new URLSearchParams();
+    if (filters?.beneficiaryClientId) query.set('beneficiaryClientId', filters.beneficiaryClientId);
+    if (filters?.status) query.set('status', filters.status);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes${suffix}`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar packs de clases');
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  static async getClassPass(slug: string, classPassId: string): Promise<AdminClassPass> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes/${classPassId}`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar el pack de clases');
+    }
+    return res.json();
+  }
+
+  static async createClassPass(
+    slug: string,
+    data: {
+      ownerClientId: string;
+      ownerUserId?: number | null;
+      beneficiaryClientId: string;
+      beneficiaryUserId?: number | null;
+      packageName: string;
+      totalCredits: number;
+      expiresAt?: string | null;
+      activityTypeId?: number | null;
+      classType?: AdminClassSessionType | null;
+      teacherId?: string | null;
+      transferable?: boolean;
+      notes?: string | null;
+    }
+  ): Promise<AdminClassPass> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al crear el pack de clases');
+    }
+    return res.json();
+  }
+
+  static async updateClassPass(
+    slug: string,
+    classPassId: string,
+    data: {
+      packageName?: string | null;
+      expiresAt?: string | null;
+      activityTypeId?: number | null;
+      classType?: AdminClassSessionType | null;
+      teacherId?: string | null;
+      transferable?: boolean;
+      notes?: string | null;
+    }
+  ): Promise<AdminClassPass> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes/${classPassId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al actualizar el pack de clases');
+    }
+    return res.json();
+  }
+
+  static async setClassPassStatus(
+    slug: string,
+    classPassId: string,
+    status: 'ACTIVE' | 'CANCELLED'
+  ): Promise<AdminClassPass> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes/${classPassId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al actualizar el estado del pack');
+    }
+    return res.json();
+  }
+
+  static async getClassPassUsages(slug: string, classPassId: string): Promise<AdminClassCreditUsage[]> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes/${classPassId}/usages`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar consumos del pack');
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  static async getEnrollmentCreditUsages(slug: string, enrollmentId: string): Promise<AdminClassCreditUsage[]> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-enrollments/${enrollmentId}/credit-usages`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar consumos de la inscripción');
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  static async createClassPassUsage(
+    slug: string,
+    classPassId: string,
+    data: {
+      classEnrollmentId: string;
+      creditsUsed: number;
+      reason: AdminClassCreditUsageReason;
+      notes?: string | null;
+    }
+  ): Promise<AdminClassCreditUsage> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes/${classPassId}/usages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al consumir crédito');
     }
     return res.json();
   }

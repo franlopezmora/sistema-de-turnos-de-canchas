@@ -27,6 +27,8 @@ import { TeacherAdminController } from '../controllers/TeacherAdminController';
 import { ClientRelationshipAdminController } from '../controllers/ClientRelationshipAdminController';
 import { ClassSessionAdminController } from '../controllers/ClassSessionAdminController';
 import { ClassEnrollmentAdminController } from '../controllers/ClassEnrollmentAdminController';
+import { ClassPassAdminController } from '../controllers/ClassPassAdminController';
+import { ClassCreditUsageAdminController } from '../controllers/ClassCreditUsageAdminController';
 
 const router = Router();
 
@@ -65,6 +67,8 @@ const teacherAdminController = new TeacherAdminController();
 const clientRelationshipAdminController = new ClientRelationshipAdminController();
 const classSessionAdminController = new ClassSessionAdminController();
 const classEnrollmentAdminController = new ClassEnrollmentAdminController();
+const classPassAdminController = new ClassPassAdminController();
+const classCreditUsageAdminController = new ClassCreditUsageAdminController();
 
 // Todas las rutas requieren autenticación y verificación de acceso al club.
 // El rol tenant se define por endpoint (ADMIN/OWNER para configuración sensible,
@@ -592,6 +596,62 @@ router.patch('/:slug/admin/class-sessions/:classSessionId/enrollments/:enrollmen
     verifyClubAccess,
     requireTenantRole(['ADMIN', 'STAFF']),
     classEnrollmentAdminController.setAttendanceStatus
+);
+
+router.get('/:slug/admin/class-passes',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classPassAdminController.list
+);
+
+router.get('/:slug/admin/class-passes/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classPassAdminController.getById
+);
+
+router.post('/:slug/admin/class-passes',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classPassAdminController.create
+);
+
+router.put('/:slug/admin/class-passes/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classPassAdminController.update
+);
+
+router.patch('/:slug/admin/class-passes/:id/status',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classPassAdminController.setStatus
+);
+
+router.get('/:slug/admin/class-passes/:passId/usages',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classCreditUsageAdminController.listByClassPass
+);
+
+router.post('/:slug/admin/class-passes/:passId/usages',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classCreditUsageAdminController.create
+);
+
+router.get('/:slug/admin/class-enrollments/:enrollmentId/credit-usages',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classCreditUsageAdminController.listByEnrollment
 );
 
 router.post('/:slug/admin/services',

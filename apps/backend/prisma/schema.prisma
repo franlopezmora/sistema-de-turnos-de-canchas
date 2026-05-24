@@ -298,6 +298,21 @@ enum ClassEnrollmentPaymentStatus {
   REFUNDED
 }
 
+enum ClassPassStatus {
+  ACTIVE
+  EXPIRED
+  DEPLETED
+  CANCELLED
+}
+
+enum ClassCreditUsageReason {
+  ATTENDANCE
+  LATE_CANCEL
+  NO_SHOW
+  MANUAL_ADJUSTMENT
+  REFUND_REVERSAL
+}
+
 //
 // MODELOS
 //
@@ -346,6 +361,10 @@ model User {
   academyClassSessionsCreated ClassSession[] @relation("ClassSessionCreatedByUser")
   academyStudentEnrollments ClassEnrollment[] @relation("ClassEnrollmentStudentUser")
   academyClassEnrollmentsCreated ClassEnrollment[] @relation("ClassEnrollmentCreatedByUser")
+  academyOwnedClassPasses ClassPass[] @relation("ClassPassOwnerUser")
+  academyBeneficiaryClassPasses ClassPass[] @relation("ClassPassBeneficiaryUser")
+  academyClassPassesCreated ClassPass[] @relation("ClassPassCreatedByUser")
+  academyClassCreditUsagesCreated ClassCreditUsage[] @relation("ClassCreditUsageCreatedByUser")
 }
 
 model MagicLoginToken {
@@ -450,6 +469,8 @@ model Club {
   clientRelationships ClientRelationship[]
   classSessions ClassSession[]
   classEnrollments ClassEnrollment[]
+  classPasses ClassPass[]
+  classCreditUsages ClassCreditUsage[]
 }
 
 model ClubFavorite {
@@ -602,6 +623,7 @@ model ActivityType {
   fixedBookings          FixedBooking[]
   discountTargets        DiscountPolicyTarget[]
   classSessions          ClassSession[]
+  classPasses            ClassPass[]
 
   @@index([clubId])
 }
@@ -660,6 +682,8 @@ model Client {
   incomingClientRelationships ClientRelationship[] @relation("ClientRelationshipToClient")
   studentClassEnrollments ClassEnrollment[] @relation("ClassEnrollmentStudentClient")
   billingResponsibleClassEnrollments ClassEnrollment[] @relation("ClassEnrollmentBillingResponsibleClient")
+  ownedClassPasses ClassPass[] @relation("ClassPassOwnerClient")
+  beneficiaryClassPasses ClassPass[] @relation("ClassPassBeneficiaryClient")
 
   @@index([clubId])
   @@index([userId])
@@ -730,6 +754,7 @@ model Teacher {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   classSessions ClassSession[]
+  classPasses   ClassPass[]
 
   @@index([clubId, isActive, displayName])
   @@index([clientId])
@@ -846,12 +871,95 @@ model ClassEnrollment {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
+  creditUsages ClassCreditUsage[]
+
   @@index([clubId, classSessionId])
   @@index([clubId, studentClientId])
   @@index([clubId, billingResponsibleClientId])
   @@index([classSessionId, enrollmentStatus])
   @@index([classSessionId, attendanceStatus])
   @@index([classSessionId, paymentStatus])
+}
+
+model ClassPass {
+  id        String @id @default(cuid())
+  clubId    Int
+  club      Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  ownerClientId String
+  ownerClient   Client @relation("ClassPassOwnerClient", fields: [ownerClientId], references: [id], onDelete: Restrict)
+
+  ownerUserId Int?
+  ownerUser   User? @relation("ClassPassOwnerUser", fields: [ownerUserId], references: [id], onDelete: SetNull)
+
+  beneficiaryClientId String
+  beneficiaryClient   Client @relation("ClassPassBeneficiaryClient", fields: [beneficiaryClientId], references: [id], onDelete: Restrict)
+
+  beneficiaryUserId Int?
+  beneficiaryUser   User? @relation("ClassPassBeneficiaryUser", fields: [beneficiaryUserId], references: [id], onDelete: SetNull)
+
+  packageName      String
+  totalCredits     Int
+  usedCredits      Int @default(0)
+  remainingCredits Int
+  expiresAt        DateTime? @db.Timestamptz(3)
+
+  activityTypeId Int?
+  activityType   ActivityType? @relation(fields: [activityTypeId], references: [id], onDelete: SetNull)
+
+  classType ClassSessionType?
+
+  teacherId String?
+  teacher   Teacher? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  transferable Boolean @default(false)
+  status       ClassPassStatus @default(ACTIVE)
+  purchasedAt  DateTime @default(now()) @db.Timestamptz(3)
+  notes        String?
+
+  createdByUserId Int
+  createdByUser   User @relation("ClassPassCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  usages ClassCreditUsage[]
+
+  @@index([clubId, status])
+  @@index([clubId, ownerClientId])
+  @@index([clubId, beneficiaryClientId])
+  @@index([clubId, expiresAt])
+  @@index([clubId, activityTypeId])
+  @@index([clubId, teacherId])
+  @@index([beneficiaryClientId, status, expiresAt])
+}
+
+model ClassCreditUsage {
+  id        String @id @default(cuid())
+  clubId    Int
+  club      Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  classPassId String
+  classPass   ClassPass @relation(fields: [classPassId], references: [id], onDelete: Cascade)
+
+  classEnrollmentId String
+  classEnrollment   ClassEnrollment @relation(fields: [classEnrollmentId], references: [id], onDelete: Restrict)
+
+  creditsUsed Int
+  usedAt      DateTime @default(now()) @db.Timestamptz(3)
+  reason      ClassCreditUsageReason
+  notes       String?
+
+  createdByUserId Int
+  createdByUser   User @relation("ClassCreditUsageCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([classPassId, classEnrollmentId])
+  @@index([clubId, classPassId, usedAt])
+  @@index([clubId, classEnrollmentId, usedAt])
+  @@index([clubId, reason, usedAt])
 }
 
 model Booking {
