@@ -1722,6 +1722,24 @@ export default function AdminAgendaPlaygroundPage() {
     setSimplifiedNewParticipantSearchLoading(false);
     setSimplifiedNewParticipantSuggestions([]);
   }, []);
+  const resetDrawerParticipantVisualState = useCallback(() => {
+    setParticipants(createInitialParticipants());
+    setSimplifiedOwnerAdded(false);
+    setSimplifiedEditingParticipantId(null);
+    setSimplifiedOwnerSuggestionsOpen(false);
+    setSimplifiedOwnerSearchLoading(false);
+    setSimplifiedOwnerSuggestions([]);
+    resetSimplifiedNewParticipantDraft();
+  }, [resetSimplifiedNewParticipantDraft]);
+  const closeBookingDrawer = useCallback((options?: { clearFormError?: boolean }) => {
+    setDrawerOpen(false);
+    setEditingBookingId(null);
+    setEditingBaseline(null);
+    if (options?.clearFormError !== false) {
+      setFormError('');
+    }
+    resetDrawerParticipantVisualState();
+  }, [resetDrawerParticipantVisualState]);
 
   const loadAdminParticipantsForBooking = useCallback(async (bookingId: number) => {
     const items = await getAdminBookingParticipants(bookingId);
@@ -4837,6 +4855,11 @@ export default function AdminAgendaPlaygroundPage() {
   }, [drawerOpen, editingBookingId, participants, resetSimplifiedNewParticipantDraft]);
 
   useEffect(() => {
+    if (drawerOpen) return;
+    resetDrawerParticipantVisualState();
+  }, [drawerOpen, resetDrawerParticipantVisualState]);
+
+  useEffect(() => {
     if (!simplifiedEditingParticipantId) return;
     const stillExists = participants.some(
       (participant) => participant.id === simplifiedEditingParticipantId
@@ -5715,6 +5738,7 @@ export default function AdminAgendaPlaygroundPage() {
                                   {(() => {
                                     const hasDragSelection = dragSelection && dragSelection.courtId === court.id;
                                     const isEditingMovedBookingPreview =
+                                      drawerOpen &&
                                       Boolean(editingBookingId) &&
                                       Boolean(hasScheduleChanges) &&
                                       !hasDragSelection;
@@ -5731,8 +5755,22 @@ export default function AdminAgendaPlaygroundPage() {
                                     const previewHeight = (range.end - range.start) * slotHeight - 4;
                                     const visibility = blockContentVisibility(previewHeight);
                                     const drawerPreviewIsConflicted = isEditingMovedBookingPreview && hasConflict;
-                                    const editedState = editingBooking?.state || 'pending';
-                                    const editedPaymentState = editingBooking?.paymentState || 'unpaid';
+                                    const previewTitle = isEditingMovedBookingPreview
+                                      ? editingBooking?.title || 'Reserva'
+                                      : bookingKind === 'block'
+                                        ? (blockingTitle.trim() || 'Bloqueo')
+                                        : 'Reserva';
+                                    const previewState = isEditingMovedBookingPreview
+                                      ? editingBooking?.state || 'pending'
+                                      : bookingKind === 'block'
+                                        ? 'blocked'
+                                        : 'pending';
+                                    const previewPaymentState = isEditingMovedBookingPreview
+                                      ? editingBooking?.paymentState || 'unpaid'
+                                      : 'unpaid';
+                                    const previewIsRecurring = isEditingMovedBookingPreview
+                                      ? Boolean(editingBooking?.isRecurring)
+                                      : bookingKind === 'recurringV2';
                                     return (
                                       <AgendaSelectionPreview
                                         range={range}
@@ -5742,10 +5780,10 @@ export default function AdminAgendaPlaygroundPage() {
                                         slotToTime={slotToTime}
                                         isEditingMovedBookingPreview={isEditingMovedBookingPreview}
                                         isConflict={drawerPreviewIsConflicted}
-                                        title={editingBooking?.title || 'Reserva'}
-                                        state={editedState}
-                                        paymentState={editedPaymentState}
-                                        isRecurring={editingBooking?.isRecurring}
+                                        title={previewTitle}
+                                        state={previewState}
+                                        paymentState={previewPaymentState}
+                                        isRecurring={previewIsRecurring}
                                       />
                                     );
                                   })()}
@@ -7096,7 +7134,7 @@ export default function AdminAgendaPlaygroundPage() {
                 type="button"
                 aria-label="Cerrar panel"
                 className="absolute inset-0 z-50 bg-[var(--overlay)]"
-                onClick={() => setDrawerOpen(false)}
+                onClick={() => closeBookingDrawer({ clearFormError: false })}
               />
             )}
 
@@ -7226,11 +7264,7 @@ export default function AdminAgendaPlaygroundPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setDrawerOpen(false);
-                      setEditingBookingId(null);
-                      setEditingBaseline(null);
-                    }}
+                    onClick={() => closeBookingDrawer({ clearFormError: false })}
                     className="h-9 w-9 rounded-full border border-p-border text-p-text-muted grid place-items-center hover:bg-p-surface-2 shrink-0"
                   >
                     <X size={16} />
