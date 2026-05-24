@@ -376,6 +376,11 @@ function AdminClassesPageContent({ user }: { user: any }) {
     resetForm();
   }, [resetForm, submitting]);
 
+  const closeModalImmediately = useCallback(() => {
+    setModalOpen(false);
+    resetForm();
+  }, [resetForm]);
+
   const updateClassType = useCallback((nextType: AdminClassSessionType) => {
     setForm((prev) => ({
       ...prev,
@@ -454,7 +459,7 @@ function AdminClassesPageContent({ user }: { user: any }) {
         showAdminToast('Clase creada.');
       }
 
-      closeModal();
+      closeModalImmediately();
       await loadClassSessions();
       setFeedback(null);
     } catch (error) {
