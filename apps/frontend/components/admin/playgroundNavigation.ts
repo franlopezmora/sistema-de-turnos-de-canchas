@@ -26,6 +26,7 @@ export type PlaygroundSidebarItem = {
 export const PLAYGROUND_SIDEBAR_ITEMS: PlaygroundSidebarItem[] = [
   { label: 'Calendario', icon: CalendarDays, href: '/admin/agenda', minAccess: 'operator' },
   { label: 'Clientes', icon: Users, href: '/admin/clientes', minAccess: 'admin' },
+  { label: 'Profesores', icon: Users, href: '/admin/profesores', minAccess: 'admin' },
   { label: 'Caja', icon: CreditCard, href: '/admin/caja', minAccess: 'operator' },
   { label: 'Reservas', icon: Receipt, href: '/admin/reservas', disabled: true, minAccess: 'admin' },
   { label: 'Tienda', icon: ShoppingBag, href: '/admin/tienda', minAccess: 'admin' },

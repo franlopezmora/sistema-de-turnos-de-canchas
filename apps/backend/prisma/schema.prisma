@@ -291,6 +291,7 @@ model User {
   duplicateIncidents ClientDuplicateIncident[] @relation("DuplicateIncidentUser")
   duplicateIncidentsResolved ClientDuplicateIncident[] @relation("DuplicateIncidentResolvedBy")
   sessions      AuthSession[]
+  teacherProfiles Teacher[]
 }
 
 model MagicLoginToken {
@@ -391,6 +392,7 @@ model Club {
   paymentProviderOAuthStates PaymentProviderOAuthState[]
   onlinePaymentAttempts OnlinePaymentAttempt[]
   bookingHistoryEntries BookingHistoryEntry[]
+  teachers      Teacher[]
 }
 
 model ClubFavorite {
@@ -594,6 +596,7 @@ model Client {
   duplicateIncidentsPrimary ClientDuplicateIncident[] @relation("DuplicateIncidentPrimaryClient")
   duplicateIncidentsResolvedTarget ClientDuplicateIncident[] @relation("DuplicateIncidentResolvedClient")
   accounts      Account[]
+  teacherProfiles Teacher[]
 
   @@index([clubId])
   @@index([userId])
@@ -641,6 +644,33 @@ model ClientDuplicateIncident {
 
   @@index([clubId, status, createdAt])
   @@index([clubId, dedupeKey, status])
+}
+
+model Teacher {
+  id        String   @id @default(cuid())
+  clubId    Int
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  displayName String
+  email       String?
+  phone       String?
+  isInternal  Boolean @default(false)
+  isActive    Boolean @default(true)
+  specialtiesJson Json?
+  notes       String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([clubId, isActive, displayName])
+  @@index([clientId])
+  @@index([userId])
+  @@unique([clubId, clientId])
+  @@unique([clubId, userId])
 }
 
 model Booking {

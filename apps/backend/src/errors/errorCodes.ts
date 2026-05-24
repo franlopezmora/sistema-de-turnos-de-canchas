@@ -109,6 +109,7 @@ export const ErrorCodes = {
   SERVICE_NOT_FOUND:            'SERVICE_NOT_FOUND',
   SERVICE_INACTIVE:             'SERVICE_INACTIVE',
   PRICE_RULE_NOT_FOUND:         'PRICE_RULE_NOT_FOUND',
+  TEACHER_NOT_FOUND:            'TEACHER_NOT_FOUND',
 
   // ── Validación ───────────────────────────────────────────────────────
   VALIDATION_ERROR:             'VALIDATION_ERROR',

@@ -41,6 +41,11 @@ const HELP_TIPS_BY_SECTION: Record<string, string[]> = {
     'Completá datos clave para evitar errores al cobrar o contactar.',
     'Revisá historial antes de crear duplicados.',
   ],
+  Profesores: [
+    'Da de alta profesores aunque todavía no tengan usuario en la app.',
+    'Mantené separados el perfil del profesor y las clases que dicte.',
+    'Usá estado activo/inactivo para retirarlos sin perder trazabilidad.',
+  ],
   Caja: [
     'Registra pagos parciales cuando no se abone el total.',
     'Verifica el responsable de cobro antes de confirmar.',

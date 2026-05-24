@@ -80,6 +80,32 @@ export type ClubCatalogService = {
   updatedAt?: string;
 };
 
+export type AdminTeacher = {
+  id: string;
+  clubId: number;
+  clientId: string | null;
+  userId: number | null;
+  displayName: string;
+  email: string | null;
+  phone: string | null;
+  isInternal: boolean;
+  isActive: boolean;
+  specialties: string[];
+  notes: string | null;
+  client: {
+    id: string;
+    name: string;
+  } | null;
+  user: {
+    id: number;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AuditLogUser = {
   id: number;
   firstName?: string | null;
@@ -777,6 +803,90 @@ export class ClubAdminService {
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
       throw new Error(error.error || 'Error al eliminar servicio');
+    }
+    return res.json();
+  }
+
+  static async getTeachers(slug: string, includeInactive = true): Promise<AdminTeacher[]> {
+    const query = includeInactive ? '?includeInactive=true' : '';
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/teachers${query}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar profesores');
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  static async getTeacher(slug: string, id: string): Promise<AdminTeacher> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/teachers/${id}`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar profesor');
+    }
+    return res.json();
+  }
+
+  static async createTeacher(
+    slug: string,
+    data: {
+      displayName: string;
+      email?: string | null;
+      phone?: string | null;
+      isInternal?: boolean;
+      specialties?: string[];
+      notes?: string | null;
+      clientId?: string | null;
+      userId?: number | null;
+    }
+  ): Promise<AdminTeacher> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/teachers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al crear profesor');
+    }
+    return res.json();
+  }
+
+  static async updateTeacher(
+    slug: string,
+    id: string,
+    data: {
+      displayName?: string;
+      email?: string | null;
+      phone?: string | null;
+      isInternal?: boolean;
+      isActive?: boolean;
+      specialties?: string[];
+      notes?: string | null;
+      clientId?: string | null;
+      userId?: number | null;
+    }
+  ): Promise<AdminTeacher> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/teachers/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al actualizar profesor');
+    }
+    return res.json();
+  }
+
+  static async setTeacherActive(slug: string, id: string, isActive: boolean): Promise<AdminTeacher> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/teachers/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive })
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al actualizar estado del profesor');
     }
     return res.json();
   }

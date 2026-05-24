@@ -23,6 +23,7 @@ import { ClubReviewController } from '../controllers/ClubReviewController';
 import { ClientDuplicateIncidentController } from '../controllers/ClientDuplicateIncidentController';
 import { ClientDuplicateIncidentService } from '../services/ClientDuplicateIncidentService';
 import { MembershipAdminController } from '../controllers/MembershipAdminController';
+import { TeacherAdminController } from '../controllers/TeacherAdminController';
 
 const router = Router();
 
@@ -57,6 +58,7 @@ const clubReviewController = new ClubReviewController();
 const clientDuplicateIncidentService = new ClientDuplicateIncidentService();
 const clientDuplicateIncidentController = new ClientDuplicateIncidentController(clientDuplicateIncidentService);
 const membershipAdminController = new MembershipAdminController();
+const teacherAdminController = new TeacherAdminController();
 
 // Todas las rutas requieren autenticación y verificación de acceso al club.
 // El rol tenant se define por endpoint (ADMIN/OWNER para configuración sensible,
@@ -451,6 +453,41 @@ router.get('/:slug/admin/services',
     verifyClubAccess,
     requireTenantRole(['ADMIN', 'STAFF']),
     clubServiceCatalogController.list
+);
+
+router.get('/:slug/admin/teachers',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    teacherAdminController.list
+);
+
+router.get('/:slug/admin/teachers/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    teacherAdminController.getById
+);
+
+router.post('/:slug/admin/teachers',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    teacherAdminController.create
+);
+
+router.put('/:slug/admin/teachers/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    teacherAdminController.update
+);
+
+router.patch('/:slug/admin/teachers/:id/status',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    teacherAdminController.setStatus
 );
 
 router.post('/:slug/admin/services',
