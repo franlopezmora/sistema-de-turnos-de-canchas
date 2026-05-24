@@ -67,6 +67,8 @@ type EnrollmentFormState = {
   studentUserQuery: string;
   selectedResponsible: EnrollmentPersonOption | null;
   responsibleQuery: string;
+  attendanceStatus: AdminClassAttendanceStatus;
+  initialAttendanceStatus: AdminClassAttendanceStatus;
   notes: string;
 };
 
@@ -135,8 +137,22 @@ const buildEmptyEnrollmentForm = (): EnrollmentFormState => ({
   studentUserQuery: '',
   selectedResponsible: null,
   responsibleQuery: '',
+  attendanceStatus: 'PENDING',
+  initialAttendanceStatus: 'PENDING',
   notes: '',
 });
+
+const ACTIVE_ATTENDANCE_OPTIONS: Array<{ value: AdminClassAttendanceStatus; label: string }> = [
+  { value: 'PENDING', label: 'Pendiente' },
+  { value: 'ATTENDED', label: 'Asistió' },
+  { value: 'ABSENT', label: 'Ausente' },
+  { value: 'NO_SHOW', label: 'No show' },
+];
+
+const CANCELLED_ATTENDANCE_OPTIONS: Array<{ value: AdminClassAttendanceStatus; label: string }> = [
+  { value: 'CANCELLED_ON_TIME', label: 'Canceló a tiempo' },
+  { value: 'CANCELLED_LATE', label: 'Canceló tarde' },
+];
 
 const formatDateRange = (startsAt: string, endsAt: string) => {
   const start = new Date(startsAt);
@@ -430,6 +446,8 @@ const translateEnrollmentError = (error: unknown, fallback: string) => {
       return 'El alumno o responsable seleccionado ya no pertenece a este club.';
     case 'USER_NOT_FOUND':
       return 'El usuario seleccionado ya no está disponible.';
+    case 'INVALID_INPUT':
+      return extractErrorMessage(normalized, 'La asistencia elegida no es válida para esta inscripción.');
     default:
       return extractErrorMessage(normalized, fallback);
   }
@@ -849,6 +867,8 @@ function AdminClassesPageContent({ user }: { user: any }) {
       studentUserQuery: '',
       selectedResponsible: buildResponsibleOptionFromEnrollment(enrollment),
       responsibleQuery: '',
+      attendanceStatus: enrollment.attendanceStatus,
+      initialAttendanceStatus: enrollment.attendanceStatus,
       notes: enrollment.notes || '',
     });
     setEnrollmentFormError('');
@@ -911,6 +931,11 @@ function AdminClassesPageContent({ user }: { user: any }) {
           billingResponsibleClientId: enrollmentForm.selectedResponsible?.clientId ?? null,
           notes: normalizeOptionalText(enrollmentForm.notes),
         });
+        if (enrollmentForm.attendanceStatus !== enrollmentForm.initialAttendanceStatus) {
+          await ClubAdminService.setClassEnrollmentAttendance(clubSlug, selectedClass.id, editingEnrollmentId, {
+            attendanceStatus: enrollmentForm.attendanceStatus,
+          });
+        }
         showAdminToast('Inscripción actualizada.');
       } else {
         await ClubAdminService.createClassEnrollment(clubSlug, selectedClass.id, {
@@ -953,6 +978,14 @@ function AdminClassesPageContent({ user }: { user: any }) {
       }
     },
     [clubSlug, enrollmentStatusBusyId, loadEnrollments, selectedClass]
+  );
+
+  const attendanceOptions = useMemo(
+    () =>
+      editingEnrollmentId && enrollmentForm.attendanceStatus.startsWith('CANCELLED')
+        ? CANCELLED_ATTENDANCE_OPTIONS
+        : ACTIVE_ATTENDANCE_OPTIONS,
+    [editingEnrollmentId, enrollmentForm.attendanceStatus]
   );
 
   const classColumns = useMemo<AdminDataTableColumn<AdminClassSession>[]>(
@@ -1735,6 +1768,26 @@ function AdminClassesPageContent({ user }: { user: any }) {
             error={enrollmentFieldErrors.billingResponsibleClientId}
             helper="Opcional. Puede ser distinto del alumno y en esta fase solo se valida que pertenezca al club."
           />
+
+          {editingEnrollmentId ? (
+            <SelectField
+              label="Asistencia"
+              value={enrollmentForm.attendanceStatus}
+              onChange={(value) =>
+                setEnrollmentForm((prev) => ({
+                  ...prev,
+                  attendanceStatus: value as AdminClassAttendanceStatus,
+                }))
+              }
+              error={enrollmentFieldErrors.attendanceStatus}
+              options={attendanceOptions}
+            />
+          ) : (
+            <div className="rounded-xl border border-p-border bg-p-surface-2 px-4 py-3 text-[12px] text-p-text-secondary">
+              <p className="font-semibold text-p-text">Asistencia inicial</p>
+              <p className="mt-1">Las nuevas inscripciones arrancan como pendiente. La asistencia se gestiona después desde la edición del alumno.</p>
+            </div>
+          )}
 
           <TextAreaField
             label="Notas"

@@ -15,7 +15,14 @@ const attendanceStatusSchema = z.enum([
   'ATTENDED',
   'ABSENT',
   'NO_SHOW',
+  'CANCELLED_ON_TIME',
+  'CANCELLED_LATE',
 ]);
+
+const optionalDateTime = z.preprocess((value) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  return value;
+}, z.string().datetime({ offset: true }).optional());
 
 const createEnrollmentSchema = z.object({
   studentClientId: z.string().trim().min(1),
@@ -157,7 +164,12 @@ export class ClassEnrollmentAdminController {
       const clubId = this.resolveClubId(req);
       const classSessionId = this.resolveClassSessionId(req.params.classSessionId);
       const enrollmentId = this.resolveEnrollmentId(req.params.enrollmentId);
-      const parsed = z.object({ attendanceStatus: attendanceStatusSchema }).safeParse(req.body);
+      const parsed = z
+        .object({
+          attendanceStatus: attendanceStatusSchema,
+          attendedAt: optionalDateTime.nullable().optional(),
+        })
+        .safeParse(req.body);
       if (!parsed.success) {
         return sendAppError(res, zodValidationAppError(parsed.error, 'Revisá los campos marcados.'));
       }
@@ -166,7 +178,8 @@ export class ClassEnrollmentAdminController {
         clubId,
         classSessionId,
         enrollmentId,
-        parsed.data.attendanceStatus
+        parsed.data.attendanceStatus,
+        parsed.data.attendedAt ?? undefined
       );
       return res.json(updated);
     } catch (error) {

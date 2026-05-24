@@ -1154,6 +1154,29 @@ export class ClubAdminService {
     return res.json();
   }
 
+  static async setClassEnrollmentAttendance(
+    slug: string,
+    classSessionId: string,
+    enrollmentId: string,
+    data: {
+      attendanceStatus: AdminClassAttendanceStatus;
+      attendedAt?: string | null;
+    }
+  ): Promise<AdminClassEnrollment> {
+    const res = await fetchWithAuth(
+      `${apiBase()}/clubs/${slug}/admin/class-sessions/${classSessionId}/enrollments/${enrollmentId}/attendance`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }
+    );
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al actualizar la asistencia');
+    }
+    return res.json();
+  }
+
   static async getBookingItems(bookingId: number) {
     const res = await fetchWithAuth(`${apiBase()}/bookings/${bookingId}/items`);
     if (!res.ok) {

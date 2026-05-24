@@ -371,7 +371,14 @@ export class ClassEnrollmentAdminService {
     clubId: number,
     classSessionId: string,
     enrollmentId: string,
-    attendanceStatus: 'PENDING' | 'ATTENDED' | 'ABSENT' | 'NO_SHOW'
+    attendanceStatus:
+      | 'PENDING'
+      | 'ATTENDED'
+      | 'ABSENT'
+      | 'NO_SHOW'
+      | 'CANCELLED_ON_TIME'
+      | 'CANCELLED_LATE',
+    attendedAt?: string | null
   ) {
     const existing = await prisma.classEnrollment.findFirst({
       where: {
@@ -379,23 +386,42 @@ export class ClassEnrollmentAdminService {
         classSessionId: String(classSessionId),
         clubId,
       },
-      select: { id: true, enrollmentStatus: true },
+      select: { id: true, enrollmentStatus: true, attendedAt: true },
     });
     if (!existing) {
       throw notFound('Inscripción no encontrada.', ErrorCodes.CLASS_ENROLLMENT_NOT_FOUND);
     }
-    if (existing.enrollmentStatus === 'CANCELLED') {
+
+    const cancelledAttendanceStatuses = new Set(['CANCELLED_ON_TIME', 'CANCELLED_LATE']);
+    const isCancelledEnrollment = existing.enrollmentStatus === 'CANCELLED';
+    const isCancelledAttendance = cancelledAttendanceStatuses.has(attendanceStatus);
+
+    if (isCancelledEnrollment && !isCancelledAttendance) {
       throw badRequest(
-        'No se puede tomar asistencia sobre una inscripción cancelada.',
+        'Las inscripciones canceladas solo admiten estados de cancelación de asistencia.',
         ErrorCodes.INVALID_INPUT
       );
     }
+
+    if (!isCancelledEnrollment && isCancelledAttendance) {
+      throw badRequest(
+        'Usá la cancelación de la inscripción para marcar cancelación a tiempo o tardía.',
+        ErrorCodes.INVALID_INPUT
+      );
+    }
+
+    const resolvedAttendedAt =
+      attendanceStatus === 'ATTENDED'
+        ? attendedAt
+          ? new Date(attendedAt)
+          : existing.attendedAt || new Date()
+        : null;
 
     const updated = await prisma.classEnrollment.update({
       where: { id: String(enrollmentId) },
       data: {
         attendanceStatus: attendanceStatus as any,
-        attendedAt: attendanceStatus === 'ATTENDED' ? new Date() : null,
+        attendedAt: resolvedAttendedAt,
       },
       include: {
         studentClient: { select: { id: true, name: true } },
