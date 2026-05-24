@@ -24,6 +24,9 @@ import { ClientDuplicateIncidentController } from '../controllers/ClientDuplicat
 import { ClientDuplicateIncidentService } from '../services/ClientDuplicateIncidentService';
 import { MembershipAdminController } from '../controllers/MembershipAdminController';
 import { TeacherAdminController } from '../controllers/TeacherAdminController';
+import { ClientRelationshipAdminController } from '../controllers/ClientRelationshipAdminController';
+import { ClassSessionAdminController } from '../controllers/ClassSessionAdminController';
+import { ClassEnrollmentAdminController } from '../controllers/ClassEnrollmentAdminController';
 
 const router = Router();
 
@@ -59,6 +62,9 @@ const clientDuplicateIncidentService = new ClientDuplicateIncidentService();
 const clientDuplicateIncidentController = new ClientDuplicateIncidentController(clientDuplicateIncidentService);
 const membershipAdminController = new MembershipAdminController();
 const teacherAdminController = new TeacherAdminController();
+const clientRelationshipAdminController = new ClientRelationshipAdminController();
+const classSessionAdminController = new ClassSessionAdminController();
+const classEnrollmentAdminController = new ClassEnrollmentAdminController();
 
 // Todas las rutas requieren autenticación y verificación de acceso al club.
 // El rol tenant se define por endpoint (ADMIN/OWNER para configuración sensible,
@@ -488,6 +494,104 @@ router.patch('/:slug/admin/teachers/:id/status',
     verifyClubAccess,
     requireTenantRole('ADMIN'),
     teacherAdminController.setStatus
+);
+
+router.get('/:slug/admin/client-relationships',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    clientRelationshipAdminController.list
+);
+
+router.post('/:slug/admin/client-relationships',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    clientRelationshipAdminController.create
+);
+
+router.put('/:slug/admin/client-relationships/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    clientRelationshipAdminController.update
+);
+
+router.delete('/:slug/admin/client-relationships/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    clientRelationshipAdminController.remove
+);
+
+router.get('/:slug/admin/class-sessions',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classSessionAdminController.list
+);
+
+router.get('/:slug/admin/class-sessions/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classSessionAdminController.getById
+);
+
+router.post('/:slug/admin/class-sessions',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classSessionAdminController.create
+);
+
+router.put('/:slug/admin/class-sessions/:id',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classSessionAdminController.update
+);
+
+router.patch('/:slug/admin/class-sessions/:id/status',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classSessionAdminController.setStatus
+);
+
+router.get('/:slug/admin/class-sessions/:classSessionId/enrollments',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classEnrollmentAdminController.list
+);
+
+router.post('/:slug/admin/class-sessions/:classSessionId/enrollments',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classEnrollmentAdminController.create
+);
+
+router.put('/:slug/admin/class-sessions/:classSessionId/enrollments/:enrollmentId',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classEnrollmentAdminController.update
+);
+
+router.patch('/:slug/admin/class-sessions/:classSessionId/enrollments/:enrollmentId/cancel',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classEnrollmentAdminController.cancel
+);
+
+router.patch('/:slug/admin/class-sessions/:classSessionId/enrollments/:enrollmentId/attendance',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classEnrollmentAdminController.setAttendanceStatus
 );
 
 router.post('/:slug/admin/services',
