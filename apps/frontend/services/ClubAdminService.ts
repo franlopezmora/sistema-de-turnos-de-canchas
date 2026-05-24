@@ -153,6 +153,43 @@ export type AdminClassSession = {
   updatedAt: string;
 };
 
+export type AdminClassEnrollmentStatus = 'ENROLLED' | 'WAITLISTED' | 'CANCELLED';
+export type AdminClassAttendanceStatus =
+  | 'PENDING'
+  | 'ATTENDED'
+  | 'ABSENT'
+  | 'NO_SHOW'
+  | 'CANCELLED_ON_TIME'
+  | 'CANCELLED_LATE';
+export type AdminClassPaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'COVERED_BY_CREDIT' | 'REFUNDED';
+
+export type AdminClassEnrollment = {
+  id: string;
+  clubId: number;
+  classSessionId: string;
+  studentClientId: string;
+  studentUserId: number | null;
+  billingResponsibleClientId: string | null;
+  snapshotName: string;
+  snapshotEmail: string | null;
+  snapshotPhone: string | null;
+  priceAtEnrollment: number;
+  paidAmount: number;
+  enrollmentStatus: AdminClassEnrollmentStatus;
+  attendanceStatus: AdminClassAttendanceStatus;
+  paymentStatus: AdminClassPaymentStatus;
+  cancelledAt: string | null;
+  attendedAt: string | null;
+  notes: string | null;
+  createdByUserId: number;
+  studentClient: { id: string; name: string } | null;
+  studentUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  billingResponsibleClient: { id: string; name: string } | null;
+  createdByUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AuditLogUser = {
   id: number;
   firstName?: string | null;
@@ -1036,6 +1073,83 @@ export class ClubAdminService {
     });
     if (!res.ok) {
       throw await parseApiErrorResponse(res, 'Error al actualizar estado de la clase');
+    }
+    return res.json();
+  }
+
+  static async getClassEnrollments(slug: string, classSessionId: string): Promise<AdminClassEnrollment[]> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-sessions/${classSessionId}/enrollments`, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar alumnos de la clase');
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  static async createClassEnrollment(
+    slug: string,
+    classSessionId: string,
+    data: {
+      studentClientId: string;
+      studentUserId?: number | null;
+      billingResponsibleClientId?: string | null;
+      enrollmentStatus?: 'ENROLLED' | 'WAITLISTED';
+      notes?: string | null;
+    }
+  ): Promise<AdminClassEnrollment> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-sessions/${classSessionId}/enrollments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al agregar alumno a la clase');
+    }
+    return res.json();
+  }
+
+  static async updateClassEnrollment(
+    slug: string,
+    classSessionId: string,
+    enrollmentId: string,
+    data: {
+      studentUserId?: number | null;
+      billingResponsibleClientId?: string | null;
+      notes?: string | null;
+    }
+  ): Promise<AdminClassEnrollment> {
+    const res = await fetchWithAuth(
+      `${apiBase()}/clubs/${slug}/admin/class-sessions/${classSessionId}/enrollments/${enrollmentId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }
+    );
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al actualizar la inscripción');
+    }
+    return res.json();
+  }
+
+  static async cancelClassEnrollment(
+    slug: string,
+    classSessionId: string,
+    enrollmentId: string,
+    options?: { isLate?: boolean }
+  ): Promise<AdminClassEnrollment> {
+    const res = await fetchWithAuth(
+      `${apiBase()}/clubs/${slug}/admin/class-sessions/${classSessionId}/enrollments/${enrollmentId}/cancel`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isLate: Boolean(options?.isLate) })
+      }
+    );
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cancelar la inscripción');
     }
     return res.json();
   }

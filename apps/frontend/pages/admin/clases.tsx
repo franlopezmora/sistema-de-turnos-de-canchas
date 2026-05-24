@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Search, XCircle } from 'lucide-react';
+import { Pencil, Plus, Search, UserPlus, Users, XCircle } from 'lucide-react';
 import AdminRouteShell from '../../components/admin/AdminRouteShell';
 import {
   AdminDataTable,
@@ -14,19 +14,25 @@ import {
 } from '../../components/admin/ui';
 import {
   ClubAdminService,
+  type AdminClassAttendanceStatus,
+  type AdminClassEnrollment,
+  type AdminClassEnrollmentStatus,
+  type AdminClassPaymentStatus,
   type AdminClassSession,
   type AdminClassSessionStatus,
   type AdminClassSessionType,
   type AdminClassSessionVisibility,
   type AdminTeacher,
   type ClubActivityType,
+  type PersonSearchResult,
 } from '../../services/ClubAdminService';
-import { getApiFieldErrors } from '../../utils/apiError';
+import { getApiFieldErrors, normalizeApiError } from '../../utils/apiError';
 import { showAdminToast } from '../../utils/adminToast';
 import { getActiveClubSlug, normalizeSessionUser } from '../../utils/session';
 import { extractErrorMessage, reportUiError } from '../../utils/uiError';
 
 type ClassStatusFilter = 'all' | 'active' | 'completed' | 'cancelled';
+type EnrollmentFilter = 'active' | 'all' | 'cancelled';
 
 type CourtOption = {
   id: number;
@@ -48,6 +54,20 @@ type ClassFormState = {
   description: string;
   requiresApproval: boolean;
   requiresPaymentToEnroll: boolean;
+};
+
+type EnrollmentPersonOption = PersonSearchResult & {
+  disabledReason?: string;
+};
+
+type EnrollmentFormState = {
+  selectedStudent: EnrollmentPersonOption | null;
+  studentQuery: string;
+  selectedStudentUser: EnrollmentPersonOption | null;
+  studentUserQuery: string;
+  selectedResponsible: EnrollmentPersonOption | null;
+  responsibleQuery: string;
+  notes: string;
 };
 
 const CLASS_STATUS_OPTIONS: Array<{ value: AdminClassSessionStatus; label: string }> = [
@@ -87,7 +107,7 @@ const localInputToIso = (value: string) => {
   return date.toISOString();
 };
 
-const buildEmptyForm = (): ClassFormState => {
+const buildEmptyClassForm = (): ClassFormState => {
   const start = nowRounded();
   const end = addMinutes(start, 60);
   return {
@@ -108,6 +128,16 @@ const buildEmptyForm = (): ClassFormState => {
   };
 };
 
+const buildEmptyEnrollmentForm = (): EnrollmentFormState => ({
+  selectedStudent: null,
+  studentQuery: '',
+  selectedStudentUser: null,
+  studentUserQuery: '',
+  selectedResponsible: null,
+  responsibleQuery: '',
+  notes: '',
+});
+
 const formatDateRange = (startsAt: string, endsAt: string) => {
   const start = new Date(startsAt);
   const end = new Date(endsAt);
@@ -123,7 +153,8 @@ const formatDateRange = (startsAt: string, endsAt: string) => {
   return `${day} · ${startTime} - ${endTime}`;
 };
 
-const formatDateTime = (value: string) => {
+const formatDateTime = (value: string | null) => {
+  if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleString('es-AR', {
@@ -187,6 +218,55 @@ const visibilityLabel = (visibility: AdminClassSessionVisibility) =>
 const classTypeLabel = (classType: AdminClassSessionType) =>
   classType === 'GROUP' ? 'Grupal' : 'Individual';
 
+const enrollmentStatusLabel = (status: AdminClassEnrollmentStatus) => {
+  switch (status) {
+    case 'ENROLLED':
+      return 'Inscripto';
+    case 'WAITLISTED':
+      return 'En espera';
+    case 'CANCELLED':
+      return 'Cancelado';
+    default:
+      return status;
+  }
+};
+
+const attendanceStatusLabel = (status: AdminClassAttendanceStatus) => {
+  switch (status) {
+    case 'PENDING':
+      return 'Pendiente';
+    case 'ATTENDED':
+      return 'Asistió';
+    case 'ABSENT':
+      return 'Ausente';
+    case 'NO_SHOW':
+      return 'No show';
+    case 'CANCELLED_ON_TIME':
+      return 'Canceló a tiempo';
+    case 'CANCELLED_LATE':
+      return 'Canceló tarde';
+    default:
+      return status;
+  }
+};
+
+const paymentStatusLabel = (status: AdminClassPaymentStatus) => {
+  switch (status) {
+    case 'UNPAID':
+      return 'Impago';
+    case 'PARTIAL':
+      return 'Pago parcial';
+    case 'PAID':
+      return 'Pagado';
+    case 'COVERED_BY_CREDIT':
+      return 'Cubierto por crédito';
+    case 'REFUNDED':
+      return 'Reintegrado';
+    default:
+      return status;
+  }
+};
+
 const statusToneClasses = (status: AdminClassSessionStatus) => {
   switch (status) {
     case 'CONFIRMED':
@@ -202,6 +282,191 @@ const statusToneClasses = (status: AdminClassSessionStatus) => {
       return 'border-p-border-strong bg-p-surface text-p-text';
   }
 };
+
+const enrollmentToneClasses = (status: AdminClassEnrollmentStatus) => {
+  switch (status) {
+    case 'ENROLLED':
+      return 'border-p-positive bg-p-positive-bg text-p-positive';
+    case 'WAITLISTED':
+      return 'border-p-border-strong bg-p-surface text-p-text';
+    case 'CANCELLED':
+    default:
+      return 'border-p-error bg-p-error-bg text-[var(--error-fg)]';
+  }
+};
+
+const personSecondaryLine = (row: { email?: string | null; phone?: string | null; dni?: string | null }) =>
+  String(row.phone || '').trim() || String(row.email || '').trim() || String(row.dni || '').trim() || 'Sin datos extra';
+
+const personBadges = (row: { badges?: string[] | null }) =>
+  Array.isArray(row.badges) ? row.badges.filter(Boolean).map(String) : [];
+
+const buildStudentCandidate = (row: PersonSearchResult): EnrollmentPersonOption => {
+  if (row.kind === 'newClientSuggestion') {
+    return {
+      ...row,
+      disabledReason: 'La creación de clientes desde clases todavía no está disponible. Usá Clientes.',
+    };
+  }
+  if (!row.clientId) {
+    return {
+      ...row,
+      disabledReason: 'Para inscribir necesitás un cliente del club asociado a la persona elegida.',
+    };
+  }
+  return row;
+};
+
+const buildResponsibleCandidate = (row: PersonSearchResult): EnrollmentPersonOption => {
+  if (row.kind === 'newClientSuggestion') {
+    return {
+      ...row,
+      disabledReason: 'Primero creá el responsable como cliente del club desde Clientes.',
+    };
+  }
+  if (!row.clientId) {
+    return {
+      ...row,
+      disabledReason: 'El responsable de pago debe existir como cliente del club.',
+    };
+  }
+  return row;
+};
+
+const buildStudentUserCandidate = (
+  row: PersonSearchResult,
+  studentClientId: string | null
+): EnrollmentPersonOption => {
+  if (!row.userId) {
+    return {
+      ...row,
+      disabledReason: 'La persona elegida no tiene usuario de app.',
+    };
+  }
+  if (studentClientId && row.clientId && row.clientId !== studentClientId) {
+    return {
+      ...row,
+      disabledReason: 'Ese usuario ya está asociado a otro cliente del club.',
+    };
+  }
+  return row;
+};
+
+const buildStudentOptionFromEnrollment = (enrollment: AdminClassEnrollment): EnrollmentPersonOption => ({
+  personKey: `student-client-${enrollment.studentClientId}`,
+  kind: enrollment.studentUserId ? 'linked' : 'clubClient',
+  clientId: enrollment.studentClientId,
+  userId: enrollment.studentUserId,
+  displayName: enrollment.snapshotName,
+  email: enrollment.snapshotEmail,
+  phone: enrollment.snapshotPhone,
+  dni: null,
+  badges: enrollment.studentUserId ? ['Cliente del club', 'Usuario Pique'] : ['Cliente del club'],
+});
+
+const buildResponsibleOptionFromEnrollment = (
+  enrollment: AdminClassEnrollment
+): EnrollmentPersonOption | null => {
+  if (!enrollment.billingResponsibleClient) return null;
+  return {
+    personKey: `responsible-client-${enrollment.billingResponsibleClient.id}`,
+    kind: 'clubClient',
+    clientId: enrollment.billingResponsibleClient.id,
+    userId: null,
+    displayName: enrollment.billingResponsibleClient.name,
+    email: null,
+    phone: null,
+    dni: null,
+    badges: ['Cliente del club'],
+  };
+};
+
+const buildStudentUserOptionFromEnrollment = (
+  enrollment: AdminClassEnrollment
+): EnrollmentPersonOption | null => {
+  if (!enrollment.studentUser) return null;
+  return {
+    personKey: `student-user-${enrollment.studentUser.id}`,
+    kind: enrollment.studentClientId ? 'linked' : 'systemUser',
+    clientId: enrollment.studentClientId || null,
+    userId: enrollment.studentUser.id,
+    displayName:
+      [enrollment.studentUser.firstName, enrollment.studentUser.lastName].filter(Boolean).join(' ').trim() ||
+      enrollment.studentUser.email,
+    email: enrollment.studentUser.email,
+    phone: null,
+    dni: null,
+    badges: enrollment.studentClientId ? ['Usuario Pique', 'Cliente del club'] : ['Usuario Pique'],
+  };
+};
+
+const enrollmentActiveCount = (rows: AdminClassEnrollment[]) =>
+  rows.filter((row) => row.enrollmentStatus === 'ENROLLED').length;
+
+const enrollmentWaitlistCount = (rows: AdminClassEnrollment[]) =>
+  rows.filter((row) => row.enrollmentStatus === 'WAITLISTED').length;
+
+const enrollmentCancelledCount = (rows: AdminClassEnrollment[]) =>
+  rows.filter((row) => row.enrollmentStatus === 'CANCELLED').length;
+
+const translateEnrollmentError = (error: unknown, fallback: string) => {
+  const normalized = normalizeApiError(error, fallback);
+  switch (normalized.code) {
+    case 'CLASS_SESSION_ENROLLMENT_CONFLICT':
+      return 'Este alumno ya está inscripto en la clase.';
+    case 'CLASS_SESSION_CAPACITY_EXCEEDED':
+      return 'La clase ya no tiene cupo disponible.';
+    case 'CLIENT_LINK_CONFLICT':
+      return 'La identidad elegida para el alumno entra en conflicto con un vínculo existente. Revisá cliente y usuario.';
+    case 'FORBIDDEN':
+      return 'La persona seleccionada no pertenece a este club.';
+    case 'CLIENT_NOT_FOUND':
+      return 'El alumno o responsable seleccionado ya no pertenece a este club.';
+    case 'USER_NOT_FOUND':
+      return 'El usuario seleccionado ya no está disponible.';
+    default:
+      return extractErrorMessage(normalized, fallback);
+  }
+};
+
+function usePersonSearchResults(
+  clubSlug: string,
+  query: string,
+  transform: (row: PersonSearchResult) => EnrollmentPersonOption
+) {
+  const [results, setResults] = useState<EnrollmentPersonOption[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const safeQuery = String(query || '').trim();
+    if (!clubSlug || safeQuery.length < 2) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        setLoading(true);
+        const rows = await ClubAdminService.searchPeople(clubSlug, safeQuery);
+        if (cancelled) return;
+        setResults((Array.isArray(rows) ? rows : []).slice(0, 8).map(transform));
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [clubSlug, query, transform]);
+
+  return { results, loading };
+}
 
 export default function AdminClassesPage() {
   return (
@@ -226,11 +491,24 @@ function AdminClassesPageContent({ user }: { user: any }) {
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
-  const [form, setForm] = useState<ClassFormState>(() => buildEmptyForm());
+  const [form, setForm] = useState<ClassFormState>(() => buildEmptyClassForm());
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
+
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [enrollments, setEnrollments] = useState<AdminClassEnrollment[]>([]);
+  const [enrollmentsLoading, setEnrollmentsLoading] = useState(false);
+  const [enrollmentsError, setEnrollmentsError] = useState('');
+  const [enrollmentFilter, setEnrollmentFilter] = useState<EnrollmentFilter>('active');
+  const [enrollmentModalOpen, setEnrollmentModalOpen] = useState(false);
+  const [editingEnrollmentId, setEditingEnrollmentId] = useState<string | null>(null);
+  const [enrollmentForm, setEnrollmentForm] = useState<EnrollmentFormState>(() => buildEmptyEnrollmentForm());
+  const [enrollmentFormError, setEnrollmentFormError] = useState('');
+  const [enrollmentFieldErrors, setEnrollmentFieldErrors] = useState<Record<string, string>>({});
+  const [enrollmentSubmitting, setEnrollmentSubmitting] = useState(false);
+  const [enrollmentStatusBusyId, setEnrollmentStatusBusyId] = useState<string | null>(null);
 
   const loadClassSessions = useCallback(async () => {
     if (!clubSlug) {
@@ -285,10 +563,39 @@ function AdminClassesPageContent({ user }: { user: any }) {
     }
   }, [clubSlug]);
 
+  const loadEnrollments = useCallback(
+    async (classSessionId: string) => {
+      if (!clubSlug) return;
+      try {
+        setEnrollmentsLoading(true);
+        setEnrollmentsError('');
+        const rows = await ClubAdminService.getClassEnrollments(clubSlug, classSessionId);
+        setEnrollments(rows);
+      } catch (error) {
+        reportUiError({ area: 'AdminClassesPage', action: 'loadEnrollments' }, error);
+        setEnrollments([]);
+        setEnrollmentsError(translateEnrollmentError(error, 'No se pudieron cargar los alumnos de la clase.'));
+      } finally {
+        setEnrollmentsLoading(false);
+      }
+    },
+    [clubSlug]
+  );
+
   useEffect(() => {
     void loadClassSessions();
     void loadOptions();
   }, [loadClassSessions, loadOptions]);
+
+  useEffect(() => {
+    if (!selectedClassId) {
+      setEnrollments([]);
+      setEnrollmentsError('');
+      setEnrollmentsLoading(false);
+      return;
+    }
+    void loadEnrollments(selectedClassId);
+  }, [loadEnrollments, selectedClassId]);
 
   const summary = useMemo(() => {
     const publicCount = classSessions.filter((row) => row.visibility === 'PUBLIC').length;
@@ -325,61 +632,94 @@ function AdminClassesPageContent({ user }: { user: any }) {
     });
   }, [classSessions, searchTerm, statusFilter]);
 
-  const resetForm = useCallback(() => {
-    setForm(buildEmptyForm());
+  const selectedClass = useMemo(
+    () => classSessions.find((row) => row.id === selectedClassId) || null,
+    [classSessions, selectedClassId]
+  );
+
+  useEffect(() => {
+    if (!selectedClassId) return;
+    if (!classSessions.some((row) => row.id === selectedClassId)) {
+      setSelectedClassId(null);
+      setEnrollments([]);
+    }
+  }, [classSessions, selectedClassId]);
+
+  const filteredEnrollments = useMemo(() => {
+    if (enrollmentFilter === 'cancelled') {
+      return enrollments.filter((row) => row.enrollmentStatus === 'CANCELLED');
+    }
+    if (enrollmentFilter === 'active') {
+      return enrollments.filter((row) => row.enrollmentStatus !== 'CANCELLED');
+    }
+    return enrollments;
+  }, [enrollmentFilter, enrollments]);
+
+  const resetClassForm = useCallback(() => {
+    setForm(buildEmptyClassForm());
     setFormError('');
     setFieldErrors({});
     setEditingClassId(null);
   }, []);
 
-  const openCreateModal = useCallback(() => {
-    resetForm();
-    setModalOpen(true);
-  }, [resetForm]);
+  const resetEnrollmentForm = useCallback(() => {
+    setEnrollmentForm(buildEmptyEnrollmentForm());
+    setEnrollmentFormError('');
+    setEnrollmentFieldErrors({});
+    setEditingEnrollmentId(null);
+  }, []);
 
-  const openEditModal = useCallback(async (classSessionId: string) => {
-    if (!clubSlug) return;
-    try {
-      setSubmitting(true);
-      setFormError('');
-      setFieldErrors({});
-      const classSession = await ClubAdminService.getClassSession(clubSlug, classSessionId);
-      setEditingClassId(classSession.id);
-      setForm({
-        teacherId: classSession.teacherId,
-        visibility: classSession.visibility,
-        classType: classSession.classType,
-        activityTypeId: classSession.activityTypeId ? String(classSession.activityTypeId) : '',
-        courtId: classSession.courtId ? String(classSession.courtId) : '',
-        startsAt: toLocalDateTimeInputValue(classSession.startsAt),
-        endsAt: toLocalDateTimeInputValue(classSession.endsAt),
-        capacity: String(classSession.capacity || ''),
-        pricePerStudent: classSession.pricePerStudent == null ? '' : String(classSession.pricePerStudent),
-        status: classSession.status,
-        level: classSession.level || '',
-        description: classSession.description || '',
-        requiresApproval: Boolean(classSession.requiresApproval),
-        requiresPaymentToEnroll: Boolean(classSession.requiresPaymentToEnroll),
-      });
-      setModalOpen(true);
-    } catch (error) {
-      reportUiError({ area: 'AdminClassesPage', action: 'openEditModal' }, error);
-      setFeedback({ tone: 'error', message: extractErrorMessage(error, 'No se pudo cargar la clase.') });
-    } finally {
-      setSubmitting(false);
-    }
-  }, [clubSlug]);
+  const openCreateModal = useCallback(() => {
+    resetClassForm();
+    setModalOpen(true);
+  }, [resetClassForm]);
+
+  const openEditModal = useCallback(
+    async (classSessionId: string) => {
+      if (!clubSlug) return;
+      try {
+        setSubmitting(true);
+        setFormError('');
+        setFieldErrors({});
+        const classSession = await ClubAdminService.getClassSession(clubSlug, classSessionId);
+        setEditingClassId(classSession.id);
+        setForm({
+          teacherId: classSession.teacherId,
+          visibility: classSession.visibility,
+          classType: classSession.classType,
+          activityTypeId: classSession.activityTypeId ? String(classSession.activityTypeId) : '',
+          courtId: classSession.courtId ? String(classSession.courtId) : '',
+          startsAt: toLocalDateTimeInputValue(classSession.startsAt),
+          endsAt: toLocalDateTimeInputValue(classSession.endsAt),
+          capacity: String(classSession.capacity || ''),
+          pricePerStudent: classSession.pricePerStudent == null ? '' : String(classSession.pricePerStudent),
+          status: classSession.status,
+          level: classSession.level || '',
+          description: classSession.description || '',
+          requiresApproval: Boolean(classSession.requiresApproval),
+          requiresPaymentToEnroll: Boolean(classSession.requiresPaymentToEnroll),
+        });
+        setModalOpen(true);
+      } catch (error) {
+        reportUiError({ area: 'AdminClassesPage', action: 'openEditModal' }, error);
+        setFeedback({ tone: 'error', message: extractErrorMessage(error, 'No se pudo cargar la clase.') });
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [clubSlug]
+  );
 
   const closeModal = useCallback(() => {
     if (submitting) return;
     setModalOpen(false);
-    resetForm();
-  }, [resetForm, submitting]);
+    resetClassForm();
+  }, [resetClassForm, submitting]);
 
   const closeModalImmediately = useCallback(() => {
     setModalOpen(false);
-    resetForm();
-  }, [resetForm]);
+    resetClassForm();
+  }, [resetClassForm]);
 
   const updateClassType = useCallback((nextType: AdminClassSessionType) => {
     setForm((prev) => ({
@@ -471,22 +811,145 @@ function AdminClassesPageContent({ user }: { user: any }) {
     }
   };
 
-  const updateStatus = useCallback(async (classSession: AdminClassSession, nextStatus: AdminClassSessionStatus) => {
-    if (!clubSlug || statusBusyId) return;
-    try {
-      setStatusBusyId(classSession.id);
-      await ClubAdminService.setClassSessionStatus(clubSlug, classSession.id, nextStatus);
-      await loadClassSessions();
-      showAdminToast(nextStatus === 'CANCELLED' ? 'Clase cancelada.' : 'Estado actualizado.');
-    } catch (error) {
-      reportUiError({ area: 'AdminClassesPage', action: 'updateStatus' }, error);
-      setFeedback({ tone: 'error', message: extractErrorMessage(error, 'No se pudo actualizar el estado de la clase.') });
-    } finally {
-      setStatusBusyId(null);
-    }
-  }, [clubSlug, loadClassSessions, statusBusyId]);
+  const updateStatus = useCallback(
+    async (classSession: AdminClassSession, nextStatus: AdminClassSessionStatus) => {
+      if (!clubSlug || statusBusyId) return;
+      try {
+        setStatusBusyId(classSession.id);
+        await ClubAdminService.setClassSessionStatus(clubSlug, classSession.id, nextStatus);
+        await loadClassSessions();
+        showAdminToast(nextStatus === 'CANCELLED' ? 'Clase cancelada.' : 'Estado actualizado.');
+      } catch (error) {
+        reportUiError({ area: 'AdminClassesPage', action: 'updateStatus' }, error);
+        setFeedback({ tone: 'error', message: extractErrorMessage(error, 'No se pudo actualizar el estado de la clase.') });
+      } finally {
+        setStatusBusyId(null);
+      }
+    },
+    [clubSlug, loadClassSessions, statusBusyId]
+  );
 
-  const columns = useMemo<AdminDataTableColumn<AdminClassSession>[]>(
+  const openEnrollmentCreateModal = useCallback(() => {
+    resetEnrollmentForm();
+    setEnrollmentModalOpen(true);
+  }, [resetEnrollmentForm]);
+
+  const openEnrollmentEditModal = useCallback((enrollment: AdminClassEnrollment) => {
+    setEditingEnrollmentId(enrollment.id);
+    setEnrollmentForm({
+      selectedStudent: buildStudentOptionFromEnrollment(enrollment),
+      studentQuery: '',
+      selectedStudentUser: buildStudentUserOptionFromEnrollment(enrollment),
+      studentUserQuery: '',
+      selectedResponsible: buildResponsibleOptionFromEnrollment(enrollment),
+      responsibleQuery: '',
+      notes: enrollment.notes || '',
+    });
+    setEnrollmentFormError('');
+    setEnrollmentFieldErrors({});
+    setEnrollmentModalOpen(true);
+  }, []);
+
+  const closeEnrollmentModal = useCallback(() => {
+    if (enrollmentSubmitting) return;
+    setEnrollmentModalOpen(false);
+    resetEnrollmentForm();
+  }, [enrollmentSubmitting, resetEnrollmentForm]);
+
+  const closeEnrollmentModalImmediately = useCallback(() => {
+    setEnrollmentModalOpen(false);
+    resetEnrollmentForm();
+  }, [resetEnrollmentForm]);
+
+  const studentSearch = usePersonSearchResults(
+    clubSlug || '',
+    enrollmentForm.studentQuery,
+    buildStudentCandidate
+  );
+
+  const responsibleSearch = usePersonSearchResults(
+    clubSlug || '',
+    enrollmentForm.responsibleQuery,
+    buildResponsibleCandidate
+  );
+
+  const currentStudentClientId = enrollmentForm.selectedStudent?.clientId || null;
+  const studentUserSearchTransform = useCallback(
+    (row: PersonSearchResult) => buildStudentUserCandidate(row, currentStudentClientId),
+    [currentStudentClientId]
+  );
+  const studentUserSearch = usePersonSearchResults(
+    clubSlug || '',
+    enrollmentForm.studentUserQuery,
+    studentUserSearchTransform
+  );
+
+  const submitEnrollmentForm = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!clubSlug || !selectedClass || enrollmentSubmitting) return;
+
+    if (!enrollmentForm.selectedStudent?.clientId) {
+      setEnrollmentFormError('Seleccioná un alumno explícitamente desde PersonSearch.');
+      setEnrollmentFieldErrors({ studentClientId: 'Elegí un alumno del club.' });
+      return;
+    }
+
+    try {
+      setEnrollmentSubmitting(true);
+      setEnrollmentFormError('');
+      setEnrollmentFieldErrors({});
+
+      if (editingEnrollmentId) {
+        await ClubAdminService.updateClassEnrollment(clubSlug, selectedClass.id, editingEnrollmentId, {
+          studentUserId: enrollmentForm.selectedStudentUser?.userId ?? null,
+          billingResponsibleClientId: enrollmentForm.selectedResponsible?.clientId ?? null,
+          notes: normalizeOptionalText(enrollmentForm.notes),
+        });
+        showAdminToast('Inscripción actualizada.');
+      } else {
+        await ClubAdminService.createClassEnrollment(clubSlug, selectedClass.id, {
+          studentClientId: enrollmentForm.selectedStudent.clientId,
+          studentUserId: enrollmentForm.selectedStudentUser?.userId ?? enrollmentForm.selectedStudent.userId ?? null,
+          billingResponsibleClientId: enrollmentForm.selectedResponsible?.clientId ?? null,
+          notes: normalizeOptionalText(enrollmentForm.notes),
+        });
+        showAdminToast('Alumno agregado a la clase.');
+      }
+
+      closeEnrollmentModalImmediately();
+      await loadEnrollments(selectedClass.id);
+      setFeedback(null);
+    } catch (error) {
+      reportUiError({ area: 'AdminClassesPage', action: 'submitEnrollmentForm' }, error);
+      setEnrollmentFieldErrors(getApiFieldErrors(error));
+      setEnrollmentFormError(translateEnrollmentError(error, 'No se pudo guardar la inscripción.'));
+    } finally {
+      setEnrollmentSubmitting(false);
+    }
+  };
+
+  const cancelEnrollment = useCallback(
+    async (enrollment: AdminClassEnrollment) => {
+      if (!clubSlug || !selectedClass || enrollmentStatusBusyId) return;
+      try {
+        setEnrollmentStatusBusyId(enrollment.id);
+        await ClubAdminService.cancelClassEnrollment(clubSlug, selectedClass.id, enrollment.id);
+        await loadEnrollments(selectedClass.id);
+        showAdminToast('Inscripción cancelada.');
+      } catch (error) {
+        reportUiError({ area: 'AdminClassesPage', action: 'cancelEnrollment' }, error);
+        setFeedback({
+          tone: 'error',
+          message: translateEnrollmentError(error, 'No se pudo cancelar la inscripción.'),
+        });
+      } finally {
+        setEnrollmentStatusBusyId(null);
+      }
+    },
+    [clubSlug, enrollmentStatusBusyId, loadEnrollments, selectedClass]
+  );
+
+  const classColumns = useMemo<AdminDataTableColumn<AdminClassSession>[]>(
     () => [
       {
         key: 'session',
@@ -557,9 +1020,17 @@ function AdminClassesPageContent({ user }: { user: any }) {
         label: '',
         align: 'right',
         isActions: true,
-        width: 'w-[190px]',
+        width: 'w-[250px]',
         render: (classSession) => (
           <div className="flex items-center justify-end gap-2 opacity-100">
+            <button
+              type="button"
+              onClick={() => setSelectedClassId(classSession.id)}
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-p-border bg-p-surface px-2.5 text-[11px] font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
+            >
+              <Users size={13} />
+              Alumnos
+            </button>
             <button
               type="button"
               onClick={() => void openEditModal(classSession.id)}
@@ -584,15 +1055,108 @@ function AdminClassesPageContent({ user }: { user: any }) {
     [openEditModal, statusBusyId, updateStatus]
   );
 
+  const enrollmentColumns = useMemo<AdminDataTableColumn<AdminClassEnrollment>[]>(
+    () => [
+      {
+        key: 'student',
+        label: 'Alumno',
+        render: (enrollment) => (
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-p-text">{enrollment.snapshotName}</p>
+            <p className="mt-0.5 text-[12px] text-p-text-muted">{personSecondaryLine({ email: enrollment.snapshotEmail, phone: enrollment.snapshotPhone })}</p>
+          </div>
+        ),
+      },
+      {
+        key: 'responsible',
+        label: 'Responsable',
+        render: (enrollment) => (
+          <div className="text-[12px] text-p-text-secondary">
+            <p>{enrollment.billingResponsibleClient?.name || 'Sin responsable cargado'}</p>
+            <p className="mt-0.5 text-p-text-muted">
+              {enrollment.studentUser
+                ? [enrollment.studentUser.firstName, enrollment.studentUser.lastName].filter(Boolean).join(' ').trim() || enrollment.studentUser.email
+                : 'Sin usuario de app explícito'}
+            </p>
+          </div>
+        ),
+      },
+      {
+        key: 'statuses',
+        label: 'Estados',
+        render: (enrollment) => (
+          <div className="flex flex-wrap gap-1">
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${enrollmentToneClasses(enrollment.enrollmentStatus)}`}>
+              {enrollmentStatusLabel(enrollment.enrollmentStatus)}
+            </span>
+            <span className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
+              {attendanceStatusLabel(enrollment.attendanceStatus)}
+            </span>
+            <span className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
+              {paymentStatusLabel(enrollment.paymentStatus)}
+            </span>
+          </div>
+        ),
+      },
+      {
+        key: 'price',
+        label: 'Precio',
+        width: 'w-[120px]',
+        render: (enrollment) => <span className="text-[12px] text-p-text-secondary">{formatCurrency(enrollment.priceAtEnrollment)}</span>,
+      },
+      {
+        key: 'notes',
+        label: 'Notas',
+        render: (enrollment) => (
+          <span className="line-clamp-2 text-[12px] text-p-text-secondary">
+            {enrollment.notes || 'Sin notas'}
+          </span>
+        ),
+      },
+      {
+        key: 'actions',
+        label: '',
+        align: 'right',
+        isActions: true,
+        width: 'w-[200px]',
+        render: (enrollment) => (
+          <div className="flex items-center justify-end gap-2 opacity-100">
+            <button
+              type="button"
+              onClick={() => openEnrollmentEditModal(enrollment)}
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-p-border bg-p-surface px-2.5 text-[11px] font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
+            >
+              <Pencil size={13} />
+              Editar
+            </button>
+            <button
+              type="button"
+              onClick={() => void cancelEnrollment(enrollment)}
+              disabled={enrollmentStatusBusyId === enrollment.id || enrollment.enrollmentStatus === 'CANCELLED'}
+              className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-p-error bg-p-error-bg px-2.5 text-[11px] font-semibold text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-ink-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <XCircle size={13} />
+              Cancelar
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [cancelEnrollment, enrollmentStatusBusyId, openEnrollmentEditModal]
+  );
+
   const canCreateClass = teachers.length > 0 && !optionsLoading;
   const durationMinutes = durationFromForm(form);
+  const activeEnrollmentCount = enrollmentActiveCount(enrollments);
+  const waitlistedCount = enrollmentWaitlistCount(enrollments);
+  const cancelledEnrollmentCount = enrollmentCancelledCount(enrollments);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4 pb-0 lg:p-6 lg:pb-0">
       <AdminPageHeader
         eyebrow="Academia"
         title="Clases"
-        description="Gestioná clases básicas del club sin mezclar todavía inscripciones, agenda compuesta ni cobros."
+        description="Gestioná clases básicas del club sin mezclar todavía agenda compuesta, cobros ni créditos."
         actions={
           <button
             type="button"
@@ -667,11 +1231,14 @@ function AdminClassesPageContent({ user }: { user: any }) {
         }
       >
         <AdminDataTable
-          columns={columns}
+          columns={classColumns}
           data={filteredClasses}
           rowKey={(row) => row.id}
           loading={loading}
-          onRowClick={(row) => void openEditModal(row.id)}
+          onRowClick={(row) => setSelectedClassId(row.id)}
+          rowClassName={(row) =>
+            row.id === selectedClassId ? 'bg-p-surface-2/80 ring-1 ring-inset ring-p-border-strong' : ''
+          }
           empty={{
             title: teachers.length === 0 && !optionsLoading ? 'Cargá profesores antes de crear clases' : 'Todavía no hay clases cargadas',
             description:
@@ -690,6 +1257,141 @@ function AdminClassesPageContent({ user }: { user: any }) {
             ) : undefined,
           }}
         />
+      </AdminPanel>
+
+      <AdminPanel
+        title={selectedClass ? `Clase seleccionada · ${selectedClass.teacher?.displayName || 'Sin profesor'}` : 'Clase seleccionada'}
+        description={
+          selectedClass
+            ? 'Administrá inscripciones del grupo o clase individual sin abrir todavía asistencia ni cobros.'
+            : 'Seleccioná una clase del listado para ver el detalle y gestionar alumnos.'
+        }
+        actions={
+          selectedClass ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openEnrollmentCreateModal()}
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-800"
+              >
+                <UserPlus size={14} />
+                Agregar alumno
+              </button>
+              <button
+                type="button"
+                onClick={() => void openEditModal(selectedClass.id)}
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
+              >
+                <Pencil size={14} />
+                Editar clase
+              </button>
+            </div>
+          ) : null
+        }
+      >
+        {!selectedClass ? (
+          <div className="rounded-xl border border-dashed border-p-border px-4 py-8 text-center text-[13px] text-p-text-muted">
+            Elegí una clase para ver cupo, alumnos inscriptos y responsables de pago.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <AdminPanel title="Cupo usado" bodyClassName="px-4 py-4">
+                <p className="text-[28px] font-semibold text-p-text">
+                  {activeEnrollmentCount}/{selectedClass.capacity}
+                </p>
+                <p className="mt-1 text-[12px] text-p-text-muted">{classTypeLabel(selectedClass.classType)}</p>
+              </AdminPanel>
+              <AdminPanel title="En espera" bodyClassName="px-4 py-4">
+                <p className="text-[28px] font-semibold text-p-text">{waitlistedCount}</p>
+                <p className="mt-1 text-[12px] text-p-text-muted">No consume cupo por ahora</p>
+              </AdminPanel>
+              <AdminPanel title="Cancelados" bodyClassName="px-4 py-4">
+                <p className="text-[28px] font-semibold text-[var(--error-fg)]">{cancelledEnrollmentCount}</p>
+                <p className="mt-1 text-[12px] text-p-text-muted">Conservados por trazabilidad</p>
+              </AdminPanel>
+              <AdminPanel title="Precio" bodyClassName="px-4 py-4">
+                <p className="text-[28px] font-semibold text-p-text">{formatCurrency(selectedClass.pricePerStudent)}</p>
+                <p className="mt-1 text-[12px] text-p-text-muted">Por alumno en esta clase</p>
+              </AdminPanel>
+            </div>
+
+            <div className="rounded-xl border border-p-border bg-p-surface-2 px-4 py-4">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-p-text-muted">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${statusToneClasses(selectedClass.status)}`}>
+                  {statusLabel(selectedClass.status)}
+                </span>
+                <span className="inline-flex rounded-full border border-p-border bg-p-surface px-2 py-0.5 font-semibold text-p-text-secondary">
+                  Visibilidad: {visibilityLabel(selectedClass.visibility)}
+                </span>
+                <span className="inline-flex rounded-full border border-p-border bg-p-surface px-2 py-0.5 font-semibold text-p-text-secondary">
+                  Formato: {classTypeLabel(selectedClass.classType)}
+                </span>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <SummaryBlock label="Profesor" value={selectedClass.teacher?.displayName || 'Sin profesor'} />
+                <SummaryBlock label="Horario" value={formatDateRange(selectedClass.startsAt, selectedClass.endsAt)} />
+                <SummaryBlock label="Cancha" value={selectedClass.court?.name || 'Sin cancha asignada'} />
+                <SummaryBlock label="Actividad" value={selectedClass.activityType?.name || 'Sin actividad específica'} />
+              </div>
+              {selectedClass.level || selectedClass.description ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <SummaryBlock label="Nivel" value={selectedClass.level || 'Sin nivel definido'} />
+                  <SummaryBlock label="Descripción" value={selectedClass.description || 'Sin descripción'} />
+                </div>
+              ) : null}
+            </div>
+
+            {enrollmentsError ? (
+              <AdminFeedbackBanner tone="error" title="Error">
+                {enrollmentsError}
+              </AdminFeedbackBanner>
+            ) : null}
+
+            <AdminPanel
+              title="Alumnos"
+              description="Inscripciones de la clase, con alumno, responsable opcional y estados informativos."
+              bodyClassName="p-0"
+              actions={
+                <AdminFilterToolbar className="border-0 bg-transparent p-0 gap-2 sm:flex-nowrap sm:justify-end">
+                  <AdminSegmentedControl
+                    options={[
+                      { value: 'active', label: 'Activos' },
+                      { value: 'all', label: 'Todos' },
+                      { value: 'cancelled', label: 'Cancelados' },
+                    ]}
+                    value={enrollmentFilter}
+                    onChange={(value) => setEnrollmentFilter(value as EnrollmentFilter)}
+                    ariaLabel="Filtro de inscripciones"
+                    className="w-fit"
+                  />
+                </AdminFilterToolbar>
+              }
+            >
+              <AdminDataTable
+                columns={enrollmentColumns}
+                data={filteredEnrollments}
+                rowKey={(row) => row.id}
+                loading={enrollmentsLoading}
+                onRowClick={(row) => openEnrollmentEditModal(row)}
+                empty={{
+                  title: 'Todavía no hay alumnos en esta clase',
+                  description: 'Agregá el primer alumno con búsqueda explícita, sin mezclar todavía asistencia ni pagos.',
+                  action: (
+                    <button
+                      type="button"
+                      onClick={openEnrollmentCreateModal}
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 text-[12px] font-semibold text-ink-50 transition hover:bg-ink-800"
+                    >
+                      <UserPlus size={14} />
+                      Agregar alumno
+                    </button>
+                  ),
+                }}
+              />
+            </AdminPanel>
+          </div>
+        )}
       </AdminPanel>
 
       <AdminModal
@@ -886,6 +1588,152 @@ function AdminClassesPageContent({ user }: { user: any }) {
           />
         </form>
       </AdminModal>
+
+      <AdminModal
+        open={enrollmentModalOpen}
+        onClose={closeEnrollmentModal}
+        title={editingEnrollmentId ? 'Editar inscripción' : 'Agregar alumno'}
+        description={
+          editingEnrollmentId
+            ? 'Ajustá responsable, notas o referencia explícita de usuario sin mezclar asistencia ni pagos.'
+            : 'Seleccioná explícitamente al alumno y, si corresponde, un responsable de pago opcional.'
+        }
+        maxWidthClassName="max-w-[760px]"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeEnrollmentModal}
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-p-border px-3 text-sm font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="class-enrollment-form"
+              disabled={enrollmentSubmitting}
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-ink-900 px-3 text-sm font-semibold text-ink-50 transition hover:bg-ink-800 disabled:cursor-wait disabled:opacity-70"
+            >
+              {enrollmentSubmitting ? 'Guardando...' : editingEnrollmentId ? 'Guardar inscripción' : 'Agregar alumno'}
+            </button>
+          </>
+        }
+      >
+        <form id="class-enrollment-form" onSubmit={submitEnrollmentForm} className="space-y-4">
+          {enrollmentFormError && <AdminInlineError>{enrollmentFormError}</AdminInlineError>}
+
+          <div className="rounded-xl border border-p-border bg-p-surface-2 px-4 py-3 text-[12px] text-p-text-secondary">
+            <p className="font-semibold text-p-text">Alumno y responsable no son lo mismo</p>
+            <p className="mt-1">
+              Alumno es quien toma la clase. Responsable es quien paga o administra, y puede ser otra persona.
+            </p>
+          </div>
+
+          {editingEnrollmentId ? (
+            <div className="rounded-xl border border-p-border bg-p-surface px-4 py-3">
+              <p className="text-[12px] font-semibold text-p-text">Alumno</p>
+              <p className="mt-1 text-[13px] font-medium text-p-text">
+                {enrollmentForm.selectedStudent?.displayName || 'Sin alumno'}
+              </p>
+              <p className="mt-1 text-[12px] text-p-text-muted">
+                {enrollmentForm.selectedStudent ? personSecondaryLine(enrollmentForm.selectedStudent) : 'Sin datos'}
+              </p>
+            </div>
+          ) : (
+            <PersonSearchSelectField
+              label="Alumno"
+              required
+              placeholder="Buscar alumno por nombre, teléfono o email..."
+              selected={enrollmentForm.selectedStudent}
+              query={enrollmentForm.studentQuery}
+              onQueryChange={(value) => setEnrollmentForm((prev) => ({ ...prev, studentQuery: value }))}
+              results={studentSearch.results}
+              loading={studentSearch.loading}
+              onSelect={(candidate) =>
+                setEnrollmentForm((prev) => ({
+                  ...prev,
+                  selectedStudent: candidate,
+                  studentQuery: '',
+                  selectedStudentUser: candidate.userId ? candidate : null,
+                  studentUserQuery: '',
+                }))
+              }
+              onClear={() =>
+                setEnrollmentForm((prev) => ({
+                  ...prev,
+                  selectedStudent: null,
+                  studentQuery: '',
+                  selectedStudentUser: null,
+                  studentUserQuery: '',
+                }))
+              }
+              error={enrollmentFieldErrors.studentClientId}
+              helper="Solo se pueden inscribir clientes del club. Si la búsqueda sugiere crear uno nuevo, hacelo primero desde Clientes."
+            />
+          )}
+
+          <PersonSearchSelectField
+            label="Usuario del alumno"
+            placeholder="Buscar usuario explícito del alumno..."
+            selected={enrollmentForm.selectedStudentUser}
+            query={enrollmentForm.studentUserQuery}
+            onQueryChange={(value) => setEnrollmentForm((prev) => ({ ...prev, studentUserQuery: value }))}
+            results={studentUserSearch.results}
+            loading={studentUserSearch.loading}
+            onSelect={(candidate) =>
+              setEnrollmentForm((prev) => ({
+                ...prev,
+                selectedStudentUser: candidate,
+                studentUserQuery: '',
+              }))
+            }
+            onClear={() =>
+              setEnrollmentForm((prev) => ({
+                ...prev,
+                selectedStudentUser: null,
+                studentUserQuery: '',
+              }))
+            }
+            error={enrollmentFieldErrors.studentUserId}
+            helper="Opcional. Se guarda solo por selección explícita y no crea vínculos automáticos."
+            disabled={!editingEnrollmentId && !enrollmentForm.selectedStudent}
+          />
+
+          <PersonSearchSelectField
+            label="Responsable de pago"
+            placeholder="Buscar responsable opcional..."
+            selected={enrollmentForm.selectedResponsible}
+            query={enrollmentForm.responsibleQuery}
+            onQueryChange={(value) => setEnrollmentForm((prev) => ({ ...prev, responsibleQuery: value }))}
+            results={responsibleSearch.results}
+            loading={responsibleSearch.loading}
+            onSelect={(candidate) =>
+              setEnrollmentForm((prev) => ({
+                ...prev,
+                selectedResponsible: candidate,
+                responsibleQuery: '',
+              }))
+            }
+            onClear={() =>
+              setEnrollmentForm((prev) => ({
+                ...prev,
+                selectedResponsible: null,
+                responsibleQuery: '',
+              }))
+            }
+            error={enrollmentFieldErrors.billingResponsibleClientId}
+            helper="Opcional. Puede ser distinto del alumno y en esta fase solo se valida que pertenezca al club."
+          />
+
+          <TextAreaField
+            label="Notas"
+            value={enrollmentForm.notes}
+            onChange={(value) => setEnrollmentForm((prev) => ({ ...prev, notes: value }))}
+            error={enrollmentFieldErrors.notes}
+            placeholder="Notas operativas sobre esta inscripción."
+          />
+        </form>
+      </AdminModal>
     </div>
   );
 }
@@ -1015,5 +1863,149 @@ function CheckboxField({
       />
       {label}
     </label>
+  );
+}
+
+function SummaryBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-p-text-muted">{label}</p>
+      <p className="text-[13px] text-p-text">{value}</p>
+    </div>
+  );
+}
+
+function PersonSearchSelectField({
+  label,
+  selected,
+  query,
+  onQueryChange,
+  results,
+  loading,
+  onSelect,
+  onClear,
+  placeholder,
+  error,
+  helper,
+  required = false,
+  disabled = false,
+}: {
+  label: string;
+  selected: EnrollmentPersonOption | null;
+  query: string;
+  onQueryChange: (value: string) => void;
+  results: EnrollmentPersonOption[];
+  loading: boolean;
+  onSelect: (candidate: EnrollmentPersonOption) => void;
+  onClear: () => void;
+  placeholder: string;
+  error?: string;
+  helper?: string;
+  required?: boolean;
+  disabled?: boolean;
+}) {
+  const safeQuery = String(query || '').trim();
+  return (
+    <div className="space-y-2">
+      <label className="text-[12px] font-semibold text-p-text">
+        {label}
+        {required ? ' *' : ''}
+      </label>
+
+      {selected ? (
+        <div className="rounded-xl border border-p-border bg-p-surface px-3 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-p-text">{selected.displayName}</p>
+              <p className="mt-1 text-[12px] text-p-text-muted">{personSecondaryLine(selected)}</p>
+              {personBadges(selected).length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {personBadges(selected).map((badge) => (
+                    <span
+                      key={`${label}-${badge}`}
+                      className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-medium text-p-text-secondary"
+                    >
+                      {badge}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {!disabled ? (
+              <button
+                type="button"
+                onClick={onClear}
+                className="inline-flex h-8 items-center justify-center rounded-lg border border-p-border px-2.5 text-[11px] font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text"
+              >
+                Cambiar
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={query}
+            disabled={disabled}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder={placeholder}
+            className="h-10 w-full rounded-xl border border-p-border bg-p-surface px-3 text-[13px] text-p-text outline-none transition focus:border-p-accent disabled:cursor-not-allowed disabled:bg-p-surface-2 disabled:text-p-text-muted"
+          />
+          {loading ? (
+            <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-3 text-[12px] text-p-text-muted">
+              Buscando personas...
+            </div>
+          ) : safeQuery.length >= 2 ? (
+            results.length > 0 ? (
+              <div className="divide-y divide-p-border overflow-hidden rounded-xl border border-p-border bg-p-surface">
+                {results.map((candidate) => (
+                  <div key={`${label}-${candidate.personKey}`} className="px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-semibold text-p-text">{candidate.displayName}</p>
+                        <p className="mt-1 text-[12px] text-p-text-muted">{personSecondaryLine(candidate)}</p>
+                        {personBadges(candidate).length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {personBadges(candidate).map((badge) => (
+                              <span
+                                key={`${candidate.personKey}-${badge}`}
+                                className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-medium text-p-text-secondary"
+                              >
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {candidate.disabledReason ? (
+                          <p className="mt-2 text-[11px] text-[var(--error-fg)]">{candidate.disabledReason}</p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={Boolean(candidate.disabledReason)}
+                        onClick={() => onSelect(candidate)}
+                        className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-p-border px-2.5 text-[11px] font-semibold text-p-text-muted transition hover:border-p-border-strong hover:text-p-text disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Seleccionar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-p-border bg-p-surface-2 px-3 py-3 text-[12px] text-p-text-muted">
+                No encontramos coincidencias para esa búsqueda.
+              </div>
+            )
+          ) : helper ? (
+            <p className="text-[11px] text-p-text-muted">{helper}</p>
+          ) : null}
+        </div>
+      )}
+
+      {error ? <p className="text-[11px] text-[var(--error-fg)]">{error}</p> : null}
+      {!error && helper && selected ? <p className="text-[11px] text-p-text-muted">{helper}</p> : null}
+    </div>
   );
 }
