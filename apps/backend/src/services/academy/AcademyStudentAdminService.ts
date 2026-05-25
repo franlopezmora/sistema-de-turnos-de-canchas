@@ -438,9 +438,19 @@ export class AcademyStudentAdminService {
       const upcomingEnrollmentsCount = activeUpcomingEnrollments.length;
       const pastEnrollmentsCount = Math.max(0, row.studentClassEnrollments.length - upcomingEnrollmentsCount);
       const activePasses = row.beneficiaryClassPasses.filter((classPass) => this.effectivePassStatus(classPass) === 'ACTIVE');
-      const classTimes = row.studentClassEnrollments
+      const historicalClassTimes = row.studentClassEnrollments
+        .filter((enrollment) => {
+          const startsAt = new Date(enrollment.classSession.startsAt).getTime();
+          return (
+            Number.isFinite(startsAt) &&
+            (
+              startsAt < now ||
+              String(enrollment.enrollmentStatus) === 'CANCELLED' ||
+              String(enrollment.classSession.status) === 'CANCELLED'
+            )
+          );
+        })
         .map((enrollment) => new Date(enrollment.classSession.startsAt).getTime())
-        .filter((value) => Number.isFinite(value))
         .sort((a, b) => a - b);
 
       const nextClassAt =
@@ -448,7 +458,7 @@ export class AcademyStudentAdminService {
           .map((enrollment) => new Date(enrollment.classSession.startsAt).getTime())
           .filter((value) => Number.isFinite(value))
           .sort((a, b) => a - b)[0] ?? null;
-      const lastClassAt = classTimes.length ? classTimes[classTimes.length - 1] : null;
+      const lastClassAt = historicalClassTimes.length ? historicalClassTimes[historicalClassTimes.length - 1] : null;
 
       return {
         client: this.mapClient(row),

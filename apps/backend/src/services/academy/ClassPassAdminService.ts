@@ -333,6 +333,14 @@ export class ClassPassAdminService {
     return parsed;
   }
 
+  private parsePackageName(value: string | null | undefined) {
+    const packageName = String(value || '').trim();
+    if (!packageName) {
+      throw badRequest('Elegí un nombre para el pack.', ErrorCodes.INVALID_INPUT);
+    }
+    return packageName;
+  }
+
   private parseOptionalExpiry(value: string | Date | null | undefined) {
     if (value === undefined) return undefined;
     if (value === null || value === '') return null;
@@ -411,6 +419,7 @@ export class ClassPassAdminService {
       ]);
 
     const totalCredits = this.parseTotalCredits(input.totalCredits);
+    const packageName = this.parsePackageName(input.packageName);
     const priceAtPurchase = this.parseOptionalMoney(input.priceAtPurchase);
     const expiresAt = this.parseOptionalExpiry(input.expiresAt);
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
@@ -426,7 +435,7 @@ export class ClassPassAdminService {
         ownerUserId,
         beneficiaryClientId: beneficiaryClient.id,
         beneficiaryUserId,
-        packageName: String(input.packageName || '').trim(),
+        packageName,
         priceAtPurchase: priceAtPurchase == null ? null : priceAtPurchase,
         totalCredits,
         usedCredits: 0,
@@ -506,7 +515,7 @@ export class ClassPassAdminService {
         packageName:
           input.packageName === undefined
             ? existing.packageName
-            : String(input.packageName || '').trim(),
+            : this.parsePackageName(input.packageName),
         expiresAt: expiresAt ?? null,
         activityTypeId,
         classType:

@@ -362,10 +362,12 @@ export class RefundService {
       createdByUserId: input.executedByUserId ?? refund.createdByUserId ?? null
     });
 
-    const shouldSyncEnrollmentAccountStatus = refund.payment.account.sourceType === 'CLASS_ENROLLMENT';
+    const shouldReconcileClosedAccountStatus =
+      refund.payment.account.sourceType === 'CLASS_ENROLLMENT' ||
+      refund.payment.account.sourceType === 'CLASS_PASS';
     const accountBalance = await this.accountService.reconcilePaidAmountTx(tx, refund.accountId, {
-      updateStatus: shouldSyncEnrollmentAccountStatus,
-      reopenIfRemaining: shouldSyncEnrollmentAccountStatus
+      updateStatus: shouldReconcileClosedAccountStatus,
+      reopenIfRemaining: shouldReconcileClosedAccountStatus
     });
 
     if (refund.payment.account.sourceType === 'CLASS_ENROLLMENT') {
@@ -437,7 +439,10 @@ export class RefundService {
         if (!bookingForClosedAccount || bookingForClosedAccount.status !== 'CANCELLED') {
           throw conflict('No se puede devolver un pago de una reserva no cancelada con cuenta cerrada.', ErrorCodes.ACCOUNT_CLOSED);
         }
-      } else if (payment.account.sourceType !== 'CLASS_ENROLLMENT') {
+      } else if (
+        payment.account.sourceType !== 'CLASS_ENROLLMENT' &&
+        payment.account.sourceType !== 'CLASS_PASS'
+      ) {
         throw conflict('No se puede devolver un pago de una cuenta cerrada.', ErrorCodes.ACCOUNT_CLOSED);
       }
     }
