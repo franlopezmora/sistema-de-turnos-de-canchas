@@ -73,6 +73,7 @@ export class ClassEnrollmentAdminService {
     classSessionStatus?: string | null;
     paymentStatus: string;
     priceAtEnrollment?: number | null;
+    paidAmount?: number | null;
   }) {
     if (String(row.enrollmentStatus) === 'CANCELLED') {
       return 'No se puede abrir cuenta para una inscripción cancelada.';
@@ -89,6 +90,10 @@ export class ClassEnrollmentAdminService {
     if (String(row.paymentStatus) === 'PAID') {
       return 'La inscripción ya figura como pagada.';
     }
+    const paidAmount = Number(row.paidAmount || 0);
+    if (String(row.paymentStatus) === 'PARTIAL' || paidAmount > 0.009) {
+      return 'La inscripción ya tiene pagos parciales o movimientos previos sin cuenta trazable. Revisá el caso manualmente.';
+    }
     const priceAtEnrollment = Number(row.priceAtEnrollment || 0);
     if (!Number.isFinite(priceAtEnrollment) || priceAtEnrollment <= 0) {
       return 'Cargá un precio mayor a 0 para abrir la cuenta de esta clase.';
@@ -102,6 +107,7 @@ export class ClassEnrollmentAdminService {
       classSessionStatus?: string | null;
       paymentStatus: string;
       priceAtEnrollment?: number | null;
+      paidAmount?: number | null;
     },
     account?: {
       id: string;
@@ -537,6 +543,7 @@ export class ClassEnrollmentAdminService {
         enrollmentStatus: true,
         paymentStatus: true,
         priceAtEnrollment: true,
+        paidAmount: true,
         classSession: {
           select: {
             status: true,
@@ -567,6 +574,7 @@ export class ClassEnrollmentAdminService {
           classSessionStatus: String(enrollment.classSession?.status || ''),
           paymentStatus: String(enrollment.paymentStatus || ''),
           priceAtEnrollment: Number(enrollment.priceAtEnrollment || 0),
+          paidAmount: Number(enrollment.paidAmount || 0),
         }),
       };
     }
@@ -578,6 +586,7 @@ export class ClassEnrollmentAdminService {
         classSessionStatus: String(enrollment.classSession?.status || ''),
         paymentStatus: String(enrollment.paymentStatus || ''),
         priceAtEnrollment: Number(enrollment.priceAtEnrollment || 0),
+        paidAmount: Number(enrollment.paidAmount || 0),
       },
       {
         id: String(account.id),

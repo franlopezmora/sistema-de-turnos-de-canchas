@@ -247,6 +247,7 @@ export class AccountService {
         enrollmentStatus: string;
         paymentStatus: string;
         priceAtEnrollment: Prisma.Decimal;
+        paidAmount: Prisma.Decimal;
         studentClientId: string;
         billingResponsibleClientId: string | null;
         snapshotName: string;
@@ -311,6 +312,7 @@ export class AccountService {
             enrollmentStatus: true,
             paymentStatus: true,
             priceAtEnrollment: true,
+            paidAmount: true,
             studentClientId: true,
             billingResponsibleClientId: true,
             snapshotName: true,
@@ -364,6 +366,13 @@ export class AccountService {
             ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
           );
         }
+        const currentPaidAmount = Number(classEnrollment.paidAmount || 0);
+        if (classEnrollment.paymentStatus === 'PARTIAL' || currentPaidAmount > EPSILON) {
+          throw conflict(
+            'La inscripción ya tiene pagos parciales o movimientos previos sin cuenta trazable. Revisá el caso manualmente.',
+            ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+          );
+        }
         const priceAtEnrollment = Number(classEnrollment.priceAtEnrollment || 0);
         if (!Number.isFinite(priceAtEnrollment) || priceAtEnrollment <= 0) {
           throw badRequest(
@@ -376,6 +385,7 @@ export class AccountService {
           enrollmentStatus: String(classEnrollment.enrollmentStatus),
           paymentStatus: String(classEnrollment.paymentStatus),
           priceAtEnrollment: classEnrollment.priceAtEnrollment,
+          paidAmount: classEnrollment.paidAmount,
           studentClientId: String(classEnrollment.studentClientId),
           billingResponsibleClientId: classEnrollment.billingResponsibleClientId
             ? String(classEnrollment.billingResponsibleClientId)

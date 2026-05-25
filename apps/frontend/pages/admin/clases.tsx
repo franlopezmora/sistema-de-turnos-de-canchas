@@ -1519,7 +1519,11 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
           accountId = payload.account?.id || null;
           initialView = 'payment';
           showAdminToast('Cuenta de la clase lista para cobrar.');
-        } else if (payload.financialStatus === 'PENDING' || payload.financialStatus === 'PARTIAL') {
+        } else if (
+          enrollment.enrollmentStatus !== 'CANCELLED' &&
+          !['PAID', 'REFUNDED'].includes(enrollment.paymentStatus) &&
+          (payload.financialStatus === 'PENDING' || payload.financialStatus === 'PARTIAL')
+        ) {
           initialView = 'payment';
         }
 
@@ -2035,6 +2039,45 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
     if (editingEnrollmentAccount.classEnrollmentId !== editingEnrollment.id) return null;
     return editingEnrollmentAccount;
   }, [editingEnrollment, editingEnrollmentAccount]);
+  const editingEnrollmentAccountBadgeLabel = useMemo(() => {
+    if (!editingEnrollment) return academyFinancialStateLabel(editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT');
+    if (editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT') return 'Cubierto por crédito';
+    if (editingEnrollment.paymentStatus === 'REFUNDED') return 'Reintegrado';
+    if (editingEnrollment.paymentStatus === 'PAID') return 'Pagado';
+    if (editingEnrollment.enrollmentStatus === 'CANCELLED') return 'No cobrable';
+    return academyFinancialStateLabel(editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT');
+  }, [editingEnrollment, editingEnrollmentFinancial]);
+  const editingEnrollmentAccountBadgeTone = useMemo(() => {
+    if (!editingEnrollment) return editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT';
+    if (editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT') return 'PAID' as const;
+    if (editingEnrollment.paymentStatus === 'PAID') return 'PAID' as const;
+    return editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT';
+  }, [editingEnrollment, editingEnrollmentFinancial]);
+  const editingEnrollmentAccountButtonLabel = useMemo(() => {
+    if (!editingEnrollment) return 'Abrir cuenta de la clase';
+    if (editingEnrollmentFinancial?.account?.id) {
+      if (editingEnrollment.enrollmentStatus === 'CANCELLED') return 'Ver cuenta';
+      if (editingEnrollment.paymentStatus === 'PAID') return 'Ver cuenta';
+      return editingEnrollmentFinancial.financialStatus === 'PAID' ? 'Ver cuenta' : 'Cobrar clase';
+    }
+    return 'Abrir cuenta de la clase';
+  }, [editingEnrollment, editingEnrollmentFinancial]);
+  const editingEnrollmentAccountActionDisabled = useMemo(() => {
+    if (!editingEnrollment) return true;
+    const hasAccount = Boolean(editingEnrollmentFinancial?.account?.id);
+    if (classEnrollmentAccountBusyId === editingEnrollment.id || editingEnrollmentAccountLoading) return true;
+    if (editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT') return true;
+    if (editingEnrollment.paymentStatus === 'REFUNDED') return !hasAccount;
+    if (editingEnrollment.paymentStatus === 'PAID') return !hasAccount;
+    if (editingEnrollment.enrollmentStatus === 'CANCELLED') return !hasAccount;
+    if (!hasAccount && Boolean(editingEnrollmentFinancial?.blockedReason)) return true;
+    return false;
+  }, [
+    classEnrollmentAccountBusyId,
+    editingEnrollment,
+    editingEnrollmentAccountLoading,
+    editingEnrollmentFinancial,
+  ]);
   const classFormContent = (
     <form id="class-session-form" onSubmit={submitForm} className="space-y-4">
       {formError && <AdminInlineError>{formError}</AdminInlineError>}
@@ -2778,14 +2821,10 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                         <p className="text-[13px] font-semibold text-p-text">Cuenta de la clase</p>
                         <span
                           className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${academyFinancialToneClasses(
-                            editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT'
+                            editingEnrollmentAccountBadgeTone
                           )}`}
                         >
-                          {editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT'
-                            ? 'Cubierto por crédito'
-                            : editingEnrollment.paymentStatus === 'REFUNDED'
-                              ? 'Reintegrado'
-                              : academyFinancialStateLabel(editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT')}
+                          {editingEnrollmentAccountBadgeLabel}
                         </span>
                         {editingEnrollmentFinancial?.summary?.remaining != null ? (
                           <span className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
@@ -2818,23 +2857,13 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                     <div className="flex flex-col items-start gap-2 md:items-end">
                       <button
                         type="button"
-                        disabled={
-                          classEnrollmentAccountBusyId === editingEnrollment.id ||
-                          editingEnrollmentAccountLoading ||
-                          Boolean(editingEnrollmentFinancial?.blockedReason) ||
-                          editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT' ||
-                          editingEnrollment.paymentStatus === 'REFUNDED'
-                        }
+                        disabled={editingEnrollmentAccountActionDisabled}
                         onClick={() => void openClassEnrollmentAccountDrawer(editingEnrollment)}
                         className="inline-flex h-8 items-center justify-center rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text transition hover:border-p-border-strong hover:text-p-text disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {classEnrollmentAccountBusyId === editingEnrollment.id
                           ? 'Abriendo cuenta...'
-                          : editingEnrollmentFinancial?.account?.id
-                            ? editingEnrollmentFinancial.financialStatus === 'PAID'
-                              ? 'Ver cuenta'
-                              : 'Cobrar clase'
-                            : 'Abrir cuenta de la clase'}
+                          : editingEnrollmentAccountButtonLabel}
                       </button>
                     </div>
                   </div>

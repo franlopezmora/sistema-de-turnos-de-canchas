@@ -12,6 +12,7 @@ import { ProjectionService } from './ProjectionService';
 import { AccountService } from './AccountService';
 import { generateDisplayCode } from '../utils/displayCode';
 import { badRequest, notFound, conflict, ErrorCodes } from '../errors';
+import { getDerivedPaymentStatus } from '../domain/bookingDomain';
 
 const EPSILON = 0.009;
 
@@ -95,6 +96,50 @@ export class RefundService {
 
   private toMoney(value: number) {
     return Number((Number(value || 0)).toFixed(2));
+  }
+
+  private async syncClassEnrollmentFinancialStateTx(
+    tx: TxClient,
+    params: {
+      clubId: number;
+      enrollmentId: string;
+      total: number;
+      netPaid: number;
+    }
+  ) {
+    const enrollment = await tx.classEnrollment.findFirst({
+      where: {
+        id: params.enrollmentId,
+        clubId: params.clubId,
+      },
+      select: {
+        id: true,
+        paymentStatus: true,
+      }
+    });
+
+    if (!enrollment) {
+      throw notFound(
+        'La inscripción asociada a la cuenta no existe.',
+        ErrorCodes.CLASS_ENROLLMENT_NOT_FOUND
+      );
+    }
+
+    if (String(enrollment.paymentStatus) === 'COVERED_BY_CREDIT') {
+      throw conflict(
+        'La inscripción está cubierta por crédito y no admite sincronización financiera por devoluciones.',
+        ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+      );
+    }
+
+    const nextPaymentStatus = getDerivedPaymentStatus(params.total, params.netPaid);
+    await tx.classEnrollment.update({
+      where: { id: params.enrollmentId },
+      data: {
+        paymentStatus: nextPaymentStatus,
+        paidAmount: new Prisma.Decimal(this.toMoney(params.netPaid)),
+      }
+    });
   }
 
   private normalizeReason(value: string, maxLen = 300) {
@@ -299,10 +344,19 @@ export class RefundService {
       createdByUserId: input.executedByUserId ?? refund.createdByUserId ?? null
     });
 
-    await this.accountService.reconcilePaidAmountTx(tx, refund.accountId, {
+    const accountBalance = await this.accountService.reconcilePaidAmountTx(tx, refund.accountId, {
       updateStatus: false,
       reopenIfRemaining: false
     });
+
+    if (refund.payment.account.sourceType === 'CLASS_ENROLLMENT') {
+      await this.syncClassEnrollmentFinancialStateTx(tx, {
+        clubId: refund.clubId,
+        enrollmentId: String(refund.payment.account.sourceId),
+        total: accountBalance.total,
+        netPaid: accountBalance.netPaid,
+      });
+    }
 
     await tx.cashMovement.create({
       data: {
