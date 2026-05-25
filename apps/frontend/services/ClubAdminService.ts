@@ -259,6 +259,212 @@ export type AdminClassCreditUsage = {
   updatedAt: string;
 };
 
+export type AdminAcademyStudentListItem = {
+  client: {
+    id: string;
+    clubId: number;
+    userId: number | null;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    linkedUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  };
+  summary: {
+    upcomingEnrollmentsCount: number;
+    pastEnrollmentsCount: number;
+    activePassesCount: number;
+    ownedPassesCount: number;
+    totalRemainingCredits: number;
+    totalCreditUsages: number;
+    incomingRelationshipsCount: number;
+    outgoingRelationshipsCount: number;
+  };
+  nextClassAt: string | null;
+  lastClassAt: string | null;
+};
+
+export type AdminAcademyStudentOverview = {
+  client: {
+    id: string;
+    clubId: number;
+    userId: number | null;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    linkedUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+  };
+  summary: {
+    upcomingEnrollmentsCount: number;
+    pastEnrollmentsCount: number;
+    activePassesCount: number;
+    ownedPassesCount: number;
+    totalRemainingCredits: number;
+    totalCreditUsages: number;
+  };
+  billingResponsibles: Array<{ id: string; name: string }>;
+  upcomingEnrollments: Array<{
+    id: string;
+    classSessionId: string;
+    snapshotName: string;
+    billingResponsibleClientId: string | null;
+    priceAtEnrollment: number;
+    paidAmount: number;
+    enrollmentStatus: AdminClassEnrollmentStatus | string;
+    attendanceStatus: AdminClassAttendanceStatus | string;
+    paymentStatus: AdminClassPaymentStatus | string;
+    cancelledAt: string | null;
+    attendedAt: string | null;
+    notes: string | null;
+    billingResponsibleClient: { id: string; name: string } | null;
+    classSession: {
+      id: string;
+      startsAt: string;
+      endsAt: string;
+      status: AdminClassSessionStatus | string;
+      visibility: AdminClassSessionVisibility | string;
+      classType: AdminClassSessionType | string;
+      teacher: { id: string; displayName: string; isActive: boolean } | null;
+      activityType: { id: number; name: string } | null;
+      court: { id: number; name: string } | null;
+    };
+  }>;
+  pastEnrollments: Array<{
+    id: string;
+    classSessionId: string;
+    snapshotName: string;
+    billingResponsibleClientId: string | null;
+    priceAtEnrollment: number;
+    paidAmount: number;
+    enrollmentStatus: AdminClassEnrollmentStatus | string;
+    attendanceStatus: AdminClassAttendanceStatus | string;
+    paymentStatus: AdminClassPaymentStatus | string;
+    cancelledAt: string | null;
+    attendedAt: string | null;
+    notes: string | null;
+    billingResponsibleClient: { id: string; name: string } | null;
+    classSession: {
+      id: string;
+      startsAt: string;
+      endsAt: string;
+      status: AdminClassSessionStatus | string;
+      visibility: AdminClassSessionVisibility | string;
+      classType: AdminClassSessionType | string;
+      teacher: { id: string; displayName: string; isActive: boolean } | null;
+      activityType: { id: number; name: string } | null;
+      court: { id: number; name: string } | null;
+    };
+  }>;
+  beneficiaryPasses: Array<{
+    id: string;
+    ownerClientId: string;
+    beneficiaryClientId: string;
+    packageName: string;
+    totalCredits: number;
+    usedCredits: number;
+    remainingCredits: number;
+    expiresAt: string | null;
+    classType: AdminClassSessionType | string | null;
+    transferable: boolean;
+    status: AdminClassPassStatus | string;
+    purchasedAt: string;
+    notes: string | null;
+    ownerClient: { id: string; name: string } | null;
+    beneficiaryClient: { id: string; name: string } | null;
+    activityType: { id: number; name: string } | null;
+    teacher: { id: string; displayName: string; isActive: boolean } | null;
+    recentUsages: Array<{
+      id: string;
+      usedAt: string;
+      reason: AdminClassCreditUsageReason | string;
+      creditsUsed: number;
+      classEnrollmentId: string;
+    }>;
+  }>;
+  ownedPasses: Array<{
+    id: string;
+    ownerClientId: string;
+    beneficiaryClientId: string;
+    packageName: string;
+    totalCredits: number;
+    usedCredits: number;
+    remainingCredits: number;
+    expiresAt: string | null;
+    classType: AdminClassSessionType | string | null;
+    transferable: boolean;
+    status: AdminClassPassStatus | string;
+    purchasedAt: string;
+    notes: string | null;
+    ownerClient: { id: string; name: string } | null;
+    beneficiaryClient: { id: string; name: string } | null;
+    activityType: { id: number; name: string } | null;
+    teacher: { id: string; displayName: string; isActive: boolean } | null;
+    recentUsages: Array<{
+      id: string;
+      usedAt: string;
+      reason: AdminClassCreditUsageReason | string;
+      creditsUsed: number;
+      classEnrollmentId: string;
+    }>;
+  }>;
+  creditUsages: Array<{
+    id: string;
+    classPassId: string;
+    classEnrollmentId: string;
+    creditsUsed: number;
+    usedAt: string;
+    reason: AdminClassCreditUsageReason | string;
+    notes: string | null;
+    createdAt: string;
+    createdByUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
+    classPass: {
+      id: string;
+      packageName: string;
+      beneficiaryClientId: string;
+      remainingCredits: number;
+      status: AdminClassPassStatus | string;
+    } | null;
+    classEnrollment: {
+      id: string;
+      snapshotName: string;
+      enrollmentStatus: AdminClassEnrollmentStatus | string;
+      attendanceStatus: AdminClassAttendanceStatus | string;
+      paymentStatus: AdminClassPaymentStatus | string;
+      classSessionId: string;
+      classSession: {
+        id: string;
+        startsAt: string;
+        endsAt: string;
+        teacher: { id: string; displayName: string; isActive: boolean } | null;
+        activityType: { id: number; name: string } | null;
+      } | null;
+    } | null;
+  }>;
+  incomingRelationships: Array<{
+    id: string;
+    relationshipType: string;
+    canPayFor: boolean;
+    canManageEnrollments: boolean;
+    canViewSchedule: boolean;
+    canCancelClass: boolean;
+    canViewPayments: boolean;
+    notes: string | null;
+    fromClient: { id: string; name: string } | null;
+    toClient: { id: string; name: string } | null;
+  }>;
+  outgoingRelationships: Array<{
+    id: string;
+    relationshipType: string;
+    canPayFor: boolean;
+    canManageEnrollments: boolean;
+    canViewSchedule: boolean;
+    canCancelClass: boolean;
+    canViewPayments: boolean;
+    notes: string | null;
+    fromClient: { id: string; name: string } | null;
+    toClient: { id: string; name: string } | null;
+  }>;
+};
+
 export type AuditLogUser = {
   id: number;
   firstName?: string | null;
@@ -1381,6 +1587,36 @@ export class ClubAdminService {
     });
     if (!res.ok) {
       throw await parseApiErrorResponse(res, 'Error al consumir crédito');
+    }
+    return res.json();
+  }
+
+  static async getAcademyStudents(
+    slug: string,
+    options?: { q?: string }
+  ): Promise<AdminAcademyStudentListItem[]> {
+    const query = new URLSearchParams();
+    if (options?.q) query.set('q', options.q);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/academy-students${suffix}`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar alumnos de Academia');
+    }
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  static async getAcademyStudentOverview(
+    slug: string,
+    clientId: string
+  ): Promise<AdminAcademyStudentOverview> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/academy-students/${clientId}/overview`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar el resumen del alumno');
     }
     return res.json();
   }

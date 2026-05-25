@@ -2,17 +2,20 @@ import { useRouter } from 'next/router';
 import AdminRouteShell from '../../components/admin/AdminRouteShell';
 import { AdminSegmentedControl } from '../../components/admin/ui';
 import { AdminClassesPageContent } from './clases';
+import { AdminAcademyStudentsPageContent } from './alumnos';
 import { AdminTeachersPageContent } from './profesores';
 
-type AcademyTab = 'clases' | 'profesores';
+type AcademyTab = 'clases' | 'alumnos' | 'profesores';
 
 const ACADEMY_TABS: Array<{ value: AcademyTab; label: string }> = [
   { value: 'clases', label: 'Clases' },
+  { value: 'alumnos', label: 'Alumnos' },
   { value: 'profesores', label: 'Profesores' },
 ];
 
 const parseAcademyTab = (value: unknown): AcademyTab => {
   const raw = String(value || '').toLowerCase();
+  if (raw === 'alumnos') return 'alumnos';
   if (raw === 'profesores') return 'profesores';
   return 'clases';
 };
@@ -46,6 +49,7 @@ export default function AdminAcademyPage() {
           />
           <section className="min-h-0 flex-1 overflow-hidden pb-6 lg:pb-8">
             {activeTab === 'clases' && <AdminClassesPageContent user={user} embedded />}
+            {activeTab === 'alumnos' && <AdminAcademyStudentsPageContent user={user} embedded />}
             {activeTab === 'profesores' && <AdminTeachersPageContent user={user} embedded />}
           </section>
         </div>

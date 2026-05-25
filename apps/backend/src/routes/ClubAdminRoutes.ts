@@ -29,6 +29,7 @@ import { ClassSessionAdminController } from '../controllers/ClassSessionAdminCon
 import { ClassEnrollmentAdminController } from '../controllers/ClassEnrollmentAdminController';
 import { ClassPassAdminController } from '../controllers/ClassPassAdminController';
 import { ClassCreditUsageAdminController } from '../controllers/ClassCreditUsageAdminController';
+import { AcademyStudentAdminController } from '../controllers/AcademyStudentAdminController';
 
 const router = Router();
 
@@ -69,6 +70,7 @@ const classSessionAdminController = new ClassSessionAdminController();
 const classEnrollmentAdminController = new ClassEnrollmentAdminController();
 const classPassAdminController = new ClassPassAdminController();
 const classCreditUsageAdminController = new ClassCreditUsageAdminController();
+const academyStudentAdminController = new AcademyStudentAdminController();
 
 // Todas las rutas requieren autenticación y verificación de acceso al club.
 // El rol tenant se define por endpoint (ADMIN/OWNER para configuración sensible,
@@ -652,6 +654,20 @@ router.get('/:slug/admin/class-enrollments/:enrollmentId/credit-usages',
     verifyClubAccess,
     requireTenantRole(['ADMIN', 'STAFF']),
     classCreditUsageAdminController.listByEnrollment
+);
+
+router.get('/:slug/admin/academy-students',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    academyStudentAdminController.list
+);
+
+router.get('/:slug/admin/academy-students/:clientId/overview',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    academyStudentAdminController.getOverview
 );
 
 router.post('/:slug/admin/services',
