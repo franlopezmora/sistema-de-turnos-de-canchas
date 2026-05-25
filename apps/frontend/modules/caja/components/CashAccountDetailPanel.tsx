@@ -5,7 +5,7 @@
 export type CashDetailAccount = {
   id: string;
   status: 'OPEN' | 'CLOSED';
-  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
+  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS' | 'CLASS_ENROLLMENT';
   booking?: {
     id?: number;
     clientName?: string | null;
@@ -66,6 +66,7 @@ const sourceLabel: Record<CashDetailAccount['sourceType'], string> = {
   TABLE: 'Mesa',
   MANUAL: 'Manual',
   CLASS_PASS: 'Pack de clases',
+  CLASS_ENROLLMENT: 'Clase',
 };
 
 const itemTypeLabel: Record<string, string> = {

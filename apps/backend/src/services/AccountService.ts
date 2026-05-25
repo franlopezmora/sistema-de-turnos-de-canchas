@@ -13,7 +13,7 @@ const EPSILON = 0.009;
 
 type OpenAccountInput = {
   clubId: number;
-  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
+  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS' | 'CLASS_ENROLLMENT';
   sourceId: string;
 };
 
@@ -104,7 +104,7 @@ export class AccountService {
   }
 
   async cancelItemsForSourceTx(tx: Prisma.TransactionClient, input: {
-    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
+    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS' | 'CLASS_ENROLLMENT';
     sourceId: string | number;
   }) {
     const sourceId = String(input.sourceId);
@@ -181,12 +181,30 @@ export class AccountService {
   }
 
   async cancelItemsForSource(input: {
-    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
+    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS' | 'CLASS_ENROLLMENT';
     sourceId: string | number;
   }) {
     return prisma.$transaction(async (tx) => {
       return this.cancelItemsForSourceTx(tx, input);
     });
+  }
+
+  private buildClassEnrollmentAccountDescription(input: {
+    snapshotName: string;
+    startsAt?: Date | null;
+    teacherDisplayName?: string | null;
+  }) {
+    const label = String(input.snapshotName || '').trim() || 'Clase de Academia';
+    const dateLabel =
+      input.startsAt instanceof Date && !Number.isNaN(input.startsAt.getTime())
+        ? input.startsAt.toLocaleDateString('es-AR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+          })
+        : null;
+    const teacherLabel = String(input.teacherDisplayName || '').trim() || null;
+    return [label, teacherLabel, dateLabel].filter(Boolean).join(' · ');
   }
 
   async openAccount(input: OpenAccountInput) {
@@ -223,6 +241,22 @@ export class AccountService {
         packageName: string;
         priceAtPurchase: Prisma.Decimal | null;
         ownerClientId: string;
+      } | null = null;
+      let classEnrollmentForAccount: {
+        id: string;
+        enrollmentStatus: string;
+        paymentStatus: string;
+        priceAtEnrollment: Prisma.Decimal;
+        studentClientId: string;
+        billingResponsibleClientId: string | null;
+        snapshotName: string;
+        classSession: {
+          id: string;
+          clubId: number;
+          status: string;
+          startsAt: Date;
+          teacher: { displayName: string } | null;
+        };
       } | null = null;
       if (input.sourceType === 'BOOKING') {
         const booking = await tx.booking.findFirst({
@@ -269,6 +303,94 @@ export class AccountService {
           priceAtPurchase: classPass.priceAtPurchase,
           ownerClientId: String(classPass.ownerClientId),
         };
+      } else if (input.sourceType === 'CLASS_ENROLLMENT') {
+        const classEnrollment = await tx.classEnrollment.findFirst({
+          where: { id: input.sourceId, clubId: input.clubId },
+          select: {
+            id: true,
+            enrollmentStatus: true,
+            paymentStatus: true,
+            priceAtEnrollment: true,
+            studentClientId: true,
+            billingResponsibleClientId: true,
+            snapshotName: true,
+            classSession: {
+              select: {
+                id: true,
+                clubId: true,
+                status: true,
+                startsAt: true,
+                teacher: { select: { displayName: true } }
+              }
+            }
+          }
+        });
+        if (!classEnrollment) {
+          throw notFound('La inscripción de Academia no existe.', ErrorCodes.CLASS_ENROLLMENT_NOT_FOUND);
+        }
+        if (Number(classEnrollment.classSession.clubId) !== input.clubId) {
+          throw conflict(
+            'La inscripción no corresponde al club activo.',
+            ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+          );
+        }
+        if (classEnrollment.enrollmentStatus === 'CANCELLED') {
+          throw conflict(
+            'No se puede abrir cuenta para una inscripción cancelada.',
+            ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+          );
+        }
+        if (classEnrollment.classSession.status === 'CANCELLED') {
+          throw conflict(
+            'No se puede abrir cuenta para una clase cancelada.',
+            ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+          );
+        }
+        if (classEnrollment.paymentStatus === 'COVERED_BY_CREDIT') {
+          throw conflict(
+            'La inscripción ya está cubierta por crédito y no admite cuenta de cobro.',
+            ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+          );
+        }
+        if (classEnrollment.paymentStatus === 'REFUNDED') {
+          throw conflict(
+            'La inscripción está reembolsada y requiere revisión manual antes de cobrar.',
+            ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+          );
+        }
+        if (classEnrollment.paymentStatus === 'PAID') {
+          throw conflict(
+            'La inscripción ya figura como pagada. Revisá la trazabilidad antes de abrir una cuenta nueva.',
+            ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+          );
+        }
+        const priceAtEnrollment = Number(classEnrollment.priceAtEnrollment || 0);
+        if (!Number.isFinite(priceAtEnrollment) || priceAtEnrollment <= 0) {
+          throw badRequest(
+            'La inscripción necesita un precio mayor a 0 para abrir su cuenta.',
+            ErrorCodes.INVALID_INPUT
+          );
+        }
+        classEnrollmentForAccount = {
+          id: String(classEnrollment.id),
+          enrollmentStatus: String(classEnrollment.enrollmentStatus),
+          paymentStatus: String(classEnrollment.paymentStatus),
+          priceAtEnrollment: classEnrollment.priceAtEnrollment,
+          studentClientId: String(classEnrollment.studentClientId),
+          billingResponsibleClientId: classEnrollment.billingResponsibleClientId
+            ? String(classEnrollment.billingResponsibleClientId)
+            : null,
+          snapshotName: String(classEnrollment.snapshotName || '').trim(),
+          classSession: {
+            id: String(classEnrollment.classSession.id),
+            clubId: Number(classEnrollment.classSession.clubId),
+            status: String(classEnrollment.classSession.status),
+            startsAt: classEnrollment.classSession.startsAt,
+            teacher: classEnrollment.classSession.teacher
+              ? { displayName: String(classEnrollment.classSession.teacher.displayName || '').trim() }
+              : null,
+          },
+        };
       }
 
       const account = await tx.account.create({
@@ -278,7 +400,11 @@ export class AccountService {
           sourceType: input.sourceType,
           sourceId: input.sourceId,
           status: 'OPEN',
-          clientId: classPassForAccount?.ownerClientId ?? undefined,
+          clientId:
+            classPassForAccount?.ownerClientId ??
+            classEnrollmentForAccount?.billingResponsibleClientId ??
+            classEnrollmentForAccount?.studentClientId ??
+            undefined,
         }
       });
 
@@ -370,6 +496,44 @@ export class AccountService {
           amount: packCharge,
           revenueAccount: 'ACADEMY_REVENUE',
           description: `Pack Academia ${classPassForAccount.packageName || classPassForAccount.id}`
+        });
+      } else if (input.sourceType === 'CLASS_ENROLLMENT' && classEnrollmentForAccount) {
+        const enrollmentCharge = Number(classEnrollmentForAccount.priceAtEnrollment || 0);
+        const description =
+          this.buildClassEnrollmentAccountDescription({
+            snapshotName: classEnrollmentForAccount.snapshotName,
+            startsAt: classEnrollmentForAccount.classSession.startsAt,
+            teacherDisplayName: classEnrollmentForAccount.classSession.teacher?.displayName || null,
+          }) || 'Clase de Academia';
+
+        const enrollmentItem = await tx.accountItem.create({
+          data: {
+            accountId: account.id,
+            type: 'SERVICE',
+            description,
+            quantity: 1,
+            unitPrice: new Prisma.Decimal(enrollmentCharge),
+            total: new Prisma.Decimal(enrollmentCharge)
+          }
+        });
+
+        await tx.account.update({
+          where: { id: account.id },
+          data: {
+            totalAmount: { increment: new Prisma.Decimal(enrollmentCharge) }
+          }
+        });
+
+        await this.accountingService.createAccountItemTransaction(tx, {
+          clubId: input.clubId,
+          type: 'ACCOUNT_ITEM',
+          referenceType: 'CLASS_ENROLLMENT',
+          referenceId: classEnrollmentForAccount.id,
+          accountId: account.id,
+          accountItemId: enrollmentItem.id,
+          amount: enrollmentCharge,
+          revenueAccount: 'ACADEMY_REVENUE',
+          description
         });
       }
 

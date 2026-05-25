@@ -81,7 +81,7 @@ export class AccountController {
   create = async (req: Request, res: Response) => {
     try {
       const bodySchema = z.object({
-        sourceType: z.enum(['BOOKING', 'BAR', 'TABLE', 'MANUAL', 'CLASS_PASS']),
+        sourceType: z.enum(['BOOKING', 'BAR', 'TABLE', 'MANUAL', 'CLASS_PASS', 'CLASS_ENROLLMENT']),
         sourceId: z.string().trim().min(1)
       });
       const parsed = bodySchema.safeParse(req.body);

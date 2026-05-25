@@ -268,6 +268,34 @@ export type AdminClassPassAccount = {
   blockedReason: string | null;
 };
 
+export type AdminClassEnrollmentAccount = {
+  classEnrollmentId: string;
+  account: {
+    id: string;
+    displayCode: string | null;
+    clubId: number;
+    sourceType: string;
+    sourceId: string;
+    status: 'OPEN' | 'CLOSED';
+    totalAmount: number;
+    paidAmount: number;
+    createdAt: string;
+    closedAt: string | null;
+    client: { id: string; name: string; phone: string | null; email: string | null } | null;
+  } | null;
+  summary: {
+    accountId: string;
+    itemsTotal: number;
+    paymentsTotal: number;
+    remaining: number;
+    paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+    isBalanced: boolean;
+    status: 'OPEN' | 'CLOSED';
+  } | null;
+  financialStatus: 'NO_ACCOUNT' | 'PENDING' | 'PARTIAL' | 'PAID';
+  blockedReason: string | null;
+};
+
 export type AdminClassCreditUsage = {
   id: string;
   clubId: number;
@@ -1487,6 +1515,33 @@ export class ClubAdminService {
     );
     if (!res.ok) {
       throw await parseApiErrorResponse(res, 'Error al actualizar la asistencia');
+    }
+    return res.json();
+  }
+
+  static async getClassEnrollmentAccount(
+    slug: string,
+    enrollmentId: string
+  ): Promise<AdminClassEnrollmentAccount> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-enrollments/${enrollmentId}/account`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar la cuenta de la inscripción');
+    }
+    return res.json();
+  }
+
+  static async openClassEnrollmentAccount(
+    slug: string,
+    enrollmentId: string
+  ): Promise<AdminClassEnrollmentAccount> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-enrollments/${enrollmentId}/account`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al abrir la cuenta de la inscripción');
     }
     return res.json();
   }

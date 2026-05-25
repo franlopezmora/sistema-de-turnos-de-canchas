@@ -3,6 +3,9 @@ import { prisma } from '../../prisma';
 import { ErrorCodes, badRequest, conflict, notFound } from '../../errors';
 import { AcademyAdminValidationService } from './AcademyAdminValidation';
 import { normalizeOptionalString } from './academyAdminUtils';
+import { getDerivedPaymentStatus } from '../../domain/bookingDomain';
+import { AccountService } from '../AccountService';
+import { mapAccountDto } from '../../dto/financialDto';
 
 type CreateClassEnrollmentInput = {
   studentClientId: string;
@@ -45,8 +48,99 @@ type ClassEnrollmentSummary = {
   updatedAt: string;
 };
 
+type ClassEnrollmentAccountPayload = {
+  classEnrollmentId: string;
+  account: ReturnType<typeof mapAccountDto> | null;
+  summary: {
+    accountId: string;
+    itemsTotal: number;
+    paymentsTotal: number;
+    remaining: number;
+    paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+    isBalanced: boolean;
+    status: 'OPEN' | 'CLOSED';
+  } | null;
+  financialStatus: 'NO_ACCOUNT' | 'PENDING' | 'PARTIAL' | 'PAID';
+  blockedReason: string | null;
+};
+
 export class ClassEnrollmentAdminService {
   private readonly validation = new AcademyAdminValidationService();
+  private readonly accountService = new AccountService();
+
+  private buildAccountBlockedReason(row: {
+    enrollmentStatus: string;
+    classSessionStatus?: string | null;
+    paymentStatus: string;
+    priceAtEnrollment?: number | null;
+  }) {
+    if (String(row.enrollmentStatus) === 'CANCELLED') {
+      return 'No se puede abrir cuenta para una inscripción cancelada.';
+    }
+    if (row.classSessionStatus && String(row.classSessionStatus) === 'CANCELLED') {
+      return 'No se puede abrir cuenta para una clase cancelada.';
+    }
+    if (String(row.paymentStatus) === 'COVERED_BY_CREDIT') {
+      return 'La inscripción ya está cubierta por crédito.';
+    }
+    if (String(row.paymentStatus) === 'REFUNDED') {
+      return 'La inscripción está reembolsada y requiere revisión manual.';
+    }
+    if (String(row.paymentStatus) === 'PAID') {
+      return 'La inscripción ya figura como pagada.';
+    }
+    const priceAtEnrollment = Number(row.priceAtEnrollment || 0);
+    if (!Number.isFinite(priceAtEnrollment) || priceAtEnrollment <= 0) {
+      return 'Cargá un precio mayor a 0 para abrir la cuenta de esta clase.';
+    }
+    return null;
+  }
+
+  private mapAccountFinancial(
+    row: {
+      enrollmentStatus: string;
+      classSessionStatus?: string | null;
+      paymentStatus: string;
+      priceAtEnrollment?: number | null;
+    },
+    account?: {
+      id: string;
+      status: 'OPEN' | 'CLOSED';
+      totalAmount: Prisma.Decimal | number;
+      paidAmount: Prisma.Decimal | number;
+    } | null
+  ) {
+    if (!account) {
+      return {
+        accountId: null,
+        accountStatus: null,
+        state: 'NO_ACCOUNT' as const,
+        paymentStatus: null,
+        totalAmount: null,
+        paidAmount: null,
+        remainingAmount: null,
+        blockedReason: this.buildAccountBlockedReason(row),
+      };
+    }
+
+    const totalAmount = Number(account.totalAmount || 0);
+    const paidAmount = Number(account.paidAmount || 0);
+    const remainingAmount = Number(Math.max(0, totalAmount - paidAmount).toFixed(2));
+    const paymentStatus = getDerivedPaymentStatus(totalAmount, paidAmount);
+    const state: 'PENDING' | 'PARTIAL' | 'PAID' =
+      paymentStatus === 'PAID' ? 'PAID' : paymentStatus === 'PARTIAL' ? 'PARTIAL' : 'PENDING';
+
+    return {
+      accountId: String(account.id),
+      accountStatus: account.status,
+      state,
+      paymentStatus,
+      totalAmount,
+      paidAmount,
+      remainingAmount,
+      blockedReason: null,
+    };
+  }
 
   private mapRow(row: any): ClassEnrollmentSummary {
     return {
@@ -433,5 +527,111 @@ export class ClassEnrollmentAdminService {
     });
 
     return this.mapRow(updated);
+  }
+
+  async getAccount(clubId: number, enrollmentId: string): Promise<ClassEnrollmentAccountPayload> {
+    const enrollment = await prisma.classEnrollment.findFirst({
+      where: { id: String(enrollmentId), clubId },
+      select: {
+        id: true,
+        enrollmentStatus: true,
+        paymentStatus: true,
+        priceAtEnrollment: true,
+        classSession: {
+          select: {
+            status: true,
+          }
+        }
+      }
+    });
+    if (!enrollment) {
+      throw notFound('Inscripción no encontrada.', ErrorCodes.CLASS_ENROLLMENT_NOT_FOUND);
+    }
+
+    const account = await prisma.account.findFirst({
+      where: {
+        clubId,
+        sourceType: 'CLASS_ENROLLMENT',
+        sourceId: String(enrollment.id),
+      },
+    });
+
+    if (!account) {
+      return {
+        classEnrollmentId: String(enrollment.id),
+        account: null,
+        summary: null,
+        financialStatus: 'NO_ACCOUNT',
+        blockedReason: this.buildAccountBlockedReason({
+          enrollmentStatus: String(enrollment.enrollmentStatus || ''),
+          classSessionStatus: String(enrollment.classSession?.status || ''),
+          paymentStatus: String(enrollment.paymentStatus || ''),
+          priceAtEnrollment: Number(enrollment.priceAtEnrollment || 0),
+        }),
+      };
+    }
+
+    const summary = await this.accountService.getAccountSummary(clubId, account.id);
+    const financial = this.mapAccountFinancial(
+      {
+        enrollmentStatus: String(enrollment.enrollmentStatus || ''),
+        classSessionStatus: String(enrollment.classSession?.status || ''),
+        paymentStatus: String(enrollment.paymentStatus || ''),
+        priceAtEnrollment: Number(enrollment.priceAtEnrollment || 0),
+      },
+      {
+        id: String(account.id),
+        status: account.status,
+        totalAmount: account.totalAmount,
+        paidAmount: account.paidAmount,
+      }
+    );
+
+    return {
+      classEnrollmentId: String(enrollment.id),
+      account: mapAccountDto(account),
+      summary: {
+        accountId: summary.accountId,
+        itemsTotal: Number(summary.itemsTotal || 0),
+        paymentsTotal: Number(summary.paymentsTotal || 0),
+        remaining: Number(summary.remaining || 0),
+        paymentStatus: summary.paymentStatus,
+        isBalanced: Boolean(summary.isBalanced),
+        status: summary.status,
+      },
+      financialStatus: financial.state,
+      blockedReason: null,
+    };
+  }
+
+  async openAccount(clubId: number, enrollmentId: string): Promise<ClassEnrollmentAccountPayload> {
+    const enrollment = await prisma.classEnrollment.findFirst({
+      where: { id: String(enrollmentId), clubId },
+      select: {
+        id: true,
+        classSessionId: true,
+        studentClientId: true,
+        billingResponsibleClientId: true,
+      },
+    });
+    if (!enrollment) {
+      throw notFound('Inscripción no encontrada.', ErrorCodes.CLASS_ENROLLMENT_NOT_FOUND);
+    }
+
+    await Promise.all([
+      this.validation.assertClassSessionBelongsToClub(clubId, String(enrollment.classSessionId)),
+      this.validation.assertClientBelongsToClub(clubId, String(enrollment.studentClientId)),
+      enrollment.billingResponsibleClientId
+        ? this.validation.assertClientBelongsToClub(clubId, String(enrollment.billingResponsibleClientId))
+        : Promise.resolve(null),
+    ]);
+
+    await this.accountService.openAccount({
+      clubId,
+      sourceType: 'CLASS_ENROLLMENT',
+      sourceId: String(enrollment.id),
+    });
+
+    return this.getAccount(clubId, String(enrollment.id));
   }
 }

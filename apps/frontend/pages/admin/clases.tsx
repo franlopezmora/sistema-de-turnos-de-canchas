@@ -26,6 +26,7 @@ import {
   type AdminClassCreditUsage,
   type AdminClassCreditUsageReason,
   type AdminClassEnrollment,
+  type AdminClassEnrollmentAccount,
   type AdminClassEnrollmentStatus,
   type AdminClassPass,
   type AdminClassPaymentStatus,
@@ -367,7 +368,9 @@ const classPassStatusLabel = (status: AdminClassPass['status'] | string) => {
   }
 };
 
-const classPassFinancialStateLabel = (state: AdminClassPass['financial']['state']) => {
+const academyFinancialStateLabel = (
+  state: AdminClassPass['financial']['state'] | AdminClassEnrollmentAccount['financialStatus']
+) => {
   switch (state) {
     case 'PENDING':
       return 'Pendiente de cobro';
@@ -381,7 +384,9 @@ const classPassFinancialStateLabel = (state: AdminClassPass['financial']['state'
   }
 };
 
-const classPassFinancialToneClasses = (state: AdminClassPass['financial']['state']) => {
+const academyFinancialToneClasses = (
+  state: AdminClassPass['financial']['state'] | AdminClassEnrollmentAccount['financialStatus']
+) => {
   switch (state) {
     case 'PAID':
       return 'border-p-positive bg-p-positive-bg text-p-positive';
@@ -493,11 +498,13 @@ const resolveClassPassAvailability = ({
   enrollment,
   selectedClass,
   hasUsage,
+  enrollmentAccount,
 }: {
   classPass: AdminClassPass;
   enrollment: AdminClassEnrollment;
   selectedClass: AdminClassSession;
   hasUsage: boolean;
+  enrollmentAccount?: AdminClassEnrollmentAccount | null;
 }): ClassPassAvailability => {
   const reason = resolveCreditUsageReason(enrollment.attendanceStatus);
   const effectiveStatus = effectiveClassPassStatus(classPass);
@@ -517,6 +524,15 @@ const resolveClassPassAvailability = ({
       effectiveStatus,
       reason,
       disabledReason: 'El estado de pago actual ya no admite cubrir esta inscripción con crédito.',
+    };
+  }
+
+  if (enrollmentAccount?.account?.id) {
+    return {
+      usable: false,
+      effectiveStatus,
+      reason,
+      disabledReason: 'La inscripción ya tiene una cuenta financiera abierta. Cobrá o revisá esa cuenta antes de usar crédito.',
     };
   }
 
@@ -754,6 +770,8 @@ const translateClassPassError = (error: unknown, fallback: string) => {
       return 'Ese pack no aplica a esta clase o a este alumno.';
     case 'CLASS_CREDIT_USAGE_CONFLICT':
       return 'Ese crédito ya fue consumido o cambió mientras lo estabas registrando.';
+    case 'CLASS_ENROLLMENT_INVALID_STATUS':
+      return extractErrorMessage(normalized, 'La inscripción ya tiene una cuenta financiera o un estado que no admite crédito.');
     case 'CLASS_PASS_NOT_FOUND':
       return 'El pack elegido ya no está disponible.';
     case 'INVALID_INPUT':
@@ -774,6 +792,22 @@ const translateCreateClassPassError = (error: unknown, fallback: string) => {
       return 'No se pudo asignar el pack con los datos actuales del club.';
     case 'INVALID_INPUT':
       return extractErrorMessage(normalized, 'Revisá los datos del pack antes de guardarlo.');
+    default:
+      return extractErrorMessage(normalized, fallback);
+  }
+};
+
+const translateEnrollmentAccountError = (error: unknown, fallback: string) => {
+  const normalized = normalizeApiError(error, fallback);
+  switch (normalized.code) {
+    case 'CLASS_ENROLLMENT_INVALID_STATUS':
+      return extractErrorMessage(normalized, 'La inscripción no admite cobro en este estado.');
+    case 'CLASS_ENROLLMENT_NOT_FOUND':
+      return 'La inscripción ya no está disponible.';
+    case 'CLIENT_NOT_FOUND':
+      return 'El alumno o responsable de pago ya no pertenece a este club.';
+    case 'INVALID_INPUT':
+      return extractErrorMessage(normalized, 'La inscripción necesita un precio válido para abrir su cuenta.');
     default:
       return extractErrorMessage(normalized, fallback);
   }
@@ -876,6 +910,16 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
   const [classPassFormError, setClassPassFormError] = useState('');
   const [classPassFieldErrors, setClassPassFieldErrors] = useState<Record<string, string>>({});
   const [classPassSubmitting, setClassPassSubmitting] = useState(false);
+  const [editingEnrollmentAccount, setEditingEnrollmentAccount] = useState<AdminClassEnrollmentAccount | null>(null);
+  const [editingEnrollmentAccountLoading, setEditingEnrollmentAccountLoading] = useState(false);
+  const [editingEnrollmentAccountError, setEditingEnrollmentAccountError] = useState('');
+  const [classEnrollmentAccountBusyId, setClassEnrollmentAccountBusyId] = useState<string | null>(null);
+  const [classEnrollmentAccountDrawerOpen, setClassEnrollmentAccountDrawerOpen] = useState(false);
+  const [classEnrollmentAccountId, setClassEnrollmentAccountId] = useState<string | null>(null);
+  const [classEnrollmentAccountInitialView, setClassEnrollmentAccountInitialView] =
+    useState<AccountDrawerInitialView>('overview');
+  const [classEnrollmentAccountContext, setClassEnrollmentAccountContext] =
+    useState<AccountDrawerContext | undefined>(undefined);
   const [classPassAccountBusyId, setClassPassAccountBusyId] = useState<string | null>(null);
   const [classPassAccountDrawerOpen, setClassPassAccountDrawerOpen] = useState(false);
   const [classPassAccountId, setClassPassAccountId] = useState<string | null>(null);
@@ -1024,6 +1068,32 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
     [clubSlug]
   );
 
+  const loadEnrollmentAccount = useCallback(
+    async (enrollmentId: string) => {
+      if (!clubSlug) {
+        setEditingEnrollmentAccount(null);
+        setEditingEnrollmentAccountLoading(false);
+        setEditingEnrollmentAccountError('');
+        return;
+      }
+      try {
+        setEditingEnrollmentAccountLoading(true);
+        setEditingEnrollmentAccountError('');
+        const payload = await ClubAdminService.getClassEnrollmentAccount(clubSlug, enrollmentId);
+        setEditingEnrollmentAccount(payload);
+      } catch (error) {
+        reportUiError({ area: 'AdminClassesPage', action: 'loadEnrollmentAccount' }, error);
+        setEditingEnrollmentAccount(null);
+        setEditingEnrollmentAccountError(
+          translateEnrollmentAccountError(error, 'No se pudo cargar la cuenta de esta inscripción.')
+        );
+      } finally {
+        setEditingEnrollmentAccountLoading(false);
+      }
+    },
+    [clubSlug]
+  );
+
   useEffect(() => {
     void loadClassSessions();
     void loadOptions();
@@ -1123,6 +1193,16 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
     void loadEnrollmentCreditUsages(editingEnrollmentId);
   }, [editingEnrollmentId, enrollmentModalOpen, loadEnrollmentCreditUsages]);
 
+  useEffect(() => {
+    if (!editingEnrollmentId || !enrollmentModalOpen) {
+      setEditingEnrollmentAccount(null);
+      setEditingEnrollmentAccountError('');
+      setEditingEnrollmentAccountLoading(false);
+      return;
+    }
+    void loadEnrollmentAccount(editingEnrollmentId);
+  }, [editingEnrollmentId, enrollmentModalOpen, loadEnrollmentAccount]);
+
   const resetClassForm = useCallback(() => {
     setForm(buildEmptyClassForm());
     setFormError('');
@@ -1141,6 +1221,9 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
     setClassPassForm(null);
     setClassPassFormError('');
     setClassPassFieldErrors({});
+    setEditingEnrollmentAccount(null);
+    setEditingEnrollmentAccountError('');
+    setEditingEnrollmentAccountLoading(false);
   }, []);
 
   const openCreateModal = useCallback(() => {
@@ -1362,6 +1445,13 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
     setClassPassAccountStudentClientId(null);
   }, []);
 
+  const closeClassEnrollmentAccountDrawer = useCallback(() => {
+    setClassEnrollmentAccountDrawerOpen(false);
+    setClassEnrollmentAccountId(null);
+    setClassEnrollmentAccountInitialView('overview');
+    setClassEnrollmentAccountContext(undefined);
+  }, []);
+
   const openClassPassAccountDrawer = useCallback(
     async (classPass: AdminClassPass) => {
       if (!clubSlug || classPassAccountBusyId) return;
@@ -1405,6 +1495,57 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
       }
     },
     [classPassAccountBusyId, clubSlug, loadClassPassesForStudents]
+  );
+
+  const openClassEnrollmentAccountDrawer = useCallback(
+    async (enrollment: AdminClassEnrollment) => {
+      if (!clubSlug || classEnrollmentAccountBusyId || !selectedClass) return;
+
+      try {
+        setClassEnrollmentAccountBusyId(enrollment.id);
+        setEditingEnrollmentAccountError('');
+        let payload = editingEnrollmentAccount;
+        if (!payload || payload.classEnrollmentId !== enrollment.id) {
+          payload = await ClubAdminService.getClassEnrollmentAccount(clubSlug, enrollment.id);
+          setEditingEnrollmentAccount(payload);
+        }
+
+        let accountId = payload.account?.id || null;
+        let initialView: AccountDrawerInitialView = 'overview';
+
+        if (!accountId) {
+          payload = await ClubAdminService.openClassEnrollmentAccount(clubSlug, enrollment.id);
+          setEditingEnrollmentAccount(payload);
+          accountId = payload.account?.id || null;
+          initialView = 'payment';
+          showAdminToast('Cuenta de la clase lista para cobrar.');
+        } else if (payload.financialStatus === 'PENDING' || payload.financialStatus === 'PARTIAL') {
+          initialView = 'payment';
+        }
+
+        if (!accountId) {
+          throw new Error(payload.blockedReason || 'No se pudo resolver la cuenta de la clase.');
+        }
+
+        setClassEnrollmentAccountId(accountId);
+        setClassEnrollmentAccountInitialView(initialView);
+        setClassEnrollmentAccountContext({
+          title: `Cuenta clase · ${enrollment.snapshotName}`,
+          subtitle: selectedClass.teacher?.displayName
+            ? `${selectedClass.teacher.displayName} · ${formatDateRange(selectedClass.startsAt, selectedClass.endsAt)}`
+            : 'Cuenta financiera de la inscripción de Academia',
+        });
+        setClassEnrollmentAccountDrawerOpen(true);
+      } catch (error) {
+        reportUiError({ area: 'AdminClassesPage', action: 'openClassEnrollmentAccountDrawer' }, error);
+        const message = translateEnrollmentAccountError(error, 'No se pudo abrir la cuenta de la clase.');
+        setEditingEnrollmentAccountError(message);
+        setEnrollmentFormError(message);
+      } finally {
+        setClassEnrollmentAccountBusyId(null);
+      }
+    },
+    [classEnrollmentAccountBusyId, clubSlug, editingEnrollmentAccount, selectedClass]
   );
 
   const studentSearch = usePersonSearchResults(
@@ -1889,6 +2030,11 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
       attendanceStatus: editingEnrollmentId ? enrollmentForm.attendanceStatus : editingEnrollment.attendanceStatus,
     };
   }, [editingEnrollment, editingEnrollmentId, enrollmentForm.attendanceStatus]);
+  const editingEnrollmentFinancial = useMemo(() => {
+    if (!editingEnrollment || !editingEnrollmentAccount) return null;
+    if (editingEnrollmentAccount.classEnrollmentId !== editingEnrollment.id) return null;
+    return editingEnrollmentAccount;
+  }, [editingEnrollment, editingEnrollmentAccount]);
   const classFormContent = (
     <form id="class-session-form" onSubmit={submitForm} className="space-y-4">
       {formError && <AdminInlineError>{formError}</AdminInlineError>}
@@ -2625,6 +2771,75 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                   />
                 </div>
 
+                <div className="rounded-xl border border-p-border bg-p-surface px-4 py-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[13px] font-semibold text-p-text">Cuenta de la clase</p>
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${academyFinancialToneClasses(
+                            editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT'
+                          )}`}
+                        >
+                          {editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT'
+                            ? 'Cubierto por crédito'
+                            : editingEnrollment.paymentStatus === 'REFUNDED'
+                              ? 'Reintegrado'
+                              : academyFinancialStateLabel(editingEnrollmentFinancial?.financialStatus || 'NO_ACCOUNT')}
+                        </span>
+                        {editingEnrollmentFinancial?.summary?.remaining != null ? (
+                          <span className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
+                            Pendiente: {formatCurrency(editingEnrollmentFinancial.summary.remaining)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-[12px] text-p-text-secondary">
+                        {editingEnrollment.priceAtEnrollment > 0
+                          ? `Precio de la inscripción: ${formatCurrency(editingEnrollment.priceAtEnrollment)}`
+                          : 'La inscripción no tiene precio cargado para abrir cuenta.'}
+                      </p>
+                      {editingEnrollmentAccountLoading ? (
+                        <p className="mt-2 text-[12px] text-p-text-muted">Cargando estado financiero...</p>
+                      ) : editingEnrollmentAccountError ? (
+                        <p className="mt-2 text-[12px] text-[var(--error-fg)]">{editingEnrollmentAccountError}</p>
+                      ) : editingEnrollmentFinancial?.blockedReason ? (
+                        <p className="mt-2 text-[12px] text-p-text-muted">{editingEnrollmentFinancial.blockedReason}</p>
+                      ) : editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT' ? (
+                        <p className="mt-2 text-[12px] text-p-text-muted">
+                          Esta inscripción quedó cubierta por crédito. No se abre una cuenta de cobro en esta fase.
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-[12px] text-p-text-muted">
+                          Cobrar la clase usa la cuenta financiera canónica. No modifica créditos ni asistencia.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col items-start gap-2 md:items-end">
+                      <button
+                        type="button"
+                        disabled={
+                          classEnrollmentAccountBusyId === editingEnrollment.id ||
+                          editingEnrollmentAccountLoading ||
+                          Boolean(editingEnrollmentFinancial?.blockedReason) ||
+                          editingEnrollment.paymentStatus === 'COVERED_BY_CREDIT' ||
+                          editingEnrollment.paymentStatus === 'REFUNDED'
+                        }
+                        onClick={() => void openClassEnrollmentAccountDrawer(editingEnrollment)}
+                        className="inline-flex h-8 items-center justify-center rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text transition hover:border-p-border-strong hover:text-p-text disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {classEnrollmentAccountBusyId === editingEnrollment.id
+                          ? 'Abriendo cuenta...'
+                          : editingEnrollmentFinancial?.account?.id
+                            ? editingEnrollmentFinancial.financialStatus === 'PAID'
+                              ? 'Ver cuenta'
+                              : 'Cobrar clase'
+                            : 'Abrir cuenta de la clase'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {resolveCreditUsageReason(editingEnrollmentForCredit.attendanceStatus) === 'MANUAL_ADJUSTMENT' ? (
                   <div className="rounded-xl border border-p-border-strong bg-p-surface px-3 py-3 text-[12px] text-p-text-secondary">
                     <p className="font-semibold text-p-text">Consumo manual</p>
@@ -2679,6 +2894,7 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                         enrollment: editingEnrollmentForCredit,
                         selectedClass,
                         hasUsage,
+                        enrollmentAccount: editingEnrollmentFinancial,
                       });
                       const restrictionItems = buildClassPassRestrictionList(classPass);
                       const ownerIsDifferent =
@@ -2708,11 +2924,11 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                               </p>
                               <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <span
-                                  className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classPassFinancialToneClasses(
+                                  className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${academyFinancialToneClasses(
                                     classPass.financial.state
                                   )}`}
                                 >
-                                  {classPassFinancialStateLabel(classPass.financial.state)}
+                                  {academyFinancialStateLabel(classPass.financial.state)}
                                 </span>
                                 {classPass.financial.remainingAmount != null ? (
                                   <span className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
@@ -2826,6 +3042,19 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
       >
         {classPassFormContent}
       </AdminDrawer>
+
+      <AccountDrawer
+        accountId={classEnrollmentAccountId}
+        open={classEnrollmentAccountDrawerOpen}
+        initialView={classEnrollmentAccountInitialView}
+        context={classEnrollmentAccountContext}
+        onClose={closeClassEnrollmentAccountDrawer}
+        onSuccess={async (_event, _meta?: AccountDrawerSuccessMeta) => {
+          if (!selectedClass || !editingEnrollmentId) return;
+          await loadEnrollments(selectedClass.id);
+          await loadEnrollmentAccount(editingEnrollmentId);
+        }}
+      />
 
       <AccountDrawer
         accountId={classPassAccountId}

@@ -600,6 +600,20 @@ router.patch('/:slug/admin/class-sessions/:classSessionId/enrollments/:enrollmen
     classEnrollmentAdminController.setAttendanceStatus
 );
 
+router.get('/:slug/admin/class-enrollments/:enrollmentId/account',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classEnrollmentAdminController.getAccount
+);
+
+router.post('/:slug/admin/class-enrollments/:enrollmentId/account',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classEnrollmentAdminController.openAccount
+);
+
 router.get('/:slug/admin/class-passes',
     authMiddleware,
     verifyClubAccess,

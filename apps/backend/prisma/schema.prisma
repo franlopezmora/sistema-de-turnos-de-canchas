@@ -79,6 +79,7 @@ enum AccountSource {
   TABLE
   MANUAL
   CLASS_PASS
+  CLASS_ENROLLMENT
 }
 
 enum AccountStatus {
@@ -156,6 +157,7 @@ enum LedgerReferenceType {
   REFUND
   BOOKING
   CLASS_PASS
+  CLASS_ENROLLMENT
   MANUAL
 }
 

@@ -10,6 +10,7 @@ import { BookingDomainService } from './BookingDomainService';
 import { AccountService } from './AccountService';
 import { generateDisplayCode } from '../utils/displayCode';
 import { BookingHistoryService } from './BookingHistoryService';
+import { getDerivedPaymentStatus } from '../domain/bookingDomain';
 
 const EPSILON = 0.009;
 
@@ -97,6 +98,50 @@ export class PaymentService {
     if (userName) return userName;
 
     return null;
+  }
+
+  private async syncClassEnrollmentFinancialStateTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      clubId: number;
+      enrollmentId: string;
+      total: number;
+      netPaid: number;
+    }
+  ) {
+    const enrollment = await tx.classEnrollment.findFirst({
+      where: {
+        id: params.enrollmentId,
+        clubId: params.clubId,
+      },
+      select: {
+        id: true,
+        paymentStatus: true,
+      }
+    });
+
+    if (!enrollment) {
+      throw notFound(
+        'La inscripción asociada a la cuenta no existe.',
+        ErrorCodes.CLASS_ENROLLMENT_NOT_FOUND
+      );
+    }
+
+    if (String(enrollment.paymentStatus) === 'COVERED_BY_CREDIT') {
+      throw conflict(
+        'La inscripción ya está cubierta por crédito y no admite sincronización de cobro.',
+        ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+      );
+    }
+
+    const nextPaymentStatus = getDerivedPaymentStatus(params.total, params.netPaid);
+    await tx.classEnrollment.update({
+      where: { id: params.enrollmentId },
+      data: {
+        paymentStatus: nextPaymentStatus,
+        paidAmount: new Prisma.Decimal(this.roundMoney(params.netPaid)),
+      }
+    });
   }
 
   private async getAllocatedByItemTx(
@@ -459,7 +504,16 @@ export class PaymentService {
         createdByUserId: input.createdByUserId ?? null
       });
 
-      await this.accountService.reconcilePaidAmountTx(tx, account.id, { updateStatus: true });
+      const accountBalance = await this.accountService.reconcilePaidAmountTx(tx, account.id, { updateStatus: true });
+
+      if (account.sourceType === 'CLASS_ENROLLMENT') {
+        await this.syncClassEnrollmentFinancialStateTx(tx, {
+          clubId: account.clubId,
+          enrollmentId: String(account.sourceId),
+          total: accountBalance.total,
+          netPaid: accountBalance.netPaid,
+        });
+      }
 
       if (source === 'POS' && resolvedCashShiftId) {
         const movementMethod: CashMovementMethod =

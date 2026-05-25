@@ -84,6 +84,17 @@ export class ClassEnrollmentAdminController {
     }
   };
 
+  getAccount = async (req: Request & { clubId?: number }, res: Response) => {
+    try {
+      const clubId = this.resolveClubId(req);
+      const enrollmentId = this.resolveEnrollmentId(req.params.enrollmentId);
+      const payload = await this.service.getAccount(clubId, enrollmentId);
+      return res.json(payload);
+    } catch (error) {
+      return sendAppError(res, error, 'No se pudo obtener la cuenta de la inscripción.');
+    }
+  };
+
   create = async (req: Request & { clubId?: number }, res: Response) => {
     try {
       const clubId = this.resolveClubId(req);
@@ -184,6 +195,17 @@ export class ClassEnrollmentAdminController {
       return res.json(updated);
     } catch (error) {
       return sendAppError(res, error, 'No se pudo actualizar la asistencia.');
+    }
+  };
+
+  openAccount = async (req: Request & { clubId?: number }, res: Response) => {
+    try {
+      const clubId = this.resolveClubId(req);
+      const enrollmentId = this.resolveEnrollmentId(req.params.enrollmentId);
+      const payload = await this.service.openAccount(clubId, enrollmentId);
+      return res.json(payload);
+    } catch (error) {
+      return sendAppError(res, error, 'No se pudo abrir la cuenta de la inscripción.');
     }
   };
 }

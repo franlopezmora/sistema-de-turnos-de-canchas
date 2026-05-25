@@ -293,6 +293,30 @@ export class ClassCreditUsageAdminService {
           );
         }
 
+        const classEnrollmentAccount = await tx.account.findFirst({
+          where: {
+            clubId,
+            sourceType: 'CLASS_ENROLLMENT',
+            sourceId: safeEnrollmentId,
+          },
+          select: {
+            id: true,
+            totalAmount: true,
+            paidAmount: true,
+          },
+        });
+
+        if (classEnrollmentAccount) {
+          const paidAmount = Number(classEnrollmentAccount.paidAmount || 0);
+          const totalAmount = Number(classEnrollmentAccount.totalAmount || 0);
+          if (paidAmount > 0.009 || totalAmount > 0.009) {
+            throw conflict(
+              'La inscripción ya tiene una cuenta financiera abierta o registrada. Revisá la cuenta antes de cubrirla con crédito.',
+              ErrorCodes.CLASS_ENROLLMENT_INVALID_STATUS
+            );
+          }
+        }
+
         const usage = await tx.classCreditUsage.create({
           data: {
             clubId,

@@ -5,7 +5,7 @@
 export type CashAccountItem = {
   id: string;
   status: 'OPEN' | 'CLOSED';
-  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
+  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS' | 'CLASS_ENROLLMENT';
   hasDebt: boolean;
   booking?: {
     id?: number;
@@ -43,6 +43,7 @@ const sourceLabel: Record<CashAccountItem['sourceType'], string> = {
   TABLE: 'Mesa',
   MANUAL: 'Manual',
   CLASS_PASS: 'Pack de clases',
+  CLASS_ENROLLMENT: 'Clase',
 };
 
 const shortId = (value: string): string => {
