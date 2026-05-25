@@ -635,6 +635,20 @@ router.patch('/:slug/admin/class-passes/:id/status',
     classPassAdminController.setStatus
 );
 
+router.get('/:slug/admin/class-passes/:passId/account',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole(['ADMIN', 'STAFF']),
+    classPassAdminController.getAccount
+);
+
+router.post('/:slug/admin/class-passes/:passId/account',
+    authMiddleware,
+    verifyClubAccess,
+    requireTenantRole('ADMIN'),
+    classPassAdminController.openAccount
+);
+
 router.get('/:slug/admin/class-passes/:passId/usages',
     authMiddleware,
     verifyClubAccess,

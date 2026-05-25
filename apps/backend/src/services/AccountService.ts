@@ -13,7 +13,7 @@ const EPSILON = 0.009;
 
 type OpenAccountInput = {
   clubId: number;
-  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
+  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
   sourceId: string;
 };
 
@@ -104,7 +104,7 @@ export class AccountService {
   }
 
   async cancelItemsForSourceTx(tx: Prisma.TransactionClient, input: {
-    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
+    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
     sourceId: string | number;
   }) {
     const sourceId = String(input.sourceId);
@@ -181,7 +181,7 @@ export class AccountService {
   }
 
   async cancelItemsForSource(input: {
-    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
+    sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
     sourceId: string | number;
   }) {
     return prisma.$transaction(async (tx) => {
@@ -217,6 +217,13 @@ export class AccountService {
         clientId: string;
         activityId: number;
       } | null = null;
+      let classPassForAccount: {
+        id: string;
+        status: string;
+        packageName: string;
+        priceAtPurchase: Prisma.Decimal | null;
+        ownerClientId: string;
+      } | null = null;
       if (input.sourceType === 'BOOKING') {
         const booking = await tx.booking.findFirst({
           where: { id: Number(input.sourceId), clubId: input.clubId },
@@ -233,6 +240,35 @@ export class AccountService {
           clientId: string;
           activityId: number;
         };
+      } else if (input.sourceType === 'CLASS_PASS') {
+        const classPass = await tx.classPass.findFirst({
+          where: { id: input.sourceId, clubId: input.clubId },
+          select: {
+            id: true,
+            status: true,
+            packageName: true,
+            priceAtPurchase: true,
+            ownerClientId: true,
+          }
+        });
+        if (!classPass) throw notFound('El pack de clases no existe.', ErrorCodes.CLASS_PASS_NOT_FOUND);
+        if (classPass.status === 'CANCELLED') {
+          throw conflict('No se puede abrir cuenta para un pack cancelado.', ErrorCodes.CLASS_PASS_INVALID_STATUS);
+        }
+        const priceAtPurchase = Number(classPass.priceAtPurchase || 0);
+        if (!Number.isFinite(priceAtPurchase) || priceAtPurchase <= 0) {
+          throw badRequest(
+            'El pack necesita un precio mayor a 0 para abrir su cuenta.',
+            ErrorCodes.INVALID_INPUT
+          );
+        }
+        classPassForAccount = {
+          id: String(classPass.id),
+          status: String(classPass.status),
+          packageName: String(classPass.packageName || '').trim(),
+          priceAtPurchase: classPass.priceAtPurchase,
+          ownerClientId: String(classPass.ownerClientId),
+        };
       }
 
       const account = await tx.account.create({
@@ -241,7 +277,8 @@ export class AccountService {
           displayCode: generateDisplayCode('CTA'),
           sourceType: input.sourceType,
           sourceId: input.sourceId,
-          status: 'OPEN'
+          status: 'OPEN',
+          clientId: classPassForAccount?.ownerClientId ?? undefined,
         }
       });
 
@@ -303,6 +340,37 @@ export class AccountService {
             });
           }
         }
+      } else if (input.sourceType === 'CLASS_PASS' && classPassForAccount) {
+        const packCharge = Number(classPassForAccount.priceAtPurchase || 0);
+        const passItem = await tx.accountItem.create({
+          data: {
+            accountId: account.id,
+            type: 'SERVICE',
+            description: classPassForAccount.packageName || 'Pack de clases',
+            quantity: 1,
+            unitPrice: new Prisma.Decimal(packCharge),
+            total: new Prisma.Decimal(packCharge)
+          }
+        });
+
+        await tx.account.update({
+          where: { id: account.id },
+          data: {
+            totalAmount: { increment: new Prisma.Decimal(packCharge) }
+          }
+        });
+
+        await this.accountingService.createAccountItemTransaction(tx, {
+          clubId: input.clubId,
+          type: 'ACCOUNT_ITEM',
+          referenceType: 'CLASS_PASS',
+          referenceId: classPassForAccount.id,
+          accountId: account.id,
+          accountItemId: passItem.id,
+          amount: packCharge,
+          revenueAccount: 'ACADEMY_REVENUE',
+          description: `Pack Academia ${classPassForAccount.packageName || classPassForAccount.id}`
+        });
       }
 
       await this.projectionService.refreshAccountSummary(account.id, tx);

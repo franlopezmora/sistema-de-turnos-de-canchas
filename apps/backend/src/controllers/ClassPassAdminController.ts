@@ -9,6 +9,11 @@ const optionalNumber = z.preprocess(
   z.number().int().positive().optional()
 );
 
+const optionalMoney = z.preprocess(
+  (value) => (value === undefined || value === null || value === '' ? undefined : Number(value)),
+  z.number().positive().optional()
+);
+
 const optionalDateTime = z.preprocess((value) => {
   if (value === undefined || value === null || value === '') return undefined;
   return value;
@@ -25,6 +30,7 @@ const createClassPassSchema = z.object({
   beneficiaryClientId: z.string().trim().min(1),
   beneficiaryUserId: optionalNumber.nullable().optional(),
   packageName: z.string().trim().min(2).max(160),
+  priceAtPurchase: optionalMoney.nullable().optional(),
   totalCredits: z.number().int().positive(),
   expiresAt: optionalDateTime.nullable().optional(),
   activityTypeId: optionalNumber.nullable().optional(),
@@ -97,6 +103,17 @@ export class ClassPassAdminController {
     }
   };
 
+  getAccount = async (req: Request & { clubId?: number }, res: Response) => {
+    try {
+      const clubId = this.resolveClubId(req);
+      const classPassId = this.resolveClassPassId(req.params.passId);
+      const payload = await this.service.getAccount(clubId, classPassId);
+      return res.json(payload);
+    } catch (error) {
+      return sendAppError(res, error, 'No se pudo obtener la cuenta del pack.');
+    }
+  };
+
   create = async (req: Request & { clubId?: number }, res: Response) => {
     try {
       const clubId = this.resolveClubId(req);
@@ -112,6 +129,7 @@ export class ClassPassAdminController {
         beneficiaryClientId: sanitizeString(parsed.data.beneficiaryClientId, 120),
         beneficiaryUserId: parsed.data.beneficiaryUserId ?? undefined,
         packageName: sanitizeString(parsed.data.packageName, 160),
+        priceAtPurchase: parsed.data.priceAtPurchase ?? undefined,
         totalCredits: parsed.data.totalCredits,
         expiresAt: parsed.data.expiresAt ?? undefined,
         activityTypeId: parsed.data.activityTypeId ?? undefined,
@@ -175,6 +193,17 @@ export class ClassPassAdminController {
       return res.json(updated);
     } catch (error) {
       return sendAppError(res, error, 'No se pudo actualizar el estado del pack.');
+    }
+  };
+
+  openAccount = async (req: Request & { clubId?: number }, res: Response) => {
+    try {
+      const clubId = this.resolveClubId(req);
+      const classPassId = this.resolveClassPassId(req.params.passId);
+      const payload = await this.service.openAccount(clubId, classPassId);
+      return res.json(payload);
+    } catch (error) {
+      return sendAppError(res, error, 'No se pudo abrir la cuenta del pack.');
     }
   };
 }

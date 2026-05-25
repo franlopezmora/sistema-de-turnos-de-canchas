@@ -206,6 +206,7 @@ export type AdminClassPass = {
   beneficiaryClientId: string;
   beneficiaryUserId: number | null;
   packageName: string;
+  priceAtPurchase: number | null;
   totalCredits: number;
   usedCredits: number;
   remainingCredits: number;
@@ -227,6 +228,44 @@ export type AdminClassPass = {
   createdByUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
   createdAt: string;
   updatedAt: string;
+  financial: {
+    accountId: string | null;
+    accountStatus: 'OPEN' | 'CLOSED' | null;
+    state: 'NO_ACCOUNT' | 'PENDING' | 'PARTIAL' | 'PAID';
+    paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' | null;
+    totalAmount: number | null;
+    paidAmount: number | null;
+    remainingAmount: number | null;
+    blockedReason: string | null;
+  };
+};
+
+export type AdminClassPassAccount = {
+  classPassId: string;
+  account: {
+    id: string;
+    displayCode: string | null;
+    clubId: number;
+    sourceType: string;
+    sourceId: string;
+    status: 'OPEN' | 'CLOSED';
+    totalAmount: number;
+    paidAmount: number;
+    createdAt: string;
+    closedAt: string | null;
+    client: { id: string; name: string; phone: string | null; email: string | null } | null;
+  } | null;
+  summary: {
+    accountId: string;
+    itemsTotal: number;
+    paymentsTotal: number;
+    remaining: number;
+    paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+    isBalanced: boolean;
+    status: 'OPEN' | 'CLOSED';
+  } | null;
+  financialStatus: 'NO_ACCOUNT' | 'PENDING' | 'PARTIAL' | 'PAID';
+  blockedReason: string | null;
 };
 
 export type AdminClassCreditUsage = {
@@ -1488,6 +1527,7 @@ export class ClubAdminService {
       beneficiaryClientId: string;
       beneficiaryUserId?: number | null;
       packageName: string;
+      priceAtPurchase?: number | null;
       totalCredits: number;
       expiresAt?: string | null;
       activityTypeId?: number | null;
@@ -1544,6 +1584,27 @@ export class ClubAdminService {
     });
     if (!res.ok) {
       throw await parseApiErrorResponse(res, 'Error al actualizar el estado del pack');
+    }
+    return res.json();
+  }
+
+  static async getClassPassAccount(slug: string, classPassId: string): Promise<AdminClassPassAccount> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes/${classPassId}/account`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al cargar la cuenta del pack');
+    }
+    return res.json();
+  }
+
+  static async openClassPassAccount(slug: string, classPassId: string): Promise<AdminClassPassAccount> {
+    const res = await fetchWithAuth(`${apiBase()}/clubs/${slug}/admin/class-passes/${classPassId}/account`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      throw await parseApiErrorResponse(res, 'Error al abrir la cuenta del pack');
     }
     return res.json();
   }

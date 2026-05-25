@@ -78,6 +78,7 @@ enum AccountSource {
   BAR
   TABLE
   MANUAL
+  CLASS_PASS
 }
 
 enum AccountStatus {
@@ -154,6 +155,7 @@ enum LedgerReferenceType {
   PAYMENT
   REFUND
   BOOKING
+  CLASS_PASS
   MANUAL
 }
 
@@ -170,6 +172,7 @@ enum LedgerAccount {
   ACCOUNTS_RECEIVABLE
   BOOKING_REVENUE
   BAR_REVENUE
+  ACADEMY_REVENUE
   ADJUSTMENTS
   EXPENSE
 }
@@ -899,6 +902,7 @@ model ClassPass {
   beneficiaryUser   User? @relation("ClassPassBeneficiaryUser", fields: [beneficiaryUserId], references: [id], onDelete: SetNull)
 
   packageName      String
+  priceAtPurchase  Decimal? @db.Decimal(10, 2)
   totalCredits     Int
   usedCredits      Int @default(0)
   remainingCredits Int

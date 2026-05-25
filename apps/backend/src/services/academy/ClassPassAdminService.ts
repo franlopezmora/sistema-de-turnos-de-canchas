@@ -2,6 +2,9 @@ import { prisma } from '../../prisma';
 import { ErrorCodes, badRequest, conflict, notFound } from '../../errors';
 import { AcademyAdminValidationService } from './AcademyAdminValidation';
 import { normalizeOptionalString, parseDateTimeOrThrow } from './academyAdminUtils';
+import { getDerivedPaymentStatus } from '../../domain/bookingDomain';
+import { AccountService } from '../AccountService';
+import { mapAccountDto } from '../../dto/financialDto';
 
 type ClassPassClassTypeValue = 'INDIVIDUAL' | 'GROUP';
 type ClassPassStatusValue = 'ACTIVE' | 'EXPIRED' | 'DEPLETED' | 'CANCELLED';
@@ -12,6 +15,7 @@ type CreateClassPassInput = {
   beneficiaryClientId: string;
   beneficiaryUserId?: number | null;
   packageName: string;
+  priceAtPurchase?: number | null;
   totalCredits: number;
   expiresAt?: string | Date | null;
   activityTypeId?: number | null;
@@ -39,6 +43,7 @@ type ClassPassSummary = {
   beneficiaryClientId: string;
   beneficiaryUserId: number | null;
   packageName: string;
+  priceAtPurchase: number | null;
   totalCredits: number;
   usedCredits: number;
   remainingCredits: number;
@@ -60,10 +65,37 @@ type ClassPassSummary = {
   createdByUser: { id: number; email: string; firstName: string | null; lastName: string | null } | null;
   createdAt: string;
   updatedAt: string;
+  financial: {
+    accountId: string | null;
+    accountStatus: 'OPEN' | 'CLOSED' | null;
+    state: 'NO_ACCOUNT' | 'PENDING' | 'PARTIAL' | 'PAID';
+    paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID' | null;
+    totalAmount: number | null;
+    paidAmount: number | null;
+    remainingAmount: number | null;
+    blockedReason: string | null;
+  };
+};
+
+type ClassPassAccountPayload = {
+  classPassId: string;
+  account: ReturnType<typeof mapAccountDto> | null;
+  summary: {
+    accountId: string;
+    itemsTotal: number;
+    paymentsTotal: number;
+    remaining: number;
+    paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+    isBalanced: boolean;
+    status: 'OPEN' | 'CLOSED';
+  } | null;
+  financialStatus: 'NO_ACCOUNT' | 'PENDING' | 'PARTIAL' | 'PAID';
+  blockedReason: string | null;
 };
 
 export class ClassPassAdminService {
   private readonly validation = new AcademyAdminValidationService();
+  private readonly accountService = new AccountService();
 
   private effectiveStatus(row: { status: string; expiresAt?: Date | string | null; remainingCredits?: number | null }) {
     const remainingCredits = Number(row.remainingCredits ?? 0);
@@ -78,7 +110,75 @@ export class ClassPassAdminService {
     return 'ACTIVE' as const;
   }
 
-  private mapRow(row: any): ClassPassSummary {
+  private parseOptionalMoney(value: number | null | undefined) {
+    if (value === null || value === undefined) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw badRequest('El precio del pack debe ser mayor a 0.', ErrorCodes.INVALID_INPUT);
+    }
+    return Number(parsed.toFixed(2));
+  }
+
+  private buildAccountBlockedReason(row: {
+    status: string;
+    priceAtPurchase?: number | null;
+  }) {
+    if (String(row.status) === 'CANCELLED') return 'No se puede abrir cuenta para un pack cancelado.';
+    const priceAtPurchase = Number(row.priceAtPurchase || 0);
+    if (!Number.isFinite(priceAtPurchase) || priceAtPurchase <= 0) {
+      return 'Cargá un precio mayor a 0 para abrir la cuenta del pack.';
+    }
+    return null;
+  }
+
+  private mapFinancial(row: {
+    id: string;
+    status: string;
+    priceAtPurchase?: number | null;
+  }, account?: {
+    id: string;
+    status: 'OPEN' | 'CLOSED';
+    totalAmount: any;
+    paidAmount: any;
+  } | null) {
+    if (!account) {
+      return {
+        accountId: null,
+        accountStatus: null,
+        state: 'NO_ACCOUNT' as const,
+        paymentStatus: null,
+        totalAmount: null,
+        paidAmount: null,
+        remainingAmount: null,
+        blockedReason: this.buildAccountBlockedReason(row),
+      };
+    }
+
+    const totalAmount = Number(account.totalAmount || 0);
+    const paidAmount = Number(account.paidAmount || 0);
+    const remainingAmount = Number(Math.max(0, totalAmount - paidAmount).toFixed(2));
+    const paymentStatus = getDerivedPaymentStatus(totalAmount, paidAmount);
+    const state: 'PENDING' | 'PARTIAL' | 'PAID' =
+      paymentStatus === 'PAID'
+        ? 'PAID'
+        : paymentStatus === 'PARTIAL'
+          ? 'PARTIAL'
+          : 'PENDING';
+
+    return {
+      accountId: String(account.id),
+      accountStatus: account.status,
+      state,
+      paymentStatus,
+      totalAmount,
+      paidAmount,
+      remainingAmount,
+      blockedReason: null,
+    };
+  }
+
+  private mapRow(row: any, accountByPassId?: Map<string, any>): ClassPassSummary {
+    const passId = String(row.id);
     const ownerUserId =
       row.ownerUserId === null || row.ownerUserId === undefined ? null : Number(row.ownerUserId);
     const beneficiaryUserId =
@@ -94,6 +194,7 @@ export class ClassPassAdminService {
       beneficiaryClientId: String(row.beneficiaryClientId),
       beneficiaryUserId: Number.isFinite(beneficiaryUserId ?? Number.NaN) ? beneficiaryUserId : null,
       packageName: String(row.packageName || '').trim(),
+      priceAtPurchase: row.priceAtPurchase == null ? null : Number(row.priceAtPurchase),
       totalCredits: Number(row.totalCredits),
       usedCredits: Number(row.usedCredits),
       remainingCredits: Number(row.remainingCredits),
@@ -148,7 +249,37 @@ export class ClassPassAdminService {
         : null,
       createdAt: new Date(row.createdAt).toISOString(),
       updatedAt: new Date(row.updatedAt).toISOString(),
+      financial: this.mapFinancial(
+        {
+          id: passId,
+          status: String(row.status || ''),
+          priceAtPurchase: row.priceAtPurchase == null ? null : Number(row.priceAtPurchase),
+        },
+        accountByPassId?.get(passId) || null
+      ),
     };
+  }
+
+  private async loadAccountByPassId(clubId: number, classPassIds: string[]) {
+    const safeIds = Array.from(new Set(classPassIds.map((value) => String(value || '').trim()).filter(Boolean)));
+    if (!safeIds.length) return new Map<string, any>();
+
+    const rows = await prisma.account.findMany({
+      where: {
+        clubId,
+        sourceType: 'CLASS_PASS',
+        sourceId: { in: safeIds },
+      },
+      select: {
+        id: true,
+        sourceId: true,
+        status: true,
+        totalAmount: true,
+        paidAmount: true,
+      },
+    });
+
+    return new Map(rows.map((row) => [String(row.sourceId), row]));
   }
 
   private async validateClientUserIdentity(
@@ -235,7 +366,11 @@ export class ClassPassAdminService {
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     });
 
-    const items = rows.map((row) => this.mapRow(row));
+    const accountByPassId = await this.loadAccountByPassId(
+      clubId,
+      rows.map((row) => String(row.id))
+    );
+    const items = rows.map((row) => this.mapRow(row, accountByPassId));
     if (!filters?.status) return items;
     return items.filter((row) => row.status === filters.status);
   }
@@ -256,7 +391,8 @@ export class ClassPassAdminService {
     if (!row) {
       throw notFound('Pack de clases no encontrado.', ErrorCodes.CLASS_PASS_NOT_FOUND);
     }
-    return this.mapRow(row);
+    const accountByPassId = await this.loadAccountByPassId(clubId, [String(classPassId)]);
+    return this.mapRow(row, accountByPassId);
   }
 
   async create(clubId: number, actorUserId: number, input: CreateClassPassInput) {
@@ -275,6 +411,7 @@ export class ClassPassAdminService {
       ]);
 
     const totalCredits = this.parseTotalCredits(input.totalCredits);
+    const priceAtPurchase = this.parseOptionalMoney(input.priceAtPurchase);
     const expiresAt = this.parseOptionalExpiry(input.expiresAt);
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
       throw badRequest('El vencimiento debe estar en el futuro.', ErrorCodes.INVALID_DATE_TIME);
@@ -290,6 +427,7 @@ export class ClassPassAdminService {
         beneficiaryClientId: beneficiaryClient.id,
         beneficiaryUserId,
         packageName: String(input.packageName || '').trim(),
+        priceAtPurchase: priceAtPurchase == null ? null : priceAtPurchase,
         totalCredits,
         usedCredits: 0,
         remainingCredits: totalCredits,
@@ -313,7 +451,8 @@ export class ClassPassAdminService {
       },
     });
 
-    return this.mapRow(created);
+    const accountByPassId = await this.loadAccountByPassId(clubId, [String(created.id)]);
+    return this.mapRow(created, accountByPassId);
   }
 
   async update(clubId: number, classPassId: string, input: UpdateClassPassInput) {
@@ -389,7 +528,8 @@ export class ClassPassAdminService {
       },
     });
 
-    return this.mapRow(updated);
+    const accountByPassId = await this.loadAccountByPassId(clubId, [String(updated.id)]);
+    return this.mapRow(updated, accountByPassId);
   }
 
   async setStatus(clubId: number, classPassId: string, status: 'ACTIVE' | 'CANCELLED') {
@@ -421,7 +561,8 @@ export class ClassPassAdminService {
           createdByUser: { select: { id: true, email: true, firstName: true, lastName: true } },
         },
       });
-      return this.mapRow(updated);
+      const accountByPassId = await this.loadAccountByPassId(clubId, [String(updated.id)]);
+      return this.mapRow(updated, accountByPassId);
     }
 
     if (effectiveStatus === 'DEPLETED' || effectiveStatus === 'EXPIRED') {
@@ -444,6 +585,98 @@ export class ClassPassAdminService {
         createdByUser: { select: { id: true, email: true, firstName: true, lastName: true } },
       },
     });
-    return this.mapRow(updated);
+    const accountByPassId = await this.loadAccountByPassId(clubId, [String(updated.id)]);
+    return this.mapRow(updated, accountByPassId);
+  }
+
+  async getAccount(clubId: number, classPassId: string): Promise<ClassPassAccountPayload> {
+    const classPass = await prisma.classPass.findFirst({
+      where: { id: String(classPassId), clubId },
+      select: {
+        id: true,
+        status: true,
+        priceAtPurchase: true,
+      },
+    });
+    if (!classPass) {
+      throw notFound('Pack de clases no encontrado.', ErrorCodes.CLASS_PASS_NOT_FOUND);
+    }
+
+    const account = await prisma.account.findFirst({
+      where: {
+        clubId,
+        sourceType: 'CLASS_PASS',
+        sourceId: String(classPass.id),
+      },
+    });
+
+    if (!account) {
+      return {
+        classPassId: String(classPass.id),
+        account: null,
+        summary: null,
+        financialStatus: 'NO_ACCOUNT',
+        blockedReason: this.buildAccountBlockedReason({
+          status: String(classPass.status || ''),
+          priceAtPurchase: classPass.priceAtPurchase == null ? null : Number(classPass.priceAtPurchase),
+        }),
+      };
+    }
+
+    const summary = await this.accountService.getAccountSummary(clubId, account.id);
+    const financial = this.mapFinancial(
+      {
+        id: String(classPass.id),
+        status: String(classPass.status || ''),
+        priceAtPurchase: classPass.priceAtPurchase == null ? null : Number(classPass.priceAtPurchase),
+      },
+      {
+        id: String(account.id),
+        status: account.status,
+        totalAmount: account.totalAmount,
+        paidAmount: account.paidAmount,
+      }
+    );
+
+    return {
+      classPassId: String(classPass.id),
+      account: mapAccountDto(account),
+      summary: {
+        accountId: summary.accountId,
+        itemsTotal: Number(summary.itemsTotal || 0),
+        paymentsTotal: Number(summary.paymentsTotal || 0),
+        remaining: Number(summary.remaining || 0),
+        paymentStatus: summary.paymentStatus,
+        isBalanced: Boolean(summary.isBalanced),
+        status: summary.status,
+      },
+      financialStatus: financial.state,
+      blockedReason: null,
+    };
+  }
+
+  async openAccount(clubId: number, classPassId: string): Promise<ClassPassAccountPayload> {
+    const classPass = await prisma.classPass.findFirst({
+      where: { id: String(classPassId), clubId },
+      select: {
+        id: true,
+        status: true,
+        ownerClientId: true,
+        priceAtPurchase: true,
+      },
+    });
+    if (!classPass) {
+      throw notFound('Pack de clases no encontrado.', ErrorCodes.CLASS_PASS_NOT_FOUND);
+    }
+
+    await this.validation.assertClientBelongsToClub(clubId, String(classPass.ownerClientId));
+
+    await this.accountService.openAccount({
+      clubId,
+      sourceType: 'CLASS_PASS',
+      sourceId: String(classPass.id),
+    });
+
+    return this.getAccount(clubId, String(classPass.id));
   }
 }

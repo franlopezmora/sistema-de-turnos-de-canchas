@@ -2,6 +2,11 @@ import type { GetServerSideProps } from 'next';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, Search, UserPlus, Users, XCircle } from 'lucide-react';
 import AdminRouteShell from '../../components/admin/AdminRouteShell';
+import AccountDrawer, {
+  type AccountDrawerContext,
+  type AccountDrawerInitialView,
+  type AccountDrawerSuccessMeta,
+} from '../../modules/cuentas/components/AccountDrawer';
 import {
   AdminAppModal,
   AdminDataTable,
@@ -86,6 +91,7 @@ type ClassPassFormState = {
   ownerClientName: string;
   beneficiaryClientId: string;
   beneficiaryClientName: string;
+  priceAtPurchase: string;
   restrictToActivity: boolean;
   restrictToClassType: boolean;
   restrictToTeacher: boolean;
@@ -178,6 +184,10 @@ const buildDefaultClassPassForm = ({
     'Cliente del club';
   const beneficiaryClientName =
     enrollment.studentClient?.name || enrollment.snapshotName || 'Alumno';
+  const suggestedPrice =
+    selectedClass.pricePerStudent != null
+      ? String(Number((Number(selectedClass.pricePerStudent) * 4).toFixed(2)))
+      : '';
 
   return {
     packageName: 'Pack 4 clases',
@@ -187,6 +197,7 @@ const buildDefaultClassPassForm = ({
     ownerClientName,
     beneficiaryClientId: enrollment.studentClientId,
     beneficiaryClientName,
+    priceAtPurchase: suggestedPrice,
     restrictToActivity: Boolean(selectedClass.activityTypeId),
     restrictToClassType: Boolean(selectedClass.classType),
     restrictToTeacher: Boolean(selectedClass.teacherId),
@@ -353,6 +364,34 @@ const classPassStatusLabel = (status: AdminClassPass['status'] | string) => {
       return 'Cancelado';
     default:
       return status;
+  }
+};
+
+const classPassFinancialStateLabel = (state: AdminClassPass['financial']['state']) => {
+  switch (state) {
+    case 'PENDING':
+      return 'Pendiente de cobro';
+    case 'PARTIAL':
+      return 'Cobro parcial';
+    case 'PAID':
+      return 'Cobrado';
+    case 'NO_ACCOUNT':
+    default:
+      return 'Sin cuenta';
+  }
+};
+
+const classPassFinancialToneClasses = (state: AdminClassPass['financial']['state']) => {
+  switch (state) {
+    case 'PAID':
+      return 'border-p-positive bg-p-positive-bg text-p-positive';
+    case 'PARTIAL':
+      return 'border-p-border-strong bg-p-surface text-p-text';
+    case 'PENDING':
+      return 'border-p-accent/40 bg-p-surface text-p-accent';
+    case 'NO_ACCOUNT':
+    default:
+      return 'border-p-border bg-p-surface-2 text-p-text-muted';
   }
 };
 
@@ -837,6 +876,13 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
   const [classPassFormError, setClassPassFormError] = useState('');
   const [classPassFieldErrors, setClassPassFieldErrors] = useState<Record<string, string>>({});
   const [classPassSubmitting, setClassPassSubmitting] = useState(false);
+  const [classPassAccountBusyId, setClassPassAccountBusyId] = useState<string | null>(null);
+  const [classPassAccountDrawerOpen, setClassPassAccountDrawerOpen] = useState(false);
+  const [classPassAccountId, setClassPassAccountId] = useState<string | null>(null);
+  const [classPassAccountInitialView, setClassPassAccountInitialView] =
+    useState<AccountDrawerInitialView>('overview');
+  const [classPassAccountContext, setClassPassAccountContext] = useState<AccountDrawerContext | undefined>(undefined);
+  const [classPassAccountStudentClientId, setClassPassAccountStudentClientId] = useState<string | null>(null);
 
   const loadClassSessions = useCallback(async () => {
     if (!clubSlug) {
@@ -1308,6 +1354,59 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
     setClassPassFieldErrors({});
   }, [classPassSubmitting]);
 
+  const closeClassPassAccountDrawer = useCallback(() => {
+    setClassPassAccountDrawerOpen(false);
+    setClassPassAccountId(null);
+    setClassPassAccountInitialView('overview');
+    setClassPassAccountContext(undefined);
+    setClassPassAccountStudentClientId(null);
+  }, []);
+
+  const openClassPassAccountDrawer = useCallback(
+    async (classPass: AdminClassPass) => {
+      if (!clubSlug || classPassAccountBusyId) return;
+
+      try {
+        setClassPassAccountBusyId(classPass.id);
+        let accountId = classPass.financial.accountId;
+        let initialView: AccountDrawerInitialView = 'overview';
+
+        if (!accountId) {
+          const payload = await ClubAdminService.openClassPassAccount(clubSlug, classPass.id);
+          accountId = payload.account?.id || null;
+          initialView = 'payment';
+          showAdminToast('Cuenta del pack lista para cobrar.');
+          await loadClassPassesForStudents([classPass.beneficiaryClientId], 'merge');
+        } else if (classPass.financial.state === 'PENDING' || classPass.financial.state === 'PARTIAL') {
+          initialView = 'payment';
+        }
+
+        if (!accountId) {
+          throw new Error(classPass.financial.blockedReason || 'No se pudo resolver la cuenta del pack.');
+        }
+
+        setClassPassAccountId(accountId);
+        setClassPassAccountInitialView(initialView);
+        setClassPassAccountContext({
+          title: `Cuenta pack · ${classPass.packageName}`,
+          subtitle: classPass.ownerClient?.name
+            ? `Titular: ${classPass.ownerClient.name}`
+            : 'Cuenta financiera del pack de Academia',
+        });
+        setClassPassAccountStudentClientId(classPass.beneficiaryClientId);
+        setClassPassAccountDrawerOpen(true);
+      } catch (error) {
+        reportUiError({ area: 'AdminClassesPage', action: 'openClassPassAccountDrawer' }, error);
+        const message = translateClassPassError(error, 'No se pudo abrir la cuenta del pack.');
+        setCreditUsageError(message);
+        setEnrollmentFormError(message);
+      } finally {
+        setClassPassAccountBusyId(null);
+      }
+    },
+    [classPassAccountBusyId, clubSlug, loadClassPassesForStudents]
+  );
+
   const studentSearch = usePersonSearchResults(
     clubSlug || '',
     enrollmentForm.studentQuery,
@@ -1445,6 +1544,7 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
       if (!clubSlug || !selectedClass || !editingEnrollment || !classPassForm || classPassSubmitting) return;
 
       const totalCredits = Number(classPassForm.totalCredits);
+      const parsedPriceAtPurchase = parseOptionalPositiveNumber(classPassForm.priceAtPurchase);
       if (!classPassForm.packageName.trim()) {
         setClassPassFormError('Ingresá un nombre para el pack.');
         setClassPassFieldErrors({ packageName: 'Elegí un nombre.' });
@@ -1453,6 +1553,11 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
       if (!Number.isInteger(totalCredits) || totalCredits <= 0) {
         setClassPassFormError('La cantidad de créditos debe ser un entero mayor a 0.');
         setClassPassFieldErrors({ totalCredits: 'Ingresá créditos válidos.' });
+        return;
+      }
+      if (Number.isNaN(parsedPriceAtPurchase) || parsedPriceAtPurchase === 0) {
+        setClassPassFormError('Si cargás un precio, debe ser mayor a 0.');
+        setClassPassFieldErrors({ priceAtPurchase: 'Ingresá un precio válido.' });
         return;
       }
 
@@ -1466,6 +1571,7 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
           beneficiaryClientId: classPassForm.beneficiaryClientId,
           beneficiaryUserId: editingEnrollment.studentUserId ?? null,
           packageName: classPassForm.packageName.trim(),
+          priceAtPurchase: parsedPriceAtPurchase,
           totalCredits,
           expiresAt: classPassForm.expiresAt ? localInputToIso(classPassForm.expiresAt) : null,
           activityTypeId: classPassForm.restrictToActivity ? selectedClass.activityTypeId : null,
@@ -1985,7 +2091,7 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
           <div className={helperCardClass}>
             <p className="font-semibold text-p-text">Asignar créditos no registra un pago</p>
             <p className="mt-1">
-              Esta acción crea una tarjetita digital para el alumno. El cobro de ese pack queda para una fase futura con AccountDrawer.
+              Esta acción crea una tarjetita digital para el alumno. Si cargás un precio, después vas a poder abrir la cuenta del pack para cobrarlo desde AccountDrawer.
             </p>
           </div>
 
@@ -2045,6 +2151,16 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
               inputClassName={fieldInputClass}
             />
           </div>
+
+          <Field
+            label="Precio del pack"
+            type="number"
+            value={classPassForm.priceAtPurchase}
+            onChange={(value) => setClassPassForm((prev) => (prev ? { ...prev, priceAtPurchase: value } : prev))}
+            error={classPassFieldErrors.priceAtPurchase}
+            hint="Opcional, pero necesario si después querés abrir la cuenta del pack para cobrarlo."
+            inputClassName={fieldInputClass}
+          />
 
           <Field
             label="Vencimiento"
@@ -2495,14 +2611,18 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                 <div className={helperCardClass}>
                   <p className="font-semibold text-p-text">Consumir crédito no registra un pago</p>
                   <p className="mt-1">
-                    Esta acción solo usa un crédito del pack para cubrir la inscripción. No modifica asistencia ni genera cobros en cuenta.
+                    Esta acción solo usa un crédito del pack para cubrir la inscripción. No modifica asistencia ni genera cobros en cuenta. Si necesitás cobrar el pack, abrí su cuenta aparte.
                   </p>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-4">
                   <SummaryBlock label="Pago actual" value={paymentStatusLabel(editingEnrollment.paymentStatus)} />
                   <SummaryBlock label="Asistencia" value={attendanceStatusLabel(editingEnrollmentForCredit.attendanceStatus)} />
                   <SummaryBlock label="Consumos" value={String(editingEnrollmentCreditUsages.length)} />
+                  <SummaryBlock
+                    label="Packs activos"
+                    value={String(editingEnrollmentPasses.filter((row) => effectiveClassPassStatus(row) === 'ACTIVE').length)}
+                  />
                 </div>
 
                 {resolveCreditUsageReason(editingEnrollmentForCredit.attendanceStatus) === 'MANUAL_ADJUSTMENT' ? (
@@ -2581,6 +2701,25 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                               <p className="mt-1 text-[12px] text-p-text-secondary">
                                 {classPass.remainingCredits}/{classPass.totalCredits} créditos disponibles
                               </p>
+                              <p className="mt-1 text-[12px] text-p-text-secondary">
+                                {classPass.priceAtPurchase != null
+                                  ? `Precio acordado: ${formatCurrency(classPass.priceAtPurchase)}`
+                                  : 'Precio pendiente de cargar'}
+                              </p>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classPassFinancialToneClasses(
+                                    classPass.financial.state
+                                  )}`}
+                                >
+                                  {classPassFinancialStateLabel(classPass.financial.state)}
+                                </span>
+                                {classPass.financial.remainingAmount != null ? (
+                                  <span className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
+                                    Pendiente: {formatCurrency(classPass.financial.remainingAmount)}
+                                  </span>
+                                ) : null}
+                              </div>
                               {ownerIsDifferent ? (
                                 <p className="mt-1 text-[12px] text-p-text-muted">
                                   Titular: {classPass.ownerClient?.name || 'Cliente del club'}
@@ -2592,6 +2731,20 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
                               <span className="inline-flex rounded-full border border-p-border bg-p-surface-2 px-2 py-0.5 text-[11px] font-semibold text-p-text-secondary">
                                 Motivo: {creditUsageReasonLabel(availability.reason)}
                               </span>
+                              <button
+                                type="button"
+                                disabled={classPassAccountBusyId === classPass.id || Boolean(classPass.financial.blockedReason)}
+                                onClick={() => void openClassPassAccountDrawer(classPass)}
+                                className="inline-flex h-8 items-center justify-center rounded-lg border border-p-border bg-p-surface px-3 text-[12px] font-semibold text-p-text transition hover:border-p-border-strong hover:text-p-text disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {classPassAccountBusyId === classPass.id
+                                  ? 'Abriendo cuenta...'
+                                  : classPass.financial.accountId
+                                    ? classPass.financial.state === 'PAID'
+                                      ? 'Ver cuenta'
+                                      : 'Cobrar pack'
+                                    : 'Abrir cuenta del pack'}
+                              </button>
                               <button
                                 type="button"
                                 disabled={!availability.usable || creditUsageBusyPassId === classPass.id}
@@ -2630,6 +2783,9 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
 
                           {!availability.usable && availability.disabledReason ? (
                             <p className="mt-3 text-[12px] text-[var(--error-fg)]">{availability.disabledReason}</p>
+                          ) : null}
+                          {classPass.financial.blockedReason ? (
+                            <p className="mt-2 text-[12px] text-p-text-muted">{classPass.financial.blockedReason}</p>
                           ) : null}
                         </div>
                       );
@@ -2670,6 +2826,18 @@ export function AdminClassesPageContent({ user, embedded = false }: { user: any;
       >
         {classPassFormContent}
       </AdminDrawer>
+
+      <AccountDrawer
+        accountId={classPassAccountId}
+        open={classPassAccountDrawerOpen}
+        initialView={classPassAccountInitialView}
+        context={classPassAccountContext}
+        onClose={closeClassPassAccountDrawer}
+        onSuccess={(_event, _meta?: AccountDrawerSuccessMeta) => {
+          if (!clubSlug || !classPassAccountStudentClientId) return;
+          void loadClassPassesForStudents([classPassAccountStudentClientId], 'merge');
+        }}
+      />
 
       <AdminAppModal
         show={Boolean(creditUsageConfirmState)}
