@@ -148,7 +148,7 @@ const serializePosSaleItems = (
     });
 type AccountRow = {
   id: string;
-  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
+  sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
   status: AccountStatus;
   createdAt: string;
   booking?: {
@@ -483,6 +483,7 @@ const accountSourceLabel = (sourceType: AccountRow['sourceType']) => {
   if (sourceType === 'BOOKING') return 'Reserva';
   if (sourceType === 'BAR') return 'Consumos';
   if (sourceType === 'TABLE') return 'Mesa';
+  if (sourceType === 'CLASS_PASS') return 'Pack de clases';
   return 'Manual';
 };
 

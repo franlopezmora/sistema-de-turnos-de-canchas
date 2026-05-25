@@ -24,7 +24,7 @@ export type AdminDashboardReport = {
       total: number;
     }>;
     byAccountSource: Array<{
-      sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
+      sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
       label: string;
       count: number;
       total: number;
@@ -43,7 +43,7 @@ export type AdminDashboardReport = {
     accounts: Array<{
       id: string;
       label: string;
-      sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL';
+      sourceType: 'BOOKING' | 'BAR' | 'TABLE' | 'MANUAL' | 'CLASS_PASS';
       sourceLabel: string;
       status: 'OPEN' | 'CLOSED' | 'VOIDED';
       clientName: string;
