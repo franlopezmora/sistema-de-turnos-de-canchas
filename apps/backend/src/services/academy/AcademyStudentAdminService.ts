@@ -402,7 +402,8 @@ export class AcademyStudentAdminService {
         studentClassEnrollments: {
           select: {
             id: true,
-            classSession: { select: { startsAt: true } },
+            enrollmentStatus: true,
+            classSession: { select: { startsAt: true, status: true } },
           },
         },
         beneficiaryClassPasses: {
@@ -425,10 +426,16 @@ export class AcademyStudentAdminService {
     const now = Date.now();
 
     return rows.map((row) => {
-      const upcomingEnrollmentsCount = row.studentClassEnrollments.filter((enrollment) => {
+      const activeUpcomingEnrollments = row.studentClassEnrollments.filter((enrollment) => {
         const startsAt = new Date(enrollment.classSession.startsAt).getTime();
-        return Number.isFinite(startsAt) && startsAt >= now;
-      }).length;
+        return (
+          Number.isFinite(startsAt) &&
+          startsAt >= now &&
+          String(enrollment.enrollmentStatus) !== 'CANCELLED' &&
+          String(enrollment.classSession.status) !== 'CANCELLED'
+        );
+      });
+      const upcomingEnrollmentsCount = activeUpcomingEnrollments.length;
       const pastEnrollmentsCount = Math.max(0, row.studentClassEnrollments.length - upcomingEnrollmentsCount);
       const activePasses = row.beneficiaryClassPasses.filter((classPass) => this.effectivePassStatus(classPass) === 'ACTIVE');
       const classTimes = row.studentClassEnrollments
@@ -436,7 +443,11 @@ export class AcademyStudentAdminService {
         .filter((value) => Number.isFinite(value))
         .sort((a, b) => a - b);
 
-      const nextClassAt = classTimes.find((value) => value >= now) ?? null;
+      const nextClassAt =
+        activeUpcomingEnrollments
+          .map((enrollment) => new Date(enrollment.classSession.startsAt).getTime())
+          .filter((value) => Number.isFinite(value))
+          .sort((a, b) => a - b)[0] ?? null;
       const lastClassAt = classTimes.length ? classTimes[classTimes.length - 1] : null;
 
       return {
@@ -534,7 +545,6 @@ export class AcademyStudentAdminService {
             OR: [
               { classEnrollment: { studentClientId: String(clientId) } },
               { classPass: { beneficiaryClientId: String(clientId) } },
-              { classPass: { ownerClientId: String(clientId) } },
             ],
           },
           include: {
@@ -592,10 +602,20 @@ export class AcademyStudentAdminService {
     const now = Date.now();
     const mappedEnrollments = enrollments.map((row) => this.mapEnrollment(row));
     const upcomingEnrollments = mappedEnrollments
-      .filter((row) => new Date(row.classSession.startsAt).getTime() >= now)
+      .filter(
+        (row) =>
+          new Date(row.classSession.startsAt).getTime() >= now &&
+          row.enrollmentStatus !== 'CANCELLED' &&
+          row.classSession.status !== 'CANCELLED'
+      )
       .sort((a, b) => new Date(a.classSession.startsAt).getTime() - new Date(b.classSession.startsAt).getTime());
     const pastEnrollments = mappedEnrollments
-      .filter((row) => new Date(row.classSession.startsAt).getTime() < now)
+      .filter(
+        (row) =>
+          new Date(row.classSession.startsAt).getTime() < now ||
+          row.enrollmentStatus === 'CANCELLED' ||
+          row.classSession.status === 'CANCELLED'
+      )
       .sort((a, b) => new Date(b.classSession.startsAt).getTime() - new Date(a.classSession.startsAt).getTime());
 
     const mappedBeneficiaryPasses = beneficiaryPasses.map((row) => this.mapPass(row));
