@@ -40,6 +40,7 @@ type CourtSummary = {
 const DEFAULT_DURATION_MINUTES = 90;
 const TIMELINE_PIXELS_PER_MINUTE = 1.45;
 const TIMELINE_ROW_HEIGHT = 52;
+const TIMELINE_COURT_COLUMN_WIDTH = 150;
 const MOBILE_LIST_ONLY_QUERY = '(max-width: 900px)';
 const MOBILE_VISIBLE_SLOTS_LIMIT = 9;
 type ScheduleViewMode = 'timeline' | 'list';
@@ -951,48 +952,28 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       {/* View mode */}
       {!isMobileListOnly && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'inline-flex', padding: 4, borderRadius: 12, border: `1px solid ${T.borderSubtle}`, background: T.bgSubtle, gap: 4 }}>
+          <style>{`
+            .v-view-toggle-group{display:inline-flex;padding:4px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);gap:4px;}
+            .v-view-toggle{border:1px solid transparent;border-radius:9px;padding:8px 12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-family:'Geist',system-ui,sans-serif;background:transparent;color:var(--text-secondary);outline:none;transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease;}
+            .v-view-toggle:hover{background:var(--surface-1);border-color:var(--border);color:var(--text-primary);}
+            .v-view-toggle:focus{outline:none;}
+            .v-view-toggle:focus-visible{box-shadow:var(--shadow-focus);border-color:var(--accent-border);}
+            .v-view-toggle[aria-pressed="true"]{background:var(--surface-1);border-color:var(--accent-border);color:var(--accent-fg);}
+          `}</style>
+          <div className="v-view-toggle-group">
             <button
               type="button"
               onClick={() => setScheduleViewMode('timeline')}
-              style={{
-                border: 'none',
-                borderRadius: 9,
-                padding: '8px 12px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: '.08em',
-                textTransform: 'uppercase',
-                background: scheduleViewMode === 'timeline' ? 'var(--accent-bg-muted)' : 'transparent',
-                color: scheduleViewMode === 'timeline' ? 'var(--brand)' : T.textMuted,
-                fontFamily: "'Geist',system-ui,sans-serif",
-              }}
+              className="v-view-toggle"
+              aria-pressed={scheduleViewMode === 'timeline'}
             >
               <LayoutGrid size={12} /> Agenda visual
             </button>
             <button
               type="button"
               onClick={() => setScheduleViewMode('list')}
-              style={{
-                border: 'none',
-                borderRadius: 9,
-                padding: '8px 12px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: '.08em',
-                textTransform: 'uppercase',
-                background: scheduleViewMode === 'list' ? 'var(--accent-bg-muted)' : 'transparent',
-                color: scheduleViewMode === 'list' ? 'var(--brand)' : T.textMuted,
-                fontFamily: "'Geist',system-ui,sans-serif",
-              }}
+              className="v-view-toggle"
+              aria-pressed={scheduleViewMode === 'list'}
             >
               <Rows3 size={12} /> Lista clásica
             </button>
@@ -1039,7 +1020,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                 <div style={{ border: `1px solid ${T.borderSubtle}`, borderRadius: 16, overflow: 'hidden', background: T.bgSubtle }}>
                   <div style={{ overflowX: 'auto' }}>
                     <div style={{ minWidth: 280 + atcTimeline.totalMinutes * TIMELINE_PIXELS_PER_MINUTE }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', borderBottom: `1px solid ${T.borderSubtle}` }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: `${TIMELINE_COURT_COLUMN_WIDTH}px 1fr`, borderBottom: `1px solid ${T.borderSubtle}` }}>
                         <div style={{ padding: '10px 14px', fontSize: 12, fontWeight: 800, color: T.textPrimary }}>Canchas</div>
                         <div style={{ position: 'relative', height: 38 }}>
                           {atcTimeline.hourTicks.map((tick, index) => {
@@ -1082,7 +1063,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                           hoveredAtcSlot?.slotTime === slot.slotTime
                         );
                         return (
-                          <div key={court.id} style={{ display: 'grid', gridTemplateColumns: '280px 1fr', borderBottom: `1px solid ${T.borderFaint}` }}>
+                          <div key={court.id} style={{ display: 'grid', gridTemplateColumns: `${TIMELINE_COURT_COLUMN_WIDTH}px 1fr`, borderBottom: `1px solid ${T.borderFaint}` }}>
                             <div style={{ padding: '10px 14px', minHeight: TIMELINE_ROW_HEIGHT, display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: `1px solid ${T.borderSubtle}` }}>
                               <span style={{ fontSize: 14, fontWeight: 800, color: T.textPrimary2 }}>{court.name}</span>
                               <span style={{ fontSize: 11, color: T.textMuted, fontWeight: 600 }}>
@@ -1148,8 +1129,8 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                                     height: TIMELINE_ROW_HEIGHT - 12,
                                     width: Math.max(8, selectedDuration * TIMELINE_PIXELS_PER_MINUTE - 4),
                                     borderRadius: 8,
-                                    border: '1px solid var(--accent-border-strong)',
-                                    background: 'var(--accent-bg-strong)',
+                                    border: '1px solid var(--brand)',
+                                    background: 'var(--brand)',
                                     pointerEvents: 'none',
                                     zIndex: 2,
                                   }}
@@ -1165,7 +1146,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                                     width: Math.max(8, selectedDuration * TIMELINE_PIXELS_PER_MINUTE - 4),
                                     borderRadius: 8,
                                     border: '1px solid var(--accent-border-strong)',
-                                    background: 'var(--brand)',
+                                    background: 'var(--accent-bg-strong)',
                                     pointerEvents: 'none',
                                     zIndex: 3,
                                   }}
@@ -1211,7 +1192,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, color: T.textMuted }}>
                     <span style={{ width: 12, height: 12, borderRadius: 4, background: 'var(--surface-3)', border: '1px solid var(--border-strong)' }} />
                     Ocupado / no disponible
-                    <span style={{ width: 12, height: 12, borderRadius: 4, background: 'var(--accent-border)', border: '1px solid var(--accent-border-strong)', marginLeft: 8 }} />
+                    <span style={{ width: 12, height: 12, borderRadius: 4, background: 'var(--brand)', border: '1px solid var(--brand)', marginLeft: 8 }} />
                     Tu selección
                   </div>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: T.textMuted, fontSize: 11, fontWeight: 700 }}>
@@ -1227,22 +1208,48 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
             )
           ) : (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 8 }}>
+              <style>{`
+              /* Slot visual tokens */
+              :root{
+                --slot-bg: var(--surface-1, #ffffff);
+                --slot-border: var(--border, #E6E6E6);
+                --slot-text: var(--text-primary, #1F2937);
+                --slot-subtext: var(--text-muted, #6B7280);
+                --slot-hover-bg: var(--accent-bg-faint, rgba(182,243,106,.045));
+                --slot-hover-border: var(--accent-border, rgba(182,243,106,.32));
+                --slot-hover-shadow: var(--shadow-md);
+                --slot-selected-bg: var(--accent-bg-muted, rgba(182,243,106,.16));
+                --slot-selected-border: var(--accent-border-strong, rgba(182,243,106,.52));
+                --slot-selected-text: var(--accent-fg, #5C8E1A);
+                --slot-selected-ring: 0 0 0 3px var(--accent-border-subtle, rgba(182,243,106,.22));
+                --slot-disabled-bg: var(--surface-3, #F3F4F6);
+                --slot-disabled-border: var(--border-strong, #E5E7EB);
+                --slot-disabled-text: var(--text-muted, #9CA3AF);
+              }
+              .v-slot-grid{ display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap:8px; }
+              .v-slot{ background:var(--slot-bg); border:1px solid var(--slot-border); color:var(--slot-text); padding:8px 10px; border-radius:12px; font-weight:700; font-size:13px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; transition: box-shadow .18s ease, border-color .18s ease, background-color .12s ease; font-family: 'Geist',system-ui,sans-serif; }
+              .v-slot:focus{ outline:none; }
+              .v-slot:focus-visible{ box-shadow: var(--slot-hover-shadow); border-color: var(--slot-hover-border); }
+              .v-slot:hover{ background:var(--slot-hover-bg); border-color:var(--slot-hover-border); box-shadow: var(--slot-hover-shadow); }
+              .v-slot--selected{ background:var(--slot-selected-bg); border-color:var(--slot-selected-border); color:var(--slot-selected-text); box-shadow: none; }
+              .v-slot--selected:hover,
+              .v-slot--selected:focus-visible{ background:var(--slot-selected-bg); border-color:var(--slot-selected-border); color:var(--slot-selected-text); box-shadow:none; }
+              .v-slot--disabled{ background:var(--slot-disabled-bg); border-color:var(--slot-disabled-border); color:var(--slot-disabled-text); pointer-events:none; opacity:0.85; }
+              @media (max-width:720px){ .v-slot{ transform:none; } }
+              `}</style>
+
+              <div className="v-slot-grid">
                 {visibleListSlots.map(slot => {
                   const isSelected = selectedSlot === slot.slotTime;
+                  const isDisabled = slot.courts.length === 0;
                   return (
                     <button
                       key={slot.slotTime}
                       type="button"
-                      onClick={() => { setSelectedSlot(slot.slotTime); setSelectedCourt(null); }}
-                      style={{
-                        padding: '10px 6px', borderRadius: 10, fontSize: 13, fontWeight: 700,
-                        border: `1px solid ${isSelected ? 'var(--accent-border-strong)' : T.border}`,
-                        background: isSelected ? 'var(--accent-bg-muted)' : T.bgSubtle,
-                        color: isSelected ? 'var(--brand)' : T.textSecondary,
-                        cursor: 'pointer', transition: 'all .15s', fontFamily: "'Geist',system-ui,sans-serif",
-                        boxShadow: isSelected ? '0 0 0 1px var(--accent-border)' : 'none',
-                      }}
+                      className={`v-slot${isSelected ? ' v-slot--selected' : ''}${isDisabled ? ' v-slot--disabled' : ''}`}
+                      onClick={() => { if (!isDisabled) { setSelectedSlot(slot.slotTime); setSelectedCourt(null); } }}
+                      aria-pressed={isSelected}
+                      aria-disabled={isDisabled}
                     >
                       {slot.slotTime}
                     </button>
@@ -1288,6 +1295,19 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       {activeScheduleViewMode === 'list' && selectedSlot && (
         <div ref={courtsSectionRef} style={sectionStyle}>
           <div style={labelStyle}><MapPin size={12} style={{ color: 'var(--brand)' }} /> Elegí una cancha</div>
+          <style>{`
+            .v-court-option{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:14px;text-align:left;width:100%;border:1px solid var(--border);background:var(--surface-1);cursor:pointer;transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease;outline:none;font-family:'Geist',system-ui,sans-serif;}
+            .v-court-option:hover{background:var(--accent-bg-faint);border-color:var(--accent-border-subtle);}
+            .v-court-option:focus{outline:none;}
+            .v-court-option:focus-visible{box-shadow:var(--shadow-focus);border-color:var(--accent-border);}
+            .v-court-option[aria-pressed="true"]{background:var(--accent-bg-muted);border-color:var(--accent-border-strong);}
+            .v-court-dot{width:10px;height:10px;border-radius:50%;background:var(--border-strong);border:1px solid var(--border);flex-shrink:0;transition:background-color .16s ease,border-color .16s ease;}
+            .v-court-option[aria-pressed="true"] .v-court-dot{background:var(--accent-fg);border-color:var(--accent-fg);}
+            .v-court-name{font-size:14px;font-weight:800;color:${T.textPrimary};margin-bottom:3px;}
+            .v-court-meta{font-size:11px;color:${T.textMuted};font-weight:600;}
+            .v-court-option[aria-pressed="true"] .v-court-name,
+            .v-court-option[aria-pressed="true"] .v-court-meta{color:var(--accent-fg);}
+          `}</style>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {(availableSlots.find(s => s.slotTime === selectedSlot)?.courts || []).map(court => {
               if (!selectedDate) return null;
@@ -1308,21 +1328,16 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
                   key={court.id}
                   type="button"
                   onClick={handleSelectCourt}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '14px 16px', borderRadius: 14, textAlign: 'left', width: '100%',
-                    border: `1px solid ${isSelected ? 'var(--accent-border)' : T.border}`,
-                    background: isSelected ? 'var(--accent-bg-soft)' : T.bgSubtle,
-                    cursor: 'pointer', transition: 'all .15s', fontFamily: "'Geist',system-ui,sans-serif",
-                  }}
+                  className="v-court-option"
+                  aria-pressed={isSelected}
                 >
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: T.textPrimary, marginBottom: 3 }}>{court.name}</div>
-                    <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 600 }}>
+                    <div className="v-court-name">{court.name}</div>
+                    <div className="v-court-meta">
                       {court.price ? `$${court.price.toLocaleString()} · ${selectedDuration} min` : 'Precio a confirmar'}
                     </div>
                   </div>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: isSelected ? 'var(--brand)' : T.border, border: isSelected ? 'none' : `1px solid ${T.border}`, flexShrink: 0, boxShadow: isSelected ? '0 0 0 3px var(--accent-border-subtle)' : 'none', transition: 'all .15s' }} />
+                  <div className="v-court-dot" />
                 </button>
               );
             })}

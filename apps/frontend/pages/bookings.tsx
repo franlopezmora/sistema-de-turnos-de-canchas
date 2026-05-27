@@ -25,7 +25,7 @@ import { useValidateAuth } from '../hooks/useValidateAuth';
 import { getPendingLogoutRedirect } from '../services/AuthService';
 import Link from 'next/link';
 import UserLoadingState from '../components/UserLoadingState';
-import { Calendar, Clock, MapPin, Ticket, ArrowRight, Search, XCircle, CheckCircle2, Star, MessageSquare, X, Users, UserPlus, Mail, LogOut, Trash2 } from 'lucide-react';
+import { Calendar, Clock, MapPin, Ticket, ArrowRight, Search, XCircle, CheckCircle2, Star, MessageSquare, X, Users, UserPlus, Mail, LogOut, Trash2, ChevronDown } from 'lucide-react';
 import { getApiFieldErrors, normalizeApiError } from '../utils/apiError';
 
 const PAGE_CSS = `
@@ -60,6 +60,12 @@ const PAGE_CSS = `
   .bk-detail-total { display:flex; align-items:center; justify-content:space-between; padding:20px 0 16px; border-top:1px solid var(--border); margin-top:8px; }
   .bk-detail-total-label { font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); }
   .bk-detail-total-val { font-size:26px; font-weight:800; color:var(--text-primary); letter-spacing:-.03em; }
+  .bk-collapsible { margin-top:18px; border-top:1px solid var(--border); padding-top:18px; }
+  .bk-collapsible-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; background:none; border:none; padding:0; cursor:pointer; font-family:var(--font-sans); text-align:left; }
+  .bk-collapsible-title { font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); }
+  .bk-collapsible-chevron { color:var(--text-muted); flex-shrink:0; transition:transform .18s ease, color .18s ease; }
+  .bk-collapsible-open .bk-collapsible-chevron { transform:rotate(180deg); color:var(--accent-fg); }
+  .bk-collapsible-body { margin-top:12px; display:grid; gap:12px; }
   .bk-action-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px 16px; border-radius:14px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; font-family:var(--font-sans); border:none; transition:background .15s,transform .15s; text-decoration:none; }
   .bk-action-btn:hover { transform:translateY(-1px); }
   .bk-action-cancel { background:var(--error-bg); border:1px solid var(--error-bg)!important; color:var(--error-fg); }
@@ -140,6 +146,8 @@ const PAGE_CSS = `
   .p-public-root.p-public-theme-light .bk-detail-empty-label { color:var(--text-muted); }
   .p-public-root.p-public-theme-light .bk-review-secondary { border-color:var(--border-strong); color:var(--text-secondary); }
   .p-public-root.p-public-theme-light .bk-review-secondary:hover { background:var(--surface-2); border-color:var(--border-strong); }
+  .p-public-root:not(.p-public-theme-light) .bk-action-rebook { background:linear-gradient(135deg, var(--brand) 0%, var(--brand-hover) 100%); color:var(--brand-on); box-shadow:0 10px 22px rgba(182,243,106,.14); }
+  .p-public-root:not(.p-public-theme-light) .bk-action-rebook:hover { background:linear-gradient(135deg, var(--brand-hover) 0%, var(--brand) 100%); }
 `;
 
 export default function MyBookingsPage() {
@@ -176,6 +184,8 @@ export default function MyBookingsPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
+  const [participantsExpanded, setParticipantsExpanded] = useState(false);
+  const [paymentExpanded, setPaymentExpanded] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteFieldErrors, setInviteFieldErrors] = useState<Record<string, string>>({});
@@ -340,8 +350,13 @@ export default function MyBookingsPage() {
       setCheckoutLoading(false);
       setInviteBannerError('');
       setInviteFieldErrors({});
+      setParticipantsExpanded(false);
+      setPaymentExpanded(false);
       return;
     }
+
+    setParticipantsExpanded(false);
+    setPaymentExpanded(false);
 
     let cancelled = false;
     setParticipantsLoading(true);
@@ -705,6 +720,29 @@ export default function MyBookingsPage() {
     CANCELLED: 'Canceladas'
   };
   const roleLabel = (booking: PlayerBookingDto) => booking.myRole === 'PARTICIPANT' ? 'Participante' : 'Titular';
+  const paymentStatusLabel = (booking: PlayerBookingDto) => {
+    switch (booking.paymentSummary.status) {
+      case 'PAID': return 'Pagado';
+      case 'PARTIAL': return 'Pago parcial';
+      case 'PENDING': return 'Pago pendiente';
+      default:
+        return '';
+    }
+  };
+
+  const paymentStatusTone = (booking: PlayerBookingDto) => {
+    switch (booking.paymentSummary.status) {
+      case 'PAID':
+        return { background: 'var(--positive-bg)', border: 'var(--accent-border-subtle)', color: 'var(--accent-fg)' };
+      case 'PARTIAL':
+        return { background: 'var(--surface-2)', border: 'var(--accent-border-subtle)', color: 'var(--text-secondary)' };
+      case 'PENDING':
+        return { background: 'var(--warn-bg)', border: 'var(--warn-bg)', color: 'var(--warn-fg)' };
+      case 'NOT_REQUIRED':
+      default:
+        return { background: 'var(--surface-2)', border: 'var(--border-subtle)', color: 'var(--text-secondary)' };
+    }
+  };
 
   return (
     <DarkPageLayout
@@ -894,12 +932,23 @@ export default function MyBookingsPage() {
                         <div className="bk-card-club">{booking.club?.name || 'Club'}</div>
                         <div className="bk-card-meta">
                           {booking.activity?.name && <span className="bk-card-chip">{booking.activity.name}</span>}
-                          <span className="bk-card-chip">{roleLabel(booking)}</span>
+                          {booking.myRole === 'PARTICIPANT' && <span className="bk-card-chip">{roleLabel(booking)}</span>}
                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Clock size={10} /> {formatTime(date)}
                           </span>
                           {booking.court?.name && <span style={{ color: 'var(--text-muted)' }}>{booking.court.name}</span>}
-                          <span style={{ color: 'var(--text-muted)' }}>{booking.paymentSummary.label}</span>
+                          {booking.paymentSummary.status !== 'NOT_REQUIRED' && paymentStatusLabel(booking) && (
+                            <span
+                              className="bk-card-chip"
+                              style={{
+                                background: paymentStatusTone(booking).background,
+                                border: `1px solid ${paymentStatusTone(booking).border}`,
+                                color: paymentStatusTone(booking).color
+                              }}
+                            >
+                              {paymentStatusLabel(booking)}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <ArrowRight size={16} style={{ color: isSelected ? 'var(--brand)' : 'var(--text-muted)', flexShrink: 0, transition: 'color .2s' }} />
@@ -963,243 +1012,268 @@ export default function MyBookingsPage() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 18, borderTop: '1px solid var(--border)', paddingTop: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                    Participantes
-                  </div>
-                  {selectedBooking.capabilities.canInvitePlayers && (
-                    <span className="bk-card-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <UserPlus size={12} /> Podés invitar
-                    </span>
-                  )}
-                </div>
-
-                {participantsLoading ? (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Cargando participantes...</div>
-                ) : participantsError ? (
-                  <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
-                    {participantsError}
-                  </div>
-                ) : participants.length === 0 ? (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Todavía no hay participantes registrados para esta reserva.</div>
-                ) : (
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {participants.map((participant) => (
-                      <div
-                        key={participant.id}
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: 12,
-                          border: '1px solid var(--border-subtle)',
-                          background: 'var(--surface-2)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 12
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                            {participant.displayName} {participant.isMe ? '· Vos' : ''}
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                            {participant.status === 'JOINED' ? 'Confirmado' :
-                              participant.status === 'INVITED' ? 'Invitado' :
-                              participant.status === 'DECLINED' ? 'Rechazó' :
-                              participant.status === 'LEFT' ? 'Se bajó' : 'Removido'}
-                            {participant.invitedEmail ? ` · ${participant.invitedEmail}` : ''}
-                          </div>
-                        </div>
-                        {participant.canManage && (
-                          <button
-                            type="button"
-                            className="bk-action-btn bk-action-cancel"
-                            style={{ width: 'auto', padding: '8px 12px' }}
-                            disabled={participantActionId === participant.id}
-                            onClick={() => handleRemoveParticipant(participant)}
-                          >
-                            <Trash2 size={14} />
-                            Quitar
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {selectedBooking.capabilities.canInvitePlayers && (
-                  <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+              <div className={`bk-collapsible${participantsExpanded ? ' bk-collapsible-open' : ''}`}>
+                <button
+                  type="button"
+                  className="bk-collapsible-head"
+                  onClick={() => setParticipantsExpanded((prev) => !prev)}
+                  aria-expanded={participantsExpanded}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                      Invitar jugador
+                      Participantes
                     </div>
-                    {inviteBannerError && (
-                      <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
-                        {inviteBannerError}
-                      </div>
+                    {selectedBooking.capabilities.canInvitePlayers && (
+                      <span className="bk-card-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <UserPlus size={12} /> Podés invitar
+                      </span>
                     )}
-                    <div style={{ display: 'grid', gap: 10 }}>
-                      <div>
-                        <div style={{ position: 'relative' }}>
-                          <Mail size={14} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
-                          <input
-                            type="email"
-                            value={inviteEmail}
-                            onChange={(e) => setInviteEmail(e.target.value)}
-                            placeholder="Email del jugador"
-                            style={{ width: '100%', padding: '10px 12px 10px 34px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
-                          />
-                        </div>
-                        {inviteFieldErrors.email && (
-                          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--error-fg)' }}>{inviteFieldErrors.email}</div>
-                        )}
-                      </div>
-                      <div>
-                        <input
-                          type="text"
-                          value={inviteName}
-                          onChange={(e) => setInviteName(e.target.value)}
-                          placeholder="Nombre (opcional)"
-                          style={{ width: '100%', padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
-                        />
-                        {inviteFieldErrors.name && (
-                          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--error-fg)' }}>{inviteFieldErrors.name}</div>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="bk-action-btn bk-action-rebook"
-                        onClick={handleInviteParticipant}
-                        disabled={inviteSubmitting}
-                      >
-                        <UserPlus size={15} />
-                        {inviteSubmitting ? 'Enviando...' : 'Invitar jugador'}
-                      </button>
-                    </div>
                   </div>
-                )}
-              </div>
+                  <ChevronDown size={14} className="bk-collapsible-chevron" />
+                </button>
 
-              <div className="bk-detail-total">
-                <div className="bk-detail-total-label">Estado de pago</div>
-                <div className="bk-detail-total-val" style={{ fontSize: 18 }}>{selectedBooking.paymentSummary.label}</div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                  Resumen de pago
-                </div>
-
-                {checkoutLoading ? (
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Cargando estado de pago...</div>
-                ) : checkoutError ? (
-                  <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
-                    {checkoutError}
-                  </div>
-                ) : checkoutSummary ? (
-                  <>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                        gap: 10
-                      }}
-                    >
-                      {[
-                        { label: 'Total', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.total) : '—' },
-                        { label: 'Pagado', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.paid) : '—' },
-                        { label: 'Pendiente', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.pending) : '—' }
-                      ].map((item) => (
-                        <div
-                          key={item.label}
-                          style={{
-                            padding: '12px 14px',
-                            borderRadius: 14,
-                            background: 'var(--surface-2)',
-                            border: '1px solid var(--border-subtle)'
-                          }}
-                        >
-                          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-                            {item.label}
-                          </div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>{item.value}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {checkoutSummary.account?.items?.length ? (
+                {participantsExpanded && (
+                  <div className="bk-collapsible-body">
+                    {participantsLoading ? (
+                      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Cargando participantes...</div>
+                    ) : participantsError ? (
+                      <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
+                        {participantsError}
+                      </div>
+                    ) : participants.length === 0 ? (
+                      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Todavía no hay participantes registrados para esta reserva.</div>
+                    ) : (
                       <div style={{ display: 'grid', gap: 8 }}>
-                        {checkoutSummary.account.items.map((item, index) => (
+                        {participants.map((participant) => (
                           <div
-                            key={`${item.label}-${index}`}
+                            key={participant.id}
                             style={{
                               padding: '10px 12px',
                               borderRadius: 12,
-                              background: 'var(--surface-2)',
                               border: '1px solid var(--border-subtle)',
+                              background: 'var(--surface-2)',
                               display: 'flex',
+                              alignItems: 'center',
                               justifyContent: 'space-between',
                               gap: 12
                             }}
                           >
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{item.label}</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {participant.displayName} {participant.isMe ? '· Vos' : ''}
+                              </div>
                               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                                {accountItemTypeLabel(item.type)} · {item.quantity} x {formatMoney(item.unitPrice)}
+                                {participant.status === 'JOINED' ? 'Confirmado' :
+                                  participant.status === 'INVITED' ? 'Invitado' :
+                                  participant.status === 'DECLINED' ? 'Rechazó' :
+                                  participant.status === 'LEFT' ? 'Se bajó' : 'Removido'}
+                                {participant.invitedEmail ? ` · ${participant.invitedEmail}` : ''}
                               </div>
                             </div>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                              {formatMoney(item.total)}
-                            </div>
+                            {participant.canManage && (
+                              <button
+                                type="button"
+                                className="bk-action-btn bk-action-cancel"
+                                style={{ width: 'auto', padding: '8px 12px' }}
+                                disabled={participantActionId === participant.id}
+                                onClick={() => handleRemoveParticipant(participant)}
+                              >
+                                <Trash2 size={14} />
+                                Quitar
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                        No hay conceptos de cobro visibles para esta reserva.
+                    )}
+
+                    {selectedBooking.capabilities.canInvitePlayers && (
+                      <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                          Invitar jugador
+                        </div>
+                        {inviteBannerError && (
+                          <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
+                            {inviteBannerError}
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gap: 10 }}>
+                          <div>
+                            <div style={{ position: 'relative' }}>
+                              <Mail size={14} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />
+                              <input
+                                type="email"
+                                value={inviteEmail}
+                                onChange={(e) => setInviteEmail(e.target.value)}
+                                placeholder="Email del jugador"
+                                style={{ width: '100%', padding: '10px 12px 10px 34px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                              />
+                            </div>
+                            {inviteFieldErrors.email && (
+                              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--error-fg)' }}>{inviteFieldErrors.email}</div>
+                            )}
+                          </div>
+                          <div>
+                            <input
+                              type="text"
+                              value={inviteName}
+                              onChange={(e) => setInviteName(e.target.value)}
+                              placeholder="Nombre (opcional)"
+                              style={{ width: '100%', padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)' }}
+                            />
+                            {inviteFieldErrors.name && (
+                              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--error-fg)' }}>{inviteFieldErrors.name}</div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="bk-action-btn bk-action-rebook"
+                            onClick={handleInviteParticipant}
+                            disabled={inviteSubmitting}
+                          >
+                            <UserPlus size={15} />
+                            {inviteSubmitting ? 'Enviando...' : 'Invitar jugador'}
+                          </button>
+                        </div>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
 
-                    <div
-                      style={{
-                        padding: '12px 14px',
-                        borderRadius: 12,
-                        background: checkoutSummary.checkout.enabled
-                          ? 'var(--positive-bg)'
-                          : checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
-                          ? 'var(--positive-bg)'
-                          : 'var(--surface-2)',
-                        border: checkoutSummary.checkout.enabled
-                          ? '1px solid var(--accent-border-subtle)'
-                          : checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
-                          ? '1px solid var(--accent-border-subtle)'
-                          : '1px solid var(--border-subtle)',
-                        color: checkoutSummary.checkout.enabled
-                          ? 'var(--accent-fg)'
-                          : checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
-                          ? 'var(--accent-fg)'
-                          : 'var(--text-secondary)',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        lineHeight: 1.5
-                      }}
-                    >
-                      {getCheckoutReasonMessage(checkoutSummary)}
+              <div className={`bk-collapsible${paymentExpanded ? ' bk-collapsible-open' : ''}`} style={{ marginBottom: 18 }}>
+                <button
+                  type="button"
+                  className="bk-collapsible-head"
+                  onClick={() => setPaymentExpanded((prev) => !prev)}
+                  aria-expanded={paymentExpanded}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <div className="bk-detail-total-label">Estado de pago</div>
+                  </div>
+                  <ChevronDown size={14} className="bk-collapsible-chevron" />
+                </button>
+
+                {paymentExpanded && (
+                  <div className="bk-collapsible-body">
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                        Resumen de pago
+                      </div>
+
+                      {checkoutLoading ? (
+                        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Cargando estado de pago...</div>
+                      ) : checkoutError ? (
+                        <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--error-bg)', color: 'var(--error-fg)', fontSize: 13, fontWeight: 600 }}>
+                          {checkoutError}
+                        </div>
+                      ) : checkoutSummary ? (
+                        <>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                              gap: 10
+                            }}
+                          >
+                            {[
+                              { label: 'Total', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.total) : '—' },
+                              { label: 'Pagado', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.paid) : '—' },
+                              { label: 'Pendiente', value: checkoutSummary.account ? formatMoney(checkoutSummary.account.pending) : '—' }
+                            ].map((item) => (
+                              <div
+                                key={item.label}
+                                style={{
+                                  padding: '12px 14px',
+                                  borderRadius: 14,
+                                  background: 'var(--surface-2)',
+                                  border: '1px solid var(--border-subtle)'
+                                }}
+                              >
+                                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                                  {item.label}
+                                </div>
+                                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>{item.value}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {checkoutSummary.account?.items?.length ? (
+                            <div style={{ display: 'grid', gap: 8 }}>
+                              {checkoutSummary.account.items.map((item, index) => (
+                                <div
+                                  key={`${item.label}-${index}`}
+                                  style={{
+                                    padding: '10px 12px',
+                                    borderRadius: 12,
+                                    background: 'var(--surface-2)',
+                                    border: '1px solid var(--border-subtle)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    gap: 12
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{item.label}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                      {accountItemTypeLabel(item.type)} · {item.quantity} x {formatMoney(item.unitPrice)}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                    {formatMoney(item.total)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                              No hay conceptos de cobro visibles para esta reserva.
+                            </div>
+                          )}
+
+                          <div
+                            style={{
+                              padding: '12px 14px',
+                              borderRadius: 12,
+                              background: checkoutSummary.checkout.enabled
+                                ? 'var(--positive-bg)'
+                                : checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
+                                ? 'var(--positive-bg)'
+                                : 'var(--surface-2)',
+                              border: checkoutSummary.checkout.enabled
+                                ? '1px solid var(--accent-border-subtle)'
+                                : checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
+                                ? '1px solid var(--accent-border-subtle)'
+                                : '1px solid var(--border-subtle)',
+                              color: checkoutSummary.checkout.enabled
+                                ? 'var(--accent-fg)'
+                                : checkoutSummary.checkout.reason === 'NO_PENDING_BALANCE'
+                                ? 'var(--accent-fg)'
+                                : 'var(--text-secondary)',
+                              fontSize: 13,
+                              fontWeight: 600,
+                              lineHeight: 1.5
+                            }}
+                          >
+                            {getCheckoutReasonMessage(checkoutSummary)}
+                          </div>
+
+                          {checkoutSummary.checkout.enabled && (
+                            <button
+                              type="button"
+                              className="bk-action-btn bk-action-rebook"
+                              onClick={handleStartOnlineCheckout}
+                              disabled={checkoutSubmitting}
+                            >
+                              <Ticket size={15} />
+                              {checkoutSubmitting ? 'Redirigiendo...' : 'Pagar online con Mercado Pago'}
+                            </button>
+                          )}
+                        </>
+                      ) : null}
                     </div>
-
-                    {checkoutSummary.checkout.enabled && (
-                      <button
-                        type="button"
-                        className="bk-action-btn bk-action-rebook"
-                        onClick={handleStartOnlineCheckout}
-                        disabled={checkoutSubmitting}
-                      >
-                        <Ticket size={15} />
-                        {checkoutSubmitting ? 'Redirigiendo...' : 'Pagar online con Mercado Pago'}
-                      </button>
-                    )}
-                  </>
-                ) : null}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -33,7 +33,7 @@ const CHECKOUT_CSS = `
   .checkout-hero { position:relative; padding:28px; border-bottom:1px solid var(--border); overflow:hidden; }
   .checkout-hero::before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 10% 0%, var(--accent-border-subtle), transparent 34%), linear-gradient(135deg, var(--positive-bg), transparent 46%); pointer-events:none; }
   .checkout-hero-content { position:relative; z-index:1; }
-  .checkout-pill { display:inline-flex; align-items:center; gap:8px; height:30px; padding:0 11px; border-radius:999px; background:var(--positive-bg); border:1px solid var(--accent-border-subtle); color:var(--brand-hover); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+  .checkout-pill { display:inline-flex; align-items:center; gap:8px; height:30px; padding:0 11px; border-radius:999px; background:var(--positive-bg); border:1px solid var(--accent-border-subtle); color:var(--accent-fg); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
   .checkout-title { margin:14px 0 7px; color:var(--text-primary); font-size:clamp(28px,4vw,46px); line-height:.98; font-weight:900; letter-spacing:-.06em; }
   .checkout-copy { margin:0; max-width:560px; color:var(--text-muted); font-size:14px; line-height:1.6; font-weight:600; }
   .checkout-activity { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
@@ -47,20 +47,20 @@ const CHECKOUT_CSS = `
   .checkout-summary { position:sticky; top:88px; }
   .checkout-price { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:22px; border-bottom:1px solid var(--border); background:linear-gradient(135deg, var(--accent-bg-soft), transparent); }
   .checkout-price-label { margin:0; color:var(--text-muted); font-size:10px; font-weight:900; letter-spacing:.13em; text-transform:uppercase; }
-  .checkout-price-value { margin:5px 0 0; color:var(--brand-hover); font-size:34px; font-weight:900; letter-spacing:-.06em; }
+  .checkout-price-value { margin:5px 0 0; color:var(--accent-fg); font-size:34px; font-weight:900; letter-spacing:-.06em; }
   .payment-option { display:flex; align-items:flex-start; gap:12px; border-radius:18px; padding:14px; border:1px solid var(--border); background:var(--surface-2); }
-  .payment-option.active { border-color:var(--accent-border); background:var(--accent-bg-faint); }
+  .payment-option.active { border-color:var(--accent-border-strong); background:var(--accent-bg-soft); }
   .payment-option.disabled { opacity:.55; }
   .payment-icon { width:38px; height:38px; border-radius:14px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--surface-2); color:var(--text-muted); }
-  .payment-option.active .payment-icon { background:var(--positive-bg); color:var(--accent-fg); }
+  .payment-option.active .payment-icon { background:var(--accent-bg-muted); color:var(--accent-fg); }
   .payment-title { margin:0; color:var(--text-primary); font-size:13px; font-weight:850; }
   .payment-copy { margin:4px 0 0; color:var(--text-muted); font-size:12px; line-height:1.45; font-weight:600; }
   .checkout-error { border:1px solid var(--error-bg); background:var(--error-bg); color:var(--error-fg); border-radius:16px; padding:13px 14px; font-size:13px; font-weight:700; line-height:1.45; }
   .checkout-actions { display:flex; gap:10px; padding-top:16px; }
   .checkout-secondary,.checkout-primary { height:48px; border-radius:15px; font-family:var(--font-sans); font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; padding:0 18px; }
-  .checkout-secondary { flex:0 0 auto; min-width:154px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-secondary); }
-  .checkout-primary { flex:1; border:1px solid var(--accent-border-subtle); background:var(--positive-bg); color:var(--brand); }
-  .checkout-primary:hover { border-color:var(--accent-border); color:var(--brand); }
+  .checkout-secondary { flex:0 0 auto; min-width:154px; border:1px solid var(--border); background:var(--surface-1); color:var(--text-secondary); }
+  .checkout-primary { flex:1; border:1px solid var(--brand); background:var(--brand); color:var(--brand-on); }
+  .checkout-primary:hover { border-color:var(--brand-hover); background:var(--brand-hover); color:var(--brand-on); }
   .checkout-primary:disabled { cursor:not-allowed; opacity:.65; }
   .checkout-success { max-width:720px; margin:0 auto; text-align:center; }
   .checkout-success-icon { width:68px; height:68px; border-radius:22px; margin:0 auto 18px; display:flex; align-items:center; justify-content:center; background:var(--positive-bg); border:1px solid var(--accent-border-subtle); color:var(--accent-fg); }
@@ -89,16 +89,18 @@ const CHECKOUT_CSS = `
   .p-public-root.p-public-theme-light .payment-option { background:var(--surface-1); border-color:var(--border); }
   .p-public-root.p-public-theme-light .checkout-label { color:var(--text-muted); }
   .p-public-root.p-public-theme-light .checkout-summary { box-shadow:none; }
-  .p-public-root.p-public-theme-light .checkout-price { border-bottom-color:var(--border-subtle); background:linear-gradient(135deg, var(--accent-bg-soft), transparent); }
+  .p-public-root.p-public-theme-light .checkout-price { border-bottom-color:var(--border-subtle); background:linear-gradient(135deg, var(--accent-bg-faint), transparent); }
   .p-public-root.p-public-theme-light .checkout-price-value { color:var(--accent-fg); }
   .p-public-root.p-public-theme-light .payment-icon { background:var(--surface-2); color:var(--text-muted); }
-  .p-public-root.p-public-theme-light .payment-option.active { border-color:var(--accent-border); background:var(--positive-bg); }
-  .p-public-root.p-public-theme-light .payment-option.active .payment-icon { background:var(--positive-bg); color:var(--accent-fg); }
+  .p-public-root.p-public-theme-light .payment-option.active { border-color:var(--accent-border-strong); background:var(--accent-bg-soft); }
+  .p-public-root.p-public-theme-light .payment-option.active .payment-icon { background:var(--accent-bg-muted); color:var(--accent-fg); }
   .p-public-root.p-public-theme-light .payment-title { color:var(--text-primary); }
   .p-public-root.p-public-theme-light .checkout-secondary { background:var(--surface-1); border-color:var(--border); color:var(--text-secondary); }
   .p-public-root.p-public-theme-light .checkout-secondary:hover { background:var(--surface-2); color:var(--text-primary); }
   .p-public-root.p-public-theme-light .checkout-error { color:var(--error-fg); background:var(--error-bg); border-color:var(--danger-border); }
   .p-public-root.p-public-theme-light .checkout-success-icon { background:var(--positive-bg); border-color:var(--accent-border-subtle); color:var(--accent-fg); }
+  .p-public-root:not(.p-public-theme-light) .checkout-success .checkout-primary { background:linear-gradient(135deg, var(--brand) 0%, var(--brand-hover) 100%); border-color:var(--brand-hover); color:var(--brand-on); box-shadow:0 14px 28px rgba(182,243,106,.18); }
+  .p-public-root:not(.p-public-theme-light) .checkout-success .checkout-primary:hover { background:linear-gradient(135deg, var(--brand-hover) 0%, var(--brand) 100%); border-color:var(--brand); color:var(--brand-on); }
 `;
 
 const formatMoney = (value: number) => `$${Number(value || 0).toLocaleString('es-AR')}`;
@@ -337,7 +339,7 @@ export default function CheckoutPage() {
                   {draft.lightsExtraApplied > 0.009 && (
                     <div>Luces +{formatMoney(draft.lightsExtraApplied)}{draft.lightsFromHour ? ` desde ${draft.lightsFromHour}` : ''}</div>
                   )}
-                  {draft.discountAmount > 0.009 && <div style={{ color: 'var(--brand-hover)' }}>Descuento -{formatMoney(draft.discountAmount)}</div>}
+                  {draft.discountAmount > 0.009 && <div style={{ color: 'var(--accent-fg)' }}>Descuento -{formatMoney(draft.discountAmount)}</div>}
                   {draft.lightsExtraApplied <= 0.009 && draft.discountAmount <= 0.009 && <div>Pago en el club</div>}
                 </div>
               </div>
@@ -354,8 +356,8 @@ export default function CheckoutPage() {
                 <div className="payment-option disabled">
                   <div className="payment-icon"><CreditCard size={18} /></div>
                   <div>
-                    <p className="payment-title">Seña online</p>
-                    <p className="payment-copy">Preparado para habilitar pago parcial o total cuando activemos proveedor.</p>
+                    <p className="payment-title">Seña online (próximamente)</p>
+                    <p className="payment-copy">Esta opción todavía no está disponible. Por ahora, el pago se realiza en el club.</p>
                   </div>
                 </div>
 
