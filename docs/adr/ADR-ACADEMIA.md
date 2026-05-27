@@ -1210,3 +1210,85 @@ Este módulo no falla por falta de pantallas; falla si nace con el modelo equivo
 1. Implementar ACA-010 Modelo Teacher.
 2. Implementar ACA-011 CRUD admin profesores.
 3. Recién después avanzar con ClassSession.
+
+
+
+
+
+I. Impacto futuro en Jugadores/Alumnos
+
+El modelo debería dejar listo:
+
+catálogo de clases públicas
+mis clases
+clases privadas asignadas
+inscripción
+pago de cualquier clase
+pago de deuda
+compra de packs
+créditos restantes
+historial de asistencia
+cancelación por reglas
+QR/check-in futuro
+
+
+no limitar pagos del jugador a clases públicas.
+El modelo debe soportar pago futuro de:
+
+pública
+privada
+grupal
+suelta
+recurrente
+pack
+deuda acumulada
+
+
+
+J. Panel profesor futuro
+
+Debería poder ver:
+
+clases del día
+alumnos
+asistencia
+deuda/crédito visible
+notas
+cierre de clase
+Decisión importante
+
+Profesor no debe depender de ser User en MVP
+pero el modelo sí debe permitir userId? para login futuro limitado
+
+
+
+K. Ideas avanzadas
+
+Idea	MVP	Soporte	Riesgo
+QR asistencia	no	ClassEnrollment, Attendance	medio
+Reglas de cancelación por clase	no, quizá básicas	ClassSession/policy	medio
+Packs flexibles	después	ClassPass	medio
+Crédito transferible/familiar	no	wallet/family model	alto
+Nivel del alumno	no	enrollment/profile metadata	bajo
+Lista de espera	después	ClassEnrollment	medio
+Cupos por perfil	después	rule engine	alto
+mínimo para confirmar clase	después	ClassSession rules	medio
+reemplazos profesor	después	teacher assignment history	medio
+comisiones/liquidación	no MVP	payout domain	alto
+agenda profesor	después	schedule projections	medio
+disponibilidad profesor	después	availability domain	medio
+solicitud clase privada	después	request workflow	medio
+cursos recurrentes	después	ClassSeries	alto
+recuperación clase perdida	después	compensation rules	alto
+historial alumno	sí temprano	enrollment/history	bajo
+notas profesor	después	teacher notes	bajo
+evaluaciones/progreso	no MVP	academic progress domain	alto
+recordatorios automáticos	después	notifications	medio
+check-in con deuda visible	después	enrollment + account summary	medio
+modo asistencia rápido	sí temprano	admin/prof panel	bajo
+cierre de clase	después	class session workflow	medio
+varias canchas	no MVP	class-resource allocation	alto
+varios profesores	no MVP	multi-teacher assignment	alto
+métricas dueño	después	reports	medio
+alertas operativas	después	rule engine/notifications	medio
+motor de reglas club	no MVP	policy engine	muy alto

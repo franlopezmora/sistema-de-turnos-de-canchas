@@ -4,6 +4,7 @@
  */
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { shift } from '@floating-ui/react';
 
 type DatePickerDarkProps = {
   selected: Date | null;
@@ -45,6 +46,10 @@ export default function DatePickerDark({
       placeholderText={placeholderText}
       className={inputClassName ?? defaultInputCls}
       calendarClassName="rdp-calendar-dark"
+      portalId="datepicker-portal"
+      popperPlacement="bottom-start"
+      popperClassName="date-picker-popper date-picker-popper--public"
+      popperModifiers={[shift({ padding: 8 })]}
       showPopperArrow={false}
     />
   );

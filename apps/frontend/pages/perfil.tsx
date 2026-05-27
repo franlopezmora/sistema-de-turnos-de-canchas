@@ -142,7 +142,7 @@ export default function PerfilPage() {
         { label: 'Mi perfil' },
       ]}
     >
-      <div className="p-public-page-sm">
+      <div className="p-public-page-sm" style={{ paddingTop: 24 }}>
 
         {/* ── PAGE HEADER ── */}
         <div className="pf-head" style={{ marginBottom: 40, paddingBottom: 32, borderBottom: '1px solid var(--border-subtle)' }}>

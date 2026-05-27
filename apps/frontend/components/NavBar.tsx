@@ -65,7 +65,7 @@ const NAV_CSS = `
   .p-player-btn-accent span { color:var(--brand-on); }
   .p-player-btn-accent:hover span { color:var(--brand-on); }
   .p-player-theme svg { width:14px; height:14px; }
-  .p-player-login { white-space:nowrap; line-height:1; min-height:40px; padding:11px 16px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--brand-on); }
+  .p-player-login { white-space:nowrap; line-height:1; min-height:40px; padding:11px 16px; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--brand-on); min-width:104px; }
   .p-player-menu-meta { padding:18px 18px 16px; text-align:center; border-bottom:1px solid var(--border); }
   .p-player-menu-role { margin-top:4px; color:var(--text-muted); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
   .p-player-menu-body { padding:8px; display:flex; flex-direction:column; gap:4px; }
@@ -84,7 +84,9 @@ const NAV_CSS = `
     .p-player-nav .p-header-inner { padding-inline:16px; }
     .p-player-contact { display:none; }
     .p-player-user-name { display:none; }
-    .p-player-login span { display:none; }
+    .p-player-user-btn { gap:0; padding:3px; min-height:40px; }
+    .p-player-login { min-width:96px; padding-inline:14px; font-size:11px; letter-spacing:.04em; }
+    .p-player-theme span { display:none; }
   }
 `;
 
@@ -292,6 +294,7 @@ export default function Navbar({
               </div>
             ) : (
               <Link href={`/login?from=${encodeURIComponent(router.asPath)}`} className="p-player-btn p-player-btn-accent p-player-login">
+                <User size={14} style={{ color: 'var(--brand-on)' }} />
                 <span>Ingresar</span>
               </Link>
             )}

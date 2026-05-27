@@ -310,3 +310,42 @@
   z-index: 2147483500 !important;
 }
 #datepicker-portal { z-index: 2147483500; }
+
+.date-picker-popper--public {
+  max-width: calc(100vw - 16px) !important;
+}
+
+.date-picker-popper--public .react-datepicker {
+  max-width: calc(100vw - 16px) !important;
+}
+
+@media (max-width: 720px) {
+  .date-picker-popper--public .react-datepicker {
+    width: min(320px, calc(100vw - 16px)) !important;
+    border-radius: 16px !important;
+  }
+
+  .date-picker-popper--public .react-datepicker__month-container {
+    width: 100% !important;
+  }
+
+  .date-picker-popper--public .react-datepicker__header {
+    padding: 14px 12px 10px !important;
+  }
+
+  .date-picker-popper--public .react-datepicker__current-month {
+    font-size: 14px !important;
+  }
+
+  .date-picker-popper--public .react-datepicker__day-name,
+  .date-picker-popper--public .react-datepicker__day {
+    width: calc((100% - 8px) / 7) !important;
+    margin: 0 !important;
+    line-height: 36px !important;
+  }
+
+  .date-picker-popper--public .react-datepicker__day-names,
+  .date-picker-popper--public .react-datepicker__week {
+    display: flex !important;
+  }
+}

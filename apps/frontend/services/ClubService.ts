@@ -47,6 +47,7 @@ export interface Club {
   bookingSimpleAdvanceDaysUser?: number;
   bookingSimpleAdvanceDaysAdmin?: number;
   allowAdminSkipSimpleAdvanceLimit?: boolean;
+  publicSports?: string[];
   openingDays?: number[] | null;
   closureDates?: string[] | null;
   clubOperationalStatus?: ClubOperationalStatus;

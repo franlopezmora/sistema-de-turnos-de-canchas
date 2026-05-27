@@ -715,7 +715,7 @@ export default function MyBookingsPage() {
         { label: 'Mis reservas' },
       ]}
     >
-      <div className="p-public-page">
+      <div className="p-public-page" style={{ paddingTop: 24 }}>
 
         {/* ── PAGE HEADER ── */}
         <div style={{ marginBottom: 36, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, paddingBottom: 28, borderBottom: '1px solid var(--border-subtle)' }}>

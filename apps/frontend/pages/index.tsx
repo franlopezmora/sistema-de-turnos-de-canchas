@@ -180,6 +180,8 @@ export default function Home() {
   const [heroWordVisible, setHeroWordVisible] = useState(true);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const faqRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const shouldAnimateMarquee = clubs.length >= 6;
+  const marqueeClubs = shouldAnimateMarquee ? [...clubs, ...clubs] : clubs;
 
   // close open FAQ when clicking outside the open item's box
   useEffect(() => {
@@ -719,6 +721,7 @@ export default function Home() {
     .p-home-search-seg:hover .p-home-search-caret { color:var(--text-muted); }
     .p-home-search-caret.p-home-search-caret-open { transform:rotate(180deg); color:var(--accent-fg); }
     .p-home-search-divider { width:1px; height:28px; background:var(--border); flex-shrink:0; margin:0 2px; }
+    .p-home-search-loc { flex:1; position:relative; min-width:0; }
     .p-home-search-input { flex:1; min-width:120px; padding:10px 14px; background:transparent; border:none; color:var(--text-secondary); font-family:var(--font-sans); font-size:13px; font-weight:500; outline:none; }
     .p-home-search-input::placeholder { color:var(--text-muted); }
     .p-home-search-cta { padding:12px 20px; background:var(--brand); color:var(--brand-on); border:none; border-radius:999px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:8px; transition:background .15s; cursor:pointer; font-family:inherit; white-space:nowrap; flex-shrink:0; }
@@ -855,7 +858,7 @@ export default function Home() {
     .p-home-contact-panel { position:fixed; top:0; right:0; height:100%; width:100%; max-width:360px; background:var(--surface-1); z-index:70; box-shadow:var(--shadow-lg); transform:translateX(100%); transition:transform .3s ease-out; border-left:1px solid var(--border-subtle); }
     .p-home-contact-panel.p-home-open { transform:translateX(0); }
     /* Dropdowns */
-    .p-home-dropdown { position:absolute; top:calc(100% + 8px); left:0; min-width:220px; background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:12px; overflow:hidden; box-shadow:var(--shadow-md); z-index:100; }
+    .p-home-dropdown { position:absolute; top:calc(100% + 8px); left:0; min-width:220px; width:max-content; max-width:min(360px, calc(100vw - 32px)); background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:12px; overflow:hidden; box-shadow:var(--shadow-md); z-index:100; }
     /* Responsive */
     @media(max-width:1024px){
       .p-home-hero-inner{grid-template-columns:1fr;gap:40px}
@@ -879,8 +882,16 @@ export default function Home() {
       .p-home-foot{padding:44px 24px 24px}
       .p-home-foot-cols{grid-template-columns:1fr 1fr;gap:28px}
       .p-home-foot-brand{grid-column:1 / -1;max-width:none}
-      .p-home-search{border-radius:16px;padding:8px}
+      .p-home-search{border-radius:24px;padding:8px;gap:8px}
       .p-home-search-divider{display:none}
+      .p-home-search-sport{order:1;flex:1 1 0;min-width:0}
+      .p-home-search-date{order:2;flex:0 0 auto;margin-left:auto}
+      .p-home-search-loc{order:3;flex:1 0 100%}
+      .p-home-search-input{width:100%;min-width:0;padding:12px 14px}
+      .p-home-search-cta{order:4;width:100%;justify-content:center;padding:14px 18px}
+      .p-home-search .p-home-dropdown{left:0;right:auto;width:100%;min-width:0;max-width:100%}
+      .p-home-contact-panel{top:auto;right:0;bottom:0;left:0;height:auto;max-width:none;max-height:min(78vh,680px);border-left:none;border-top:1px solid var(--border-subtle);border-radius:20px 20px 0 0;transform:translateY(100%)}
+      .p-home-contact-panel.p-home-open{transform:translateY(0)}
     }
     @media(max-width:480px){
       .p-home-foot-cols{grid-template-columns:1fr}
@@ -914,6 +925,7 @@ export default function Home() {
     .p-home-marquee-wrap { overflow:hidden; border-bottom:1px solid var(--border-subtle); background:var(--surface-1); padding:20px 0; }
     .p-home-marquee-track { display:flex; gap:14px; width:max-content; animation:p-home-marquee 40s linear infinite; }
     .p-home-marquee-wrap:hover .p-home-marquee-track { animation-play-state:paused; }
+    .p-home-marquee-track.p-home-marquee-static { width:100%; min-width:100%; justify-content:center; flex-wrap:wrap; padding:0 24px; animation:none; }
     @keyframes p-home-marquee { to { transform:translateX(-50%); } }
     .p-home-marquee-item { display:inline-flex; align-items:center; gap:8px; padding:7px 16px; background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:999px; font-size:12px; font-weight:600; color:var(--text-muted); white-space:nowrap; transition:color .2s,border-color .2s; cursor:default; }
     .p-home-marquee-item:hover { color:var(--text-secondary); border-color:var(--border); }
@@ -1093,7 +1105,7 @@ export default function Home() {
             {/* Search bar */}
             <div ref={searchBarRef} className="p-home-search" onClick={e => e.stopPropagation()}>
               {/* Sport selector */}
-              <div className="p-home-search-seg" style={{ position: 'relative' }} onClick={(e) => { e.stopPropagation(); setShowCityDropdown(false); closeDatepicker(); setShowSportDropdown(p => !p); }}>
+              <div className="p-home-search-seg p-home-search-sport" style={{ position: 'relative' }} onClick={(e) => { e.stopPropagation(); setShowCityDropdown(false); closeDatepicker(); setShowSportDropdown(p => !p); }}>
                 <span style={{ color: 'var(--text-muted)', display: 'flex' }}>{selectedSport.icon}</span>
                 <span>{selectedSport.label}</span>
                 <ChevronDown className={`p-home-search-caret${showSportDropdown ? ' p-home-search-caret-open' : ''}`} />
@@ -1112,7 +1124,7 @@ export default function Home() {
               </div>
               <div className="p-home-search-divider" />
               {/* Location */}
-              <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+              <div className="p-home-search-loc">
                 <input
                   id="cityInput"
                   type="text"
@@ -1147,7 +1159,7 @@ export default function Home() {
               </div>
               <div className="p-home-search-divider" />
               {/* Date */}
-              <div className="p-home-search-seg" onClick={() => { setShowCityDropdown(false); setShowSportDropdown(false); }}>
+              <div className="p-home-search-seg p-home-search-date" onClick={() => { setShowCityDropdown(false); setShowSportDropdown(false); }}>
                 <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
                 <DatePickerDark
                   selected={searchDate ? (() => { const [y,m,d] = searchDate.split('-').map(Number); return new Date(y,m-1,d); })() : null}
@@ -1175,7 +1187,10 @@ export default function Home() {
             {!loadingClubs && clubs.length > 0 && (
               <div className="p-home-hero-stat">
                 <span className="p-home-hero-stat-dot" />
-                <span><b>{clubs.length}</b> clubes disponibles en Argentina</span>
+                <span>
+                  <b>{clubs.length}</b>{' '}
+                  {clubs.length === 1 ? 'club disponible en Argentina' : 'clubes disponibles en Argentina'}
+                </span>
               </div>
             )}
           </div>
@@ -1198,8 +1213,8 @@ export default function Home() {
       {/* ── MARQUEE STRIP ── */}
       {!loadingClubs && clubs.length > 0 && (
         <div className="p-home-marquee-wrap">
-          <div className="p-home-marquee-track">
-            {[...clubs, ...clubs].map((club, i) => (
+          <div className={`p-home-marquee-track${shouldAnimateMarquee ? '' : ' p-home-marquee-static'}`}>
+            {marqueeClubs.map((club, i) => (
               <div key={i} className="p-home-marquee-item">
                 <span className="p-home-marquee-dot" />
                 {club.name}
@@ -1444,7 +1459,6 @@ export default function Home() {
         ref={sidebarRef}
         className={`p-home-contact-panel${showContact ? ' p-home-open' : ''}`}
         style={{
-          transform: showContact ? 'translateX(0)' : 'translateX(100%)',
           visibility: showContact ? 'visible' : 'hidden',
           pointerEvents: showContact ? 'auto' : 'none',
         }}

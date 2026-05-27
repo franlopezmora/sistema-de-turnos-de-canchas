@@ -51,6 +51,8 @@ const PAGE_CSS = `
   .cl-icon-btn:disabled { opacity:.5; cursor:not-allowed; }
   /* Grid */
   .cl-grid { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:24px; align-items:start; }
+  .cl-grid > * { min-width:0; }
+  .cl-sidebar { display:flex; flex-direction:column; gap:16px; min-width:0; }
   /* Sidebar panels */
   .cl-panel { background:var(--surface-1); border:1px solid var(--border); border-radius:18px; padding:22px 24px; }
   .cl-panel-h { font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--text-muted); margin-bottom:16px; }
@@ -91,8 +93,12 @@ const PAGE_CSS = `
     .cl-hero-h { font-size:28px; }
   }
   @media(max-width:600px){
+    .cl-page { padding-top:24px !important; padding-inline:24px !important; }
     .cl-hero-body { flex-direction:column; align-items:flex-start; gap:16px; }
     .cl-hero-actions { align-self:flex-end; }
+    .cl-grid { gap:20px; }
+    .cl-sidebar { gap:14px; }
+    .cl-panel { padding:20px; }
   }
   .p-public-root.p-public-theme-light .cl-hero { border-color:var(--border); box-shadow:0 12px 28px var(--border); }
   .p-public-root.p-public-theme-light .cl-hero-bg { background:linear-gradient(135deg,var(--surface-1) 0%,var(--surface-2) 52%,var(--surface-3) 100%); }
@@ -384,7 +390,7 @@ export default function ClubPage() {
 
   return (
     <DarkPageLayout title={pageTitle} extraCss={PAGE_CSS} breadcrumbs={clubBreadcrumbs}>
-      <div className="p-public-page" style={{ paddingTop: 32 }}>
+      <div className="p-public-page cl-page" style={{ paddingTop: 32 }}>
 
         {/* ── HERO ── */}
         <div className="cl-hero">
@@ -477,7 +483,7 @@ export default function ClubPage() {
           <BookingGrid clubSlug={slug} />
 
           {/* Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="cl-sidebar">
 
             {/* Info */}
             <div className="cl-panel">

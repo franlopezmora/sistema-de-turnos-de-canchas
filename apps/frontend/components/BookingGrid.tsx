@@ -73,7 +73,7 @@ const normalizeSlotLabel = (slot: string) => {
 };
 
 // -- CUSTOM SELECT (theme-aware) --
-const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
+const CustomSelect = ({ value, options, onChange, placeholder, centerLabel = false }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -92,7 +92,8 @@ const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
       <div
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          position: 'relative',
+          display: 'flex', alignItems: 'center', justifyContent: centerLabel ? 'center' : 'space-between',
           height: 46, padding: '0 14px',
           background: 'var(--surface-1)',
           border: `1px solid ${isOpen ? 'var(--accent-fg)' : 'var(--border)'}`,
@@ -101,10 +102,10 @@ const CustomSelect = ({ value, options, onChange, placeholder }: any) => {
           transition: 'border-color .2s, box-shadow .2s',
         }}
       >
-        <span style={{ fontSize: 14, fontWeight: 650, color: selectedOption ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
+        <span style={{ fontSize: 14, fontWeight: 650, color: selectedOption ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'var(--font-sans)', textAlign: centerLabel ? 'center' : 'left', width: centerLabel ? '100%' : 'auto', paddingRight: centerLabel ? 22 : 0 }}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <ChevronDown size={16} style={{ color: isOpen ? 'var(--accent-fg)' : 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .3s, color .2s', flexShrink: 0 }} />
+        <ChevronDown size={16} style={{ color: isOpen ? 'var(--accent-fg)' : 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .3s, color .2s', flexShrink: 0, position: centerLabel ? 'absolute' : 'static', right: centerLabel ? 14 : undefined }} />
       </div>
 
       {isOpen && (
@@ -882,7 +883,7 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
   const sectionStyle: React.CSSProperties = { marginBottom: 28 };
 
   return (
-    <div style={{ width: '100%', background: T.bg, border: `1px solid ${T.borderSubtle}`, borderRadius: 24, padding: '28px 28px 24px', fontFamily: "'Geist',system-ui,sans-serif", boxSizing: 'border-box', boxShadow: T.shadow }}>
+    <div style={{ width: '100%', minWidth: 0, background: T.bg, border: `1px solid ${T.borderSubtle}`, borderRadius: 24, padding: isMobileListOnly ? '24px 20px 20px' : '28px 28px 24px', fontFamily: "'Geist',system-ui,sans-serif", boxSizing: 'border-box', boxShadow: T.shadow, overflow: 'hidden' }}>
 
       {/* Header */}
       <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: `1px solid ${T.borderSubtle}` }}>
@@ -893,21 +894,22 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
       </div>
 
       {/* Filters row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobileListOnly ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 24 }}>
 
         {/* Deporte */}
-        <div style={{ position: 'relative', zIndex: 20 }}>
+        <div style={{ position: 'relative', zIndex: 20, minWidth: 0 }}>
           <div style={labelStyle}><Activity size={12} style={{ color: 'var(--brand)' }} /> Deporte</div>
           <CustomSelect
             value={selectedActivityFilter}
             onChange={(val: string) => { setSelectedActivityFilter(val); setSelectedSlot(null); setSelectedCourt(null); }}
             placeholder="Seleccioná"
+            centerLabel={isMobileListOnly}
             options={availableActivities.map(n => ({ value: n, label: n }))}
           />
         </div>
 
         {/* Fecha */}
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={labelStyle}><Calendar size={12} style={{ color: 'var(--brand)' }} /> Fecha</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 46, padding: '0 6px', background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: T.shadow }}>
             <button
@@ -933,12 +935,13 @@ export default function BookingGrid({ clubSlug }: BookingGridProps = {}) {
         </div>
 
         {/* Duración */}
-        <div style={{ position: 'relative', zIndex: 10 }}>
+        <div style={{ position: 'relative', zIndex: 10, minWidth: 0 }}>
           <div style={labelStyle}><Clock size={12} style={{ color: 'var(--brand)' }} /> Duración</div>
           <CustomSelect
             value={selectedDuration}
             onChange={(val: number) => { setSelectedDuration(Number(val)); setSelectedSlot(null); setSelectedCourt(null); }}
             placeholder="Duración"
+            centerLabel={isMobileListOnly}
             options={durationOptions.map(d => ({ value: d, label: `${d} min` }))}
           />
         </div>
