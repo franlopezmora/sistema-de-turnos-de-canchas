@@ -106,6 +106,7 @@ export type PlayerBookingDto = {
         id: string;
         name: string;
         slug: string;
+        timeZone: string;
     };
     court: {
         name: string;
@@ -161,6 +162,7 @@ export type PlayerBookingInvitationDto = {
     club: {
         name: string;
         slug: string;
+        timeZone: string;
     };
     court: {
         name: string;
@@ -4669,7 +4671,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 ]
             },
             include: {
-                court: { include: { club: true } },
+                court: { include: { club: { include: { settings: true } } } },
                 activity: true,
                 client: {
                     select: {
@@ -4744,7 +4746,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 club: {
                     id: String(booking.court.club.id),
                     name: String(booking.court.club.name || 'Club'),
-                    slug: String(booking.court.club.slug || '')
+                    slug: String(booking.court.club.slug || ''),
+                    timeZone: String(booking.court.club.settings?.timeZone || 'America/Argentina/Buenos_Aires')
                 },
                 court: {
                     name: String(booking.court.name || 'Cancha')
@@ -6045,7 +6048,11 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     include: {
                         court: {
                             include: {
-                                club: true
+                                club: {
+                                    include: {
+                                        settings: true
+                                    }
+                                }
                             }
                         }
                     }
@@ -6064,7 +6071,8 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
             bookingPublicCode: String(invitation.booking.displayCode || `RES-${invitation.booking.id}`),
             club: {
                 name: String(invitation.booking.court.club.name || 'Club'),
-                slug: String(invitation.booking.court.club.slug || '')
+                slug: String(invitation.booking.court.club.slug || ''),
+                timeZone: String(invitation.booking.court.club.settings?.timeZone || 'America/Argentina/Buenos_Aires')
             },
             court: {
                 name: String(invitation.booking.court.name || 'Cancha')
