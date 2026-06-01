@@ -10,6 +10,11 @@ Guía mínima para desplegar Pique con foco en autenticación por cookies y oper
 
 Si usás `wpp-service`, instalar dependencias de Chromium en host/contenedor según tu estrategia.
 
+Nota:
+
+- `apps/wpp-service` es el transporte legacy basado en WhatsApp Web.
+- La dirección objetivo de producto/arquitectura está documentada en `docs/whatsapp-cloud-api-migration.md`.
+
 ## 2) Variables de entorno críticas
 
 Partir de `env.example` y definir valores reales.

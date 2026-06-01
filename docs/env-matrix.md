@@ -49,3 +49,5 @@ Variables principales para operar Pique.
 - Si usás `SameSite=None`, `AUTH_COOKIE_SECURE=true` es obligatorio.
 - No poner secretos reales en `.env.example`.
 - Para el primer piloto, preferir mismo dominio (`https://pique.ar` + `/api`) y cookie host-only.
+- Las variables actuales de WhatsApp reflejan la implementación legacy (`wpp-service` / `local_browser`).
+- La migración objetivo a `WhatsApp Cloud API`, junto con futuras variables y feature flags, está definida en `docs/whatsapp-cloud-api-migration.md`.
