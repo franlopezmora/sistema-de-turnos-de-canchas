@@ -34,9 +34,12 @@ import { recordUserClientLinkAuditTx } from './UserClientLinkAudit';
 import { ClubPaymentIntegrationService } from './ClubPaymentIntegrationService';
 import { MercadoPagoService } from './MercadoPagoService';
 import { mercadoPagoConfig } from '../utils/mercadoPagoConfig';
+import { featureFlags } from '../config/featureFlags';
 import { PaymentService } from './PaymentService';
 import { PersonService } from './PersonService';
 import { BookingHistoryService } from './BookingHistoryService';
+import { BookingCustomerWhatsappNotificationService } from './BookingCustomerWhatsappNotificationService';
+import { BookingStaffWhatsappNotificationService } from './BookingStaffWhatsappNotificationService';
 import { AppError, ErrorCodes, badRequest, conflict, forbidden, notFound } from '../errors';
 
 type CancelBookingReason = 'MANUAL' | 'AUTO_CANCEL_UNCONFIRMED';
@@ -305,6 +308,8 @@ export class BookingService {
     private readonly bookingDomainService = new BookingDomainService();
     private readonly refundService = new RefundService();
     private readonly discountService = new DiscountService();
+    private readonly bookingCustomerWhatsappNotificationService = new BookingCustomerWhatsappNotificationService();
+    private readonly bookingStaffWhatsappNotificationService = new BookingStaffWhatsappNotificationService();
 
     constructor(
         private bookingRepo: BookingRepository,
@@ -3059,6 +3064,54 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
         ].filter((item): item is NonNullable<typeof item> => Boolean(item));
     }
 
+    private filterOutboxMessages(messages: any[], predicate: (message: any) => boolean) {
+        return messages.filter((message) => !predicate(message));
+    }
+
+    private isLegacyCustomerWhatsappOutboxMessage(message: any, dedupePrefix: string) {
+        return (
+            message?.type === OUTBOX_TYPES.WHATSAPP_SEND &&
+            typeof message?.dedupeKey === 'string' &&
+            message.dedupeKey.startsWith(dedupePrefix)
+        );
+    }
+
+    private isLegacyClubStaffWhatsappOutboxMessage(message: any, dedupePrefix: string) {
+        return (
+            message?.type === OUTBOX_TYPES.WHATSAPP_SEND &&
+            typeof message?.dedupeKey === 'string' &&
+            message.dedupeKey.startsWith(dedupePrefix)
+        );
+    }
+
+    private filterBookingWhatsappOutboxMessages(params: {
+        messages: any[];
+        customerLegacyDedupePrefix?: string;
+        staffLegacyDedupePrefix?: string;
+        customerEventsV2Enabled: boolean;
+        staffEventsV2Enabled: boolean;
+    }) {
+        return this.filterOutboxMessages(params.messages, (message) => {
+            if (
+                params.customerEventsV2Enabled &&
+                params.customerLegacyDedupePrefix &&
+                this.isLegacyCustomerWhatsappOutboxMessage(message, params.customerLegacyDedupePrefix)
+            ) {
+                return true;
+            }
+
+            if (
+                params.staffEventsV2Enabled &&
+                params.staffLegacyDedupePrefix &&
+                this.isLegacyClubStaffWhatsappOutboxMessage(message, params.staffLegacyDedupePrefix)
+            ) {
+                return true;
+            }
+
+            return false;
+        });
+    }
+
     async getBookingFinancialSummary(bookingId: number, clubId: number) {
         const summary = await prisma.$transaction((tx) => this.bookingDomainService.getBookingFinancialSummaryTx(tx, bookingId, clubId));
         const courtTotal = summary.account.items
@@ -3407,7 +3460,7 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 throw this.bookingOverlap('El horario se superpone con reservas existentes.', overlaps);
             }
 
-            let saved;
+            let saved: any;
             try {
                 let resolvedClient: any = null;
                 let resolvedBookingUserId: number | null = bookingOwnerUser?.id ?? null;
@@ -3663,7 +3716,45 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                     suppressClubNotification: createdByAdmin
                 });
 
-                await this.outboxService.enqueueMany(outboxMessages, tx);
+                const customerEventsV2Enabled = featureFlags.ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2;
+                const staffEventsV2Enabled = featureFlags.ENABLE_WHATSAPP_STAFF_EVENTS_V2;
+                const messagesToEnqueue = this.filterBookingWhatsappOutboxMessages({
+                    messages: outboxMessages,
+                    customerLegacyDedupePrefix: `booking-created:${saved.id}:client:`,
+                    staffLegacyDedupePrefix: `booking-created:${saved.id}:club:`,
+                    customerEventsV2Enabled,
+                    staffEventsV2Enabled
+                });
+
+                await this.outboxService.enqueueMany(messagesToEnqueue, tx);
+                if (customerEventsV2Enabled) {
+                    await this.bookingCustomerWhatsappNotificationService.enqueueBookingCreated({
+                        bookingId: saved.id,
+                        clubId: bookingClubId,
+                        clubName: (court as any)?.club?.name || 'el complejo',
+                        clubPhone,
+                        courtName: court.name,
+                        clientName,
+                        clientPhone,
+                        startDateTime,
+                        timeZone,
+                        amount: Number(saved.price || 0)
+                    }, tx);
+                }
+                if (staffEventsV2Enabled) {
+                    await this.bookingStaffWhatsappNotificationService.enqueueBookingCreated({
+                        bookingId: saved.id,
+                        clubId: bookingClubId,
+                        clubName: (court as any)?.club?.name || 'el complejo',
+                        clubPhone,
+                        courtName: court.name,
+                        clientName,
+                        clientPhone,
+                        startDateTime,
+                        timeZone,
+                        amount: Number(saved.price || 0)
+                    }, tx);
+                }
             } catch (error) {
                 if (this.isOverlapConstraintError(error)) {
                     throw this.bookingSlotUnavailable('No se pudo confirmar la disponibilidad del horario. Reintentá.');
@@ -4074,7 +4165,45 @@ ${isAutoCancel ? 'El sistema canceló automáticamente una reserva pendiente en'
                 reason
             });
 
-            await this.outboxService.enqueueMany(outboxMessages, tx);
+            const customerEventsV2Enabled = featureFlags.ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2;
+            const staffEventsV2Enabled = featureFlags.ENABLE_WHATSAPP_STAFF_EVENTS_V2;
+            const messagesToEnqueue = this.filterBookingWhatsappOutboxMessages({
+                messages: outboxMessages,
+                customerLegacyDedupePrefix: `booking-cancelled:${bookingId}:client:`,
+                staffLegacyDedupePrefix: `booking-cancelled:${bookingId}:club:`,
+                customerEventsV2Enabled,
+                staffEventsV2Enabled
+            });
+
+            await this.outboxService.enqueueMany(messagesToEnqueue, tx);
+            if (customerEventsV2Enabled) {
+                await this.bookingCustomerWhatsappNotificationService.enqueueBookingCancelled({
+                    bookingId,
+                    clubId: booking.court.club.id,
+                    clubName: booking.court.club.name,
+                    clubPhone,
+                    courtName: booking.court.name,
+                    clientName,
+                    clientPhone,
+                    startDateTime: currentBooking.startDateTime,
+                    timeZone,
+                    reason
+                }, tx);
+            }
+            if (staffEventsV2Enabled) {
+                await this.bookingStaffWhatsappNotificationService.enqueueBookingCancelled({
+                    bookingId,
+                    clubId: booking.court.club.id,
+                    clubName: booking.court.club.name,
+                    clubPhone,
+                    courtName: booking.court.name,
+                    clientName,
+                    clientPhone,
+                    startDateTime: currentBooking.startDateTime,
+                    timeZone,
+                    reason
+                }, tx);
+            }
             if (account) {
                 await this.projectionService.refreshAccountSummary(account.id, tx);
             }

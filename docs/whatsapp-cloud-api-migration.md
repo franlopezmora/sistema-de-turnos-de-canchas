@@ -103,7 +103,13 @@ Mensajes a `CLUB_STAFF`:
 
 - nueva reserva creada
 - reserva cancelada
-- alertas operativas equivalentes a las existentes hoy
+- solo alertas operativas equivalentes a las existentes hoy
+
+Regla MVP:
+
+- `BOOKING_CREATED / CLUB_STAFF`: incluido
+- `BOOKING_CANCELLED / CLUB_STAFF`: incluido
+- `BOOKING_PENDING_WARNING / CLUB_STAFF`: futuro, no activar en este rollout
 
 ### 6.3 Fuera de alcance funcional
 
@@ -223,7 +229,7 @@ Propuesta de templates utility iniciales:
 | `customer_booking_pending_warning_v1` | `CUSTOMER` | warning pre autocancelacion |
 | `staff_booking_created_v1` | `CLUB_STAFF` | nueva reserva |
 | `staff_booking_cancelled_v1` | `CLUB_STAFF` | reserva cancelada |
-| `staff_booking_pending_warning_v1` | `CLUB_STAFF` | warning operativo pre autocancelacion |
+| `staff_booking_pending_warning_v1` | `CLUB_STAFF` | futuro; no activar en MVP |
 
 Regla:
 
@@ -294,6 +300,12 @@ Regla:
 - `court_name`
 - `cancel_minutes_before`
 - `insufficient_amount`
+
+Regla:
+
+- documentado para futuro
+- no requerido para rollout MVP
+- no debe activarse mientras no exista flujo real `BOOKING_PENDING_WARNING / CLUB_STAFF`
 
 ## 11. Regla de versionado de templates
 
@@ -589,10 +601,12 @@ Clasificaciones minimas:
 ## 20. Feature flags sugeridas
 
 ```text
+ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2=false
+ENABLE_WHATSAPP_STAFF_EVENTS_V2=false
+ENABLE_WHATSAPP_SEND_V2=false
 ENABLE_WHATSAPP_CLOUD_API=false
-ENABLE_WHATSAPP_TEMPLATES=false
 ENABLE_WHATSAPP_WEBHOOK_PROCESSOR=false
-ENABLE_WHATSAPP_LEGACY_WPP=false
+ENABLE_WHATSAPP_V2_DRY_RUN=false
 ```
 
 ### Regla de rollout
@@ -601,19 +615,26 @@ Durante la migracion:
 
 - mantener `legacy` y `cloud` coexistiendo por feature flag
 - nunca activar ambos para el mismo flujo sin estrategia de deduplicacion explicita
+- `CUSTOMER` y `CLUB_STAFF` se prenden por separado
+- `ENABLE_WHATSAPP_SEND_V2` y `ENABLE_WHATSAPP_CLOUD_API` no implican por si solos cutover de dominio
+- `ENABLE_WHATSAPP_V2_DRY_RUN=true` tiene prioridad y bloquea envio real
 
 ## 21. Variables de entorno futuras sugeridas
 
 Variables globales MVP:
 
-- `WHATSAPP_PROVIDER=meta_cloud_api`
-- `WHATSAPP_GRAPH_API_BASE_URL=https://graph.facebook.com`
-- `WHATSAPP_GRAPH_API_VERSION=v19.0` o version vigente
-- `WHATSAPP_DEFAULT_SENDER_KEY=PIQUE_DEFAULT`
-- `WHATSAPP_META_ACCESS_TOKEN=...`
-- `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN=...`
+- `WHATSAPP_PROVIDER=wpp_http` o provider legacy actual hasta cutover controlado
+- `WHATSAPP_META_GRAPH_API_BASE_URL=https://graph.facebook.com`
+- `WHATSAPP_META_GRAPH_API_VERSION=v19.0` o version vigente
+- `WHATSAPP_META_REQUEST_TIMEOUT_MS=10000`
+- `WHATSAPP_META_ACCESS_TOKEN=<env backend>`
+- `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN=<env backend>`
+- `WHATSAPP_META_RECIPIENT_ALLOWLIST=`
 - `ENABLE_WHATSAPP_CLOUD_API=false`
-- `ENABLE_WHATSAPP_TEMPLATES=false`
+- `ENABLE_WHATSAPP_SEND_V2=false`
+- `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2=false`
+- `ENABLE_WHATSAPP_STAFF_EVENTS_V2=false`
+- `ENABLE_WHATSAPP_V2_DRY_RUN=false`
 - `ENABLE_WHATSAPP_WEBHOOK_PROCESSOR=false`
 
 Estas variables representan la direccion objetivo. No deben sobreescribir silenciosamente la operacion actual hasta que exista implementacion real.
@@ -708,11 +729,14 @@ Si la salida a Cloud API falla:
 La documentacion se considera suficientemente cerrada cuando:
 
 - el MVP conserva mensajes a cliente y al club ya existentes
+- `BOOKING_PENDING_WARNING / CLUB_STAFF` queda explicitamente fuera del MVP real
 - el contrato de outbox ya no depende de `phone + message`
 - hay un modelo de sender y message log definidos
 - hay templates iniciales identificados
 - hay webhook y estados internos definidos
 - existe estrategia de rollout y rollback
+- existe preflight operativo
+- existe backoffice read-only minimo
 
 ## 29. Fuentes oficiales
 
@@ -789,6 +813,12 @@ Motivo: {{cancel_reason_label}}
 ```
 
 ### 31.6 `staff_booking_pending_warning_v1`
+
+Estado:
+
+- futuro
+- no forma parte del rollout MVP
+- no activar hasta que exista flujo real `BOOKING_PENDING_WARNING / CLUB_STAFF`
 
 ```text
 Reserva pendiente por revisar en {{club_name}}.
@@ -947,7 +977,7 @@ sequenceDiagram
 | `BOOKING_CANCELLED` | `CUSTOMER` | `customer_booking_cancelled_v1` | `client_name`, `club_name`, `date`, `time`, `court_name`, `club_whatsapp_url`, `cancel_reason_label` |
 | `BOOKING_CANCELLED` | `CLUB_STAFF` | `staff_booking_cancelled_v1` | `club_name`, `client_name`, `client_phone`, `date`, `time`, `court_name`, `cancel_reason_label` |
 | `BOOKING_PENDING_WARNING` | `CUSTOMER` | `customer_booking_pending_warning_v1` | `client_name`, `club_name`, `date`, `time`, `court_name`, `cancel_minutes_before`, `insufficient_amount` |
-| `BOOKING_PENDING_WARNING` | `CLUB_STAFF` | `staff_booking_pending_warning_v1` | `club_name`, `client_name`, `client_phone`, `date`, `time`, `court_name`, `cancel_minutes_before`, `insufficient_amount` |
+| `BOOKING_PENDING_WARNING` | `CLUB_STAFF` | `staff_booking_pending_warning_v1` | futuro; no activar en MVP |
 
 ## 35. Checklist operativo de onboarding de sender central
 
@@ -1675,3 +1705,878 @@ El modulo alcanza experiencia excelente cuando:
 - el sistema puede crecer a sender propio por club
 - el usuario no siente spam
 - el club percibe mas control y menos trabajo manual
+
+## 67. Estado de implementacion PR 2
+
+Alcance:
+
+- `PR 2` solo prepara schema, enums y contratos base
+- `OutboxMessage` sigue siendo la queue actual
+- las tablas nuevas agregan configuracion, delivery, webhook y trazabilidad
+
+Fuera de alcance de `PR 2`:
+
+- no manda mensajes por `Meta Cloud API`
+- no agrega provider HTTP real
+- no agrega webhook funcional
+- no migra eventos `CUSTOMER`
+- no migra eventos `CLUB_STAFF`
+- no modifica `BookingService`
+- no modifica `PendingBookingAutoCancelService`
+- no cambia comportamiento productivo
+
+Objetivo del corte:
+
+- dejar lista la base persistente para `WHATSAPP_SEND_V2`
+- dejar listos estados `ACCEPTED`, `SENT`, `DELIVERED`, `READ`, `FAILED`
+- dejar listo `providerMessageId`
+- dejar preparada la trazabilidad real para `PR 3`
+
+Validacion y decision de modelado:
+
+- `OutboxMessage` sigue siendo la unica queue
+- no se creo una segunda cola paralela
+- `WhatsappDelivery` se modela 1:1 con `OutboxMessage`
+- en este corte, `WhatsappDelivery` representa el estado agregado actual del envio para ese outbox message
+- no representa todavia el historial de cada retry individual
+- si en el futuro hiciera falta historico por intento, eso debe modelarse con una tabla especifica y no rompiendo esta semantica
+
+Estado de validacion:
+
+- `prisma validate`: OK
+- `prisma generate`: OK
+- migracion SQL manual revisada contra `schema.prisma`
+- `prisma migrate deploy`: OK sobre DB disposable limpia `tucancha_migration_smoke`
+- `prisma migrate status`: OK sobre DB disposable limpia `tucancha_migration_smoke`
+- el `P3005` visto sobre la DB local historica corresponde a falta de baseline de ese entorno, no a mismatch del `PR 2`
+- no hubo cambios funcionales
+
+## 68. Estado de implementacion PR 3
+
+Alcance:
+
+- se agrego `WHATSAPP_SEND_V2` como tipo de outbox
+- se agrego policy layer para validar intenciones V2 antes de encolarlas
+- se agrego servicio de enqueue V2
+- `OutboxMessage` sigue siendo la queue
+- `WhatsappDelivery` sigue siendo estado agregado 1:1 del outbox message
+
+Comportamiento de este corte:
+
+- al encolar `WHATSAPP_SEND_V2` se crea `OutboxMessage`
+- al encolar `WHATSAPP_SEND_V2` se crea `WhatsappDelivery` inicial en estado `QUEUED`
+- no se resuelve sender todavia
+- no se resuelve template todavia
+- no se envia nada a `Meta Cloud API`
+- no se agregan webhooks
+- no se migran eventos reales de reservas
+- `WHATSAPP_SEND` legacy sigue intacto
+
+Worker:
+
+- si aparece `WHATSAPP_SEND_V2`, el worker no despacha a Meta
+- con flag apagada lo procesa en modo controlado y marca `WhatsappDelivery` como `SKIPPED`
+- con flag encendida, mientras no exista provider real, sigue en stub controlado y no envia nada
+- esto evita loops infinitos y no altera el comportamiento de `WHATSAPP_SEND`
+
+Pendiente para `PR 4`:
+
+- resolver sender
+- resolver template
+- conectar `PIQUE_DEFAULT`
+
+## 69. Estado de implementacion PR 4
+
+Alcance:
+
+- se creo `WhatsappSenderResolver`
+- se creo `WhatsappTemplateResolver`
+- se agrego helper semantico para tratar `BOOKING_OWNER` como alias de `CUSTOMER`
+- no se toco `BookingService`
+- no se toco `PendingBookingAutoCancelService`
+
+Decisiones cerradas:
+
+- MVP resuelve siempre `PIQUE_DEFAULT`
+- `CLUB_OWN` queda preparado para futuro pero no participa del resolver MVP
+- templates de `CUSTOMER` y `CLUB_STAFF` quedan separados
+- `BOOKING_OWNER` no existe como rol persistente
+- `BOOKING_OWNER` solo puede vivir en helpers semanticos y se normaliza a `CUSTOMER`
+
+Bootstrap/configuracion:
+
+- en este PR no se agrega seed real ni onboarding
+- `PIQUE_DEFAULT` debe existir en DB antes del cutover real
+- el resolver falla de forma controlada si `PIQUE_DEFAULT` no existe, esta deshabilitado o esta invalido
+- `tokenSecretRef` sigue siendo referencia a secreto; no se guardan access tokens planos
+
+Fuera de alcance:
+
+- no hay provider Meta
+- no hay webhooks
+- no se migran eventos reales
+- no se cambia enqueue V2
+- no se cambia worker stub salvo la documentacion de su rol temporal
+
+Pendiente para `PR 5`:
+
+- implementar provider `Meta Cloud API`
+- usar sender resuelto
+- usar template resuelto
+
+## 70. Estado de implementacion PR 5
+
+Alcance:
+
+- se creo `MetaCloudWhatsappProvider`
+- el provider recibe `SendTemplateMessageInput`
+- construye payload template para `Meta Cloud API`
+- resuelve token por `tokenSecretRef -> process.env[...]`
+- no guarda tokens planos
+- no loguea tokens
+
+Comportamiento:
+
+- respuesta HTTP exitosa de Meta => `status = ACCEPTED`
+- `providerMessageId` se extrae de `messages[0].id` si existe
+- `ACCEPTED` sigue significando aceptacion inicial de API
+- `SENT/DELIVERED/READ/FAILED` quedan para webhooks en `PR 6`
+
+Seguridad/configuracion:
+
+- `PIQUE_DEFAULT` sigue viniendo desde DB
+- `tokenSecretRef` apunta a variable de entorno del backend
+- no hay requests reales desde reservas
+- no se tocaron `BookingService` ni `PendingBookingAutoCancelService`
+- no se tocaron eventos reales `CUSTOMER` ni `CLUB_STAFF`
+
+Decisiones:
+
+- provider queda puro
+- no actualiza `WhatsappDelivery` por si solo
+- no se conecta todavia al `OutboxWorker`
+- `ENABLE_WHATSAPP_CLOUD_API` queda apagada por default
+- el orden de parametros de template puede venir explicito en `templateParameterOrder`
+- si no viene, se usa orden alfabetico estable de keys
+
+Pendiente para `PR 6`:
+
+- webhooks de Meta
+- mapping de `SENT/DELIVERED/READ/FAILED`
+- persistencia de eventos webhook
+
+## 71. Estado de implementacion PR 6
+
+Alcance:
+
+- se creo endpoint `GET /api/webhooks/meta/whatsapp` para verificacion de Meta
+- se creo endpoint `POST /api/webhooks/meta/whatsapp` para recepcion de payloads
+- se creo `WhatsappWebhookProcessor`
+- se agrego `ENABLE_WHATSAPP_WEBHOOK_PROCESSOR`
+- se agrego `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN`
+
+Comportamiento:
+
+- `GET` valida `hub.mode`, `hub.verify_token` y devuelve `hub.challenge`
+- `POST` responde rapido con `200`
+- si la flag esta apagada, el `POST` devuelve `OK` controlado y no procesa funcionalmente
+- si la flag esta prendida, el processor persiste eventos raw en `WhatsappWebhookEvent`
+- los estados Meta se mapean a:
+  - `sent -> SENT`
+  - `delivered -> DELIVERED`
+  - `read -> READ`
+  - `failed -> FAILED`
+- `ACCEPTED` sigue siendo solo estado inicial del provider, no estado de webhook
+
+Idempotencia y orden:
+
+- `providerMessageId` sigue siendo la clave principal para vincular webhooks con deliveries
+- `providerEventId` se calcula como hash estable por status event
+- `providerEventId` queda unico para evitar reprocesamiento duplicado
+- no se baja de `READ` a `DELIVERED`
+- no se baja de `DELIVERED` a `SENT`
+- `FAILED` puede aplicarse salvo que el delivery ya este en `READ`
+- si llega un success avanzado despues de `FAILED`, solo `DELIVERED` o `READ` pueden corregirlo
+
+Fuera de alcance:
+
+- no se conecto `OutboxWorker` al provider Meta
+- no hay dispatch real de `WHATSAPP_SEND_V2`
+- no se migraron eventos reales `CUSTOMER`
+- no se migraron eventos reales `CLUB_STAFF`
+- no hay inbox
+- no hay bot
+- no hay inbound funcional de producto
+
+Inbound y eventos huerfanos:
+
+- si llegan mensajes inbound, se persisten como raw event y se ignoran funcionalmente
+- si llega un status sin `WhatsappDelivery`, el evento se guarda igual como huerfano
+- los webhooks desconocidos se guardan como raw event y no rompen el endpoint
+
+Pendiente para `PR 7`:
+
+- conectar provider al worker de forma controlada
+- empezar a poblar `providerMessageId` desde envios reales
+- migrar eventos `CUSTOMER` cuando corresponda
+
+## 72. Estado de implementacion PR 7
+
+Alcance:
+
+- se creo `WhatsappSendV2Dispatcher`
+- `OutboxWorker` ya puede procesar `WHATSAPP_SEND_V2` con pipeline real
+- el pipeline conectado es:
+  - `OutboxWorker`
+  - `WhatsappNotificationPolicyService`
+  - `WhatsappSenderResolver`
+  - `WhatsappTemplateResolver`
+  - `MetaCloudWhatsappProvider`
+  - `WhatsappDelivery`
+
+Flags:
+
+- si `ENABLE_WHATSAPP_SEND_V2=false`, sigue el stub seguro y el delivery queda `SKIPPED`
+- si `ENABLE_WHATSAPP_SEND_V2=true` pero `ENABLE_WHATSAPP_CLOUD_API=false`, no se llama provider y el delivery queda `SKIPPED` con error controlado
+- solo hay dispatch real si:
+  - `ENABLE_WHATSAPP_SEND_V2=true`
+  - `ENABLE_WHATSAPP_CLOUD_API=true`
+
+Comportamiento del dispatch:
+
+- el payload V2 se valida antes de despachar
+- `PIQUE_DEFAULT` se resuelve desde DB por `WhatsappSenderResolver`
+- el template se resuelve por sender + evento + rol + idioma
+- no se mezclan templates `CUSTOMER` y `CLUB_STAFF`
+- si Meta acepta el request inicial:
+  - `WhatsappDelivery.status = ACCEPTED`
+  - se guarda `providerMessageId`
+  - se guarda `rawRequest`
+  - se guarda `rawResponse`
+- si el provider falla en el request inicial:
+  - `WhatsappDelivery.status = FAILED`
+  - se guarda `errorCode`
+  - se guarda `errorMessage`
+  - se guarda `rawRequest`
+  - se guarda `rawResponse` si existe
+
+Semantica de estados:
+
+- `ACCEPTED` sigue significando solo aceptacion inicial de API
+- `SENT`, `DELIVERED`, `READ` y `FAILED` por entrega final siguen viviendo en webhooks
+- `OutboxMessage.status` solo expresa que la queue ya proceso el item
+- el estado real del delivery vive en `WhatsappDelivery`
+
+Retries:
+
+- errores retryable del provider hacen que el worker deje `OutboxMessage` en `FAILED` para retry
+- errores no retryable dejan `OutboxMessage` procesado y el detalle de falla queda en `WhatsappDelivery`
+- no se cambia la semantica legacy del worker
+
+Fuera de alcance:
+
+- no se tocaron `BookingService`
+- no se tocaron `PendingBookingAutoCancelService`
+- no se migraron eventos reales `CUSTOMER`
+- no se migraron eventos reales `CLUB_STAFF`
+- no se agrego inbox
+- no se agrego bot
+- no se agrego inbound funcional
+- no se agrego sender propio por club
+
+Pendiente para `PR 8`:
+
+- migrar eventos reales `CUSTOMER`
+- empezar el cutover controlado de reservas hacia `WHATSAPP_SEND_V2`
+- decidir rollout progresivo y shadow mode operativo
+
+## 73. Estado de implementacion PR 8
+
+Alcance:
+
+- se agrego `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2`
+- se creo `BookingCustomerWhatsappNotificationService`
+- se migraron solo eventos reales `CUSTOMER`:
+  - `BOOKING_CREATED`
+  - `BOOKING_CANCELLED`
+  - `BOOKING_PENDING_WARNING`
+- `CLUB_STAFF` queda legacy en este PR
+
+Comportamiento:
+
+- si `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2=false`:
+  - `BookingService` sigue encolando el WhatsApp legacy del cliente como hoy
+  - `PendingBookingAutoCancelService` sigue encolando el warning legacy del cliente como hoy
+- si `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2=true`:
+  - `BookingService` filtra el `WHATSAPP_SEND` legacy solo del cliente
+  - `BookingService` encola `WHATSAPP_SEND_V2` para cliente creado/cancelado
+  - `PendingBookingAutoCancelService` encola `WHATSAPP_SEND_V2` para warning del cliente
+  - no hay fallback automatico a legacy si el enqueue V2 falla
+
+Templates y orden explicito:
+
+- `customer_booking_created_v1`
+  - `client_name`
+  - `club_name`
+  - `date`
+  - `time`
+  - `court_name`
+  - `amount`
+  - `club_whatsapp_url`
+- `customer_booking_cancelled_v1`
+  - `client_name`
+  - `club_name`
+  - `date`
+  - `time`
+  - `court_name`
+  - `club_whatsapp_url`
+  - `cancel_reason_label`
+- `customer_booking_pending_warning_v1`
+  - `client_name`
+  - `club_name`
+  - `date`
+  - `time`
+  - `court_name`
+  - `cancel_minutes_before`
+  - `insufficient_amount`
+
+Reglas importantes:
+
+- no se elimina `WHATSAPP_SEND` legacy
+- no se migran mensajes `CLUB_STAFF` en este PR
+- no se hace doble envio cliente legacy + V2
+- si falla el enqueue V2, la reserva o el job siguen igual
+- no se hace fallback legacy automatico
+
+Pendiente para `PR 9`:
+
+- shadow mode y rollout controlado por entorno
+- observabilidad comparativa de deliveries legacy vs V2
+- arranque progresivo del cutover real
+
+## 74. Estado de implementacion PR 9
+
+Alcance:
+
+- se agrego `ENABLE_WHATSAPP_STAFF_EVENTS_V2`
+- se creo `BookingStaffWhatsappNotificationService`
+- se migraron solo eventos reales `CLUB_STAFF` que ya existian en legacy:
+  - `BOOKING_CREATED / CLUB_STAFF`
+  - `BOOKING_CANCELLED / CLUB_STAFF`
+
+Fuera de alcance explicitamente:
+
+- no se agrego `BOOKING_PENDING_WARNING / CLUB_STAFF`
+- no se toco `PendingBookingAutoCancelService` para staff
+- no se creo `staff_booking_pending_warning_v1` como flujo real
+
+Comportamiento:
+
+- si `ENABLE_WHATSAPP_STAFF_EVENTS_V2=false`:
+  - el club/staff sigue usando `WHATSAPP_SEND` legacy como hoy
+- si `ENABLE_WHATSAPP_STAFF_EVENTS_V2=true`:
+  - `BookingService` filtra solo el WhatsApp legacy de staff
+  - `BookingService` encola `WHATSAPP_SEND_V2` solo para staff created/cancelled
+  - no hay doble envio entre legacy y V2 para staff
+
+Templates y orden explicito:
+
+- `staff_booking_created_v1`
+  - `club_name`
+  - `client_name`
+  - `client_phone`
+  - `date`
+  - `time`
+  - `court_name`
+  - `amount`
+- `staff_booking_cancelled_v1`
+  - `club_name`
+  - `client_name`
+  - `client_phone`
+  - `date`
+  - `time`
+  - `court_name`
+  - `cancel_reason_label`
+
+Reglas operativas:
+
+- `club.phone` sigue siendo el destinatario staff MVP
+- si falta `club.phone`, el envio staff se omite sin romper la operacion
+- si falla el enqueue V2 staff, no falla la reserva ni la cancelacion
+- no hay fallback legacy automatico ante error de enqueue V2
+- el rollback operativo sigue siendo apagar `ENABLE_WHATSAPP_STAFF_EVENTS_V2`
+
+Compatibilidad con customer:
+
+- `CUSTOMER` no cambia en este PR
+- `CUSTOMER` puede quedar legacy o V2 de forma independiente de staff
+- matriz valida:
+  - customer false + staff false -> ambos legacy
+  - customer true + staff false -> customer V2, staff legacy
+  - customer false + staff true -> customer legacy, staff V2
+  - customer true + staff true -> ambos V2 sin mezclar roles
+
+Pendiente para `PR 10`:
+
+- shadow mode operativo
+- metricas comparativas y rollout progresivo
+- pasos de rollback/cutover mas finos por entorno
+
+## 75. Estado de implementacion PR 10
+
+Alcance:
+
+- se agrego `ENABLE_WHATSAPP_V2_DRY_RUN`
+- se agrego `WHATSAPP_META_RECIPIENT_ALLOWLIST`
+- se creo `WhatsappV2PreflightService`
+- se agrego precedence operativa en `WhatsappSendV2Dispatcher`
+- se reforzo el rollout seguro sin cambiar defaults productivos
+
+Precedence de flags:
+
+1. si `ENABLE_WHATSAPP_V2_DRY_RUN=true`, no se llama a Meta
+2. si hay allowlist y el destinatario no esta incluido, no se llama a Meta
+3. si `ENABLE_WHATSAPP_SEND_V2=false`, no hay dispatch real
+4. si `ENABLE_WHATSAPP_CLOUD_API=false`, no hay provider real
+5. solo con flags correctas + no dry-run + allowlist OK se llama a Meta
+
+Dry-run:
+
+- el dispatcher construye `rawRequest`
+- no llama provider
+- no setea `ACCEPTED`
+- `WhatsappDelivery` queda `SKIPPED`
+- usa `errorCode = WHATSAPP_V2_DRY_RUN`
+- no genera retry infinito
+
+Allowlist:
+
+- si `WHATSAPP_META_RECIPIENT_ALLOWLIST` esta vacia, no bloquea
+- si tiene valores, solo esos telefonos pueden salir por Cloud API
+- destinatario fuera de allowlist:
+  - no llama a Meta
+  - `WhatsappDelivery` queda `SKIPPED`
+  - `errorCode = WHATSAPP_RECIPIENT_NOT_ALLOWLISTED`
+  - no rompe reservas
+  - no reintenta infinito
+
+Preflight:
+
+- valida `PIQUE_DEFAULT`
+- valida status `ACTIVE`
+- valida `phoneNumberId`
+- valida `wabaId`
+- valida `tokenSecretRef`
+- valida que exista env para el token
+- valida templates activos requeridos:
+  - `customer_booking_created_v1`
+  - `customer_booking_cancelled_v1`
+  - `customer_booking_pending_warning_v1`
+  - `staff_booking_created_v1`
+  - `staff_booking_cancelled_v1`
+- valida verify token si webhook processor esta activo
+- reporta warnings por combinaciones inconsistentes de flags
+
+Observabilidad minima:
+
+- `dry-run skip`
+- `allowlist blocked recipient`
+- `dispatching to provider`
+- mantiene IDs utiles:
+  - `outboxMessageId`
+  - `whatsappDeliveryId`
+  - `eventType`
+  - `recipientRole`
+  - `clubId`
+- el telefono solo se loguea enmascarado
+- no se loguean tokens ni authorization headers
+
+Rollout recomendado:
+
+Paso 0: Preflight
+
+- validar DB migrada
+- configurar `PIQUE_DEFAULT`
+- configurar template mappings
+- configurar envs
+- correr preflight
+
+Paso 1: Dry-run
+
+- `ENABLE_WHATSAPP_SEND_V2=true`
+- `ENABLE_WHATSAPP_V2_DRY_RUN=true`
+- `ENABLE_WHATSAPP_CLOUD_API=false`
+- activar `CUSTOMER` o `CLUB_STAFF` V2 segun prueba
+
+Paso 2: Allowlist interna
+
+- `ENABLE_WHATSAPP_SEND_V2=true`
+- `ENABLE_WHATSAPP_CLOUD_API=true`
+- `ENABLE_WHATSAPP_V2_DRY_RUN=false`
+- `WHATSAPP_META_RECIPIENT_ALLOWLIST=...`
+
+Paso 3: Customer piloto
+
+- `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2=true`
+- `ENABLE_WHATSAPP_STAFF_EVENTS_V2=false`
+
+Paso 4: Staff piloto
+
+- `ENABLE_WHATSAPP_STAFF_EVENTS_V2=true`
+
+Paso 5: Rollback
+
+- apagar `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2`
+- apagar `ENABLE_WHATSAPP_STAFF_EVENTS_V2`
+- apagar `ENABLE_WHATSAPP_SEND_V2`
+- apagar `ENABLE_WHATSAPP_CLOUD_API`
+- legacy sigue disponible
+
+Smoke checklist:
+
+- crear reserva customer legacy
+- crear reserva customer V2 dry-run
+- crear reserva customer V2 allowlist
+- cancelar reserva customer V2
+- pending warning customer V2 dry-run
+- crear reserva staff legacy
+- crear reserva staff V2 dry-run
+- cancelar reserva staff V2
+- verificar `WhatsappDelivery`
+- verificar `providerMessageId` en envio real allowlisted
+- simular webhook delivered/read con payload mock
+- confirmar que no hay doble envio
+- confirmar rollback por flags
+
+Pendiente para `PR 11`:
+
+- backoffice/logs minimos para soporte
+- inspeccion operativa de deliveries desde UI/admin si corresponde
+
+## 76. Estado de implementacion PR 11
+
+PR11 agrega visibilidad operativa minima read-only para soporte/admin.
+
+### Incluido
+
+- service interno `WhatsappOperationsService`
+- endpoints admin read-only en `/api/admin/whatsapp`
+- listado de deliveries
+- detalle de delivery
+- listado de webhook events
+- summary operativo simple
+- preflight expuesto por endpoint admin
+- sanitizacion obligatoria de payloads/raw
+
+### Endpoints
+
+- `GET /api/admin/whatsapp/deliveries`
+- `GET /api/admin/whatsapp/deliveries/:id`
+- `GET /api/admin/whatsapp/webhook-events`
+- `GET /api/admin/whatsapp/summary`
+- `GET /api/admin/whatsapp/preflight`
+
+### Seguridad
+
+- endpoints no publicos
+- protegidos por `authMiddleware + requireGlobalRole('ADMIN')`
+- sin exposicion de tokens
+- sin exposicion de `Authorization`
+- telefonos enmascarados en respuestas operativas
+
+### Alcance funcional
+
+- consultar ultimos deliveries
+- filtrar por `clubId`, `status`, `eventType`, `recipientRole`, `providerMessageId`, `outboxMessageId`
+- ver outbox minimo asociado
+- ver sender/template asociados
+- ver webhooks asociados
+- ver huerfanos
+- ver errores recientes
+- ver preflight actual
+
+### No incluido
+
+- resend manual
+- inbox
+- CRM
+- bot
+- campanas
+- marketing
+- UI premium
+
+### Sanitizacion
+
+- helper dedicado para payloads WhatsApp
+- remueve `Authorization`, `access_token`, bearer tokens y referencias sensibles
+- enmascara telefonos en request, response y webhook payloads
+
+### Rollback
+
+- no cambia defaults productivos
+- no cambia dispatch
+- rollback sigue siendo por flags ya existentes
+
+## 77. Estado final PR 12 / Production readiness
+
+PR12 cierra la migracion como modulo listo para rollout controlado. No agrega features nuevas de producto. No activa cutover por default.
+
+### 77.1 Estado del modulo
+
+| Capability | Estado | Flag | Comentario |
+| --- | --- | --- | --- |
+| `BOOKING_CREATED / CUSTOMER` V2 | Implementado | `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2` | filtra legacy customer cuando se activa |
+| `BOOKING_CANCELLED / CUSTOMER` V2 | Implementado | `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2` | sin doble envio |
+| `BOOKING_PENDING_WARNING / CUSTOMER` V2 | Implementado | `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2` | warning real migrado |
+| `BOOKING_CREATED / CLUB_STAFF` V2 | Implementado | `ENABLE_WHATSAPP_STAFF_EVENTS_V2` | usa `club.phone` actual |
+| `BOOKING_CANCELLED / CLUB_STAFF` V2 | Implementado | `ENABLE_WHATSAPP_STAFF_EVENTS_V2` | usa `club.phone` actual |
+| `BOOKING_PENDING_WARNING / CLUB_STAFF` | Futuro | N/A | no existe flujo real legacy; no activar |
+| Dispatch V2 | Implementado | `ENABLE_WHATSAPP_SEND_V2` + `ENABLE_WHATSAPP_CLOUD_API` | requiere sender + template + envs |
+| Webhooks | Implementado | `ENABLE_WHATSAPP_WEBHOOK_PROCESSOR` | `ACCEPTED` sigue siendo estado interno, no webhook |
+| Dry-run | Implementado | `ENABLE_WHATSAPP_V2_DRY_RUN` | no llama a Meta |
+| Allowlist | Implementado | `WHATSAPP_META_RECIPIENT_ALLOWLIST` | protege piloto real |
+| Preflight | Implementado | endpoint admin | correr antes de rollout |
+| Backoffice operativo | Implementado | auth admin | read-only |
+| Resend manual | Futuro | N/A | fuera de alcance |
+| Inbox | Fuera de alcance | N/A | no implementar en esta etapa |
+| Sender propio por club | Futuro | N/A | `CLUB_OWN` no entra en MVP |
+
+### 77.2 Guia operativa de `PIQUE_DEFAULT`
+
+Configuracion requerida en `WhatsappSender`:
+
+- `code = PIQUE_DEFAULT`
+- `mode = PIQUE_DEFAULT`
+- `provider = META_CLOUD_API`
+- `status = ACTIVE`
+- `clubId = null`
+- `phoneNumberId = <META_PHONE_NUMBER_ID>`
+- `wabaId = <META_WABA_ID>`
+- `tokenSecretRef = WHATSAPP_META_ACCESS_TOKEN`
+
+Reglas:
+
+- el token real vive solo en env backend
+- no guardar access token plano en DB
+- no hardcodear secretos en seed
+- `tokenSecretRef` es referencia, no secreto usable
+
+Ejemplo conceptual seguro:
+
+```sql
+insert into "WhatsappSender" (
+  "id",
+  "clubId",
+  "code",
+  "mode",
+  "provider",
+  "displayName",
+  "wabaId",
+  "phoneNumberId",
+  "businessPhone",
+  "tokenSecretRef",
+  "status",
+  "createdAt",
+  "updatedAt"
+) values (
+  '<CUID>',
+  null,
+  'PIQUE_DEFAULT',
+  'PIQUE_DEFAULT',
+  'META_CLOUD_API',
+  'Pique',
+  '<META_WABA_ID>',
+  '<META_PHONE_NUMBER_ID>',
+  '<META_BUSINESS_PHONE>',
+  'WHATSAPP_META_ACCESS_TOKEN',
+  'ACTIVE',
+  now(),
+  now()
+);
+```
+
+### 77.3 Templates requeridos para rollout MVP
+
+| Template | EventType | RecipientRole | Language | Category | Estado esperado | Variables | Template parameter order |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `customer_booking_created_v1` | `BOOKING_CREATED` | `CUSTOMER` | `es_AR` | `UTILITY` | `ACTIVE` | `client_name`, `club_name`, `date`, `time`, `court_name`, `amount`, `club_whatsapp_url` | `client_name`, `club_name`, `date`, `time`, `court_name`, `amount`, `club_whatsapp_url` |
+| `customer_booking_cancelled_v1` | `BOOKING_CANCELLED` | `CUSTOMER` | `es_AR` | `UTILITY` | `ACTIVE` | `client_name`, `club_name`, `date`, `time`, `court_name`, `club_whatsapp_url`, `cancel_reason_label` | `client_name`, `club_name`, `date`, `time`, `court_name`, `club_whatsapp_url`, `cancel_reason_label` |
+| `customer_booking_pending_warning_v1` | `BOOKING_PENDING_WARNING` | `CUSTOMER` | `es_AR` | `UTILITY` | `ACTIVE` | `client_name`, `club_name`, `date`, `time`, `court_name`, `cancel_minutes_before`, `insufficient_amount` | `client_name`, `club_name`, `date`, `time`, `court_name`, `cancel_minutes_before`, `insufficient_amount` |
+| `staff_booking_created_v1` | `BOOKING_CREATED` | `CLUB_STAFF` | `es_AR` | `UTILITY` | `ACTIVE` | `club_name`, `client_name`, `client_phone`, `date`, `time`, `court_name`, `amount` | `club_name`, `client_name`, `client_phone`, `date`, `time`, `court_name`, `amount` |
+| `staff_booking_cancelled_v1` | `BOOKING_CANCELLED` | `CLUB_STAFF` | `es_AR` | `UTILITY` | `ACTIVE` | `club_name`, `client_name`, `client_phone`, `date`, `time`, `court_name`, `cancel_reason_label` | `club_name`, `client_name`, `client_phone`, `date`, `time`, `court_name`, `cancel_reason_label` |
+| `staff_booking_pending_warning_v1` | `BOOKING_PENDING_WARNING` | `CLUB_STAFF` | `es_AR` | `UTILITY` | futuro; no activar | N/A | N/A |
+
+### 77.4 Matriz definitiva de flags
+
+| Variable | Default recomendado | Entorno | Riesgo si se activa mal | Relacion |
+| --- | --- | --- | --- | --- |
+| `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2` | `false` | staging/piloto/prod controlado | duplica o reemplaza customer legacy antes de tiempo | decide que produce dominio customer |
+| `ENABLE_WHATSAPP_STAFF_EVENTS_V2` | `false` | staging/piloto/prod controlado | duplica o reemplaza staff legacy antes de tiempo | decide que produce dominio staff |
+| `ENABLE_WHATSAPP_SEND_V2` | `false` | staging/piloto/prod controlado | dominio produce V2 pero worker no deberia despachar si queda mal combinado | gate del pipeline V2 |
+| `ENABLE_WHATSAPP_CLOUD_API` | `false` | staging/piloto/prod controlado | llama provider real sin dry-run/allowlist listos | gate del provider |
+| `ENABLE_WHATSAPP_WEBHOOK_PROCESSOR` | `false` | staging/piloto/prod controlado | ruido de webhooks si verify/config faltan | independiente del dispatch |
+| `ENABLE_WHATSAPP_V2_DRY_RUN` | `false` | staging/piloto | falsa sensacion de envio real si no se entiende | gana prioridad y no llama a Meta |
+| `WHATSAPP_META_RECIPIENT_ALLOWLIST` | vacia | staging/piloto/prod controlado | si se omite en piloto real abre mas alcance del deseado | bloquea destinatarios no permitidos |
+| `WHATSAPP_META_GRAPH_API_BASE_URL` | `https://graph.facebook.com` | todos | endpoint incorrecto | usado por provider |
+| `WHATSAPP_META_GRAPH_API_VERSION` | `v19.0` | todos | payload/endpoint incompatibles | usado por provider |
+| `WHATSAPP_META_REQUEST_TIMEOUT_MS` | `10000` | todos | timeout demasiado bajo o alto | usado por provider |
+| `WHATSAPP_META_ACCESS_TOKEN` | sin default | staging/prod | auth fail o fuga si se maneja mal | referenciado por `tokenSecretRef` |
+| `WHATSAPP_META_WEBHOOK_VERIFY_TOKEN` | sin default | staging/prod | verify falla o se expone secreto | requerido si webhook esta activo |
+
+Precedence final:
+
+1. `ENABLE_WHATSAPP_V2_DRY_RUN=true` gana y evita llamar a Meta.
+2. `WHATSAPP_META_RECIPIENT_ALLOWLIST` bloquea envios no permitidos si tiene valores.
+3. `ENABLE_WHATSAPP_SEND_V2=false` impide dispatch V2.
+4. `ENABLE_WHATSAPP_CLOUD_API=false` impide provider real.
+5. `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2` y `ENABLE_WHATSAPP_STAFF_EVENTS_V2` solo deciden que produce dominio.
+6. `ENABLE_WHATSAPP_WEBHOOK_PROCESSOR` es independiente del dispatch.
+
+### 77.5 Go / no-go checklist
+
+Go si:
+
+- DB migrada
+- `PIQUE_DEFAULT` existe y esta `ACTIVE`
+- `phoneNumberId`, `wabaId` y `tokenSecretRef` configurados
+- env real del token cargada
+- template mappings requeridos en `ACTIVE`
+- preflight `OK` o `WARN` entendido
+- dry-run validado
+- allowlist validada
+- no hay doble envio
+- rollback por flags probado
+- backoffice admin operativo responde
+- webhook verify token listo si se prende webhook
+- tests focalizados OK
+
+No-go si:
+
+- falta `PIQUE_DEFAULT`
+- falta env del token
+- faltan templates requeridos
+- preflight `FAIL`
+- dry-run genera payloads incorrectos
+- allowlist no bloquea
+- hay doble envio
+- no se puede rollback por flags
+- el delivery entra en loop
+- aparecen fallas nuevas en tests focalizados
+
+### 77.6 Rollout plan final
+
+Paso 0:
+
+- deploy con defaults apagados
+- validar migracion
+- validar backoffice admin
+
+Paso 1:
+
+- configurar `PIQUE_DEFAULT`
+- configurar template mappings
+- configurar envs
+- correr preflight
+
+Paso 2:
+
+- activar `ENABLE_WHATSAPP_SEND_V2=true`
+- activar `ENABLE_WHATSAPP_V2_DRY_RUN=true`
+- mantener `ENABLE_WHATSAPP_CLOUD_API=false`
+- activar solo `CUSTOMER` V2 si se quiere primer piloto
+
+Paso 3:
+
+- apagar dry-run
+- configurar `WHATSAPP_META_RECIPIENT_ALLOWLIST`
+- prender `ENABLE_WHATSAPP_CLOUD_API=true`
+- probar solo numeros internos permitidos
+
+Paso 4:
+
+- piloto `CUSTOMER`
+- `CLUB_STAFF` sigue legacy
+
+Paso 5:
+
+- piloto `CLUB_STAFF`
+- monitorear ruido y errores operativos
+
+Paso 6:
+
+- ampliar por entorno/club controlado
+
+Paso 7:
+
+- mantener legacy como rollback hasta estabilizacion
+
+### 77.7 Rollback plan final
+
+- apagar `ENABLE_WHATSAPP_CUSTOMER_EVENTS_V2`
+- apagar `ENABLE_WHATSAPP_STAFF_EVENTS_V2`
+- apagar `ENABLE_WHATSAPP_SEND_V2`
+- apagar `ENABLE_WHATSAPP_CLOUD_API`
+- mantener `WHATSAPP_SEND` legacy para nuevos eventos
+- no borrar `WhatsappDelivery`
+- no borrar `WhatsappWebhookEvent`
+- no resetear migraciones
+- no tocar reservas
+
+Reglas:
+
+- mensajes ya `ACCEPTED` por Meta siguen trazables por webhook si webhook sigue activo
+- mensajes V2 futuros dejan de despacharse si flags se apagan
+- el rollback principal es por flags, no por cambios de schema
+
+### 77.8 Smoke test final
+
+- created customer legacy
+- created customer dry-run
+- created customer allowlist
+- cancelled customer dry-run o allowlist
+- pending warning customer dry-run
+- created staff legacy
+- created staff dry-run
+- cancelled staff dry-run
+- confirmar que no existe staff pending warning real
+- webhook verify
+- webhook delivered/read mock
+- backoffice delivery list
+- backoffice delivery detail
+- backoffice summary
+- backoffice preflight
+- rollback de flags
+- confirmar que no hay doble envio
+
+### 77.9 Fuera de alcance confirmado
+
+- no resend manual
+- no inbox
+- no CRM
+- no bot
+- no campanas
+- no marketing
+- no WhatsApp Flows
+- no AI assistant
+- no pagos por WhatsApp
+- no sender propio por club en MVP
+- no onboarding WABA por club
+- no `ClubNotificationRecipient`
+- no `BOOKING_PENDING_WARNING / CLUB_STAFF` real
+- no eliminacion de legacy en esta etapa
+
+### 77.10 Fuente de verdad final
+
+- repo = fuente de verdad
+- Notion = espejo
+- si hay diferencia, prevalece repo hasta resincronizar
+
+### 77.11 Script de preflight
+
+No se agrega script nuevo en PR12.
+
+Decision:
+
+- ya existe endpoint admin seguro `GET /api/admin/whatsapp/preflight`
+- suficiente para readiness actual
+- evita scope extra en scripts/CLI en este cierre
