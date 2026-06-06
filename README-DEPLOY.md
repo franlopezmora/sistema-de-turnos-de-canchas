@@ -187,6 +187,26 @@ docker-compose logs -f backend
 docker-compose logs -f frontend
 ```
 
+### Redeploy en VPS / Hostinger
+
+Si ya estás parado en la raíz del proyecto dentro de la VPS y querés redeployar solo el backend API:
+
+```bash
+docker compose build backend && docker compose up -d backend
+```
+
+Si este release también necesita refrescar worker y scheduler para que queden en la misma versión:
+
+```bash
+docker compose build backend backend-worker backend-scheduler && docker compose up -d backend backend-worker backend-scheduler
+```
+
+Para seguir logs después del redeploy:
+
+```bash
+docker compose logs -f backend
+```
+
 Para una DB nueva o local de prueba, el helper seguro es:
 
 ```bash
